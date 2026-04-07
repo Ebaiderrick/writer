@@ -1,0 +1,33 @@
+export const STORAGE_KEY = "eyawriter-projects-v5";
+export const TYPE_SEQUENCE = ["scene", "action", "character", "dialogue", "transition", "parenthetical", "shot", "text", "note", "dual", "image"];
+export const TYPE_LABELS = {
+  scene: "Scene",
+  action: "Action",
+  character: "Character",
+  dialogue: "Dialogue",
+  transition: "Transition",
+  parenthetical: "Parenthetical",
+  shot: "Shot",
+  text: "Text",
+  note: "Note",
+  dual: "Dual",
+  image: "Image"
+};
+export const AUTO_UPPERCASE_TYPES = new Set(["scene", "character", "shot", "transition", "dual"]);
+export const SCENE_TIMES = ["DAY", "NIGHT", "LATER", "DAWN", "DUSK", "MORNING", "EVENING", "CONT'D"];
+export const DEFAULT_SUGGESTIONS = {
+  scene: ["INT. - DAY", "EXT. - DAY", "INT. - NIGHT", "EXT. - NIGHT", "INT./EXT. - DAY", "INT./EXT. - NIGHT"],
+  transition: ["CUT TO:", "DISSOLVE TO:", "SMASH CUT TO:", "MATCH CUT TO:", "FADE OUT."],
+  shot: ["CLOSE ON", "WIDE SHOT", "INSERT", "POV", "OVERHEAD SHOT"],
+  parenthetical: ["beat", "quietly", "whispering", "under breath", "into phone"],
+  note: ["NOTE: "],
+  image: ["IMAGE: ", "INSERT IMAGE: "]
+};
+export const DEFAULT_VIEW_OPTIONS = {
+  ruler: false,
+  pageNumbers: true,
+  pageCount: true,
+  showOutline: true,
+  textSize: 12
+};
+export const PAGE_UNIT_CAPACITY = 54;
