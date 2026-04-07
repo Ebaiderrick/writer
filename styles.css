@@ -23,9 +23,9 @@
   --script-font-size: 12pt;
   --script-line-width: 60ch;
   --script-character-offset: 22ch;
-  --script-character-width: 24ch;
-  --script-dialogue-offset: 12ch;
-  --script-dialogue-width: 36ch;
+  --script-character-width: 38ch;
+  --script-dialogue-offset: 10ch;
+  --script-dialogue-width: 35ch;
   --script-parenthetical-offset: 16ch;
   --script-parenthetical-width: 24ch;
   --script-dual-offset: 28ch;
@@ -1072,7 +1072,9 @@ img {
 
 .script-block[data-type="scene"],
 .script-block[data-type="shot"],
-.script-block[data-type="transition"] {
+.script-block[data-type="transition"],
+.script-block[data-type="character"],
+.script-block[data-type="dual"] {
   font-weight: 700;
 }
 
@@ -1132,15 +1134,14 @@ img {
 
 .preview-page-sheet {
   min-height: 420px;
-  padding: 24px 26px;
+  padding: 34px 26px;
   border: none;
   border-radius: 22px;
   background: var(--paper-bg);
   color: var(--paper-ink);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 18px;
+  display: block;
+  position: relative;
 }
 
 .preview-page-sheet.cover {
@@ -1166,12 +1167,12 @@ img {
   margin: 0 auto;
 }
 
-.preview-page-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
+.preview-page-header {
+  position: absolute;
+  top: 12px;
+  right: 26px;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.82rem;
 }
 
 .preview-line {
@@ -1181,7 +1182,9 @@ img {
 
 .preview-line.scene,
 .preview-line.shot,
-.preview-line.transition {
+.preview-line.transition,
+.preview-line.character,
+.preview-line.dual {
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -1207,6 +1210,19 @@ img {
 .preview-line.parenthetical {
   margin-left: min(var(--script-parenthetical-offset), 25%);
   width: min(100%, var(--script-parenthetical-width));
+}
+
+.preview-line.dialogue-more {
+  margin-left: min(var(--script-dialogue-offset), 20%);
+  width: min(100%, var(--script-dialogue-width));
+}
+
+.preview-line.continuity {
+  width: 100%;
+}
+
+.preview-line.blank {
+  min-height: 1.5em;
 }
 
 .metric-grid {

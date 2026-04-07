@@ -30,7 +30,7 @@ const DEFAULT_VIEW_OPTIONS = {
   showOutline: true,
   textSize: 12
 };
-const PAGE_UNIT_CAPACITY = 55;
+const PAGE_UNIT_CAPACITY = 54;
 
 const sampleProject = {
   id: "sample-project",
@@ -574,6 +574,13 @@ function renderPreview() {
     const scriptPage = document.createElement("section");
     scriptPage.className = "preview-page-sheet";
 
+    if (pageIndex > 0) {
+      const header = document.createElement("div");
+      header.className = "preview-page-header";
+      header.textContent = (pageIndex + 1) + ".";
+      scriptPage.appendChild(header);
+    }
+
     const body = document.createElement("div");
     body.className = "preview-page-body";
 
@@ -589,14 +596,6 @@ function renderPreview() {
     }
 
     scriptPage.appendChild(body);
-
-    if (state.viewOptions.pageNumbers || state.viewOptions.pageCount) {
-      const footer = document.createElement("div");
-      footer.className = "preview-page-footer";
-      footer.textContent = buildPreviewFooterLabel(pageIndex + 1, previewData.scriptPages.length);
-      scriptPage.appendChild(footer);
-    }
-
     pages.appendChild(scriptPage);
   });
 
@@ -655,31 +654,94 @@ function paginateScriptLines(lines) {
   const pages = [];
   let currentPage = [];
   let usedUnits = 0;
+  let currentSceneLines = [];
 
-  lines.forEach((line) => {
-    const lineUnits = estimateLineUnits(line.type, line.displayText);
-    if (currentPage.length && usedUnits + lineUnits > PAGE_UNIT_CAPACITY) {
-      pages.push(currentPage);
-      currentPage = [];
-      usedUnits = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let spacing = 0;
+    if (currentPage.length > 0) {
+      const prevType = currentPage[currentPage.length - 1].type;
+      if (line.type === "scene") spacing = 2;
+      else if (line.type === "dialogue" || line.type === "parenthetical") {
+        if (!["character", "parenthetical", "dialogue"].includes(prevType)) spacing = 1;
+      } else if (line.type !== "blank") spacing = 1;
     }
+
+    let lineUnits = estimateLineUnits(line.type, line.displayText);
+    let needPageBreak = (usedUnits + spacing + lineUnits > PAGE_UNIT_CAPACITY);
+
+    if (!needPageBreak && line.type === "character") {
+      let lookaheadUnits = lineUnits;
+      let dialogueLines = 0;
+      for (let j = i + 1; j < lines.length; j++) {
+        const nextLine = lines[j];
+        if (nextLine.type === "dialogue" || nextLine.type === "parenthetical") {
+          lookaheadUnits += estimateLineUnits(nextLine.type, nextLine.displayText);
+          if (nextLine.type === "dialogue") dialogueLines += Math.ceil(stripWrapperChars(nextLine.displayText).length / 35);
+          if (dialogueLines >= 2) break;
+        } else break;
+      }
+      if (usedUnits + spacing + lookaheadUnits > PAGE_UNIT_CAPACITY) needPageBreak = true;
+    }
+
+    if (needPageBreak && currentPage.length > 0) {
+      const lastLine = currentPage[currentPage.length - 1];
+      if (lastLine.type === "dialogue" || lastLine.type === "parenthetical") {
+        currentPage.push({ type: "dialogue-more", displayText: "(MORE)" });
+        pages.push(currentPage);
+        const speaker = findLastSpeaker(lines, i);
+        currentPage = [{ type: "character", displayText: speaker + " (CONT'D)" }];
+        usedUnits = estimateLineUnits("character", speaker + " (CONT'D)");
+        spacing = 0;
+      } else {
+        const lastWasScene = currentSceneLines.length > 0;
+        if (lastWasScene) currentPage.push({ type: "continuity", displayText: "CONTINUED:" });
+        pages.push(currentPage);
+        currentPage = [];
+        usedUnits = 0;
+        spacing = 0;
+        if (lastWasScene) {
+          currentPage.push({ type: "continuity", displayText: "CONTINUED:" });
+          usedUnits += 1;
+        }
+      }
+    }
+
+    if (spacing > 0) {
+      for (let s = 0; s < spacing; s++) {
+        currentPage.push({ type: "blank", displayText: "" });
+      }
+      usedUnits += spacing;
+    }
+
     currentPage.push(line);
     usedUnits += lineUnits;
-  });
-
-  if (currentPage.length || !pages.length) {
-    pages.push(currentPage);
+    if (line.type === "scene") currentSceneLines = [line];
+    else if (line.type !== "blank") currentSceneLines.push(line);
   }
 
+  if (currentPage.length) pages.push(currentPage);
   return pages;
 }
 
+function findLastSpeaker(lines, currentIndex) {
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    if (lines[i].type === "character") return stripWrapperChars(lines[i].displayText).replace(" (CONT'D)", "");
+  }
+  return "CHARACTER";
+}
+
 function estimateLineUnits(type, text) {
+  if (type === "blank") return 1;
   const compact = stripWrapperChars(text);
-  const width = type === "dialogue" ? 36 : type === "parenthetical" ? 24 : type === "character" ? 24 : type === "transition" ? 24 : 60;
+  let width = 60;
+  if (type === "dialogue") width = 35;
+  else if (type === "parenthetical") width = 25;
+  else if (type === "character" || type === "dual") width = 38;
+  else if (type === "transition") width = 24;
+
   const wrappedLines = Math.max(1, Math.ceil(compact.length / width));
-  const breathingRoom = type === "scene" ? 1.0 : type === "transition" ? 1.0 : 0.0;
-  return wrappedLines + breathingRoom;
+  return wrappedLines;
 }
 
 function buildPreviewFooterLabel(pageNumber, totalPages) {
@@ -1636,12 +1698,10 @@ function buildPrintableDocument(project, autoPrint = false) {
 
   const scriptMarkup = previewData.scriptPages.map((pageLines, index) => `
     <section class="print-page">
+      ${index >= 0 ? `<div class="print-header">${index === 0 ? "" : (index + 1) + "."}</div>` : ""}
       <div class="print-body">
         ${pageLines.map((line) => `<p class="print-line ${line.type}">${escapeHtml(line.displayText)}</p>`).join("")}
       </div>
-      ${(state.viewOptions.pageNumbers || state.viewOptions.pageCount)
-        ? `<div class="print-footer">${escapeHtml(buildPreviewFooterLabel(index + 1, previewData.scriptPages.length))}</div>`
-        : ""}
     </section>
   `).join("");
 
@@ -1680,16 +1740,16 @@ function getPrintableStyles() {
     }
     .print-page {
       width: 8.5in;
-      min-height: 11in;
+      height: 11in;
       margin: 0 auto;
       padding: 1.0in 1.0in 1.0in 1.5in;
       background: #fff;
       color: #111;
-      display: grid;
-      grid-template-rows: minmax(0, 1fr) auto;
+      position: relative;
       box-shadow: 0 16px 32px rgba(0, 0, 0, 0.08);
       page-break-after: always;
       break-after: page;
+      overflow: hidden;
     }
     .cover-page {
       display: flex;
@@ -1705,39 +1765,61 @@ function getPrintableStyles() {
       text-align: center;
       margin: 0;
     }
+    .print-header {
+      position: absolute;
+      top: 0.5in;
+      right: 1.0in;
+      width: 1in;
+      text-align: right;
+      font-size: 12pt;
+      font-family: "Courier New", Courier, monospace;
+    }
     .print-body {
-      width: 60ch;
-      margin: 0 auto;
-      font-size: ${state.viewOptions.textSize}pt;
+      width: 6in;
+      font-size: 12pt;
+      line-height: 12pt;
+      font-family: "Courier New", Courier, monospace;
     }
     .print-line {
-      margin: 0 0 10px;
+      margin: 0;
+      min-height: 12pt;
       white-space: pre-wrap;
       width: 60ch;
     }
+    .print-line.blank {
+      min-height: 12pt;
+    }
     .print-line.scene,
     .print-line.shot,
-    .print-line.transition {
+    .print-line.transition,
+    .print-line.character,
+    .print-line.dual {
       font-weight: 700;
       text-transform: uppercase;
     }
     .print-line.character,
     .print-line.dual {
-      margin-left: 20ch;
-      width: 24ch;
-      text-transform: uppercase;
+      margin-left: 22ch;
+      width: 38ch;
     }
     .print-line.dialogue {
       margin-left: 10ch;
-      width: 36ch;
+      width: 35ch;
     }
     .print-line.parenthetical {
-      margin-left: 14ch;
-      width: 24ch;
+      margin-left: 16ch;
+      width: 25ch;
+    }
+    .print-line.dialogue-more {
+      margin-left: 10ch;
+      width: 35ch;
+    }
+    .print-line.continuity {
+      width: 60ch;
     }
     .print-line.transition {
       margin-left: auto;
-      width: 24ch;
+      width: 100%;
       text-align: right;
     }
     .print-page-break {
