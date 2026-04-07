@@ -1,4 +1,3 @@
-import { stripWrapperChars } from "./pagination.js";
 import { state } from './state.js';
 import { refs } from './refs.js';
 import {
@@ -18,7 +17,7 @@ import {
   getCurrentProject, getLine, getLineIndex, upsertProject
 } from './project.js';
 import {
-  paginateScriptLines, findLastSpeaker, estimateLineUnits
+  paginateScriptLines, findLastSpeaker, estimateLineUnits, stripWrapperChars
 } from './pagination.js';
 import {
   renderHome, renderRecentProjectMenus, renderStudio,
@@ -232,7 +231,7 @@ function renderMetricsBound() {
     renderMetrics(refs, getCurrentProject, serializeScript, normalizeLineText);
 }
 
-// --- Helper Functions (Remaining in main for now or logic heavy) ---
+// --- Helper Functions ---
 
 function showHome() {
   refs.homeView.hidden = false;
@@ -257,7 +256,7 @@ function openProject(projectId) {
   refs.aiPanel.hidden = !state.aiAssist;
   syncInputsFromProject(project);
   showStudio();
-  renderStudioBound();
+  renderStudio();
   if (state.activeBlockId) {
     focusBlock(state.activeBlockId);
   }
@@ -289,34 +288,10 @@ function syncProjectFromInputs() {
 
 function handleMetaInput() {
   syncProjectFromInputs();
-  renderCoverPreviewBound();
-  renderPreviewBound();
-  renderHome(refs, openProject, removeProject, renderRecentProjectMenus);
+  renderCoverPreview();
+  renderPreview();
+  renderHome();
   queueSave();
-}
-
-function buildPreviewData(project) {
-  const preparedLines = [];
-  let sceneNumber = 0;
-
-  project.lines.forEach((line) => {
-    const normalized = normalizeLineText(line.text, line.type);
-    if (!normalized) {
-      return;
-    }
-    if (line.type === "scene") {
-      sceneNumber += 1;
-    }
-    preparedLines.push({
-      id: line.id,
-      type: line.type,
-      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
-    });
-  });
-
-  return {
-    scriptPages: paginateScriptLines(preparedLines, (t, tex) => estimateLineUnits(t, tex, stripWrapperChars), stripWrapperChars, (l, i) => findLastSpeaker(l, i, stripWrapperChars))
-  };
 }
 
 function buildVisibleFilterSet(project) {
@@ -377,7 +352,7 @@ function toggleSceneCollapse(sceneId) {
   }
   project.collapsedSceneIds = [...collapsed];
   project.updatedAt = new Date().toISOString();
-  renderEditorBound();
+  renderEditor();
   focusBlock(sceneId);
   queueSave();
 }
@@ -389,7 +364,7 @@ function setActiveBlock(id) {
     row.classList.toggle("is-active", row.dataset.id === id);
   });
   updateActiveTool();
-  updateSuggestionsBound();
+  updateSuggestions();
 }
 
 function updateActiveTool() {
@@ -546,7 +521,7 @@ function handleGlobalKeydown(event) {
 
   if ((event.ctrlKey || event.metaKey) && key === "s") {
     event.preventDefault();
-    persistProjectsBound(true);
+    persistProjects(true);
     return;
   }
 
@@ -554,7 +529,7 @@ function handleGlobalKeydown(event) {
     const choice = state.visibleSuggestions[Number(event.key) - 1];
     if (choice) {
       event.preventDefault();
-      applySuggestionBound(choice.value);
+      applySuggestion(choice.value);
       return;
     }
   }
@@ -575,7 +550,7 @@ function handleGlobalKeydown(event) {
     };
     if (map[key]) {
       event.preventDefault();
-      handleToolSelectionBound(map[key]);
+      handleToolSelection(map[key]);
     }
   }
 
@@ -587,15 +562,15 @@ function handleGlobalKeydown(event) {
 function handleMenuAction(action) {
   switch (action) {
     case "new-project":
-      openProject(createProject(sanitizeProject, normalizeLineText, upsertProject, persistProjectsBound).id);
+      openProject(createProject().id);
       break;
     case "open-projects":
-      persistProjectsBound(true);
+      persistProjects(true);
       showHome();
-      renderHome(refs, openProject, removeProject, renderRecentProjectMenus);
+      renderHome();
       break;
     case "save-project":
-      persistProjectsBound(true);
+      persistProjects(true);
       break;
     case "rename-project":
       renameCurrentProject();
@@ -625,9 +600,9 @@ function handleMenuAction(action) {
       printProject();
       break;
     case "exit-studio":
-      persistProjectsBound(true);
+      persistProjects(true);
       showHome();
-      renderHome(refs, openProject, removeProject, renderRecentProjectMenus);
+      renderHome();
       break;
     case "undo":
       execEditorCommand("undo");
@@ -642,7 +617,7 @@ function handleMenuAction(action) {
       insertHyperlink();
       break;
     case "insert-image":
-      handleToolSelectionBound("image");
+      handleToolSelection("image");
       break;
     case "select-all":
       selectActiveBlock();
@@ -690,7 +665,7 @@ function renameCurrentProject() {
   project.title = nextTitle.trim() || "Untitled Script";
   project.updatedAt = new Date().toISOString();
   syncInputsFromProject(project);
-  renderStudioBound();
+  renderStudio();
   queueSave();
 }
 
@@ -708,7 +683,7 @@ function execEditorCommand(command) {
 function insertMenuBlock(type, text) {
   const index = Math.max(getLineIndex(state.activeBlockId), -1);
   const newId = addBlock(type, text, index + 1);
-  renderStudioBound();
+  renderStudio();
   focusBlock(newId, true);
   queueSave();
 }
@@ -754,7 +729,7 @@ function findInScript() {
     return;
   }
   state.filterQuery = "";
-  renderStudioBound();
+  renderStudio();
   focusBlock(match.id, true);
 }
 
@@ -768,7 +743,7 @@ function setScriptFilter() {
     return;
   }
   state.filterQuery = nextFilter.trim();
-  renderStudioBound();
+  renderStudio();
   if (!state.filterQuery) {
     return;
   }
@@ -784,7 +759,7 @@ function clearScriptFilter() {
     return;
   }
   state.filterQuery = "";
-  renderStudioBound();
+  renderStudio();
 }
 
 function toggleViewOption(optionKey) {
@@ -793,7 +768,7 @@ function toggleViewOption(optionKey) {
   }
   state.viewOptions[optionKey] = !state.viewOptions[optionKey];
   applyViewState();
-  renderPreviewBound();
+  renderPreview();
   queueSave();
 }
 
@@ -903,8 +878,6 @@ function normalizeConvertedText(text, type) {
   return normalizeLineText(stripped, type);
 }
 
-
-
 function normalizeLineText(text, type) {
   const compact = String(text || "")
     .replace(/\r/g, "")
@@ -944,7 +917,7 @@ function serializeScript(project) {
 function queueSave() {
   refs.saveBadge.textContent = "Saving...";
   clearTimeout(state.saveTimer);
-  state.saveTimer = window.setTimeout(() => persistProjectsBound(false), 200);
+  state.saveTimer = window.setTimeout(() => persistProjects(false), 200);
 }
 
 function exportTxt() {
@@ -1008,10 +981,12 @@ function buildPrintableDocument(project, autoPrint = false) {
 
   const scriptMarkup = previewData.scriptPages.map((pageLines, index) => `
     <section class="print-page">
-      ${index >= 0 ? `<div class="print-header">${index === 0 ? "" : (index + 1) + "."}</div>` : ""}
       <div class="print-body">
         ${pageLines.map((line) => `<p class="print-line ${line.type}">${escapeHtml(line.displayText)}</p>`).join("")}
       </div>
+      ${(state.viewOptions.pageNumbers || state.viewOptions.pageCount)
+        ? `<div class="print-footer">${escapeHtml(buildPreviewFooterLabel(index + 1, previewData.scriptPages.length))}</div>`
+        : ""}
     </section>
   `).join("");
 
@@ -1029,7 +1004,7 @@ function buildPrintableDocument(project, autoPrint = false) {
     ${coverMarkup}
     ${scriptMarkup}
   </main>
-  ${autoPrint ? "<script>window.addEventListener('load', function () { window.print(); });</script>" : ""}
+  ${autoPrint ? "<script>window.addEventListener('load', function () { window.print(); });<\/script>" : ""}
 </body>
 </html>`;
 }
@@ -1050,16 +1025,16 @@ function getPrintableStyles() {
     }
     .print-page {
       width: 8.5in;
-      height: 11in;
+      min-height: 11in;
       margin: 0 auto;
       padding: 1.0in 1.0in 1.0in 1.5in;
       background: #fff;
       color: #111;
-      position: relative;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
       box-shadow: 0 16px 32px rgba(0, 0, 0, 0.08);
       page-break-after: always;
       break-after: page;
-      overflow: hidden;
     }
     .cover-page {
       display: flex;
@@ -1075,61 +1050,39 @@ function getPrintableStyles() {
       text-align: center;
       margin: 0;
     }
-    .print-header {
-      position: absolute;
-      top: 0.5in;
-      right: 1.0in;
-      width: 1in;
-      text-align: right;
-      font-size: 12pt;
-      font-family: "Courier New", Courier, monospace;
-    }
     .print-body {
-      width: 6in;
-      font-size: 12pt;
-      line-height: 12pt;
-      font-family: "Courier New", Courier, monospace;
+      width: 60ch;
+      margin: 0 auto;
+      font-size: ${state.viewOptions.textSize}pt;
     }
     .print-line {
-      margin: 0;
-      min-height: 12pt;
+      margin: 0 0 10px;
       white-space: pre-wrap;
       width: 60ch;
     }
-    .print-line.blank {
-      min-height: 12pt;
-    }
     .print-line.scene,
     .print-line.shot,
-    .print-line.transition,
-    .print-line.character,
-    .print-line.dual {
+    .print-line.transition {
       font-weight: 700;
       text-transform: uppercase;
     }
     .print-line.character,
     .print-line.dual {
-      margin-left: 22ch;
-      width: 38ch;
+      margin-left: 20ch;
+      width: 24ch;
+      text-transform: uppercase;
     }
     .print-line.dialogue {
       margin-left: 10ch;
-      width: 35ch;
+      width: 36ch;
     }
     .print-line.parenthetical {
-      margin-left: 16ch;
-      width: 25ch;
-    }
-    .print-line.dialogue-more {
-      margin-left: 10ch;
-      width: 35ch;
-    }
-    .print-line.continuity {
-      width: 60ch;
+      margin-left: 14ch;
+      width: 24ch;
     }
     .print-line.transition {
       margin-left: auto;
-      width: 100%;
+      width: 24ch;
       text-align: right;
     }
     .print-page-break {
@@ -1176,7 +1129,7 @@ function importFile(event) {
 
     if (file.name.toLowerCase().endsWith(".json")) {
       try {
-        nextProject = sanitizeProject(JSON.parse(text), normalizeLineText);
+        nextProject = sanitizeProject(JSON.parse(text));
       } catch (error) {
         console.error("Invalid JSON import", error);
         return;
@@ -1186,14 +1139,14 @@ function importFile(event) {
         ...project,
         title: file.name.replace(/\.[^.]+$/, ""),
         lines: parseTextToLines(text)
-      }, normalizeLineText);
+      });
     }
 
     nextProject.id = project.id;
     nextProject.createdAt = project.createdAt;
-    upsertProject(nextProject, sanitizeProject, normalizeLineText);
+    upsertProject(nextProject);
     openProject(nextProject.id);
-    persistProjectsBound(true);
+    persistProjects(true);
   };
 
   reader.readAsText(file);
@@ -1201,7 +1154,7 @@ function importFile(event) {
 }
 
 function parseTextToLines(text) {
-  const rawLines = text.replace(/\.\n/g, "\n").split(/\n{1,2}/).map((line) => line.trim()).filter(Boolean);
+  const rawLines = text.replace(/\r\n/g, "\n").split(/\n{1,2}/).map((line) => line.trim()).filter(Boolean);
   return rawLines.map((line, index) => ({
     id: uid(),
     type: inferTypeFromText(line, rawLines[index - 1] || "", rawLines[index + 1] || ""),
@@ -1212,7 +1165,7 @@ function parseTextToLines(text) {
 function inferTypeFromText(line, prevLine, nextLine) {
   if (/^(INT\.|EXT\.|INT\/EXT\.|INT\.\/EXT\.|EST\.)/i.test(line)) return "scene";
   if (/^(CUT TO:|DISSOLVE TO:|SMASH CUT TO:|MATCH CUT TO:|FADE OUT\.)/i.test(line)) return "transition";
-  if (/^(.*)$/.test(line)) return "parenthetical";
+  if (/^\(.*\)$/.test(line)) return "parenthetical";
   if (/^\[.*\]$/.test(line)) return "note";
   if (/^(CLOSE ON|WIDE SHOT|INSERT|POV|OVERHEAD SHOT)/i.test(line)) return "shot";
   if (/^IMAGE:/i.test(line)) return "image";
@@ -1227,26 +1180,26 @@ function looksLikeCharacter(line, prevLine, nextLine) {
   }
   const isUppercase = line === line.toUpperCase();
   const followedByDialogue = nextLine && !/^(INT\.|EXT\.|CUT TO:|\[|IMAGE:)/i.test(nextLine);
-  const separated = !prevLine || /^(INT\.|EXT\.|\.|CUT TO:|FADE OUT\.)/i.test(prevLine);
+  const separated = !prevLine || /^(INT\.|EXT\.|\[|CUT TO:|FADE OUT\.)/i.test(prevLine);
   return isUppercase && (followedByDialogue || separated);
 }
 
 function duplicateProject() {
   const current = getCurrentProject();
-  const copy = cloneProject({ ...current, title: `${current.title} Copy` }, true, sanitizeProject, normalizeLineText);
-  upsertProject(copy, sanitizeProject, normalizeLineText);
+  const copy = cloneProject({ ...current, title: `${current.title} Copy` }, true);
+  upsertProject(copy);
   openProject(copy.id);
-  persistProjectsBound(true);
+  persistProjects(true);
 }
 
 function replaceWithSample() {
   const current = getCurrentProject();
-  const replacement = cloneProject(sampleProject, false, sanitizeProject, normalizeLineText);
+  const replacement = cloneProject(sampleProject, false);
   replacement.id = current.id;
   replacement.createdAt = current.createdAt;
-  upsertProject(replacement, sanitizeProject, normalizeLineText);
+  upsertProject(replacement);
   openProject(replacement.id);
-  persistProjectsBound(true);
+  persistProjects(true);
 }
 
 function deleteProject() {
@@ -1268,13 +1221,13 @@ function removeProject(id) {
       id: uid("project"),
       title: "Script Name 1",
       lines: [{ id: uid(), type: "action", text: "" }]
-    }, normalizeLineText);
+    });
     state.projects = [replacement];
   }
   state.currentProjectId = state.projects[0].id;
-  persistProjectsBound(true);
+  persistProjects(true);
   showHome();
-  renderHome(refs, openProject, removeProject, renderRecentProjectMenus);
+  renderHome();
 }
 
 function insertAiAssistNote() {
@@ -1285,7 +1238,7 @@ function insertAiAssistNote() {
   const index = getLineIndex(state.activeBlockId);
   const prompt = "AI ASSIST: Suggest the next beat, sharpen the scene objective, and keep the current voice.";
   const newId = addBlock("note", prompt, index + 1);
-  renderStudioBound();
+  renderStudio();
   focusBlock(newId, true);
   queueSave();
 }
@@ -1309,7 +1262,7 @@ function togglePaneSection(body, button) {
 function toggleToolStrip() {
   state.toolStripCollapsed = !state.toolStripCollapsed;
   applyToolbarState();
-  persistProjectsBound(false);
+  persistProjects(false);
 }
 
 function applyToolbarState() {
@@ -1349,7 +1302,7 @@ function setTheme(theme) {
   state.theme = theme;
   applyTheme();
   closeMenus();
-  persistProjectsBound(false);
+  persistProjects(false);
 }
 
 function applyTheme() {
@@ -1379,7 +1332,7 @@ function initResizeHandle(handle, side) {
     const onUp = () => {
       handle.removeEventListener("pointermove", onMove);
       handle.removeEventListener("pointerup", onUp);
-      persistProjectsBound(false);
+      persistProjects(false);
     };
 
     handle.addEventListener("pointermove", onMove);
@@ -1392,7 +1345,7 @@ function focusBlock(id, selectAll = false) {
     const visibleSet = buildVisibleFilterSet(getCurrentProject());
     if (visibleSet && !visibleSet.has(id)) {
       state.filterQuery = "";
-      renderStudioBound();
+      renderStudio();
     }
   }
 
@@ -1400,7 +1353,7 @@ function focusBlock(id, selectAll = false) {
   const project = getCurrentProject();
   if (ownerSceneId && ownerSceneId !== id && project?.collapsedSceneIds.includes(ownerSceneId)) {
     project.collapsedSceneIds = project.collapsedSceneIds.filter((sceneId) => sceneId !== ownerSceneId);
-    renderStudioBound();
+    renderStudio();
   }
 
   const target = refs.screenplayEditor.querySelector(`.script-block[data-id="${id}"]`);
@@ -1419,4 +1372,29 @@ function focusBlock(id, selectAll = false) {
 
 function getActiveEditableBlock() {
   return refs.screenplayEditor.querySelector(`.script-block[data-id="${state.activeBlockId}"]`);
+}
+
+
+function buildPreviewData(project) {
+  const preparedLines = [];
+  let sceneNumber = 0;
+
+  project.lines.forEach((line) => {
+    const normalized = normalizeLineText(line.text, line.type);
+    if (!normalized) {
+      return;
+    }
+    if (line.type === "scene") {
+      sceneNumber += 1;
+    }
+    preparedLines.push({
+      id: line.id,
+      type: line.type,
+      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
+    });
+  });
+
+  return {
+    scriptPages: paginateScriptLines(preparedLines, (t, tex) => estimateLineUnits(t, tex, stripWrapperChars), stripWrapperChars, (l, i) => findLastSpeaker(l, i, stripWrapperChars))
+  };
 }
