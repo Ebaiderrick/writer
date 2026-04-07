@@ -1,16 +1,16 @@
-import { DEFAULT_VIEW_OPTIONS } from './constants.js';
-
 export const state = {
-  projects: [],
-  currentProjectId: null,
-  activeBlockId: null,
-  activeType: "action",
-  visibleSuggestions: [],
-  saveTimer: null,
-  aiAssist: false,
-  toolStripCollapsed: false,
-  autoNumberScenes: false,
-  theme: "rose",
-  viewOptions: { ...DEFAULT_VIEW_OPTIONS },
-  filterQuery: ""
+  blocks: []
 };
+
+export function addBlock(type, text) {
+  state.blocks.push({
+    id: Date.now() + Math.random(),
+    type,
+    text
+  });
+}
+
+export function updateBlock(id, newText) {
+  const block = state.blocks.find(b => b.id === id);
+  if (block) block.text = newText;
+}
