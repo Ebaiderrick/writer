@@ -226,11 +226,6 @@ function getPrintableStyles() {
       width: 2.4in;
       text-align: right;
     }
-    .print-page-break {
-      height: 0;
-      page-break-after: always;
-      break-after: page;
-    }
     @page {
       size: letter;
       margin: 0;
