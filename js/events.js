@@ -18,7 +18,8 @@ import {
 } from './ui.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
-  slugify, downloadFile, selectElementText, parseTextToLines, uid, placeCaretAtEnd
+  slugify, downloadFile, selectElementText, parseTextToLines, uid,
+  placeCaretAtEnd, getCaretOffset, setCaretOffset
 } from './utils.js';
 
 export function bindEvents() {
@@ -259,6 +260,7 @@ function handleBlockInput(id, element) {
   const project = getCurrentProject();
   if (!line || !project) return;
 
+  const offset = getCaretOffset(element);
   const beforeText = element.textContent || "";
   let normalized = normalizeLineText(beforeText, line.type);
   let autoCompleted = false;
@@ -275,7 +277,7 @@ function handleBlockInput(id, element) {
 
   if (!autoCompleted && normalized !== beforeText) {
     element.textContent = normalized;
-    placeCaretAtEnd(element);
+    setCaretOffset(element, offset);
   }
 
   line.text = normalized;

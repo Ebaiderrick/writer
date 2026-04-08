@@ -48,8 +48,13 @@ export function normalizeLineText(text, type) {
     .replace(/[ \t]{2,}/g, " ")
     .replace(/^\s+/, "");
 
-  if (!compact.trim()) {
+  if (!compact && compact !== "") {
     return "";
+  }
+
+  // If it's just spaces, we keep them for active typing feel
+  if (compact.length > 0 && compact.trim() === "") {
+      return compact;
   }
 
   if (type === "note") {
@@ -70,6 +75,48 @@ export function normalizeLineText(text, type) {
   }
 
   return compact;
+}
+
+export function getCaretOffset(element) {
+  const selection = window.getSelection();
+  if (selection.rangeCount === 0) return 0;
+  const range = selection.getRangeAt(0);
+  const preCaretRange = range.cloneRange();
+  preCaretRange.selectNodeContents(element);
+  preCaretRange.setEnd(range.endContainer, range.endOffset);
+  return preCaretRange.toString().length;
+}
+
+export function setCaretOffset(element, offset) {
+  const selection = window.getSelection();
+  const range = document.createRange();
+  let currentOffset = 0;
+  let found = false;
+
+  function traverse(node) {
+    if (found) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (currentOffset + node.length >= offset) {
+        range.setStart(node, offset - currentOffset);
+        range.setEnd(node, offset - currentOffset);
+        found = true;
+      } else {
+        currentOffset += node.length;
+      }
+    } else {
+      for (let child of node.childNodes) {
+        traverse(child);
+      }
+    }
+  }
+
+  traverse(element);
+  if (!found) {
+    range.selectNodeContents(element);
+    range.collapse(false);
+  }
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 export function placeCaretAtEnd(element) {
