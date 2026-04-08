@@ -5,11 +5,9 @@ import {
   getSuggestedNextSpeaker
 } from './project.js';
 import {
-  normalizeLineText, uid, selectTextSuffix, placeCaretAtEnd,
+  normalizeLineText, selectTextSuffix, placeCaretAtEnd,
   selectElementText, buildContinuedSceneSuggestions
 } from './utils.js';
-import { renderPreview } from './preview.js';
-import { renderMetrics } from './ui.js';
 import { createTextNode as createUINode } from './utils.js';
 
 export function renderEditor() {

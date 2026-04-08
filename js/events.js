@@ -436,33 +436,98 @@ function handleBlockKeydown(event, id) {
 
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
-    if (!line.text.trim()) {
-      return;
-    }
+    const offset = getCaretOffset(event.target);
+    const textBefore = line.text.substring(0, offset);
+    const textAfter = line.text.substring(offset);
+
+    line.text = textBefore;
     const nextType = inferNextType(index);
-    const newId = addBlock(nextType, getDefaultText(nextType, index), index + 1);
+    const newId = addBlock(nextType, textAfter || getDefaultText(nextType, index), index + 1);
+
     renderStudio();
-    focusBlock(newId, true);
+    focusBlock(newId, !textAfter);
     queueSave();
     return;
   }
 
-  if (event.key === "Backspace" && !line.text.trim() && project.lines.length > 1) {
-    event.preventDefault();
-    const targetId = project.lines[Math.max(index - 1, 0)].id;
-    project.lines.splice(index, 1);
-    state.activeBlockId = targetId;
-    project.updatedAt = new Date().toISOString();
-    renderStudio();
-    focusBlock(targetId);
-    placeCaretAtEnd(refs.screenplayEditor.querySelector(`.script-block[data-id="${targetId}"]`));
-    queueSave();
-    return;
+  if (event.key === "Backspace") {
+    const offset = getCaretOffset(event.target);
+    if (offset === 0 && index > 0) {
+      event.preventDefault();
+      const prevLine = project.lines[index - 1];
+      const prevTextLength = prevLine.text.length;
+      prevLine.text += line.text;
+      project.lines.splice(index, 1);
+      state.activeBlockId = prevLine.id;
+      project.updatedAt = new Date().toISOString();
+      renderStudio();
+      const prevElement = refs.screenplayEditor.querySelector(`.script-block[data-id="${prevLine.id}"]`);
+      focusBlock(prevLine.id);
+      setCaretOffset(prevElement, prevTextLength);
+      queueSave();
+      return;
+    }
+
+    if (!line.text.trim() && project.lines.length > 1) {
+      event.preventDefault();
+      const targetId = project.lines[Math.max(index - 1, 0)].id;
+      project.lines.splice(index, 1);
+      state.activeBlockId = targetId;
+      project.updatedAt = new Date().toISOString();
+      renderStudio();
+      focusBlock(targetId);
+      placeCaretAtEnd(refs.screenplayEditor.querySelector(`.script-block[data-id="${targetId}"]`));
+      queueSave();
+      return;
+    }
   }
 
   if (event.key === "Tab") {
     event.preventDefault();
     cycleBlockType(id);
+    return;
+  }
+
+  // Smart Navigation
+  if (event.key === "ArrowUp") {
+    const offset = getCaretOffset(event.target);
+    if (offset === 0 || event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        // Jump to previous scene
+        for (let i = index - 1; i >= 0; i--) {
+          if (project.lines[i].type === "scene") {
+            focusBlock(project.lines[i].id);
+            return;
+          }
+        }
+        focusBlock(project.lines[0].id);
+      } else {
+        const prev = project.lines[index - 1];
+        if (prev) focusBlock(prev.id);
+      }
+    }
+  }
+
+  if (event.key === "ArrowDown") {
+    const offset = getCaretOffset(event.target);
+    const length = line.text.length;
+    if (offset === length || event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        // Jump to next scene
+        for (let i = index + 1; i < project.lines.length; i++) {
+          if (project.lines[i].type === "scene") {
+            focusBlock(project.lines[i].id);
+            return;
+          }
+        }
+        focusBlock(project.lines[project.lines.length - 1].id);
+      } else {
+        const next = project.lines[index + 1];
+        if (next) focusBlock(next.id);
+      }
+    }
   }
 }
 
@@ -775,6 +840,38 @@ function handleGlobalKeydown(event) {
   if ((event.ctrlKey || event.metaKey) && key === "s") {
     event.preventDefault();
     persistProjects(true);
+    return;
+  }
+
+  // Undo / Redo
+  if ((event.ctrlKey || event.metaKey) && key === "z") {
+    event.preventDefault();
+    if (event.shiftKey) {
+        execEditorCommand("redo");
+    } else {
+        execEditorCommand("undo");
+    }
+    return;
+  }
+
+  if ((event.ctrlKey || event.metaKey) && key === "y") {
+    event.preventDefault();
+    execEditorCommand("redo");
+    return;
+  }
+
+  // Duplicate Block
+  if ((event.ctrlKey || event.metaKey) && key === "d") {
+    event.preventDefault();
+    const project = getCurrentProject();
+    const index = getLineIndex(state.activeBlockId);
+    if (index >= 0) {
+        const line = project.lines[index];
+        const newId = addBlock(line.type, line.text, index + 1);
+        renderStudio();
+        focusBlock(newId, true);
+        queueSave();
+    }
     return;
   }
 
