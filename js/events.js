@@ -172,6 +172,79 @@ export function bindEvents() {
       }
   });
 
+  refs.screenplayEditor.addEventListener("copy", (e) => {
+      const selection = window.getSelection();
+      if (selection.isCollapsed) return;
+
+      const project = getCurrentProject();
+      if (!project) return;
+
+      const selectedLines = [];
+      const range = selection.getRangeAt(0);
+      const blocks = refs.screenplayEditor.querySelectorAll(".script-block");
+
+      blocks.forEach(block => {
+          if (selection.containsNode(block, true)) {
+              const line = getLine(block.dataset.id);
+              if (line) selectedLines.push(line.text);
+          }
+      });
+
+      if (selectedLines.length > 0) {
+          e.clipboardData.setData("text/plain", selectedLines.join("\n"));
+          e.preventDefault();
+      }
+  });
+
+  refs.screenplayEditor.addEventListener("paste", (e) => {
+      e.preventDefault();
+      const text = e.clipboardData.getData("text/plain");
+      if (!text) return;
+
+      const lines = text.split(/\r?\n/);
+      const activeId = state.activeBlockId;
+      const project = getCurrentProject();
+      if (!project || !activeId) return;
+
+      let index = getLineIndex(activeId);
+      const currentLine = project.lines[index];
+
+      // If current line is empty, replace it with the first pasted line
+      if (currentLine && !currentLine.text.trim()) {
+          currentLine.text = lines[0];
+          currentLine.type = inferTypeFromText(lines[0], "", lines[1] || "");
+          lines.shift();
+      }
+
+      // Add remaining lines
+      lines.reverse().forEach(content => {
+          if (content.trim()) {
+              const type = inferTypeFromText(content, "", "");
+              const newLine = { id: uid(), type, text: content };
+              project.lines.splice(index + 1, 0, newLine);
+          }
+      });
+
+      project.updatedAt = new Date().toISOString();
+      renderStudio();
+      queueSave();
+  });
+
+  refs.screenplayEditor.addEventListener("focusout", (e) => {
+    if (e.target.classList.contains("script-block")) {
+        const id = e.target.dataset.id;
+        const line = getLine(id);
+        const project = getCurrentProject();
+        if (line && !line.text.trim() && project && project.lines.length > 1) {
+            const index = getLineIndex(id);
+            project.lines.splice(index, 1);
+            project.updatedAt = new Date().toISOString();
+            renderStudio();
+            queueSave();
+        }
+    }
+  });
+
   // Project Grid (Delegated)
   refs.projectGrid.addEventListener("click", (e) => {
       const card = e.target.closest(".project-card");
@@ -323,6 +396,9 @@ function handleBlockKeydown(event, id) {
 
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
+    if (!line.text.trim()) {
+      return;
+    }
     const nextType = inferNextType(index);
     const newId = addBlock(nextType, getDefaultText(nextType, index), index + 1);
     renderStudio();
@@ -339,6 +415,7 @@ function handleBlockKeydown(event, id) {
     project.updatedAt = new Date().toISOString();
     renderStudio();
     focusBlock(targetId);
+    placeCaretAtEnd(refs.screenplayEditor.querySelector(`.script-block[data-id="${targetId}"]`));
     queueSave();
     return;
   }
