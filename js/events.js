@@ -8,7 +8,7 @@ import {
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
-  getOwningSceneId, getCharacterAutocomplete
+  getOwningSceneId, getCharacterAutocomplete, updateSuggestions
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
 import {
@@ -21,7 +21,7 @@ import {
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
-  placeCaretAtEnd, getCaretOffset, setCaretOffset
+  placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText
 } from './utils.js';
 
 export function bindEvents() {
@@ -106,6 +106,16 @@ export function bindEvents() {
     }));
     renderStudio();
     queueSave();
+  });
+
+  refs.autoNumberToggle.addEventListener("change", () => {
+    state.autoNumberScenes = refs.autoNumberToggle.checked;
+    renderPreview();
+    queueSave();
+  });
+
+  refs.typewriterToggle.addEventListener("change", () => {
+    document.body.classList.toggle("typewriter-mode", refs.typewriterToggle.checked);
   });
 
   refs.aiAssistToggle.addEventListener("change", () => {
@@ -298,6 +308,10 @@ export function openProject(projectId) {
   state.activeBlockId = project.lines[0]?.id || null;
   state.activeType = project.lines[0]?.type || "action";
 
+  refs.aiAssistToggle.checked = state.aiAssist;
+  refs.autoNumberToggle.checked = state.autoNumberScenes;
+  refs.aiPanel.hidden = !state.aiAssist;
+
   syncInputsFromProject(project);
   showStudio();
   renderStudio();
@@ -366,6 +380,7 @@ function handleBlockInput(id, element) {
   renderCharacterList();
   renderMetrics();
   renderHome();
+  updateSuggestions();
   queueSave();
 }
 
@@ -471,6 +486,9 @@ function changeBlockType(id, nextType) {
 
 function normalizeConvertedText(text, type) {
   const stripped = stripWrapperChars(String(text || "").trim());
+  if (!stripped && type === "character") {
+      return getSuggestedNextSpeaker(getLineIndex(state.activeBlockId));
+  }
   return normalizeLineText(stripped, type);
 }
 

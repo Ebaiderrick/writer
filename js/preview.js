@@ -2,7 +2,7 @@ import { state } from './config.js';
 import { refs } from './dom.js';
 import { getCurrentProject, syncProjectFromInputs } from './project.js';
 import { paginateScriptLines } from './pagination.js';
-import { escapeHtml, createTextNode } from './utils.js';
+import { escapeHtml, createTextNode, normalizeLineText } from './utils.js';
 
 export function renderCoverPreview() {
   const project = syncProjectFromInputs() || getCurrentProject();
@@ -68,8 +68,8 @@ export function buildPreviewData(project) {
   let sceneNumber = 0;
 
   project.lines.forEach((line) => {
-    const normalized = escapeHtml(line.text);
-    if (!normalized && line.text.trim() === "") {
+    const normalized = normalizeLineText(line.text, line.type);
+    if (!normalized) {
       return;
     }
     if (line.type === "scene") {

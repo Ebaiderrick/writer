@@ -131,7 +131,7 @@ img {
 }
 
 .home-view {
-  min-height: 100vh;
+  height: 100vh;
   padding: 40px 12vw 80px;
   overflow-y: auto;
   overflow-x: hidden;

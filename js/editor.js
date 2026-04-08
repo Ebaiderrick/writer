@@ -178,7 +178,7 @@ export function buildSuggestions(type, currentText) {
     const previousScene = getPreviousSceneHeading(getLineIndex(state.activeBlockId));
     const carryOvers = previousScene ? buildContinuedSceneSuggestions(previousScene) : [];
     return [...new Set([...DEFAULT_SUGGESTIONS.scene, ...carryOvers, ...sceneHeadings])]
-      .filter((value) => !trimmed || value.includes(trimmed))
+      .filter((value) => !trimmed || value.toUpperCase().includes(trimmed))
       .map((value) => ({ label: value, value }));
   }
 
