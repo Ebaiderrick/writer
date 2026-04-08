@@ -517,6 +517,13 @@ img {
   background: var(--control-bg);
 }
 
+.btn-sm {
+  min-height: 28px !important;
+  padding: 4px 10px !important;
+  font-size: 0.8rem !important;
+  border-radius: 8px !important;
+}
+
 .danger-button {
   color: var(--accent-strong);
 }
@@ -1316,21 +1323,60 @@ img {
   width: 100%;
 }
 
-.help-dialog {
+.help-dialog, .custom-modal {
   border: 0;
   padding: 0;
   background: transparent;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
 }
 
-.help-dialog::backdrop {
-  background: rgba(16, 16, 16, 0.2);
+.help-dialog::backdrop, .custom-modal::backdrop {
+  background: rgba(16, 16, 16, 0.15);
+  backdrop-filter: blur(2px);
+}
+
+.help-sheet, .modal-content {
+  width: min(480px, calc(100vw - 32px));
+  border: none;
+  background: var(--panel);
+  padding: 24px;
+  border-radius: 16px;
 }
 
 .help-sheet {
-  width: min(720px, calc(100vw - 24px));
-  border: none;
-  background: #fff;
-  padding: 18px;
+    width: min(720px, calc(100vw - 32px));
+}
+
+.modal-title {
+    margin: 0 0 8px;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.modal-message {
+    margin: 0 0 20px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.modal-input-container {
+    margin-bottom: 20px;
+}
+
+.modal-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--control-bg);
+    color: var(--ink);
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
 }
 
 .shortcut-grid {

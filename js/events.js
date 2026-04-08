@@ -16,7 +16,7 @@ import {
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showProofreadReport, showWorkTracking, revealMetricsPanel,
-  updateMenuStateButtons
+  updateMenuStateButtons, customAlert, customConfirm, customPrompt
 } from './ui.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
@@ -687,10 +687,10 @@ function execEditorCommand(command) {
   }
 }
 
-function renameCurrentProject() {
+async function renameCurrentProject() {
   const project = getCurrentProject();
   if (!project) return;
-  const nextTitle = window.prompt("Rename this project:", project.title);
+  const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (nextTitle === null) return;
   project.title = nextTitle.trim() || "Untitled Script";
   project.updatedAt = new Date().toISOString();
@@ -720,15 +720,15 @@ function deleteProject() {
   if (current) removeProject(current.id);
 }
 
-function removeProject(id) {
+async function removeProject(id) {
   const target = state.projects.find((item) => item.id === id);
   if (!target) return;
 
-  const confirmation = window.prompt(`This will permanently delete the script "${target.title}".\n\nTo confirm, please retype the project name below:`, "");
+  const confirmation = await customPrompt(`This will permanently delete the script "${target.title}".\n\nTo confirm, please retype the project name below:`, "", "Confirm Deletion");
 
   if (confirmation !== target.title) {
     if (confirmation !== null) {
-      window.alert("Deletion cancelled. The name you typed did not match.");
+      await customAlert("Deletion cancelled. The name you typed did not match.", "Cancelled");
     }
     return;
   }
@@ -809,20 +809,20 @@ function insertMenuBlock(type, text) {
   queueSave();
 }
 
-function insertHyperlink() {
-  const url = window.prompt("Enter the hyperlink URL:");
+async function insertHyperlink() {
+  const url = await customPrompt("Enter the hyperlink URL:", "https://", "Insert Hyperlink");
   if (url === null || !url.trim()) return;
-  const label = window.prompt("Optional display text:", "");
+  const label = await customPrompt("Optional display text:", "", "Link Label");
   const cleanedUrl = url.trim();
   const cleanedLabel = label === null ? "" : label.trim();
   const text = cleanedLabel ? `${cleanedLabel} <${cleanedUrl}>` : cleanedUrl;
   insertMenuBlock("text", text);
 }
 
-function findInScript() {
+async function findInScript() {
   const project = getCurrentProject();
   if (!project) return;
-  const query = window.prompt("Find text in this script:", state.filterQuery);
+  const query = await customPrompt("Find text in this script:", state.filterQuery, "Find");
   if (query === null) return;
   const cleaned = query.trim().toLowerCase();
   if (!cleaned) {
@@ -831,7 +831,7 @@ function findInScript() {
   }
   const match = project.lines.find((line) => `${TYPE_LABELS[line.type]} ${line.text}`.toLowerCase().includes(cleaned));
   if (!match) {
-    window.alert(`No matches found for "${query}".`);
+    await customAlert(`No matches found for "${query}".`, "No Matches");
     return;
   }
   state.filterQuery = "";
@@ -839,10 +839,10 @@ function findInScript() {
   focusBlock(match.id, true);
 }
 
-function setScriptFilter() {
+async function setScriptFilter() {
   const project = getCurrentProject();
   if (!project) return;
-  const nextFilter = window.prompt("Filter visible lines by text or line function:", state.filterQuery);
+  const nextFilter = await customPrompt("Filter visible lines by text or line function:", state.filterQuery, "Filter Script");
   if (nextFilter === null) return;
   state.filterQuery = nextFilter.trim();
   renderStudio();

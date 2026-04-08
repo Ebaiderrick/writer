@@ -519,11 +519,25 @@
     </div>
   </template>
 
+  <dialog id="customModal" class="custom-modal">
+    <div class="modal-content">
+      <h3 id="modalTitle" class="modal-title"></h3>
+      <p id="modalMessage" class="modal-message"></p>
+      <div id="modalInputContainer" class="modal-input-container" hidden>
+        <input type="text" id="modalInput" class="modal-input">
+      </div>
+      <div class="modal-actions">
+        <button id="modalCancelBtn" class="ghost-button btn-sm" type="button">Cancel</button>
+        <button id="modalConfirmBtn" class="primary-button btn-sm" type="button">OK</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="helpDialog" class="help-dialog">
     <form method="dialog" class="help-sheet">
       <div class="help-head">
         <h3>Keyboard shortcuts</h3>
-        <button class="ghost-button" type="submit">Close</button>
+        <button class="ghost-button btn-sm" type="submit">Close</button>
       </div>
       <div class="shortcut-grid">
         <p><kbd>Ctrl/Cmd + S</kbd><span>Save project</span></p>

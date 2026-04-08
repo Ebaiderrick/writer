@@ -223,7 +223,7 @@ export function toggleMenu(menuId) {
   trigger?.classList.toggle("is-open", willOpen);
 }
 
-export function showProofreadReport() {
+export async function showProofreadReport() {
   const project = getCurrentProject();
   if (!project) {
     return;
@@ -244,23 +244,23 @@ export function showProofreadReport() {
     issues.push(`${loneCharacters} character cue${loneCharacters === 1 ? "" : "s"} with no following line`);
   }
 
-  window.alert(issues.length ? `Proofread highlights:\n- ${issues.join("\n- ")}` : "Proofread highlights:\n- No obvious screenplay-format issues were found in the current draft.");
+  await customAlert(issues.length ? `Proofread highlights:\n- ${issues.join("\n- ")}` : "No obvious screenplay-format issues were found in the current draft.", "Proofread Report");
 }
 
-export function showWorkTracking() {
+export async function showWorkTracking() {
   const project = getCurrentProject();
   if (!project) {
     return;
   }
   const scenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
   const words = (serializeScript(project).match(/\b[\w'-]+\b/g) || []).length;
-  window.alert([
+  await customAlert([
     `Project: ${project.title}`,
     `Created: ${formatDateTime(project.createdAt)}`,
     `Last updated: ${formatDateTime(project.updatedAt)}`,
     `Scenes: ${scenes}`,
     `Words: ${words.toLocaleString()}`
-  ].join("\n"));
+  ].join("\n"), "Work Tracking");
 }
 
 export function revealMetricsPanel() {
@@ -277,4 +277,70 @@ export function revealMetricsPanel() {
       refs.leftPaneSectionToggle.textContent = "^";
   }
   document.querySelector(".section-metrics")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+/**
+ * Custom modern modal system
+ */
+const modalRefs = {
+    dialog: document.querySelector("#customModal"),
+    title: document.querySelector("#modalTitle"),
+    message: document.querySelector("#modalMessage"),
+    inputContainer: document.querySelector("#modalInputContainer"),
+    input: document.querySelector("#modalInput"),
+    cancelBtn: document.querySelector("#modalCancelBtn"),
+    confirmBtn: document.querySelector("#modalConfirmBtn")
+};
+
+function showModal({ title, message, showInput = false, defaultValue = "", confirmLabel = "OK", cancelLabel = "Cancel", showCancel = true }) {
+    return new Promise((resolve) => {
+        modalRefs.title.textContent = title;
+        modalRefs.message.textContent = message;
+        modalRefs.inputContainer.hidden = !showInput;
+        modalRefs.input.value = defaultValue;
+        modalRefs.confirmBtn.textContent = confirmLabel;
+        modalRefs.cancelBtn.textContent = cancelLabel;
+        modalRefs.cancelBtn.hidden = !showCancel;
+
+        const cleanup = () => {
+            modalRefs.confirmBtn.removeEventListener("click", onConfirm);
+            modalRefs.cancelBtn.removeEventListener("click", onCancel);
+            modalRefs.dialog.removeEventListener("close", onCancel);
+        };
+
+        const onConfirm = () => {
+            cleanup();
+            const value = showInput ? modalRefs.input.value : true;
+            modalRefs.dialog.close();
+            resolve(value);
+        };
+
+        const onCancel = () => {
+            cleanup();
+            modalRefs.dialog.close();
+            resolve(showInput ? null : false);
+        };
+
+        modalRefs.confirmBtn.addEventListener("click", onConfirm);
+        modalRefs.cancelBtn.addEventListener("click", onCancel);
+        modalRefs.dialog.addEventListener("close", onCancel, { once: true });
+
+        modalRefs.dialog.showModal();
+        if (showInput) {
+            modalRefs.input.focus();
+            modalRefs.input.select();
+        }
+    });
+}
+
+export async function customAlert(message, title = "Alert") {
+    return showModal({ title, message, showCancel: false });
+}
+
+export async function customConfirm(message, title = "Confirm") {
+    return showModal({ title, message });
+}
+
+export async function customPrompt(message, defaultValue = "", title = "Prompt") {
+    return showModal({ title, message, showInput: true, defaultValue });
 }
