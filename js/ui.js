@@ -1,0 +1,279 @@
+import { state, TYPE_LABELS } from './config.js';
+import { refs } from './dom.js';
+import { getCurrentProject, persistProjects, serializeScript } from './project.js';
+import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from './utils.js';
+
+export function showHome() {
+  refs.homeView.hidden = false;
+  refs.studioView.hidden = true;
+}
+
+export function showStudio() {
+  refs.homeView.hidden = true;
+  refs.studioView.hidden = false;
+}
+
+export function renderHome() {
+  refs.projectGrid.innerHTML = "";
+  const template = document.querySelector("#projectCardTemplate");
+  const projects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+  projects.forEach((project) => {
+    const node = template.content.firstElementChild.cloneNode(true);
+    const openButton = node.querySelector(".project-card-open");
+    const deleteButton = node.querySelector(".project-delete");
+    const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+    const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+
+    node.querySelector(".project-card-title").textContent = project.title;
+    node.querySelector(".project-scenes").textContent = `Scenes: ${sceneCount}`;
+    node.querySelector(".project-characters").textContent = `Characters: ${characterCount}`;
+    node.querySelector(".project-card-logline").textContent = project.logline || "Description automatically appears here as the script grows.";
+    node.querySelector(".project-card-updated").textContent = `Last Modified: ${formatDateTime(project.updatedAt)}`;
+
+    // Note: Event listeners will be bound in events.js, but we need the IDs here
+    node.dataset.projectId = project.id;
+
+    refs.projectGrid.appendChild(node);
+  });
+
+  renderRecentProjectMenus();
+}
+
+export function renderRecentProjectMenus() {
+  const containers = [refs.homeRecentProjects, refs.studioRecentProjects].filter(Boolean);
+  if (!containers.length) {
+    return;
+  }
+
+  const projects = [...state.projects]
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    .slice(0, 5);
+
+  containers.forEach((container) => {
+    container.innerHTML = "";
+    projects.forEach((project) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "nav-menu-button recent-project-button";
+      button.dataset.projectId = project.id;
+      button.innerHTML = `<span>${escapeHtml(project.title)}</span><small>${escapeHtml(formatDateTime(project.updatedAt))}</small>`;
+      container.appendChild(button);
+    });
+  });
+}
+
+export function renderSceneList() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const scenes = project.lines
+    .map((line, index) => ({ ...line, index }))
+    .filter((line) => line.type === "scene");
+
+  refs.sceneList.innerHTML = "";
+  refs.sceneCount.textContent = `${scenes.length} ${scenes.length === 1 ? "scene" : "scenes"}`;
+
+  if (!scenes.length) {
+    refs.sceneList.appendChild(createTextNode("Scene headings will appear here."));
+    return;
+  }
+
+  const template = document.querySelector("#listItemTemplate");
+  scenes.forEach((scene, order) => {
+    const node = template.content.firstElementChild.cloneNode(true);
+    node.querySelector(".list-item-title").textContent = `${order + 1}. ${normalizeLineText(scene.text, "scene")}`;
+    node.querySelector(".list-item-meta").textContent = getSceneFirstLine(project, scene.index);
+    node.dataset.lineId = scene.id;
+    refs.sceneList.appendChild(node);
+  });
+}
+
+export function getSceneFirstLine(project, sceneIndex) {
+  for (let index = sceneIndex + 1; index < project.lines.length; index += 1) {
+    const line = project.lines[index];
+    if (line.type === "scene") {
+      break;
+    }
+    const text = normalizeLineText(line.text, line.type);
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+export function renderCharacterList() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const characters = new Map();
+
+  project.lines.forEach((line, index) => {
+    if (line.type !== "character" || !line.text.trim()) {
+      return;
+    }
+    const key = normalizeLineText(line.text, "character");
+    const current = characters.get(key) || { name: key, count: 0, firstId: line.id, firstIndex: index };
+    current.count += 1;
+    characters.set(key, current);
+  });
+
+  refs.characterList.innerHTML = "";
+  if (!characters.size) {
+    refs.characterList.appendChild(createTextNode("Characters will appear here."));
+    return;
+  }
+
+  const template = document.querySelector("#listItemTemplate");
+  [...characters.values()]
+    .sort((a, b) => b.count - a.count || a.firstIndex - b.firstIndex)
+    .forEach((character) => {
+      const node = template.content.firstElementChild.cloneNode(true);
+      node.querySelector(".list-item-title").textContent = character.name;
+      node.querySelector(".list-item-meta").textContent = `${character.count} entries`;
+      node.dataset.lineId = character.firstId;
+      refs.characterList.appendChild(node);
+    });
+}
+
+export function syncInputsFromProject(project) {
+  refs.titleInput.value = project.title;
+  refs.authorInput.value = project.author;
+  refs.contactInput.value = project.contact;
+  refs.companyInput.value = project.company;
+  refs.detailsInput.value = project.details;
+  refs.loglineInput.value = project.logline;
+}
+
+export function updateMenuStateButtons() {
+  document.querySelectorAll("[data-view-toggle]").forEach((button) => {
+    button.classList.toggle("is-active", Boolean(state.viewOptions[button.dataset.viewToggle]));
+  });
+
+  document.querySelectorAll("[data-text-size]").forEach((button) => {
+    button.classList.toggle("is-active", Number(button.dataset.textSize) === state.viewOptions.textSize);
+  });
+
+  document.querySelectorAll("[data-menu-action='toggle-ai-assistant']").forEach((button) => {
+    button.classList.toggle("is-active", state.aiAssist);
+  });
+
+  document.querySelectorAll("[data-menu-action='filter']").forEach((button) => {
+    button.classList.toggle("is-active", Boolean(state.filterQuery));
+  });
+}
+
+export function applyViewState() {
+  document.body.classList.toggle("show-ruler", state.viewOptions.ruler);
+  document.body.classList.toggle("outline-hidden", !state.viewOptions.showOutline);
+  document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
+  updateMenuStateButtons();
+}
+
+export function setTheme(theme) {
+  state.theme = theme;
+  applyTheme();
+  closeMenus();
+  persistProjects(false);
+}
+
+export function applyTheme() {
+  document.documentElement.dataset.theme = state.theme;
+  refs.themeButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.themeValue === state.theme);
+  });
+}
+
+export function applyToolbarState() {
+  refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
+  refs.toolStripToggle.textContent = state.toolStripCollapsed ? "v" : "^";
+}
+
+export function renderMetrics() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const words = serializeScript(project).match(/\b[\w'-]+\b/g) || [];
+  const characters = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase()));
+  const notes = project.lines.filter((line) => line.type === "note" && line.text.trim()).length;
+
+  refs.wordCount.textContent = words.length.toLocaleString();
+  refs.pageCount.textContent = Math.max(1, Math.round((words.length / 180) * 10) / 10).toFixed(1);
+  refs.characterCount.textContent = characters.size.toString();
+  refs.noteCount.textContent = notes.toString();
+}
+
+export function closeMenus() {
+  document.querySelectorAll(".nav-menu").forEach((menu) => {
+    menu.hidden = true;
+  });
+  document.querySelectorAll("[data-menu-trigger]").forEach((button) => {
+    button.classList.remove("is-open");
+  });
+}
+
+export function toggleMenu(menuId) {
+  const menu = document.getElementById(menuId);
+  if (!menu) {
+    return;
+  }
+  const trigger = document.querySelector(`[data-menu-trigger="${menuId}"]`);
+  const willOpen = menu.hidden;
+  closeMenus();
+  menu.hidden = !willOpen;
+  trigger?.classList.toggle("is-open", willOpen);
+}
+
+export function showProofreadReport() {
+  const project = getCurrentProject();
+  if (!project) {
+    return;
+  }
+
+  const issues = [];
+  const emptyScenes = project.lines.filter((line) => line.type === "scene" && !normalizeLineText(line.text, "scene")).length;
+  const weakSceneLines = project.lines.filter((line) => line.type === "scene" && line.text && !/^(INT\.|EXT\.|INT\.\/EXT\.|EST\.)/i.test(normalizeLineText(line.text, "scene"))).length;
+  const loneCharacters = project.lines.filter((line, index) => line.type === "character" && !project.lines[index + 1]?.text?.trim()).length;
+
+  if (emptyScenes) {
+    issues.push(`${emptyScenes} empty scene heading${emptyScenes === 1 ? "" : "s"}`);
+  }
+  if (weakSceneLines) {
+    issues.push(`${weakSceneLines} scene heading${weakSceneLines === 1 ? "" : "s"} without a standard INT./EXT. start`);
+  }
+  if (loneCharacters) {
+    issues.push(`${loneCharacters} character cue${loneCharacters === 1 ? "" : "s"} with no following line`);
+  }
+
+  window.alert(issues.length ? `Proofread highlights:\n- ${issues.join("\n- ")}` : "Proofread highlights:\n- No obvious screenplay-format issues were found in the current draft.");
+}
+
+export function showWorkTracking() {
+  const project = getCurrentProject();
+  if (!project) {
+    return;
+  }
+  const scenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+  const words = (serializeScript(project).match(/\b[\w'-]+\b/g) || []).length;
+  window.alert([
+    `Project: ${project.title}`,
+    `Created: ${formatDateTime(project.createdAt)}`,
+    `Last updated: ${formatDateTime(project.updatedAt)}`,
+    `Scenes: ${scenes}`,
+    `Words: ${words.toLocaleString()}`
+  ].join("\n"));
+}
+
+export function revealMetricsPanel() {
+  if (refs.leftPane.classList.contains("is-hidden")) {
+    // This needs togglePane from events.js, but ui.js shouldn't depend on events.js
+    // We can just manipulate the classes directly here or emit an event.
+    refs.leftPane.classList.remove("is-hidden");
+    refs.leftRailToggle.textContent = "<";
+    refs.studioLayout.classList.remove("left-pane-hidden");
+    if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
+  }
+  if (refs.leftPaneBody.classList.contains("is-collapsed")) {
+      refs.leftPaneBody.classList.remove("is-collapsed");
+      refs.leftPaneSectionToggle.textContent = "^";
+  }
+  document.querySelector(".section-metrics")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}

@@ -24,11 +24,11 @@
   --script-line-width: 60ch;
   --script-character-offset: 22ch;
   --script-character-width: 24ch;
-  --script-dialogue-offset: 12ch;
+  --script-dialogue-offset: 10ch;
   --script-dialogue-width: 36ch;
   --script-parenthetical-offset: 16ch;
   --script-parenthetical-width: 24ch;
-  --script-dual-offset: 28ch;
+  --script-dual-offset: 22ch;
   --script-dual-width: 20ch;
   --script-transition-width: 24ch;
 }
@@ -1077,18 +1077,19 @@ img {
 }
 
 .script-block[data-type="character"] {
-  margin-left: min(var(--script-character-offset), 32%);
-  width: min(100%, var(--script-character-width));
+  margin-left: var(--script-character-offset);
+  width: var(--script-character-width);
+  font-weight: bold;
 }
 
 .script-block[data-type="dialogue"] {
-  margin-left: min(var(--script-dialogue-offset), 18%);
-  width: min(100%, var(--script-dialogue-width));
+  margin-left: var(--script-dialogue-offset);
+  width: var(--script-dialogue-width);
 }
 
 .script-block[data-type="parenthetical"] {
-  margin-left: min(var(--script-parenthetical-offset), 24%);
-  width: min(100%, var(--script-parenthetical-width));
+  margin-left: var(--script-parenthetical-offset);
+  width: var(--script-parenthetical-width);
 }
 
 .script-block[data-type="transition"] {
@@ -1098,9 +1099,10 @@ img {
 }
 
 .script-block[data-type="dual"] {
-  margin-left: min(var(--script-dual-offset), 42%);
-  width: min(100%, var(--script-dual-width));
+  margin-left: var(--script-dual-offset);
+  width: var(--script-dual-width);
   text-transform: uppercase;
+  font-weight: bold;
 }
 
 .script-block[data-type="note"],
@@ -1194,19 +1196,20 @@ img {
 
 .preview-line.character,
 .preview-line.dual {
-  margin-left: min(var(--script-character-offset), 34%);
-  width: min(100%, var(--script-character-width));
+  margin-left: var(--script-character-offset);
+  width: var(--script-character-width);
   text-transform: uppercase;
+  font-weight: bold;
 }
 
 .preview-line.dialogue {
-  margin-left: min(var(--script-dialogue-offset), 20%);
-  width: min(100%, var(--script-dialogue-width));
+  margin-left: var(--script-dialogue-offset);
+  width: var(--script-dialogue-width);
 }
 
 .preview-line.parenthetical {
-  margin-left: min(var(--script-parenthetical-offset), 25%);
-  width: min(100%, var(--script-parenthetical-width));
+  margin-left: var(--script-parenthetical-offset);
+  width: var(--script-parenthetical-width);
 }
 
 .metric-grid {
