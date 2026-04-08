@@ -29,10 +29,11 @@ export function renderHome() {
     node.querySelector(".project-scenes").textContent = `Scenes: ${sceneCount}`;
     node.querySelector(".project-characters").textContent = `Characters: ${characterCount}`;
     node.querySelector(".project-card-logline").textContent = project.logline || "Description automatically appears here as the script grows.";
-    node.querySelector(".project-card-updated").textContent = `Last Modified: ${formatDateTime(project.updatedAt)}`;
+    node.querySelector(".project-card-updated").textContent = `Modified: ${formatDateTime(project.updatedAt)}`;
 
     // Note: Event listeners will be bound in events.js, but we need the IDs here
     node.dataset.projectId = project.id;
+    node.querySelector(".project-card-open").dataset.projectId = project.id;
 
     refs.projectGrid.appendChild(node);
   });

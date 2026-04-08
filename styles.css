@@ -132,8 +132,9 @@ img {
 
 .home-view {
   min-height: 100vh;
-  padding: 14px 28px 40px;
-  overflow: auto;
+  padding: 40px 12vw 80px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .home-topbar,
@@ -334,31 +335,35 @@ img {
 .home-hero {
   display: grid;
   justify-items: center;
-  gap: 8px;
-  margin: 0 0 40px;
+  gap: 12px;
+  margin: 0 0 64px;
   text-align: center;
 }
 
-.home-welcome {
+.home-tagline {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-weight: 500;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: -0.01em;
 }
 
 .home-hero h1 {
   margin: 0;
-  font-size: clamp(3rem, 7vw, 4.5rem);
+  font-size: clamp(3.2rem, 8vw, 5rem);
   font-weight: 800;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
   color: var(--ink);
 }
 
 .home-logo {
-  width: 80px;
-  margin-top: 10px;
+  width: 72px;
+  margin-bottom: 8px;
+}
+
+.home-projects {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .home-projects-head {
@@ -378,7 +383,7 @@ img {
 .project-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
+  gap: 32px;
 }
 
 .project-card {
@@ -423,15 +428,23 @@ img {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 0.8rem;
-  color: var(--muted);
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  color: #e53e3e;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .project-delete:hover {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
+  background: #fff5f5;
+  color: #c53030;
+}
+
+.project-delete svg {
+  width: 18px;
+  height: 18px;
 }
 
 .project-meta-row {
@@ -458,16 +471,14 @@ img {
   color: var(--muted);
 }
 
-.project-open-cta {
-  display: block;
-  width: min(230px, 100%);
-  margin: 0 auto;
-  padding: 8px 14px;
-  border-radius: 4px;
-  background: var(--accent);
-  color: #fff;
-  text-align: center;
-  font-size: 0.96rem;
+.project-card-open {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
 }
 
 .primary-button,

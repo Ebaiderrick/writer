@@ -43,9 +43,9 @@
       </header>
 
       <section class="home-hero">
-        <p class="home-welcome">Welcome to</p>
-        <h1>EyaWriter</h1>
         <img class="home-logo" src="logo.png" alt="EyaWriter logo">
+        <h1>EyaWriter</h1>
+        <p class="home-tagline">Where your stories take flight.</p>
       </section>
 
       <section class="home-projects">
@@ -489,7 +489,9 @@
     <article class="project-card">
       <div class="project-card-top">
         <h3 class="project-card-title"></h3>
-        <button class="project-delete" type="button" aria-label="Delete script">Del</button>
+        <button class="project-delete" type="button" aria-label="Delete script">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6m4-6v6"/></svg>
+        </button>
       </div>
       <button class="project-card-open" type="button">
         <div class="project-meta-row">
@@ -498,7 +500,6 @@
         </div>
         <p class="project-card-logline"></p>
         <p class="project-card-updated"></p>
-        <span class="project-open-cta">Open Script</span>
       </button>
     </article>
   </template>

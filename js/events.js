@@ -251,7 +251,7 @@ export function bindEvents() {
       if (!card) return;
       const projectId = card.dataset.projectId;
 
-      if (e.target.classList.contains("project-delete")) {
+      if (e.target.closest(".project-delete")) {
           removeProject(projectId);
       } else {
           openProject(projectId);
@@ -704,7 +704,17 @@ function deleteProject() {
 
 function removeProject(id) {
   const target = state.projects.find((item) => item.id === id);
-  if (!target || !window.confirm(`Delete "${target.title}"?`)) return;
+  if (!target) return;
+
+  const confirmation = window.prompt(`This will permanently delete the script "${target.title}".\n\nTo confirm, please retype the project name below:`, "");
+
+  if (confirmation !== target.title) {
+    if (confirmation !== null) {
+      window.alert("Deletion cancelled. The name you typed did not match.");
+    }
+    return;
+  }
+
   state.projects = state.projects.filter((item) => item.id !== id);
   if (!state.projects.length) {
     state.projects = [createProject()];
