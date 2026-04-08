@@ -6,11 +6,13 @@ import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from '.
 export function showHome() {
   refs.homeView.hidden = false;
   refs.studioView.hidden = true;
+  document.body.style.overflow = "auto";
 }
 
 export function showStudio() {
   refs.homeView.hidden = true;
   refs.studioView.hidden = false;
+  document.body.style.overflow = "hidden";
 }
 
 export function renderHome() {
@@ -223,7 +225,7 @@ export function toggleMenu(menuId) {
   trigger?.classList.toggle("is-open", willOpen);
 }
 
-export function showProofreadReport() {
+export async function showProofreadReport() {
   const project = getCurrentProject();
   if (!project) {
     return;
@@ -244,17 +246,17 @@ export function showProofreadReport() {
     issues.push(`${loneCharacters} character cue${loneCharacters === 1 ? "" : "s"} with no following line`);
   }
 
-  window.alert(issues.length ? `Proofread highlights:\n- ${issues.join("\n- ")}` : "Proofread highlights:\n- No obvious screenplay-format issues were found in the current draft.");
+  await Modal.alert(issues.length ? `Proofread highlights:\n- ${issues.join("\n- ")}` : "Proofread highlights:\n- No obvious screenplay-format issues were found in the current draft.");
 }
 
-export function showWorkTracking() {
+export async function showWorkTracking() {
   const project = getCurrentProject();
   if (!project) {
     return;
   }
   const scenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
   const words = (serializeScript(project).match(/\b[\w'-]+\b/g) || []).length;
-  window.alert([
+  await Modal.alert([
     `Project: ${project.title}`,
     `Created: ${formatDateTime(project.createdAt)}`,
     `Last updated: ${formatDateTime(project.updatedAt)}`,
@@ -278,3 +280,124 @@ export function revealMetricsPanel() {
   }
   document.querySelector(".section-metrics")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
+
+export const Modal = {
+  _render(content, onCancel) {
+    refs.customModal.innerHTML = "";
+    refs.customModal.appendChild(content);
+    refs.customModal.oncancel = (e) => {
+      e.preventDefault();
+      onCancel();
+    };
+    refs.customModal.showModal();
+  },
+
+  _close() {
+    refs.customModal.close();
+    refs.customModal.innerHTML = "";
+    refs.customModal.oncancel = null;
+    refs.customModal.onkeydown = null;
+  },
+
+  alert(message) {
+    return new Promise((resolve) => {
+      const div = document.createElement("div");
+      div.className = "modal-content";
+      div.innerHTML = `
+        <p class="modal-message">${escapeHtml(message).replace(/\n/g, "<br>")}</p>
+        <div class="modal-actions">
+          <button class="primary-button modal-btn">OK</button>
+        </div>
+      `;
+      const done = () => {
+        this._close();
+        resolve();
+      };
+      div.querySelector("button").onclick = done;
+      refs.customModal.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === "Escape") {
+          e.preventDefault();
+          done();
+        }
+      };
+      this._render(div, done);
+      div.querySelector("button").focus();
+    });
+  },
+
+  confirm(message) {
+    return new Promise((resolve) => {
+      const div = document.createElement("div");
+      div.className = "modal-content";
+      div.innerHTML = `
+        <p class="modal-message">${escapeHtml(message).replace(/\n/g, "<br>")}</p>
+        <div class="modal-actions">
+          <button class="ghost-button modal-btn btn-cancel">Cancel</button>
+          <button class="primary-button modal-btn btn-confirm">Confirm</button>
+        </div>
+      `;
+      const ok = () => {
+        this._close();
+        resolve(true);
+      };
+      const cancel = () => {
+        this._close();
+        resolve(false);
+      };
+      div.querySelector(".btn-cancel").onclick = cancel;
+      div.querySelector(".btn-confirm").onclick = ok;
+      refs.customModal.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          ok();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancel();
+        }
+      };
+      this._render(div, cancel);
+      div.querySelector(".btn-confirm").focus();
+    });
+  },
+
+  prompt(message, defaultValue = "") {
+    return new Promise((resolve) => {
+      const div = document.createElement("div");
+      div.className = "modal-content";
+      div.innerHTML = `
+        <p class="modal-message">${escapeHtml(message).replace(/\n/g, "<br>")}</p>
+        <input type="text" class="modal-input" value="${escapeHtml(defaultValue)}">
+        <div class="modal-actions">
+          <button class="ghost-button modal-btn btn-cancel">Cancel</button>
+          <button class="primary-button modal-btn btn-confirm">OK</button>
+        </div>
+      `;
+      const input = div.querySelector("input");
+      const ok = () => {
+        const val = input.value;
+        this._close();
+        resolve(val);
+      };
+      const cancel = () => {
+        this._close();
+        resolve(null);
+      };
+      div.querySelector(".btn-cancel").onclick = cancel;
+      div.querySelector(".btn-confirm").onclick = ok;
+      refs.customModal.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          ok();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancel();
+        }
+      };
+      this._render(div, cancel);
+      setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 0);
+    });
+  }
+};

@@ -131,9 +131,8 @@ img {
 }
 
 .home-view {
-  height: 100vh;
+  min-height: 100vh;
   padding: 40px 12vw 80px;
-  overflow-y: auto;
   overflow-x: hidden;
 }
 
@@ -1356,6 +1355,63 @@ kbd {
 
 .is-hidden {
   display: none;
+}
+
+.custom-modal {
+  border: none;
+  border-radius: 16px;
+  padding: 0;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  max-width: 400px;
+  width: 90%;
+  overflow: hidden;
+}
+
+.custom-modal::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
+}
+
+.modal-content {
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.modal-message {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--control-bg);
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modal-btn {
+  min-width: 80px;
+  font-size: 0.9rem;
+  padding: 6px 12px;
 }
 
 body.show-ruler .screenplay-editor::before {

@@ -16,7 +16,7 @@ import {
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showProofreadReport, showWorkTracking, revealMetricsPanel,
-  updateMenuStateButtons
+  updateMenuStateButtons, Modal
 } from './ui.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
@@ -575,7 +575,7 @@ function initResizeHandle(handle, side) {
   });
 }
 
-function handleMenuAction(action) {
+async function handleMenuAction(action) {
   switch (action) {
     case "new-project":
       openProject(createProject().id);
@@ -589,13 +589,13 @@ function handleMenuAction(action) {
       persistProjects(true);
       break;
     case "rename-project":
-      renameCurrentProject();
+      await renameCurrentProject();
       break;
     case "duplicate-project":
       duplicateProject();
       break;
     case "delete-project":
-      deleteProject();
+      await deleteProject();
       break;
     case "import-file":
       refs.fileInput.click();
@@ -630,7 +630,7 @@ function handleMenuAction(action) {
       insertMenuBlock("text", "--- PAGE BREAK ---");
       break;
     case "insert-hyperlink":
-      insertHyperlink();
+      await insertHyperlink();
       break;
     case "insert-image":
       handleToolSelection("image");
@@ -641,10 +641,10 @@ function handleMenuAction(action) {
         break;
     }
     case "find":
-      findInScript();
+      await findInScript();
       break;
     case "filter":
-      setScriptFilter();
+      await setScriptFilter();
       break;
     case "clear-filter":
       clearScriptFilter();
@@ -657,7 +657,7 @@ function handleMenuAction(action) {
       }
       break;
     case "proofread":
-      showProofreadReport();
+      await showProofreadReport();
       break;
     case "toggle-ai-assistant":
       state.aiAssist = !state.aiAssist;
@@ -667,7 +667,7 @@ function handleMenuAction(action) {
       queueSave();
       break;
     case "show-work-tracking":
-      showWorkTracking();
+      await showWorkTracking();
       break;
     case "show-metrics":
       revealMetricsPanel();
@@ -687,10 +687,10 @@ function execEditorCommand(command) {
   }
 }
 
-function renameCurrentProject() {
+async function renameCurrentProject() {
   const project = getCurrentProject();
   if (!project) return;
-  const nextTitle = window.prompt("Rename this project:", project.title);
+  const nextTitle = await Modal.prompt("Rename this project:", project.title);
   if (nextTitle === null) return;
   project.title = nextTitle.trim() || "Untitled Script";
   project.updatedAt = new Date().toISOString();
@@ -715,20 +715,20 @@ function replaceWithSample() {
   }
 }
 
-function deleteProject() {
+async function deleteProject() {
   const current = getCurrentProject();
-  if (current) removeProject(current.id);
+  if (current) await removeProject(current.id);
 }
 
-function removeProject(id) {
+async function removeProject(id) {
   const target = state.projects.find((item) => item.id === id);
   if (!target) return;
 
-  const confirmation = window.prompt(`This will permanently delete the script "${target.title}".\n\nTo confirm, please retype the project name below:`, "");
+  const confirmation = await Modal.prompt(`This will permanently delete the script "${target.title}".\n\nTo confirm, please retype the project name below:`, "");
 
   if (confirmation !== target.title) {
     if (confirmation !== null) {
-      window.alert("Deletion cancelled. The name you typed did not match.");
+      await Modal.alert("Deletion cancelled. The name you typed did not match.");
     }
     return;
   }
@@ -809,20 +809,20 @@ function insertMenuBlock(type, text) {
   queueSave();
 }
 
-function insertHyperlink() {
-  const url = window.prompt("Enter the hyperlink URL:");
+async function insertHyperlink() {
+  const url = await Modal.prompt("Enter the hyperlink URL:");
   if (url === null || !url.trim()) return;
-  const label = window.prompt("Optional display text:", "");
+  const label = await Modal.prompt("Optional display text:", "");
   const cleanedUrl = url.trim();
   const cleanedLabel = label === null ? "" : label.trim();
   const text = cleanedLabel ? `${cleanedLabel} <${cleanedUrl}>` : cleanedUrl;
   insertMenuBlock("text", text);
 }
 
-function findInScript() {
+async function findInScript() {
   const project = getCurrentProject();
   if (!project) return;
-  const query = window.prompt("Find text in this script:", state.filterQuery);
+  const query = await Modal.prompt("Find text in this script:", state.filterQuery);
   if (query === null) return;
   const cleaned = query.trim().toLowerCase();
   if (!cleaned) {
@@ -831,7 +831,7 @@ function findInScript() {
   }
   const match = project.lines.find((line) => `${TYPE_LABELS[line.type]} ${line.text}`.toLowerCase().includes(cleaned));
   if (!match) {
-    window.alert(`No matches found for "${query}".`);
+    await Modal.alert(`No matches found for "${query}".`);
     return;
   }
   state.filterQuery = "";
@@ -839,10 +839,10 @@ function findInScript() {
   focusBlock(match.id, true);
 }
 
-function setScriptFilter() {
+async function setScriptFilter() {
   const project = getCurrentProject();
   if (!project) return;
-  const nextFilter = window.prompt("Filter visible lines by text or line function:", state.filterQuery);
+  const nextFilter = await Modal.prompt("Filter visible lines by text or line function:", state.filterQuery);
   if (nextFilter === null) return;
   state.filterQuery = nextFilter.trim();
   renderStudio();

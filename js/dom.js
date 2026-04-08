@@ -31,6 +31,7 @@ export const refs = {
   fileInput: document.querySelector("#fileInput"),
   helpBtn: document.querySelector("#helpBtn"),
   helpDialog: document.querySelector("#helpDialog"),
+  customModal: document.querySelector("#customModal"),
   leftPane: document.querySelector("#leftPane"),
   rightPane: document.querySelector("#rightPane"),
   leftPaneBody: document.querySelector("#leftPaneBody"),
