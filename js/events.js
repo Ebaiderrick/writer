@@ -110,7 +110,7 @@ export function bindEvents() {
 
   refs.autoNumberToggle.addEventListener("change", () => {
     state.autoNumberScenes = refs.autoNumberToggle.checked;
-    renderPreview();
+    renderStudio();
     queueSave();
   });
 
@@ -207,36 +207,59 @@ export function bindEvents() {
   });
 
   refs.screenplayEditor.addEventListener("paste", (e) => {
+      if (!e.target.classList.contains("script-block")) return;
+
       e.preventDefault();
       const text = e.clipboardData.getData("text/plain");
       if (!text) return;
 
-      const lines = text.split(/\r?\n/);
-      const activeId = state.activeBlockId;
+      const pastedLines = text.split(/\r?\n/);
       const project = getCurrentProject();
+      const activeId = state.activeBlockId;
       if (!project || !activeId) return;
 
-      let index = getLineIndex(activeId);
+      const index = getLineIndex(activeId);
       const currentLine = project.lines[index];
+      const offset = getCaretOffset(e.target);
 
-      // If current line is empty, replace it with the first pasted line
-      if (currentLine && !currentLine.text.trim()) {
-          currentLine.text = lines[0];
-          currentLine.type = inferTypeFromText(lines[0], "", lines[1] || "");
-          lines.shift();
+      const textBefore = currentLine.text.substring(0, offset);
+      const textAfter = currentLine.text.substring(offset);
+
+      if (pastedLines.length === 1) {
+          // Simple single line paste
+          currentLine.text = textBefore + pastedLines[0] + textAfter;
+          renderStudio();
+          focusBlock(activeId);
+          setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${activeId}"]`), offset + pastedLines[0].length);
+      } else {
+          // Multi-line natural paste
+          // 1. Update current block with text before cursor + first pasted line
+          currentLine.text = textBefore + pastedLines[0];
+
+          // 2. Create new blocks for middle lines
+          const middleLines = pastedLines.slice(1, -1);
+          const newBlocks = middleLines.map(content => ({
+              id: uid(),
+              type: inferTypeFromText(content, "", ""),
+              text: content
+          }));
+
+          // 3. Create final block with last pasted line + text after cursor
+          const lastContent = pastedLines[pastedLines.length - 1];
+          const finalBlock = {
+              id: uid(),
+              type: inferTypeFromText(lastContent, "", ""),
+              text: lastContent + textAfter
+          };
+
+          project.lines.splice(index + 1, 0, ...newBlocks, finalBlock);
+
+          project.updatedAt = new Date().toISOString();
+          renderStudio();
+          focusBlock(finalBlock.id);
+          setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${finalBlock.id}"]`), lastContent.length);
       }
 
-      // Add remaining lines
-      lines.reverse().forEach(content => {
-          if (content.trim()) {
-              const type = inferTypeFromText(content, "", "");
-              const newLine = { id: uid(), type, text: content };
-              project.lines.splice(index + 1, 0, newLine);
-          }
-      });
-
-      project.updatedAt = new Date().toISOString();
-      renderStudio();
       queueSave();
   });
 
@@ -284,6 +307,8 @@ export function bindEvents() {
   refs.suggestionList.addEventListener("click", (e) => {
       const btn = e.target.closest(".suggestion-pill");
       if (btn) {
+          e.preventDefault();
+          e.stopPropagation();
           applySuggestion(btn.dataset.suggestionValue);
       }
   });
@@ -519,7 +544,7 @@ function applySuggestion(value) {
   line.text = normalizeLineText(value, line.type);
   project.updatedAt = new Date().toISOString();
   renderStudio();
-  focusBlock(line.id, true);
+  focusBlock(line.id);
   queueSave();
 }
 

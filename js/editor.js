@@ -21,6 +21,7 @@ export function renderEditor() {
   let currentSceneId = "";
   let collapsedSceneId = "";
   let visibleRows = 0;
+  let sceneNumber = 0;
 
   project.lines.forEach((line) => {
     const row = template.content.firstElementChild.cloneNode(true);
@@ -34,6 +35,7 @@ export function renderEditor() {
     }
 
     if (line.type === "scene") {
+      sceneNumber++;
       currentSceneId = line.id;
       const isCollapsed = project.collapsedSceneIds.includes(line.id);
       collapsedSceneId = isCollapsed ? line.id : "";
@@ -46,7 +48,8 @@ export function renderEditor() {
     }
 
     row.dataset.sceneOwner = currentSceneId;
-    tag.textContent = TYPE_LABELS[line.type];
+    const label = TYPE_LABELS[line.type];
+    tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
     block.dataset.id = line.id;
     block.dataset.type = line.type;
     block.textContent = line.text;
