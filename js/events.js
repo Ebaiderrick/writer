@@ -132,6 +132,9 @@ export function bindEvents() {
   refs.loadSampleBtn.addEventListener("click", replaceWithSample);
   refs.deleteProjectBtn.addEventListener("click", deleteProject);
 
+  initResizeHandle(refs.leftResize, "left");
+  initResizeHandle(refs.rightResize, "right");
+
   // Global Keys & Clicks
   document.addEventListener("keydown", handleGlobalKeydown);
   document.addEventListener("click", (event) => {
@@ -148,10 +151,10 @@ export function bindEvents() {
   });
 
   refs.screenplayEditor.addEventListener("click", (e) => {
-    if (e.target.classList.contains("script-block")) {
-        setActiveBlock(e.target.dataset.id);
+    if (e.target.closest(".script-block")) {
+        setActiveBlock(e.target.closest(".script-block").dataset.id);
     }
-    if (e.target.classList.contains("scene-toggle")) {
+    if (e.target.closest(".scene-toggle")) {
         const row = e.target.closest(".script-block-row");
         toggleSceneCollapse(row.dataset.id);
     }
@@ -448,6 +451,35 @@ function togglePane(side) {
   button.textContent = collapsed ? (isLeft ? ">" : "<") : (isLeft ? "<" : ">");
 }
 
+function initResizeHandle(handle, side) {
+  if (!handle) return;
+  handle.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = side === "left"
+      ? parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10)
+      : parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10);
+
+    const onMove = (moveEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const nextWidth = side === "left"
+        ? clamp(startWidth + delta, 220, 460)
+        : clamp(startWidth - delta, 260, 520);
+      document.documentElement.style.setProperty(side === "left" ? "--left-pane-width" : "--right-pane-width", `${nextWidth}px`);
+    };
+
+    const onUp = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      persistProjects(false);
+    };
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+  });
+}
+
 function handleMenuAction(action) {
   switch (action) {
     case "new-project":
@@ -494,10 +526,10 @@ function handleMenuAction(action) {
       renderHome();
       break;
     case "undo":
-      document.execCommand("undo");
+      execEditorCommand("undo");
       break;
     case "redo":
-      document.execCommand("redo");
+      execEditorCommand("redo");
       break;
     case "insert-page-break":
       insertMenuBlock("text", "--- PAGE BREAK ---");
@@ -547,6 +579,17 @@ function handleMenuAction(action) {
       break;
   }
   closeMenus();
+}
+
+function execEditorCommand(command) {
+  const target = getActiveEditableBlock();
+  if (!target) {
+    return;
+  }
+  target.focus();
+  if (typeof document.execCommand === "function") {
+    document.execCommand(command);
+  }
 }
 
 function renameCurrentProject() {

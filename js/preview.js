@@ -68,8 +68,8 @@ export function buildPreviewData(project) {
   let sceneNumber = 0;
 
   project.lines.forEach((line) => {
-    const normalized = escapeHtml(line.text); // Simplified for preview
-    if (!normalized) {
+    const normalized = escapeHtml(line.text);
+    if (!normalized && line.text.trim() === "") {
       return;
     }
     if (line.type === "scene") {
@@ -78,7 +78,7 @@ export function buildPreviewData(project) {
     preparedLines.push({
       id: line.id,
       type: line.type,
-      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${line.text}` : line.text
+      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
     });
   });
 

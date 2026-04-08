@@ -30,7 +30,7 @@ export const DEFAULT_VIEW_OPTIONS = {
   showOutline: true,
   textSize: 12
 };
-export const PAGE_UNIT_CAPACITY = 54;
+export const PAGE_UNIT_CAPACITY = 55;
 
 export const state = {
   projects: [],
