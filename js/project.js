@@ -176,6 +176,42 @@ export function serializeScript(project) {
   return project.lines.map((line) => normalizeLineText(line.text, line.type)).filter(Boolean).join("\n\n");
 }
 
+export function getDefaultText(type, contextIndex) {
+  if (type === "character") {
+    return getSuggestedNextSpeaker(contextIndex);
+  }
+  return "";
+}
+
+export function getSuggestedNextSpeaker(contextIndex) {
+  const project = getCurrentProject();
+  if (!project) return "";
+  const recent = [];
+
+  for (let index = 0; index <= contextIndex; index += 1) {
+    const line = project.lines[index];
+    if (line?.type === "character" && line.text.trim()) {
+      const value = normalizeLineText(line.text, "character");
+      if (recent[recent.length - 1] !== value) {
+        recent.push(value);
+      }
+    }
+  }
+
+  if (!recent.length) {
+    return "";
+  }
+
+  const last = recent[recent.length - 1];
+  for (let index = recent.length - 2; index >= 0; index -= 1) {
+    if (recent[index] !== last) {
+      return recent[index];
+    }
+  }
+
+  return last;
+}
+
 export function replaceWithSample() {
   const current = getCurrentProject();
   if (!current) return null;

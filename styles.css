@@ -157,7 +157,7 @@ img {
 
 .home-topbar {
   justify-content: center;
-  padding-top: 4px;
+  padding-top: 0;
 }
 
 .nav-stack {
@@ -333,7 +333,7 @@ img {
   display: grid;
   justify-items: center;
   gap: 10px;
-  margin: 26px 0 48px;
+  margin: 10px 0 64px;
   text-align: center;
 }
 
@@ -366,8 +366,8 @@ img {
 
 .project-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 28px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
 }
 
 .project-card {

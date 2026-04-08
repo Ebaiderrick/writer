@@ -1,7 +1,13 @@
-import { state, TYPE_LABELS, TYPE_SEQUENCE, AUTO_UPPERCASE_TYPES, DEFAULT_SUGGESTIONS } from './config.js';
+import { state, TYPE_LABELS, DEFAULT_SUGGESTIONS } from './config.js';
 import { refs } from './dom.js';
-import { getCurrentProject, getLine, getLineIndex, queueSave } from './project.js';
-import { normalizeLineText, uid, selectTextSuffix, placeCaretAtEnd, selectElementText } from './utils.js';
+import {
+  getCurrentProject, getLine, getLineIndex, queueSave,
+  getSuggestedNextSpeaker
+} from './project.js';
+import {
+  normalizeLineText, uid, selectTextSuffix, placeCaretAtEnd,
+  selectElementText, buildContinuedSceneSuggestions
+} from './utils.js';
 import { renderPreview } from './preview.js';
 import { renderMetrics } from './ui.js';
 import { createTextNode as createUINode } from './utils.js';
@@ -35,7 +41,6 @@ export function renderEditor() {
       toggle.textContent = isCollapsed ? ">" : "v";
       toggle.title = isCollapsed ? "Expand scene" : "Collapse scene";
       toggle.setAttribute("aria-label", isCollapsed ? "Expand scene" : "Collapse scene");
-      // Event listeners for toggle will be in events.js
     } else {
       toggle.hidden = true;
     }
@@ -195,34 +200,6 @@ export function buildSuggestions(type, currentText) {
   return [];
 }
 
-export function getSuggestedNextSpeaker(contextIndex) {
-  const project = getCurrentProject();
-  const recent = [];
-
-  for (let index = 0; index <= contextIndex; index += 1) {
-    const line = project.lines[index];
-    if (line?.type === "character" && line.text.trim()) {
-      const value = normalizeLineText(line.text, "character");
-      if (recent[recent.length - 1] !== value) {
-        recent.push(value);
-      }
-    }
-  }
-
-  if (!recent.length) {
-    return "";
-  }
-
-  const last = recent[recent.length - 1];
-  for (let index = recent.length - 2; index >= 0; index -= 1) {
-    if (recent[index] !== last) {
-      return recent[index];
-    }
-  }
-
-  return last;
-}
-
 function getPreviousSceneHeading(activeIndex) {
   const project = getCurrentProject();
   for (let index = activeIndex - 1; index >= 0; index -= 1) {
@@ -231,24 +208,6 @@ function getPreviousSceneHeading(activeIndex) {
     }
   }
   return "";
-}
-
-function buildContinuedSceneSuggestions(previousScene) {
-  const base = sceneBase(previousScene);
-  if (!base) {
-    return [];
-  }
-  return ["DAY", "NIGHT", "LATER", "DAWN", "DUSK", "MORNING", "EVENING", "CONT'D"].map((time) => `${base} - ${time}`);
-}
-
-function sceneBase(heading) {
-  const match = heading.match(/^(INT\.|EXT\.|INT\.\/EXT\.|INT\/EXT\.)\s*(.*?)(?:\s*-\s*[A-Z'\/. ]+)?$/i);
-  if (!match) {
-    return heading;
-  }
-  const prefix = match[1].toUpperCase().replace("INT/EXT.", "INT./EXT.");
-  const location = match[2].trim();
-  return location ? `${prefix} ${location.toUpperCase()}` : prefix;
 }
 
 export function getCharacterAutocomplete(text, activeId) {

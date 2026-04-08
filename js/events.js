@@ -3,7 +3,8 @@ import { refs } from './dom.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
-  syncProjectFromInputs, serializeScript, replaceWithSample as restoreSample
+  syncProjectFromInputs, serializeScript, replaceWithSample as restoreSample,
+  getDefaultText
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
@@ -14,7 +15,8 @@ import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
-  renderCharacterList, showProofreadReport, showWorkTracking, revealMetricsPanel
+  renderCharacterList, showProofreadReport, showWorkTracking, revealMetricsPanel,
+  updateMenuStateButtons
 } from './ui.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
@@ -319,7 +321,7 @@ function handleBlockKeydown(event, id) {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     const nextType = inferNextType(index);
-    const newId = addBlock(nextType, "", index + 1);
+    const newId = addBlock(nextType, getDefaultText(nextType, index), index + 1);
     renderStudio();
     focusBlock(newId, true);
     queueSave();
