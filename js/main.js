@@ -1,10 +1,12 @@
 import { loadProjects } from './project.js';
 import { bindEvents, renderStudio } from './events.js';
 import { showHome, renderHome, applyToolbarState, applyTheme, applyViewState } from './ui.js';
+import { AI } from './ai.js';
 
 function boot() {
   loadProjects();
   bindEvents();
+  AI.init();
   showHome();
   renderHome();
   applyToolbarState();
