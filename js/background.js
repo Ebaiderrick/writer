@@ -24,6 +24,25 @@ const colors = ["#d1fae5", "#42b6c6", "#5eead4", "#d8b4fe", "#f3e8ff"];
 
 export const initBackground = () => {
   const can = document.getElementById("color-base");
+  const body = document.body;
+
+  // Mouse tracking for reactive landing page background
+  document.addEventListener("mousemove", (e) => {
+    // Global mouse tracking
+    body.style.setProperty('--mouse-x', e.clientX + 'px');
+    body.style.setProperty('--mouse-y', e.clientY + 'px');
+
+    // Button-relative mouse tracking for reactive aura
+    const btn = document.getElementById('newProjectBtn');
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      const btnX = e.clientX - rect.left;
+      const btnY = e.clientY - rect.top;
+      btn.style.setProperty('--btn-mouse-x', btnX + 'px');
+      btn.style.setProperty('--btn-mouse-y', btnY + 'px');
+    }
+  });
+
   if (!can) return;
 
   const updateBackground = () => {
