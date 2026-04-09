@@ -93,6 +93,12 @@ html[data-theme="navy"] {
   --control-bg: #eff4ff;
 }
 
+@keyframes mesh-gradient-animation {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -101,9 +107,14 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 18%, transparent), transparent 32%),
-    linear-gradient(180deg, var(--surface-muted) 0%, var(--bg) 100%);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(at 0% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0, transparent 70%),
+    radial-gradient(at 100% 100%, color-mix(in srgb, var(--accent-strong) 25%, transparent) 0, transparent 70%),
+    radial-gradient(at 0% 100%, color-mix(in srgb, var(--accent-strong) 25%, transparent) 0, transparent 70%),
+    radial-gradient(at 100% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0, transparent 70%);
+  background-size: 200% 200%;
+  animation: mesh-gradient-animation 20s ease infinite;
   color: var(--ink);
   font-family: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   font-size: 15px;
@@ -532,7 +543,7 @@ img {
   height: 100vh;
   display: grid;
   grid-template-rows: var(--topbar-height) auto minmax(0, 1fr);
-  background: var(--surface-strong);
+  background: transparent;
 }
 
 .studio-topbar {
