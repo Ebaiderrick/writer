@@ -1521,3 +1521,19 @@ body.outline-hidden .section-scenes {
     text-align: left;
   }
 }
+
+.ai-btn {
+  font-size: 14px;
+}
+
+.ai-menu {
+  font-size: 13px;
+}
+
+.ai-menu-item {
+  border-radius: 6px;
+}
+
+.ai-input {
+  outline: none;
+}
