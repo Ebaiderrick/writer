@@ -94,9 +94,11 @@ html[data-theme="navy"] {
 }
 
 @keyframes mesh-gradient-animation {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% { background-position: 0% 0%, 100% 100%, 100% 0%, 0% 100%; }
+  25% { background-position: 100% 0%, 0% 100%, 0% 0%, 100% 100%; }
+  50% { background-position: 100% 100%, 0% 0%, 0% 100%, 100% 0%; }
+  75% { background-position: 0% 100%, 100% 0%, 100% 100%, 0% 0%; }
+  100% { background-position: 0% 0%, 100% 100%, 100% 0%, 0% 100%; }
 }
 
 * {
@@ -109,12 +111,13 @@ body {
   min-height: 100%;
   background-color: var(--bg);
   background-image:
-    radial-gradient(at 0% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0, transparent 70%),
-    radial-gradient(at 100% 100%, color-mix(in srgb, var(--accent-strong) 25%, transparent) 0, transparent 70%),
-    radial-gradient(at 0% 100%, color-mix(in srgb, var(--accent-strong) 25%, transparent) 0, transparent 70%),
-    radial-gradient(at 100% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0, transparent 70%);
+    radial-gradient(at 0% 0%, color-mix(in srgb, var(--accent) 65%, transparent) 0%, transparent 80%),
+    radial-gradient(at 100% 0%, color-mix(in srgb, var(--accent-strong) 55%, transparent) 0%, transparent 80%),
+    radial-gradient(at 100% 100%, color-mix(in srgb, var(--accent) 60%, transparent) 0%, transparent 80%),
+    radial-gradient(at 0% 100%, color-mix(in srgb, var(--accent-strong) 50%, transparent) 0%, transparent 80%);
   background-size: 200% 200%;
-  animation: mesh-gradient-animation 20s ease infinite;
+  animation: mesh-gradient-animation 20s ease-in-out infinite alternate;
+  background-attachment: fixed;
   color: var(--ink);
   font-family: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   font-size: 15px;
