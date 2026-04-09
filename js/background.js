@@ -24,45 +24,9 @@ const colors = ["#d1fae5", "#42b6c6", "#5eead4", "#d8b4fe", "#f3e8ff"];
 
 export const initBackground = () => {
   const can = document.getElementById("color-base");
-  const body = document.body;
-
-  // Cache button rect to avoid frequent getBoundingClientRect calls
-  let btnRect = null;
-  const btn = document.getElementById('newProjectBtn');
-
-  const updateBtnRect = () => {
-    if (btn) btnRect = btn.getBoundingClientRect();
-  };
-
-  if (btn) {
-    updateBtnRect();
-    window.addEventListener('resize', updateBtnRect);
-    window.addEventListener('scroll', updateBtnRect, true);
-  }
-
-  // Mouse tracking for reactive landing page background
-  document.addEventListener("mousemove", (e) => {
-    // Global mouse tracking
-    body.style.setProperty('--mouse-x', e.clientX + 'px');
-    body.style.setProperty('--mouse-y', e.clientY + 'px');
-
-    // Button-relative mouse tracking for reactive aura
-    if (btn && btnRect) {
-      const btnX = e.clientX - btnRect.left;
-      const btnY = e.clientY - btnRect.top;
-      btn.style.setProperty('--btn-mouse-x', btnX + 'px');
-      btn.style.setProperty('--btn-mouse-y', btnY + 'px');
-    }
-  });
-
   if (!can) return;
 
   const updateBackground = () => {
-    // Skip if dark theme is active
-    if (document.documentElement.getAttribute("data-theme") === "dark") {
-      return;
-    }
-
     // select a base color
     const baseColor = colors[Math.floor(Math.random() * colors.length)];
 

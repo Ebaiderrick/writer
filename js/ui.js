@@ -6,13 +6,11 @@ import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from '.
 export function showHome() {
   refs.homeView.hidden = false;
   refs.studioView.hidden = true;
-  document.body.classList.add("home-active");
 }
 
 export function showStudio() {
   refs.homeView.hidden = true;
   refs.studioView.hidden = false;
-  document.body.classList.remove("home-active");
 }
 
 export function renderHome() {
