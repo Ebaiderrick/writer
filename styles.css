@@ -1612,3 +1612,11 @@ body.outline-hidden .section-scenes {
 .ai-input {
   outline: none;
 }
+
+.ai-submit-btn:hover {
+  background: var(--accent-strong) !important;
+}
+
+.ai-input:focus {
+  border-color: var(--accent) !important;
+}

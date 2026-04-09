@@ -146,26 +146,50 @@ export const AI = (() => {
 
     if (inputEl) inputEl.remove();
 
+    const container = document.createElement("div");
+    container.className = "ai-input-wrapper";
+    container.style.display = "flex";
+    container.style.gap = "4px";
+    container.style.marginTop = "8px";
+
     inputEl = document.createElement("input");
     inputEl.className = "ai-input";
     inputEl.placeholder = `Optional instruction for "${action}"`;
 
-    inputEl.style.width = "100%";
-    inputEl.style.marginTop = "6px";
-    inputEl.style.padding = "6px";
+    inputEl.style.flex = "1";
+    inputEl.style.padding = "6px 10px";
     inputEl.style.borderRadius = "6px";
     inputEl.style.border = "1px solid var(--line)";
     inputEl.style.background = "var(--control-bg)";
     inputEl.style.color = "var(--ink)";
+    inputEl.style.fontSize = "12px";
+
+    const submitBtn = document.createElement("button");
+    submitBtn.className = "ai-submit-btn";
+    submitBtn.innerHTML = "→";
+    submitBtn.style.padding = "0 8px";
+    submitBtn.style.borderRadius = "6px";
+    submitBtn.style.border = "none";
+    submitBtn.style.background = "var(--accent)";
+    submitBtn.style.color = "#fff";
+    submitBtn.style.cursor = "pointer";
+
+    const trigger = async () => {
+      const val = inputEl.value;
+      await runAI(action, val);
+    };
 
     inputEl.onkeydown = async (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        await runAI(action, inputEl.value);
+        await trigger();
       }
     };
 
-    menuEl.appendChild(inputEl);
+    submitBtn.onclick = trigger;
+
+    container.append(inputEl, submitBtn);
+    menuEl.appendChild(container);
     inputEl.focus();
   }
 
