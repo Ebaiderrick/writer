@@ -27,6 +27,11 @@ export const initBackground = () => {
   if (!can) return;
 
   const updateBackground = () => {
+    // Skip if dark theme is active
+    if (document.documentElement.getAttribute("data-theme") === "dark") {
+      return;
+    }
+
     // select a base color
     const baseColor = colors[Math.floor(Math.random() * colors.length)];
 
