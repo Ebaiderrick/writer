@@ -57,14 +57,10 @@ export const AI = (() => {
     btn.style.position = "absolute";
     btn.style.right = "8px";
     btn.style.top = "6px";
-    btn.style.opacity = "0.4";
     btn.style.border = "none";
     btn.style.background = "transparent";
     btn.style.cursor = "pointer";
     btn.style.zIndex = "10";
-
-    btn.onmouseenter = () => btn.style.opacity = "1";
-    btn.onmouseleave = () => btn.style.opacity = "0.4";
 
     btn.onclick = (e) => {
       e.stopPropagation();

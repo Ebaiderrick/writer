@@ -1584,6 +1584,21 @@ body.outline-hidden .section-scenes {
 
 .ai-btn {
   font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.script-block-row:hover .ai-btn,
+.script-block-row:focus-within .ai-btn {
+  opacity: 0.6;
+}
+
+.ai-btn:hover {
+  opacity: 1 !important;
+}
+
+.script-block {
+  padding-right: 32px;
 }
 
 .ai-menu {
