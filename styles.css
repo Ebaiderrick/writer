@@ -93,14 +93,6 @@ html[data-theme="navy"] {
   --control-bg: #eff4ff;
 }
 
-@keyframes mesh-gradient-animation {
-  0% { background-position: 0% 0%, 100% 100%, 100% 0%, 0% 100%; }
-  25% { background-position: 100% 0%, 0% 100%, 0% 0%, 100% 100%; }
-  50% { background-position: 100% 100%, 0% 0%, 0% 100%, 100% 0%; }
-  75% { background-position: 0% 100%, 100% 0%, 100% 100%, 0% 0%; }
-  100% { background-position: 0% 0%, 100% 100%, 100% 0%, 0% 100%; }
-}
-
 * {
   box-sizing: border-box;
 }
@@ -110,14 +102,6 @@ body {
   margin: 0;
   min-height: 100%;
   background-color: var(--bg);
-  background-image:
-    radial-gradient(at 0% 0%, color-mix(in srgb, var(--accent) 65%, transparent) 0%, transparent 80%),
-    radial-gradient(at 100% 0%, color-mix(in srgb, var(--accent-strong) 55%, transparent) 0%, transparent 80%),
-    radial-gradient(at 100% 100%, color-mix(in srgb, var(--accent) 60%, transparent) 0%, transparent 80%),
-    radial-gradient(at 0% 100%, color-mix(in srgb, var(--accent-strong) 50%, transparent) 0%, transparent 80%);
-  background-size: 200% 200%;
-  animation: mesh-gradient-animation 20s ease-in-out infinite alternate;
-  background-attachment: fixed;
   color: var(--ink);
   font-family: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   font-size: 15px;
@@ -141,7 +125,69 @@ img {
 }
 
 .app-shell {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
+}
+
+.mesh-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.gradient-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.gradient-canvas {
+  position: absolute;
+  width: 150%;
+  height: 150%;
+  top: -25%;
+  left: -25%;
+  filter: blur(50px);
+  transition: all 6s ease-in-out;
+}
+
+.blobs-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  aspect-ratio: 1 / 1;
+  transition: all 6s ease-in-out;
+}
+
+#color-0 {
+  width: 100%;
+  left: -30%;
+}
+
+#color-1 {
+  width: 100%;
+  bottom: -50%;
+  right: -50%;
+}
+
+#color-2 {
+  width: 50%;
+  top: 70%;
+  left: 20%;
+}
+
+#color-3 {
+  width: 100%;
+  top: -110%;
+  left: -30%;
 }
 
 .home-view {
