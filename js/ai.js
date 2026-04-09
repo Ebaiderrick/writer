@@ -1,6 +1,6 @@
 import { state } from './config.js';
 import { refs } from './dom.js';
-import { getLine, getLineIndex, queueSave } from './project.js';
+import { getCurrentProject, getLine, getLineIndex, queueSave } from './project.js';
 import { renderStudio, addBlock } from './events.js';
 
 // ===============================
@@ -197,18 +197,20 @@ export const AI = (() => {
   // API CALL
   // -------------------------------
   async function runAI(action, instruction) {
-    const content = activeBlock.innerText;
+    const current = activeBlock.innerText;
+    const activeLineId = activeBlock.dataset.id;
+    const scenes = getLastScenes(activeLineId);
 
     const payload = {
       type: activeBlock.dataset.type,
       action,
-      content,
+      current,
       instruction,
-      context: getContext()
+      context: formatScenesForAI(scenes)
     };
 
     try {
-      const res = await fetch("/api/ai", {
+      const res = await fetch("/ai/assist", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -218,7 +220,7 @@ export const AI = (() => {
 
       const data = await res.json();
 
-      showResultOptions(data.output);
+      showResultOptions(data.result);
 
     } catch (err) {
       console.error("AI Error:", err);
@@ -226,16 +228,47 @@ export const AI = (() => {
   }
 
   // -------------------------------
-  // GET CONTEXT (last few lines)
+  // GET CONTEXT (last 3 scenes)
   // -------------------------------
-  function getContext() {
-    const blocks = [...document.querySelectorAll(".script-block")];
-    const index = blocks.indexOf(activeBlock);
+  function getLastScenes(activeLineId) {
+    const project = getCurrentProject();
+    if (!project) return [];
+    const lines = project.lines;
+    const currentIndex = lines.findIndex(l => l.id === activeLineId);
+    if (currentIndex === -1) return [];
 
-    return blocks
-      .slice(Math.max(0, index - 10), index)
-      .map(b => b.innerText)
-      .join("\n");
+    let scenes = [];
+    let currentScene = { header: "", blocks: [] };
+
+    // Traverse backwards to collect up to 3 scenes
+    for (let i = currentIndex; i >= 0; i--) {
+      const line = lines[i];
+      currentScene.blocks.unshift(line);
+
+      if (line.type === "scene") {
+        currentScene.header = line.text;
+        scenes.unshift(currentScene);
+        currentScene = { header: "", blocks: [] };
+
+        if (scenes.length === 3) break;
+      }
+    }
+
+    // If we didn't hit a scene heading at the very beginning,
+    // we still might have blocks that belong to an implicit scene.
+    if (currentScene.blocks.length > 0 && scenes.length < 3) {
+      scenes.unshift(currentScene);
+    }
+
+    return scenes;
+  }
+
+  function formatScenesForAI(scenes) {
+    return scenes.map((scene, i) => {
+      const header = scene.header || "SCENE " + (i + 1);
+      const blocks = scene.blocks.map(b => `[${b.type.toUpperCase()}] ${b.text}`).join("\n");
+      return `--- ${header} ---\n${blocks}`;
+    }).join("\n\n");
   }
 
   // -------------------------------
