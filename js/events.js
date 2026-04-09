@@ -542,7 +542,7 @@ function inferNextType(index) {
   return "action";
 }
 
-function addBlock(type, text = "", index) {
+export function addBlock(type, text = "", index) {
   const project = getCurrentProject();
   const insertAt = Number.isInteger(index) ? index : project.lines.length;
   const line = { id: uid(), type, text: normalizeLineText(text, type) };
