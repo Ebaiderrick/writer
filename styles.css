@@ -1588,8 +1588,8 @@ body.outline-hidden .section-scenes {
   transition: opacity 0.2s;
 }
 
-.script-block-row:hover .ai-btn,
-.script-block-row:focus-within .ai-btn {
+body.ai-assist-active .script-block-row:hover .ai-btn,
+body.ai-assist-active .script-block-row:focus-within .ai-btn {
   opacity: 0.6;
 }
 

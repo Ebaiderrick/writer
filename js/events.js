@@ -121,6 +121,7 @@ export function bindEvents() {
   refs.aiAssistToggle.addEventListener("change", () => {
     state.aiAssist = refs.aiAssistToggle.checked;
     refs.aiPanel.hidden = !state.aiAssist;
+    applyToolbarState();
     queueSave();
   });
 
@@ -753,6 +754,7 @@ function handleMenuAction(action) {
       state.aiAssist = !state.aiAssist;
       refs.aiAssistToggle.checked = state.aiAssist;
       refs.aiPanel.hidden = !state.aiAssist;
+      applyToolbarState();
       updateMenuStateButtons();
       queueSave();
       break;

@@ -1,15 +1,12 @@
 {
-  "name": "writer-ai-server",
+  "name": "eyawriter-server",
   "version": "1.0.0",
   "type": "module",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.0.0",
-    "express": "^4.18.2",
-    "node-fetch": "^3.3.2"
+    "express": "^4.18.0",
+    "node-fetch": "^3.2.0"
   }
 }
