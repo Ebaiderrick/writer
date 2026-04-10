@@ -211,7 +211,7 @@ export const AI = (() => {
     };
 
     try {
-      const res = await fetch("http://localhost:3000/ai/assist", {
+      const res = await fetch("http://localhost:3001/api/ai-assist", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -221,7 +221,7 @@ export const AI = (() => {
 
       const data = await res.json();
 
-      showResultOptions(data.result);
+      showResultOptions(data.output);
 
     } catch (err) {
       console.error("AI Error:", err);

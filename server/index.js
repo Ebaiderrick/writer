@@ -17,7 +17,7 @@ app.get("/", (req, res) => {
 });
 
 // AI Endpoint
-app.post("/ai/assist", async (req, res) => {
+app.post("/api/ai-assist", async (req, res) => {
   console.log("AI HIT:", req.body);
   const { type, action, current, context, instruction } = req.body;
 
@@ -28,7 +28,7 @@ app.post("/ai/assist", async (req, res) => {
   // Use test mode if no API key is present
   if (!process.env.OPENAI_API_KEY) {
       return res.json({
-          result: `AI is working (test mode) - You wanted to ${action} this ${type}.`
+          output: `AI is working (test mode) - You wanted to ${action} this ${type}.`
       });
   }
 
@@ -60,7 +60,7 @@ app.post("/ai/assist", async (req, res) => {
         output = data.choices[0].message.content;
     }
 
-    res.json({ result: output });
+    res.json({ output: output });
 
   } catch (error) {
     console.error("AI ERROR:", error);
@@ -68,7 +68,7 @@ app.post("/ai/assist", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
