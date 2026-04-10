@@ -211,7 +211,12 @@ export const AI = (() => {
     };
 
     try {
-      const res = await fetch("http://localhost:3001/api/ai-assist", {
+      // Use Netlify Function if in production, otherwise localhost
+      const endpoint = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? "http://localhost:3001/api/ai-assist"
+        : "/.netlify/functions/ai-assist";
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
