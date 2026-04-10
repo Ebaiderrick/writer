@@ -210,7 +210,7 @@ export const AI = (() => {
     };
 
     try {
-      const res = await fetch("/ai/assist", {
+      const res = await fetch("http://localhost:3000/ai/assist", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
