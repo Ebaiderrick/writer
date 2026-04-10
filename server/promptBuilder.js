@@ -1,47 +1,17 @@
-export function buildPrompt({ type, action, current, context, instruction }) {
+export default function buildPrompt(type, userInput, context = []) {
+  const lastScenes = context.join("\n");
+
   return `
-You are a professional screenplay writer.
+You are assisting in writing a screenplay.
 
-STRICT RULES:
-- Only write in screenplay format
-- No explanations
-- No commentary
-- No lists or notes
-- Maintain consistency with previous scenes
-- Continue naturally
+Context (last scenes):
+${lastScenes}
 
-STORY CONTEXT (LAST 3 SCENES):
-${context}
+Current task: ${type}
 
-CURRENT BLOCK:
-${current}
+User instruction:
+${userInput}
 
-TASK:
-${getActionInstruction(type, action)}
-${instruction ? `\nADDITIONAL INSTRUCTION: ${instruction}` : ""}
+Write ONLY in proper screenplay format.
 `;
-}
-
-function getActionInstruction(type, action) {
-  if (type === "scene" && action === "Expand") {
-    return "Expand this into a full cinematic scene with action and dialogue.";
-  }
-
-  if (type === "scene" && action === "Predict") {
-    return "Continue the story naturally.";
-  }
-
-  if (type === "dialogue" && action === "Rephrase") {
-    return "Rewrite the dialogue to sound more natural.";
-  }
-
-  if (type === "dialogue" && action === "Suggest Reply") {
-    return "Write the next line of dialogue.";
-  }
-
-  if (type === "action") {
-    return "Describe what happens next visually.";
-  }
-
-  return `Perform the action: ${action}`;
 }
