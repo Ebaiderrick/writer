@@ -11,21 +11,29 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Health check
+// Health check
 app.get("/", (req, res) => {
   res.send("AI Server Running 🚀");
 });
 
-// 🎯 AI Endpoint
+// AI Endpoint
 app.post("/ai/assist", async (req, res) => {
-  const { type, action, current, context } = req.body;
+  console.log("AI HIT:", req.body);
+  const { type, action, current, context, instruction } = req.body;
 
   if (!current) {
     return res.status(400).json({ error: "Missing current block" });
   }
 
+  // Use test mode if no API key is present
+  if (!process.env.OPENAI_API_KEY) {
+      return res.json({
+          result: `AI is working (test mode) - You wanted to ${action} this ${type}.`
+      });
+  }
+
   try {
-    const prompt = buildPrompt({ type, action, current, context });
+    const prompt = buildPrompt({ type, action, current, context, instruction });
 
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -42,13 +50,14 @@ app.post("/ai/assist", async (req, res) => {
 
     const data = await response.json();
 
-    // 🔥 safer parsing
     let output = "";
-
     if (data.output && data.output.length > 0) {
       output = data.output[0].content[0].text;
     } else if (data.output_text) {
       output = data.output_text;
+    } else if (data.choices && data.choices[0]) {
+        // Compatibility for standard OpenAI responses
+        output = data.choices[0].message.content;
     }
 
     res.json({ result: output });
@@ -59,9 +68,7 @@ app.post("/ai/assist", async (req, res) => {
   }
 });
 
-// 🚀 Start server
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

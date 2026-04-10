@@ -1,4 +1,4 @@
-export function buildPrompt({ type, action, current, context }) {
+export function buildPrompt({ type, action, current, context, instruction }) {
   return `
 You are a professional screenplay writer.
 
@@ -18,6 +18,7 @@ ${current}
 
 TASK:
 ${getActionInstruction(type, action)}
+${instruction ? `\nADDITIONAL INSTRUCTION: ${instruction}` : ""}
 `;
 }
 
@@ -42,5 +43,5 @@ function getActionInstruction(type, action) {
     return "Describe what happens next visually.";
   }
 
-  return "Improve this screenplay text.";
+  return `Perform the action: ${action}`;
 }

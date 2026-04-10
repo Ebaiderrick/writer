@@ -61,6 +61,7 @@ export const AI = (() => {
     btn.style.background = "transparent";
     btn.style.cursor = "pointer";
     btn.style.zIndex = "10";
+    btn.style.transition = "opacity 0.2s ease";
 
     btn.onclick = (e) => {
       e.stopPropagation();
