@@ -101,9 +101,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 18%, transparent), transparent 32%),
-    linear-gradient(180deg, var(--surface-muted) 0%, var(--bg) 100%);
+  background-color: var(--bg);
   color: var(--ink);
   font-family: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   font-size: 15px;
@@ -127,7 +125,69 @@ img {
 }
 
 .app-shell {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
+}
+
+.mesh-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.gradient-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.gradient-canvas {
+  position: absolute;
+  width: 150%;
+  height: 150%;
+  top: -25%;
+  left: -25%;
+  filter: blur(50px);
+  transition: all 6s ease-in-out;
+}
+
+.blobs-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  aspect-ratio: 1 / 1;
+  transition: all 6s ease-in-out;
+}
+
+#color-0 {
+  width: 100%;
+  left: -30%;
+}
+
+#color-1 {
+  width: 100%;
+  bottom: -50%;
+  right: -50%;
+}
+
+#color-2 {
+  width: 50%;
+  top: 70%;
+  left: 20%;
+}
+
+#color-3 {
+  width: 100%;
+  top: -110%;
+  left: -30%;
 }
 
 .home-view {
@@ -532,7 +592,7 @@ img {
   height: 100vh;
   display: grid;
   grid-template-rows: var(--topbar-height) auto minmax(0, 1fr);
-  background: var(--surface-strong);
+  background: transparent;
 }
 
 .studio-topbar {
@@ -1520,4 +1580,43 @@ body.outline-hidden .section-scenes {
     width: 100%;
     text-align: left;
   }
+}
+
+.ai-btn {
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+body.ai-assist-active .script-block-row:hover .ai-btn,
+body.ai-assist-active .script-block-row:focus-within .ai-btn {
+  opacity: 0.6;
+}
+
+.ai-btn:hover {
+  opacity: 1 !important;
+}
+
+.script-block {
+  padding-right: 32px;
+}
+
+.ai-menu {
+  font-size: 13px;
+}
+
+.ai-menu-item {
+  border-radius: 6px;
+}
+
+.ai-input {
+  outline: none;
+}
+
+.ai-submit-btn:hover {
+  background: var(--accent-strong) !important;
+}
+
+.ai-input:focus {
+  border-color: var(--accent) !important;
 }

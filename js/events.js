@@ -121,6 +121,7 @@ export function bindEvents() {
   refs.aiAssistToggle.addEventListener("change", () => {
     state.aiAssist = refs.aiAssistToggle.checked;
     refs.aiPanel.hidden = !state.aiAssist;
+    applyToolbarState();
     queueSave();
   });
 
@@ -542,7 +543,7 @@ function inferNextType(index) {
   return "action";
 }
 
-function addBlock(type, text = "", index) {
+export function addBlock(type, text = "", index) {
   const project = getCurrentProject();
   const insertAt = Number.isInteger(index) ? index : project.lines.length;
   const line = { id: uid(), type, text: normalizeLineText(text, type) };
@@ -753,6 +754,7 @@ function handleMenuAction(action) {
       state.aiAssist = !state.aiAssist;
       refs.aiAssistToggle.checked = state.aiAssist;
       refs.aiPanel.hidden = !state.aiAssist;
+      applyToolbarState();
       updateMenuStateButtons();
       queueSave();
       break;

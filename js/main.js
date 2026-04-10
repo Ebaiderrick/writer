@@ -1,6 +1,8 @@
 import { loadProjects } from './project.js';
 import { bindEvents, renderStudio } from './events.js';
 import { showHome, renderHome, applyToolbarState, applyTheme, applyViewState } from './ui.js';
+import { initBackground } from './background.js';
+import { AI } from './ai.js';
 
 function boot() {
   loadProjects();
@@ -10,6 +12,8 @@ function boot() {
   applyToolbarState();
   applyTheme();
   applyViewState();
+  initBackground();
+  AI.init();
 }
 
 // Check if DOM is already loaded

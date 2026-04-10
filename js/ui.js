@@ -185,6 +185,7 @@ export function applyTheme() {
 }
 
 export function applyToolbarState() {
+  document.body.classList.toggle("ai-assist-active", state.aiAssist);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
   refs.toolStripToggle.textContent = state.toolStripCollapsed ? "v" : "^";
 }
