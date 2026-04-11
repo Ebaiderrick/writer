@@ -37,7 +37,7 @@ export function loadProjects() {
     state.aiAssist = Boolean(parsed?.aiAssist);
     state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
     state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
-    state.theme = sanitizeThemeName(parsed?.theme);
+    state.theme = parsed?.theme || "rose";
     state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
     document.documentElement.style.setProperty("--right-pane-width", `${clamp(parsed?.rightWidth || 324, 260, 520)}px`);
@@ -45,20 +45,8 @@ export function loadProjects() {
     console.error("Unable to load projects", error);
     state.projects = [cloneProject(sampleProject, true)];
     state.currentProjectId = state.projects[0].id;
-    state.theme = "dark";
     state.viewOptions = { ...DEFAULT_VIEW_OPTIONS };
   }
-}
-
-function sanitizeThemeName(theme) {
-  const nextTheme = String(theme || "").trim().toLowerCase();
-  if (nextTheme === "rose") {
-    return "white";
-  }
-
-  return ["dark", "turquoise", "white", "navy"].includes(nextTheme)
-    ? nextTheme
-    : "dark";
 }
 
 export function sanitizeProject(project) {
