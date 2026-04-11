@@ -42,7 +42,7 @@ export const state = {
   aiAssist: false,
   toolStripCollapsed: false,
   autoNumberScenes: false,
-  theme: "dark",
+  theme: "rose",
   viewOptions: { ...DEFAULT_VIEW_OPTIONS },
   filterQuery: ""
 };
