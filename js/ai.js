@@ -56,8 +56,9 @@ export const AI = (() => {
     const button = document.createElement("button");
     button.className = "ai-btn";
     button.type = "button";
-    button.textContent = "AI";
-    button.title = "Open AI assistant";
+    button.textContent = "⚡";
+    button.title = "AI Assist";
+    button.setAttribute("aria-label", "AI Assist");
 
     button.style.position = "absolute";
     button.style.right = "8px";
@@ -389,6 +390,12 @@ export const AI = (() => {
 
     if (input) {
       input.disabled = isLoading;
+    }
+
+    const triggerButton = activeBlock?.closest(".script-block-row")?.querySelector(".ai-btn");
+    if (triggerButton) {
+      triggerButton.classList.toggle("is-busy", Boolean(isLoading));
+      triggerButton.setAttribute("aria-busy", isLoading ? "true" : "false");
     }
   }
 
