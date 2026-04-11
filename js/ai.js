@@ -181,7 +181,7 @@ export const AI = (() => {
     submitButton.style.borderRadius = "6px";
     submitButton.style.border = "none";
     submitButton.style.background = "var(--accent)";
-    submitButton.style.color = "#fff";
+    submitButton.style.color = "var(--accent-contrast)";
     submitButton.style.cursor = "pointer";
 
     const trigger = async () => {
