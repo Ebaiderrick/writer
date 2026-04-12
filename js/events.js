@@ -143,6 +143,16 @@ export function bindEvents() {
   refs.loadSampleBtn.addEventListener("click", replaceWithSample);
   refs.deleteProjectBtn.addEventListener("click", deleteProject);
 
+  refs.helpBtn.addEventListener("click", () => {
+    refs.helpDialog.showModal();
+  });
+
+  document.querySelectorAll("[data-home-nav='shortcuts']").forEach(btn => {
+    btn.addEventListener("click", () => {
+      refs.helpDialog.showModal();
+    });
+  });
+
   initResizeHandle(refs.leftResize, "left");
   initResizeHandle(refs.rightResize, "right");
 
@@ -272,16 +282,6 @@ export function bindEvents() {
       }
 
       const pastedLines = text.split(/\r?\n/);
-      const project = getCurrentProject();
-      const activeId = state.activeBlockId;
-      if (!project || !activeId) return;
-
-      const index = getLineIndex(activeId);
-      const currentLine = project.lines[index];
-      const offset = getCaretOffset(e.target);
-
-      const textBefore = currentLine.text.substring(0, offset);
-      const textAfter = currentLine.text.substring(offset);
 
       if (pastedLines.length === 1) {
           // Simple single line paste
