@@ -643,12 +643,15 @@ function changeBlockType(id, nextType) {
   const project = getCurrentProject();
   if (!line || !project) return;
 
+  const oldType = line.type;
   line.type = nextType;
 
-  // If user switches to scene, clear it if it was empty or default to trigger prefix suggestions
   let text = line.text;
-  if (nextType === "scene" && (!text || text === "Untitled Scene")) {
-    text = "";
+  // If user switches to scene, clear it if it was empty, default, or just a character name (likely suggested)
+  if (nextType === "scene") {
+    if (!text || text === "Untitled Scene" || oldType === "character") {
+      text = "";
+    }
   }
 
   line.text = normalizeConvertedText(text, nextType);

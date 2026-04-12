@@ -39,7 +39,7 @@ export function renderPreview() {
 
     pageLines.forEach((line) => {
       const node = document.createElement("p");
-      node.className = `preview-line ${line.type}`;
+      node.className = line.type; // Use clean classes: scene, action, character, etc.
       node.textContent = line.displayText;
       body.appendChild(node);
     });
@@ -122,7 +122,7 @@ export function buildPrintableDocument(project, autoPrint = false) {
     <section class="print-page">
       ${pageHeader}
       <div class="print-body">
-        ${pageLines.map((line) => `<p class="print-line ${line.type}">${escapeHtml(line.displayText)}</p>`).join("")}
+        ${pageLines.map((line) => `<p class="${line.type}">${escapeHtml(line.displayText)}</p>`).join("")}
       </div>
       ${(state.viewOptions.pageCount && !state.viewOptions.pageNumbers)
         ? `<div class="print-footer">${escapeHtml(buildPreviewFooterLabel(pageNum, previewData.scriptPages.length))}</div>`
@@ -149,95 +149,123 @@ export function buildPrintableDocument(project, autoPrint = false) {
 
 function getPrintableStyles() {
   return `
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: #f3f1ef;
-      color: #111;
-      font-family: "Courier New", Courier, monospace;
+    @page {
+      size: 8.5in 11in;
+      margin-top: 1in;
+      margin-bottom: 1in;
+      margin-left: 1.5in;
+      margin-right: 1in;
     }
+
+    body {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 12pt;
+      line-height: 1;
+      background: white;
+      color: black;
+      margin: 0;
+    }
+
+    * { box-sizing: border-box; }
+
     .print-shell {
       display: grid;
       gap: 0;
       padding: 0;
     }
+
     .print-page {
       position: relative;
       width: 8.5in;
       min-height: 11in;
       margin: 0 auto;
-      padding: 1.0in 1.0in 1.0in 1.5in;
+      padding: 0; /* Margins are handled by @page in print, and we'll center for preview */
       background: #fff;
       color: #111;
       page-break-after: always;
       break-after: page;
-      font-size: 12pt;
     }
+
+    /* Adjust padding for browser preview (non-print) */
+    @media screen {
+      .print-page {
+        padding: 1in 1in 1in 1.5in;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+      }
+      body {
+        background: #f3f1ef;
+        padding: 20px;
+      }
+    }
+
     .print-page-number {
       position: absolute;
       top: 0.5in;
-      right: 1.0in;
+      right: 0in; /* Flush with right margin */
       font-family: "Courier New", Courier, monospace;
       font-size: 12pt;
     }
+
     .cover-page {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding-left: 1.0in; /* Center for cover */
     }
+
     .print-cover-text {
       white-space: pre-wrap;
       text-align: center;
       margin: 0;
     }
-    .print-body {
-      width: 100%;
+
+    .scene {
+      text-transform: uppercase;
+      margin-top: 24px;
+      margin-bottom: 12px;
     }
-    .print-line {
-      margin: 0 0 12pt;
-      white-space: pre-wrap;
-      line-height: 1.2;
+
+    .action {
+      margin-bottom: 12px;
     }
-    .print-line.scene,
-    .print-line.shot,
-    .print-line.transition {
-      font-weight: bold;
+
+    .character {
+      margin-left: 2.2in; /* Relative to 1.5in left margin = 3.7in total */
+      width: 2in;
       text-transform: uppercase;
     }
-    .print-line.character,
-    .print-line.dual {
-      margin-left: 2.2in;
-      width: 2.4in;
-      text-transform: uppercase;
-      font-weight: bold;
+
+    .parenthetical {
+      margin-left: 1.7in; /* Relative to 1.5in left margin = 3.2in total */
+      width: 2.5in;
+      font-style: italic;
     }
-    .print-line.dialogue {
-      margin-left: 1.0in;
+
+    .dialogue {
+      margin-left: 1in; /* Relative to 1.5in left margin = 2.5in total */
       width: 3.5in;
+      margin-bottom: 12px;
     }
-    .print-line.parenthetical {
-      margin-left: 1.6in;
-      width: 2.4in;
-    }
-    .print-line.transition {
-      margin-left: auto;
-      width: 2.4in;
+
+    .transition {
       text-align: right;
+      margin-top: 12px;
+      margin-left: auto;
+      width: 2in;
     }
-    .print-page-break {
-      height: 0;
-      page-break-after: always;
-      break-after: page;
-    }
-    @page {
-      size: letter;
-      margin: 0;
-    }
+
     @media print {
-      body { background: #fff; }
-      .print-page { box-shadow: none; }
+      body {
+        margin: 0;
+        background: white;
+      }
+      .print-page {
+        box-shadow: none;
+        margin: 0;
+        width: 100%;
+        page-break-after: always;
+      }
     }
   `;
 }
