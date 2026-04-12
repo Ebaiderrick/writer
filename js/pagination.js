@@ -103,13 +103,13 @@ export function paginateScriptLines(lines) {
 export function estimateLineUnits(type, text) {
   const compact = stripWrapperChars(text);
 
-  // Character widths based on standard screenplay indentation/margins
-  let width = 60; // Default (Action/Scene)
-  if (type === "dialogue") width = 36;
-  if (type === "parenthetical") width = 24;
-  if (type === "character") width = 24;
-  if (type === "transition") width = 24;
-  if (type === "dual") width = 24;
+  // Character widths based on 10-pitch Courier (10 chars per inch)
+  let width = 60; // Default (Action/Scene at 6.0in)
+  if (type === "dialogue") width = 35;       // 3.5in
+  if (type === "parenthetical") width = 25; // 2.5in
+  if (type === "character") width = 20;     // 2.0in
+  if (type === "transition") width = 20;    // 2.0in
+  if (type === "dual") width = 20;          // 2.0in
 
   const wrappedLines = Math.max(1, Math.ceil(compact.length / width));
 
