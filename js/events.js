@@ -8,7 +8,7 @@ import {
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
-  getOwningSceneId, getCharacterAutocomplete, updateSuggestions
+  getOwningSceneId, getPreviousSceneHeading, getCharacterAutocomplete, updateSuggestions
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
 import {
@@ -191,18 +191,22 @@ export function bindEvents() {
       if (!project) return;
 
       const selectedLines = [];
-      const range = selection.getRangeAt(0);
+      const richLines = [];
       const blocks = refs.screenplayEditor.querySelectorAll(".script-block");
 
       blocks.forEach(block => {
           if (selection.containsNode(block, true)) {
               const line = getLine(block.dataset.id);
-              if (line) selectedLines.push(line.text);
+              if (line) {
+                selectedLines.push(line.text);
+                richLines.push({ type: line.type, text: line.text });
+              }
           }
       });
 
       if (selectedLines.length > 0) {
           e.clipboardData.setData("text/plain", selectedLines.join("\n"));
+          e.clipboardData.setData("application/x-eyawriter-blocks", JSON.stringify(richLines));
           e.preventDefault();
       }
   });
@@ -211,8 +215,61 @@ export function bindEvents() {
       if (!e.target.classList.contains("script-block")) return;
 
       e.preventDefault();
+      const rawBlocks = e.clipboardData.getData("application/x-eyawriter-blocks");
       const text = e.clipboardData.getData("text/plain");
-      if (!text) return;
+      if (!text && !rawBlocks) return;
+
+      const project = getCurrentProject();
+      const activeId = state.activeBlockId;
+      if (!project || !activeId) return;
+
+      const index = getLineIndex(activeId);
+      const currentLine = project.lines[index];
+      const offset = getCaretOffset(e.target);
+
+      const textBefore = currentLine.text.substring(0, offset);
+      const textAfter = currentLine.text.substring(offset);
+
+      if (rawBlocks) {
+          try {
+              const blocks = JSON.parse(rawBlocks);
+              if (Array.isArray(blocks) && blocks.length > 0) {
+                  // Type-preserving paste
+                  if (blocks.length === 1) {
+                      currentLine.text = textBefore + blocks[0].text + textAfter;
+                      // Optionally adopt type if pasting into empty line?
+                      // User said "appear in their copied natures", so let's adopt type if it's the only block or if user prefers.
+                      // For single line, maybe just keep existing type but update text.
+                      renderStudio();
+                      focusBlock(activeId);
+                      setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${activeId}"]`), offset + blocks[0].text.length);
+                  } else {
+                      // Multi-block type-preserving paste
+                      currentLine.text = textBefore + blocks[0].text;
+                      const middleBlocks = blocks.slice(1, -1).map(b => ({
+                          id: uid(),
+                          type: b.type,
+                          text: b.text
+                      }));
+                      const lastItem = blocks[blocks.length - 1];
+                      const finalBlock = {
+                          id: uid(),
+                          type: lastItem.type,
+                          text: lastItem.text + textAfter
+                      };
+                      project.lines.splice(index + 1, 0, ...middleBlocks, finalBlock);
+                      project.updatedAt = new Date().toISOString();
+                      renderStudio();
+                      focusBlock(finalBlock.id);
+                      setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${finalBlock.id}"]`), lastItem.text.length);
+                  }
+                  queueSave();
+                  return;
+              }
+          } catch (err) {
+              console.warn("Failed to parse rich paste data", err);
+          }
+      }
 
       const pastedLines = text.split(/\r?\n/);
       const project = getCurrentProject();
@@ -402,6 +459,18 @@ function handleBlockInput(id, element) {
   }
 
   if (!autoCompleted && normalized !== beforeText) {
+    // Stage 3: Auto-CONT'D logic
+    if (line.type === "scene" && normalized.endsWith(" -")) {
+        const currentLoc = normalized.split(" -")[0].trim().toUpperCase();
+        const prevHeading = getPreviousSceneHeading(getLineIndex(id));
+        if (prevHeading) {
+            const prevLoc = prevHeading.split(" -")[0].trim().toUpperCase();
+            if (currentLoc && currentLoc === prevLoc) {
+                normalized += " CONT'D";
+            }
+        }
+    }
+
     element.textContent = normalized;
     setCaretOffset(element, offset);
   }
@@ -575,7 +644,14 @@ function changeBlockType(id, nextType) {
   if (!line || !project) return;
 
   line.type = nextType;
-  line.text = normalizeConvertedText(line.text, nextType);
+
+  // If user switches to scene, clear it if it was empty or default to trigger prefix suggestions
+  let text = line.text;
+  if (nextType === "scene" && (!text || text === "Untitled Scene")) {
+    text = "";
+  }
+
+  line.text = normalizeConvertedText(text, nextType);
   project.updatedAt = new Date().toISOString();
   state.activeType = nextType;
   renderStudio();
@@ -615,7 +691,15 @@ function applySuggestion(value) {
   const line = getLine(state.activeBlockId);
   const project = getCurrentProject();
   if (!line || !project) return;
-  line.text = normalizeLineText(value, line.type);
+
+  if (line.type === "scene" && line.text.includes(" -")) {
+    const parts = line.text.split(" -");
+    parts[parts.length - 1] = " " + value;
+    line.text = normalizeLineText(parts.join(" -"), line.type);
+  } else {
+    line.text = normalizeLineText(value, line.type);
+  }
+
   project.updatedAt = new Date().toISOString();
   renderStudio();
   focusBlock(line.id);
@@ -897,22 +981,23 @@ function handleGlobalKeydown(event) {
 
   // Alt + Key for block types
   if (event.altKey && !event.ctrlKey && !event.metaKey) {
+    const code = event.code;
     const map = {
-      s: "scene",
-      a: "action",
-      c: "character",
-      d: "dialogue",
-      t: "transition",
-      p: "parenthetical",
-      o: "shot",
-      x: "text",
-      n: "note",
-      u: "dual",
-      i: "image"
+      KeyS: "scene",
+      KeyA: "action",
+      KeyC: "character",
+      KeyD: "dialogue",
+      KeyT: "transition",
+      KeyP: "parenthetical",
+      KeyO: "shot",
+      KeyX: "text",
+      KeyN: "note",
+      KeyU: "dual",
+      KeyI: "image"
     };
-    if (map[key]) {
+    if (map[code]) {
       event.preventDefault();
-      handleToolSelection(map[key]);
+      handleToolSelection(map[code]);
     }
   }
 

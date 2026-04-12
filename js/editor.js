@@ -110,6 +110,16 @@ export function getOwningSceneId(lineId) {
   return getSceneIdForIndex(getLineIndex(lineId));
 }
 
+export function getPreviousSceneHeading(activeIndex) {
+  const project = getCurrentProject();
+  for (let index = activeIndex - 1; index >= 0; index -= 1) {
+    if (project.lines[index]?.type === "scene" && project.lines[index].text.trim()) {
+      return normalizeLineText(project.lines[index].text, "scene");
+    }
+  }
+  return "";
+}
+
 export function setActiveBlock(id) {
   state.activeBlockId = id;
   state.activeType = getLine(id)?.type || "action";
@@ -173,6 +183,26 @@ export function buildSuggestions(type, currentText) {
   }
 
   if (type === "scene") {
+    const text = (currentText || "").toUpperCase();
+
+    // Stage 1: Initial prefix
+    if (!text.trim()) {
+        return [
+            { label: "INT.", value: "INT. " },
+            { label: "EXT.", value: "EXT. " },
+            { label: "INT./EXT.", value: "INT./EXT. " }
+        ];
+    }
+
+    // Stage 2: Time of day suffix
+    if (text.includes(" -")) {
+        const afterHyphen = text.split(" -").pop().trim();
+        return ["DAY", "NIGHT", "DAWN", "DUSK", "CONT'D"]
+            .filter(t => !afterHyphen || t.startsWith(afterHyphen))
+            .map(t => ({ label: t, value: t }));
+    }
+
+    // Default behavior for scene headings
     const sceneHeadings = project.lines
       .filter((line) => line.type === "scene" && line.text.trim())
       .map((line) => normalizeLineText(line.text, "scene"));
@@ -201,15 +231,6 @@ export function buildSuggestions(type, currentText) {
   return [];
 }
 
-function getPreviousSceneHeading(activeIndex) {
-  const project = getCurrentProject();
-  for (let index = activeIndex - 1; index >= 0; index -= 1) {
-    if (project.lines[index]?.type === "scene" && project.lines[index].text.trim()) {
-      return normalizeLineText(project.lines[index].text, "scene");
-    }
-  }
-  return "";
-}
 
 export function getCharacterAutocomplete(text, activeId) {
   const cleaned = text.trim().toUpperCase();

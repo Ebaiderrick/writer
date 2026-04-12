@@ -1113,6 +1113,7 @@ img {
   position: relative;
   min-height: calc(100vh - 280px);
   padding: 54px 64px 96px;
+  user-select: text;
 }
 
 .script-block-row {
@@ -1121,6 +1122,7 @@ img {
   gap: 10px;
   margin-bottom: 0;
   align-items: start;
+  user-select: text;
 }
 
 .scene-toggle {
