@@ -4,6 +4,7 @@ import {
   getCurrentProject, getLine, getLineIndex, queueSave,
   getSuggestedNextSpeaker
 } from './project.js';
+import { toggleSceneCollapse } from './events.js';
 import {
   normalizeLineText, selectTextSuffix, placeCaretAtEnd,
   selectElementText, buildContinuedSceneSuggestions
@@ -13,23 +14,37 @@ import { createTextNode as createUINode } from './utils.js';
 export function renderEditor() {
   const project = getCurrentProject();
   if (!project) return;
+
+  // Save current selection to restore after render if possible
+  const selection = window.getSelection();
+  let savedOffset = 0;
+  let savedId = state.activeBlockId;
+
+  if (selection.rangeCount > 0 && selection.anchorNode) {
+      const activeBlock = selection.anchorNode.closest ? selection.anchorNode.closest('.line') : selection.anchorNode.parentElement.closest('.line');
+      if (activeBlock) {
+          savedId = activeBlock.dataset.id;
+          // We can't easily save offset across full re-renders without care
+      }
+  }
+
   refs.screenplayEditor.innerHTML = "";
-  const template = document.querySelector("#blockTemplate");
-  const filterSet = buildVisibleFilterSet(project);
+
+  let sceneNumber = 0;
   let currentSceneId = "";
   let collapsedSceneId = "";
-  let visibleRows = 0;
-  let sceneNumber = 0;
 
   project.lines.forEach((line) => {
-    const row = template.content.firstElementChild.cloneNode(true);
-    const toggle = row.querySelector(".scene-toggle");
-    const tag = row.querySelector(".block-tag");
-    const block = row.querySelector(".script-block");
+    const div = document.createElement("div");
+    div.className = `line ${line.type === 'scene' ? 'scene-heading' : line.type}`;
+    div.dataset.id = line.id;
+    div.dataset.type = line.type;
+    div.contentEditable = "true";
+    div.spellcheck = true;
+    div.textContent = line.text;
 
-    row.dataset.id = line.id;
     if (line.id === state.activeBlockId) {
-      row.classList.add("is-active");
+        div.classList.add("is-active");
     }
 
     if (line.type === "scene") {
@@ -37,36 +52,39 @@ export function renderEditor() {
       currentSceneId = line.id;
       const isCollapsed = project.collapsedSceneIds.includes(line.id);
       collapsedSceneId = isCollapsed ? line.id : "";
-      toggle.hidden = false;
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "scene-toggle";
       toggle.textContent = isCollapsed ? ">" : "v";
       toggle.title = isCollapsed ? "Expand scene" : "Collapse scene";
-      toggle.setAttribute("aria-label", isCollapsed ? "Expand scene" : "Collapse scene");
-    } else {
-      toggle.hidden = true;
+      toggle.onclick = (e) => {
+          e.stopPropagation();
+          toggleSceneCollapse(line.id);
+      };
+      div.appendChild(toggle);
+
+      if (state.autoNumberScenes) {
+          const num = document.createElement("span");
+          num.className = "scene-number-label";
+          num.textContent = `${sceneNumber}. `;
+          div.prepend(num);
+      }
     }
 
-    row.dataset.sceneOwner = currentSceneId;
-    const label = TYPE_LABELS[line.type];
-    tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
-    block.dataset.id = line.id;
-    block.dataset.type = line.type;
-    block.textContent = line.text;
-
-    const hiddenByScene = !filterSet && Boolean(collapsedSceneId && line.type !== "scene");
-    const hiddenByFilter = Boolean(filterSet && !filterSet.has(line.id));
-    row.classList.toggle("is-scene-hidden", hiddenByScene);
-    row.classList.toggle("is-filtered-out", hiddenByFilter);
-
-    if (!hiddenByScene && !hiddenByFilter) {
-      visibleRows += 1;
+    const isHidden = Boolean(collapsedSceneId && line.type !== "scene");
+    if (isHidden) {
+        div.style.display = "none";
     }
 
-    refs.screenplayEditor.appendChild(row);
+    refs.screenplayEditor.appendChild(div);
   });
 
-  if (!visibleRows && state.filterQuery.trim()) {
+  if (!project.lines.length && state.filterQuery.trim()) {
     refs.screenplayEditor.appendChild(createUINode(`No lines match "${state.filterQuery}".`));
   }
+
+  updateActiveTool();
 }
 
 export function buildVisibleFilterSet(project) {
@@ -81,10 +99,6 @@ export function buildVisibleFilterSet(project) {
       return;
     }
     visible.add(line.id);
-    const ownerSceneId = getSceneIdForIndex(index, project);
-    if (ownerSceneId) {
-      visible.add(ownerSceneId);
-    }
   });
 
   return visible;
@@ -122,10 +136,13 @@ export function getPreviousSceneHeading(activeIndex) {
 
 export function setActiveBlock(id) {
   state.activeBlockId = id;
-  state.activeType = getLine(id)?.type || "action";
-  refs.screenplayEditor.querySelectorAll(".script-block-row").forEach((row) => {
-    row.classList.toggle("is-active", row.dataset.id === id);
+  const line = getLine(id);
+  state.activeType = line?.type || "action";
+
+  refs.screenplayEditor.querySelectorAll(".line").forEach((el) => {
+    el.classList.toggle("is-active", el.dataset.id === id);
   });
+
   updateActiveTool();
   updateSuggestions();
 }
@@ -248,22 +265,7 @@ export function getCharacterAutocomplete(text, activeId) {
 }
 
 export function focusBlock(id, selectAll = false) {
-  if (state.filterQuery) {
-    const visibleSet = buildVisibleFilterSet(getCurrentProject());
-    if (visibleSet && !visibleSet.has(id)) {
-      state.filterQuery = "";
-      renderEditor();
-    }
-  }
-
-  const ownerSceneId = getOwningSceneId(id);
-  const project = getCurrentProject();
-  if (ownerSceneId && ownerSceneId !== id && project?.collapsedSceneIds.includes(ownerSceneId)) {
-    project.collapsedSceneIds = project.collapsedSceneIds.filter((sceneId) => sceneId !== ownerSceneId);
-    renderEditor();
-  }
-
-  const target = refs.screenplayEditor.querySelector(`.script-block[data-id="${id}"]`);
+  const target = refs.screenplayEditor.querySelector(`.line[data-id="${id}"]`);
   if (!target) {
     return;
   }
@@ -278,5 +280,5 @@ export function focusBlock(id, selectAll = false) {
 }
 
 export function getActiveEditableBlock() {
-  return refs.screenplayEditor.querySelector(`.script-block[data-id="${state.activeBlockId}"]`);
+  return refs.screenplayEditor.querySelector(`.line[data-id="${state.activeBlockId}"]`);
 }

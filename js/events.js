@@ -10,7 +10,7 @@ import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
   getOwningSceneId, getPreviousSceneHeading, getCharacterAutocomplete, updateSuggestions
 } from './editor.js';
-import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
+import { renderPreview, renderCoverPreview, buildPrintableDocument, exportScript } from './preview.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
@@ -166,29 +166,25 @@ export function bindEvents() {
 
   // Delegated Editor Events
   refs.screenplayEditor.addEventListener("focusin", (e) => {
-      if (e.target.classList.contains("script-block")) {
+      if (e.target.classList.contains("line")) {
           setActiveBlock(e.target.dataset.id);
       }
   });
 
   refs.screenplayEditor.addEventListener("click", (e) => {
-    if (e.target.closest(".script-block")) {
-        setActiveBlock(e.target.closest(".script-block").dataset.id);
-    }
-    if (e.target.closest(".scene-toggle")) {
-        const row = e.target.closest(".script-block-row");
-        toggleSceneCollapse(row.dataset.id);
+    if (e.target.closest(".line")) {
+        setActiveBlock(e.target.closest(".line").dataset.id);
     }
   });
 
   refs.screenplayEditor.addEventListener("input", (e) => {
-      if (e.target.classList.contains("script-block")) {
+      if (e.target.classList.contains("line")) {
           handleBlockInput(e.target.dataset.id, e.target);
       }
   });
 
   refs.screenplayEditor.addEventListener("keydown", (e) => {
-      if (e.target.classList.contains("script-block")) {
+      if (e.target.classList.contains("line")) {
           handleBlockKeydown(e, e.target.dataset.id);
       }
   });
@@ -197,143 +193,49 @@ export function bindEvents() {
       const selection = window.getSelection();
       if (selection.isCollapsed) return;
 
-      const project = getCurrentProject();
-      if (!project) return;
+      const range = selection.getRangeAt(0);
+      const fragment = range.cloneContents();
+      const lines = [];
 
-      const selectedLines = [];
-      const richLines = [];
-      const blocks = refs.screenplayEditor.querySelectorAll(".script-block");
-
-      blocks.forEach(block => {
-          if (selection.containsNode(block, true)) {
-              const line = getLine(block.dataset.id);
-              if (line) {
-                selectedLines.push(line.text);
-                richLines.push({ type: line.type, text: line.text });
-              }
-          }
+      fragment.querySelectorAll(".line").forEach(line => {
+          lines.push({
+              type: line.dataset.type,
+              text: line.innerText
+          });
       });
 
-      if (selectedLines.length > 0) {
-          e.clipboardData.setData("text/plain", selectedLines.join("\n"));
-          e.clipboardData.setData("application/x-eyawriter-blocks", JSON.stringify(richLines));
+      if (lines.length > 0) {
+          e.clipboardData.setData("application/json", JSON.stringify(lines));
+          e.clipboardData.setData("text/plain", selection.toString());
           e.preventDefault();
       }
   });
 
   refs.screenplayEditor.addEventListener("paste", (e) => {
-      if (!e.target.classList.contains("script-block")) return;
-
       e.preventDefault();
-      const rawBlocks = e.clipboardData.getData("application/x-eyawriter-blocks");
-      const text = e.clipboardData.getData("text/plain");
-      if (!text && !rawBlocks) return;
-
+      const json = e.clipboardData.getData("application/json");
       const project = getCurrentProject();
+      if (!project) return;
+
       const activeId = state.activeBlockId;
-      if (!project || !activeId) return;
-
       const index = getLineIndex(activeId);
-      const currentLine = project.lines[index];
-      const offset = getCaretOffset(e.target);
 
-      const textBefore = currentLine.text.substring(0, offset);
-      const textAfter = currentLine.text.substring(offset);
-
-      if (rawBlocks) {
-          try {
-              const blocks = JSON.parse(rawBlocks);
-              if (Array.isArray(blocks) && blocks.length > 0) {
-                  // Type-preserving paste
-                  if (blocks.length === 1) {
-                      currentLine.text = textBefore + blocks[0].text + textAfter;
-                      // Optionally adopt type if pasting into empty line?
-                      // User said "appear in their copied natures", so let's adopt type if it's the only block or if user prefers.
-                      // For single line, maybe just keep existing type but update text.
-                      renderStudio();
-                      focusBlock(activeId);
-                      setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${activeId}"]`), offset + blocks[0].text.length);
-                  } else {
-                      // Multi-block type-preserving paste
-                      currentLine.text = textBefore + blocks[0].text;
-                      const middleBlocks = blocks.slice(1, -1).map(b => ({
-                          id: uid(),
-                          type: b.type,
-                          text: b.text
-                      }));
-                      const lastItem = blocks[blocks.length - 1];
-                      const finalBlock = {
-                          id: uid(),
-                          type: lastItem.type,
-                          text: lastItem.text + textAfter
-                      };
-                      project.lines.splice(index + 1, 0, ...middleBlocks, finalBlock);
-                      project.updatedAt = new Date().toISOString();
-                      renderStudio();
-                      focusBlock(finalBlock.id);
-                      setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${finalBlock.id}"]`), lastItem.text.length);
-                  }
-                  queueSave();
-                  return;
-              }
-          } catch (err) {
-              console.warn("Failed to parse rich paste data", err);
-          }
-      }
-
-      const pastedLines = text.split(/\r?\n/);
-
-      if (pastedLines.length === 1) {
-          // Simple single line paste
-          currentLine.text = textBefore + pastedLines[0] + textAfter;
-          renderStudio();
-          focusBlock(activeId);
-          setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${activeId}"]`), offset + pastedLines[0].length);
+      if (json) {
+          const lines = JSON.parse(json);
+          lines.forEach((line, i) => {
+              addBlock(line.type, line.text, index + 1 + i);
+          });
       } else {
-          // Multi-line natural paste
-          // 1. Update current block with text before cursor + first pasted line
-          currentLine.text = textBefore + pastedLines[0];
-
-          // 2. Create new blocks for middle lines
-          const middleLines = pastedLines.slice(1, -1);
-          const newBlocks = middleLines.map(content => ({
-              id: uid(),
-              type: inferTypeFromText(content, "", ""),
-              text: content
-          }));
-
-          // 3. Create final block with last pasted line + text after cursor
-          const lastContent = pastedLines[pastedLines.length - 1];
-          const finalBlock = {
-              id: uid(),
-              type: inferTypeFromText(lastContent, "", ""),
-              text: lastContent + textAfter
-          };
-
-          project.lines.splice(index + 1, 0, ...newBlocks, finalBlock);
-
-          project.updatedAt = new Date().toISOString();
-          renderStudio();
-          focusBlock(finalBlock.id);
-          setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${finalBlock.id}"]`), lastContent.length);
+          const text = e.clipboardData.getData("text/plain");
+          const pastedLines = text.split(/\r?\n/).filter(l => l.trim());
+          pastedLines.forEach((lineText, i) => {
+              const type = inferTypeFromText(lineText, "", "");
+              addBlock(type, lineText, index + 1 + i);
+          });
       }
 
+      renderStudio();
       queueSave();
-  });
-
-  refs.screenplayEditor.addEventListener("focusout", (e) => {
-    if (e.target.classList.contains("script-block")) {
-        const id = e.target.dataset.id;
-        const line = getLine(id);
-        const project = getCurrentProject();
-        if (line && !line.text.trim() && project && project.lines.length > 1) {
-            const index = getLineIndex(id);
-            project.lines.splice(index, 1);
-            project.updatedAt = new Date().toISOString();
-            renderStudio();
-            queueSave();
-        }
-    }
   });
 
   // Project Grid (Delegated)
@@ -539,7 +441,7 @@ function handleBlockKeydown(event, id) {
       state.activeBlockId = prevLine.id;
       project.updatedAt = new Date().toISOString();
       renderStudio();
-      const prevElement = refs.screenplayEditor.querySelector(`.script-block[data-id="${prevLine.id}"]`);
+      const prevElement = refs.screenplayEditor.querySelector(`.line[data-id="${prevLine.id}"]`);
       focusBlock(prevLine.id);
       setCaretOffset(prevElement, prevTextLength);
       queueSave();
@@ -554,7 +456,7 @@ function handleBlockKeydown(event, id) {
       project.updatedAt = new Date().toISOString();
       renderStudio();
       focusBlock(targetId);
-      placeCaretAtEnd(refs.screenplayEditor.querySelector(`.script-block[data-id="${targetId}"]`));
+      placeCaretAtEnd(refs.screenplayEditor.querySelector(`.line[data-id="${targetId}"]`));
       queueSave();
       return;
     }
@@ -647,7 +549,6 @@ function changeBlockType(id, nextType) {
   line.type = nextType;
 
   let text = line.text;
-  // If user switches to scene, clear it if it was empty, default, or just a character name (likely suggested)
   if (nextType === "scene") {
     if (!text || text === "Untitled Scene" || oldType === "character") {
       text = "";
@@ -670,7 +571,7 @@ function normalizeConvertedText(text, type) {
   return normalizeLineText(stripped, type);
 }
 
-function toggleSceneCollapse(sceneId) {
+export function toggleSceneCollapse(sceneId) {
   const project = getCurrentProject();
   if (!project) return;
   const collapsed = new Set(project.collapsedSceneIds);
@@ -762,6 +663,14 @@ function initResizeHandle(handle, side) {
 }
 
 function handleMenuAction(action) {
+  const project = getCurrentProject();
+  const meta = project ? {
+      title: project.title,
+      author: project.author,
+      email: project.contact,
+      phone: project.company
+  } : {};
+
   switch (action) {
     case "new-project":
       openProject(createProject().id);
@@ -796,10 +705,10 @@ function handleMenuAction(action) {
       exportPdf();
       break;
     case "preview-new-tab":
-      openPreviewWindow(false);
+      if (project) exportScript(project.lines, meta);
       break;
     case "print-project":
-      openPreviewWindow(true);
+      if (project) exportScript(project.lines, meta);
       break;
     case "exit-studio":
       persistProjects(true);
@@ -1091,16 +1000,17 @@ function exportWord() {
     downloadFile(`${slugify(project.title)}.doc`, content, "application/msword");
 }
 
-function exportPdf() { openPreviewWindow(true); }
-
-function openPreviewWindow(autoPrint) {
+function exportPdf() {
   const project = syncProjectFromInputs() || getCurrentProject();
-  if (!project) return;
-  const previewWindow = window.open("", "_blank", "noopener,noreferrer");
-  if (!previewWindow) return;
-  previewWindow.document.open();
-  previewWindow.document.write(buildPrintableDocument(project, autoPrint));
-  previewWindow.document.close();
+  if (project) {
+      const meta = {
+          title: project.title,
+          author: project.author,
+          email: project.contact,
+          phone: project.company
+      };
+      exportScript(project.lines, meta);
+  }
 }
 
 function importFile(event) {
