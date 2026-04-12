@@ -1,5 +1,6 @@
 import { state, TYPE_LABELS } from './config.js';
 import { refs } from './dom.js';
+import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from './utils.js';
 
@@ -132,6 +133,7 @@ export function renderCharacterList() {
       node.querySelector(".list-item-title").textContent = character.name;
       node.querySelector(".list-item-meta").textContent = `${character.count} entries`;
       node.dataset.lineId = character.firstId;
+      node.dataset.characterName = character.name;
       refs.characterList.appendChild(node);
     });
 }
@@ -188,6 +190,51 @@ export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
   refs.toolStripToggle.textContent = state.toolStripCollapsed ? "v" : "^";
+}
+
+export function showCharacterScenes(characterName, onSelect) {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  const sceneIds = new Set();
+  project.lines.forEach((line, index) => {
+    if (line.type === "character" && normalizeLineText(line.text, "character") === characterName) {
+      const sceneId = getSceneIdForIndex(index, project);
+      if (sceneId) {
+        sceneIds.add(sceneId);
+      }
+    }
+  });
+
+  if (sceneIds.size === 0) {
+    customAlert(`${characterName} doesn't have any dialogue scenes yet.`, "No scenes found");
+    return;
+  }
+
+  const container = document.createElement("div");
+  container.className = "modal-list";
+
+  [...sceneIds].forEach((sceneId) => {
+    const sceneLine = project.lines.find(l => l.id === sceneId);
+    if (!sceneLine) return;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "modal-list-item";
+    btn.textContent = normalizeLineText(sceneLine.text, "scene");
+    btn.onclick = () => {
+      onSelect(sceneId);
+      modalRefs.dialog.close();
+    };
+    container.appendChild(btn);
+  });
+
+  showModal({
+    title: `Scenes featuring ${characterName}`,
+    message: container,
+    showCancel: true,
+    cancelLabel: "Close"
+  });
 }
 
 export function renderMetrics() {
@@ -296,7 +343,12 @@ const modalRefs = {
 function showModal({ title, message, showInput = false, defaultValue = "", confirmLabel = "OK", cancelLabel = "Cancel", showCancel = true }) {
     return new Promise((resolve) => {
         modalRefs.title.textContent = title;
-        modalRefs.message.textContent = message;
+        if (message instanceof HTMLElement) {
+            modalRefs.message.textContent = "";
+            modalRefs.message.appendChild(message);
+        } else {
+            modalRefs.message.textContent = message;
+        }
         modalRefs.inputContainer.hidden = !showInput;
         modalRefs.input.value = defaultValue;
         modalRefs.confirmBtn.textContent = confirmLabel;

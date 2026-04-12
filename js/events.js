@@ -15,7 +15,7 @@ import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
-  renderCharacterList, showProofreadReport, showWorkTracking, revealMetricsPanel,
+  renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt
 } from './ui.js';
 import {
@@ -322,7 +322,15 @@ export function bindEvents() {
 
   refs.characterList.addEventListener("click", (e) => {
       const item = e.target.closest(".list-item");
-      if (item) focusBlock(item.dataset.lineId);
+      if (!item) return;
+
+      if (e.target.closest(".list-item-meta")) {
+          e.preventDefault();
+          e.stopPropagation();
+          showCharacterScenes(item.dataset.characterName, (id) => focusBlock(id));
+      } else {
+          focusBlock(item.dataset.lineId);
+      }
   });
 }
 
