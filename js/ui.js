@@ -1,7 +1,7 @@
 import { state, TYPE_LABELS } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
-import { getCurrentProject, persistProjects, serializeScript } from './project.js';
+import { getCurrentProject, getLineIndex, persistProjects, serializeScript } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from './utils.js';
 
 export function showHome() {
@@ -110,11 +110,12 @@ export function renderCharacterList() {
   const characters = new Map();
 
   project.lines.forEach((line, index) => {
-    if (line.type !== "character" || !line.text.trim()) {
+    if ((line.type !== "character" && line.type !== "dual") || !line.text.trim()) {
       return;
     }
-    const key = normalizeLineText(line.text, "character");
-    const current = characters.get(key) || { name: key, count: 0, firstId: line.id, firstIndex: index };
+    const name = normalizeLineText(line.text, line.type);
+    const key = name.trim().toUpperCase();
+    const current = characters.get(key) || { name: name.trim(), count: 0, firstId: line.id, firstIndex: index };
     current.count += 1;
     characters.set(key, current);
   });
@@ -197,8 +198,9 @@ export function showCharacterScenes(characterName, onSelect) {
   if (!project) return;
 
   const sceneIds = new Set();
+  const targetName = characterName.trim().toUpperCase();
   project.lines.forEach((line, index) => {
-    if (line.type === "character" && normalizeLineText(line.text, "character") === characterName) {
+    if ((line.type === "character" || line.type === "dual") && normalizeLineText(line.text, line.type).trim().toUpperCase() === targetName) {
       const sceneId = getSceneIdForIndex(index, project);
       if (sceneId) {
         sceneIds.add(sceneId);
@@ -214,14 +216,25 @@ export function showCharacterScenes(characterName, onSelect) {
   const container = document.createElement("div");
   container.className = "modal-list";
 
-  [...sceneIds].forEach((sceneId) => {
+  const sortedSceneIds = [...sceneIds].sort((a, b) => {
+    return project.lines.findIndex(l => l.id === a) - project.lines.findIndex(l => l.id === b);
+  });
+
+  sortedSceneIds.forEach((sceneId) => {
     const sceneLine = project.lines.find(l => l.id === sceneId);
     if (!sceneLine) return;
 
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "modal-list-item";
-    btn.textContent = normalizeLineText(sceneLine.text, "scene");
+
+    const sceneIndex = project.lines.findIndex(l => l.id === sceneId);
+    const sceneNumber = project.lines.slice(0, sceneIndex + 1).filter(l => l.type === 'scene').length;
+    const heading = normalizeLineText(sceneLine.text, "scene");
+    const displayHeading = state.autoNumberScenes ? `${sceneNumber}. ${heading}` : heading;
+
+    const subtext = getSceneFirstLine(project, sceneIndex);
+    btn.innerHTML = `<strong>${displayHeading}</strong><small style="display:block;opacity:0.7;font-size:0.8em;margin-top:4px">${subtext}</small>`;
     btn.onclick = () => {
       onSelect(sceneId);
       modalRefs.dialog.close();
