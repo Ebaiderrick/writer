@@ -46,6 +46,7 @@ export function renderEditor() {
     }
 
     row.dataset.sceneOwner = currentSceneId;
+    row.dataset.type = line.type;
     const label = TYPE_LABELS[line.type];
     tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
     block.dataset.id = line.id;

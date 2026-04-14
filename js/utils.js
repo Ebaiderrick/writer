@@ -37,7 +37,8 @@ export function formatDateTime(value) {
 }
 
 export function stripWrapperChars(value) {
-  return value.replace(/^\[(.*)\]$/s, "$1").replace(/^\((.*)\)$/s, "$1").trim();
+  if (!value) return "";
+  return value.replace(/[\(\)\[\]]/g, "").trim();
 }
 
 export function normalizeLineText(text, type) {
@@ -58,11 +59,13 @@ export function normalizeLineText(text, type) {
   }
 
   if (type === "note") {
-    return `[${stripWrapperChars(compact)}]`;
+    const stripped = stripWrapperChars(compact);
+    return stripped ? `[${stripped}]` : "";
   }
 
   if (type === "parenthetical") {
-    return `(${stripWrapperChars(compact)})`;
+    const stripped = stripWrapperChars(compact);
+    return stripped ? `(${stripped})` : "";
   }
 
   if (type === "image") {

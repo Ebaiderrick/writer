@@ -402,8 +402,22 @@ function handleBlockInput(id, element) {
   }
 
   if (!autoCompleted && normalized !== beforeText) {
-    element.textContent = normalized;
-    setCaretOffset(element, offset);
+    let newOffset = offset;
+    // If we added a '(' at the beginning, shift offset
+    if (line.type === "parenthetical" && !beforeText.startsWith("(") && normalized.startsWith("(")) {
+        newOffset++;
+    }
+    if (line.type === "note" && !beforeText.startsWith("[") && normalized.startsWith("[")) {
+        newOffset++;
+    }
+
+    const activeLine = getLine(state.activeBlockId);
+    if (activeLine && (activeLine.type === "parenthetical" || activeLine.type === "note") && (normalized === "" || normalized === "()" || normalized === "[]")) {
+        // Don't force set if it breaks typing feel for empty wrappers
+    } else {
+        element.textContent = normalized;
+        setCaretOffset(element, newOffset);
+    }
   }
 
   line.text = normalized;
