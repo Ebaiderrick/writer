@@ -4,7 +4,6 @@ import {
   getCurrentProject, getLine, getLineIndex, queueSave,
   getSuggestedNextSpeaker
 } from './project.js';
-import { toggleSceneCollapse } from './events.js';
 import {
   normalizeLineText, selectTextSuffix, placeCaretAtEnd,
   selectElementText, buildContinuedSceneSuggestions
@@ -14,37 +13,23 @@ import { createTextNode as createUINode } from './utils.js';
 export function renderEditor() {
   const project = getCurrentProject();
   if (!project) return;
-
-  // Save current selection to restore after render if possible
-  const selection = window.getSelection();
-  let savedOffset = 0;
-  let savedId = state.activeBlockId;
-
-  if (selection.rangeCount > 0 && selection.anchorNode) {
-      const activeBlock = selection.anchorNode.closest ? selection.anchorNode.closest('.line') : selection.anchorNode.parentElement.closest('.line');
-      if (activeBlock) {
-          savedId = activeBlock.dataset.id;
-          // We can't easily save offset across full re-renders without care
-      }
-  }
-
   refs.screenplayEditor.innerHTML = "";
-
-  let sceneNumber = 0;
+  const template = document.querySelector("#blockTemplate");
+  const filterSet = buildVisibleFilterSet(project);
   let currentSceneId = "";
   let collapsedSceneId = "";
+  let visibleRows = 0;
+  let sceneNumber = 0;
 
   project.lines.forEach((line) => {
-    const div = document.createElement("div");
-    div.className = `line ${line.type === 'scene' ? 'scene-heading' : line.type}`;
-    div.dataset.id = line.id;
-    div.dataset.type = line.type;
-    div.contentEditable = "true";
-    div.spellcheck = true;
-    div.textContent = line.text;
+    const row = template.content.firstElementChild.cloneNode(true);
+    const toggle = row.querySelector(".scene-toggle");
+    const tag = row.querySelector(".block-tag");
+    const block = row.querySelector(".script-block");
 
+    row.dataset.id = line.id;
     if (line.id === state.activeBlockId) {
-        div.classList.add("is-active");
+      row.classList.add("is-active");
     }
 
     if (line.type === "scene") {
@@ -52,39 +37,36 @@ export function renderEditor() {
       currentSceneId = line.id;
       const isCollapsed = project.collapsedSceneIds.includes(line.id);
       collapsedSceneId = isCollapsed ? line.id : "";
-
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.className = "scene-toggle";
+      toggle.hidden = false;
       toggle.textContent = isCollapsed ? ">" : "v";
       toggle.title = isCollapsed ? "Expand scene" : "Collapse scene";
-      toggle.onclick = (e) => {
-          e.stopPropagation();
-          toggleSceneCollapse(line.id);
-      };
-      div.appendChild(toggle);
-
-      if (state.autoNumberScenes) {
-          const num = document.createElement("span");
-          num.className = "scene-number-label";
-          num.textContent = `${sceneNumber}. `;
-          div.prepend(num);
-      }
+      toggle.setAttribute("aria-label", isCollapsed ? "Expand scene" : "Collapse scene");
+    } else {
+      toggle.hidden = true;
     }
 
-    const isHidden = Boolean(collapsedSceneId && line.type !== "scene");
-    if (isHidden) {
-        div.style.display = "none";
+    row.dataset.sceneOwner = currentSceneId;
+    const label = TYPE_LABELS[line.type];
+    tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
+    block.dataset.id = line.id;
+    block.dataset.type = line.type;
+    block.textContent = line.text;
+
+    const hiddenByScene = !filterSet && Boolean(collapsedSceneId && line.type !== "scene");
+    const hiddenByFilter = Boolean(filterSet && !filterSet.has(line.id));
+    row.classList.toggle("is-scene-hidden", hiddenByScene);
+    row.classList.toggle("is-filtered-out", hiddenByFilter);
+
+    if (!hiddenByScene && !hiddenByFilter) {
+      visibleRows += 1;
     }
 
-    refs.screenplayEditor.appendChild(div);
+    refs.screenplayEditor.appendChild(row);
   });
 
-  if (!project.lines.length && state.filterQuery.trim()) {
+  if (!visibleRows && state.filterQuery.trim()) {
     refs.screenplayEditor.appendChild(createUINode(`No lines match "${state.filterQuery}".`));
   }
-
-  updateActiveTool();
 }
 
 export function buildVisibleFilterSet(project) {
@@ -99,6 +81,10 @@ export function buildVisibleFilterSet(project) {
       return;
     }
     visible.add(line.id);
+    const ownerSceneId = getSceneIdForIndex(index, project);
+    if (ownerSceneId) {
+      visible.add(ownerSceneId);
+    }
   });
 
   return visible;
@@ -124,25 +110,12 @@ export function getOwningSceneId(lineId) {
   return getSceneIdForIndex(getLineIndex(lineId));
 }
 
-export function getPreviousSceneHeading(activeIndex) {
-  const project = getCurrentProject();
-  for (let index = activeIndex - 1; index >= 0; index -= 1) {
-    if (project.lines[index]?.type === "scene" && project.lines[index].text.trim()) {
-      return normalizeLineText(project.lines[index].text, "scene");
-    }
-  }
-  return "";
-}
-
 export function setActiveBlock(id) {
   state.activeBlockId = id;
-  const line = getLine(id);
-  state.activeType = line?.type || "action";
-
-  refs.screenplayEditor.querySelectorAll(".line").forEach((el) => {
-    el.classList.toggle("is-active", el.dataset.id === id);
+  state.activeType = getLine(id)?.type || "action";
+  refs.screenplayEditor.querySelectorAll(".script-block-row").forEach((row) => {
+    row.classList.toggle("is-active", row.dataset.id === id);
   });
-
   updateActiveTool();
   updateSuggestions();
 }
@@ -200,26 +173,6 @@ export function buildSuggestions(type, currentText) {
   }
 
   if (type === "scene") {
-    const text = (currentText || "").toUpperCase();
-
-    // Stage 1: Initial prefix
-    if (!text.trim()) {
-        return [
-            { label: "INT.", value: "INT. " },
-            { label: "EXT.", value: "EXT. " },
-            { label: "INT./EXT.", value: "INT./EXT. " }
-        ];
-    }
-
-    // Stage 2: Time of day suffix
-    if (text.includes(" -")) {
-        const afterHyphen = text.split(" -").pop().trim();
-        return ["DAY", "NIGHT", "DAWN", "DUSK", "CONT'D"]
-            .filter(t => !afterHyphen || t.startsWith(afterHyphen))
-            .map(t => ({ label: t, value: t }));
-    }
-
-    // Default behavior for scene headings
     const sceneHeadings = project.lines
       .filter((line) => line.type === "scene" && line.text.trim())
       .map((line) => normalizeLineText(line.text, "scene"));
@@ -248,6 +201,15 @@ export function buildSuggestions(type, currentText) {
   return [];
 }
 
+function getPreviousSceneHeading(activeIndex) {
+  const project = getCurrentProject();
+  for (let index = activeIndex - 1; index >= 0; index -= 1) {
+    if (project.lines[index]?.type === "scene" && project.lines[index].text.trim()) {
+      return normalizeLineText(project.lines[index].text, "scene");
+    }
+  }
+  return "";
+}
 
 export function getCharacterAutocomplete(text, activeId) {
   const cleaned = text.trim().toUpperCase();
@@ -265,7 +227,22 @@ export function getCharacterAutocomplete(text, activeId) {
 }
 
 export function focusBlock(id, selectAll = false) {
-  const target = refs.screenplayEditor.querySelector(`.line[data-id="${id}"]`);
+  if (state.filterQuery) {
+    const visibleSet = buildVisibleFilterSet(getCurrentProject());
+    if (visibleSet && !visibleSet.has(id)) {
+      state.filterQuery = "";
+      renderEditor();
+    }
+  }
+
+  const ownerSceneId = getOwningSceneId(id);
+  const project = getCurrentProject();
+  if (ownerSceneId && ownerSceneId !== id && project?.collapsedSceneIds.includes(ownerSceneId)) {
+    project.collapsedSceneIds = project.collapsedSceneIds.filter((sceneId) => sceneId !== ownerSceneId);
+    renderEditor();
+  }
+
+  const target = refs.screenplayEditor.querySelector(`.script-block[data-id="${id}"]`);
   if (!target) {
     return;
   }
@@ -280,5 +257,5 @@ export function focusBlock(id, selectAll = false) {
 }
 
 export function getActiveEditableBlock() {
-  return refs.screenplayEditor.querySelector(`.line[data-id="${state.activeBlockId}"]`);
+  return refs.screenplayEditor.querySelector(`.script-block[data-id="${state.activeBlockId}"]`);
 }

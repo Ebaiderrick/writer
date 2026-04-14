@@ -33,23 +33,23 @@ export const AI = (() => {
   }
 
   function handleHover(event) {
-    const line = event.target.closest(".line");
-    if (!line) {
+    const row = event.target.closest(".script-block-row");
+    if (!row) {
       return;
     }
-    addAIButton(line);
+    addAIButton(row);
   }
 
   function handleFocus(event) {
-    const line = event.target.closest(".line");
-    if (!line) {
+    const row = event.target.closest(".script-block-row");
+    if (!row) {
       return;
     }
-    addAIButton(line);
+    addAIButton(row);
   }
 
-  function addAIButton(line) {
-    if (!state.aiAssist || line.querySelector(".ai-btn")) {
+  function addAIButton(blockRow) {
+    if (!state.aiAssist || blockRow.querySelector(".ai-btn")) {
       return;
     }
 
@@ -62,7 +62,7 @@ export const AI = (() => {
 
     button.style.position = "absolute";
     button.style.right = "8px";
-    button.style.top = "2px";
+    button.style.top = "6px";
     button.style.border = "none";
     button.style.background = "transparent";
     button.style.cursor = "pointer";
@@ -71,19 +71,19 @@ export const AI = (() => {
 
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      activeBlock = line;
-      openMenu(line);
+      activeBlock = blockRow.querySelector(".script-block");
+      openMenu(blockRow);
     });
 
-    line.style.position = "relative";
-    line.appendChild(button);
+    blockRow.style.position = "relative";
+    blockRow.appendChild(button);
   }
 
-  function openMenu(line) {
+  function openMenu(blockRow) {
     closeMenu();
 
     if (!activeBlock) {
-      activeBlock = line;
+      activeBlock = blockRow.querySelector(".script-block");
     }
 
     const type = activeBlock?.dataset.type || "action";
@@ -121,7 +121,7 @@ export const AI = (() => {
       menuEl.appendChild(item);
     });
 
-    line.appendChild(menuEl);
+    blockRow.appendChild(menuEl);
   }
 
   function closeMenu() {
@@ -392,7 +392,7 @@ export const AI = (() => {
       input.disabled = isLoading;
     }
 
-    const triggerButton = activeBlock?.querySelector(".ai-btn");
+    const triggerButton = activeBlock?.closest(".script-block-row")?.querySelector(".ai-btn");
     if (triggerButton) {
       triggerButton.classList.toggle("is-busy", Boolean(isLoading));
       triggerButton.setAttribute("aria-busy", isLoading ? "true" : "false");
