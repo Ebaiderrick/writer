@@ -114,7 +114,9 @@ export const AI = (() => {
         item.style.background = "var(--soft)";
       };
       item.onmouseleave = () => {
-        item.style.background = "transparent";
+        if (!item.classList.contains("is-selected")) {
+          item.style.background = "transparent";
+        }
       };
       item.onclick = () => showInput(action);
 
@@ -156,15 +158,30 @@ export const AI = (() => {
       inputWrapperEl.remove();
     }
 
+    // Highlight selected action
+    menuEl.querySelectorAll(".ai-menu-item").forEach(item => {
+      const isSelected = item.innerText === action;
+      item.classList.toggle("is-selected", isSelected);
+      item.style.background = isSelected ? "var(--accent-soft)" : "transparent";
+      item.style.color = isSelected ? "var(--accent-strong)" : "var(--ink)";
+    });
+
     inputWrapperEl = document.createElement("div");
     inputWrapperEl.className = "ai-input-wrapper";
     inputWrapperEl.style.display = "flex";
-    inputWrapperEl.style.gap = "4px";
-    inputWrapperEl.style.marginTop = "8px";
+    inputWrapperEl.style.flexDirection = "column";
+    inputWrapperEl.style.gap = "8px";
+    inputWrapperEl.style.marginTop = "12px";
+    inputWrapperEl.style.paddingTop = "10px";
+    inputWrapperEl.style.borderTop = "1px solid var(--line)";
+
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "4px";
 
     const input = document.createElement("input");
     input.className = "ai-input";
-    input.placeholder = `Optional instruction for "${action}"`;
+    input.placeholder = `Extra details for "${action}" (optional)...`;
     input.style.flex = "1";
     input.style.padding = "6px 10px";
     input.style.borderRadius = "6px";
@@ -198,7 +215,8 @@ export const AI = (() => {
 
     submitButton.onclick = trigger;
 
-    inputWrapperEl.append(input, submitButton);
+    row.append(input, submitButton);
+    inputWrapperEl.appendChild(row);
     menuEl.appendChild(inputWrapperEl);
     input.focus();
   }
@@ -214,7 +232,7 @@ export const AI = (() => {
     const request = {
       type: activeBlock.dataset.type,
       action,
-      current,
+      current: current || "",
       instruction,
       context: formatScenesForAI(scenes)
     };

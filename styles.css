@@ -1164,6 +1164,7 @@ img {
 .script-block {
   grid-column: 3;
   min-height: 1.5em;
+  min-width: 100px;
   padding: 2px 8px;
   border: none;
   border-radius: 0;

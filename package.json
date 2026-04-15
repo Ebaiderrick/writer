@@ -2,5 +2,8 @@
   "name": "eyawriter",
   "type": "module",
   "version": "1.0.0",
-  "description": "Screenplay editor with AI assistance"
+  "description": "Screenplay editor with AI assistance",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
 }

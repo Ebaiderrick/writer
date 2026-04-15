@@ -23,7 +23,7 @@ export const handler = async (event) => {
 
   const { type, action, current, context: screenplayContext, instruction } = body;
 
-  if (!current) {
+  if (current === undefined || current === null) {
     return {
       statusCode: 400,
       headers: { "Content-Type": "application/json" },
@@ -45,14 +45,15 @@ export const handler = async (event) => {
     const systemPrompt = `You are an elite Hollywood Screenwriter and Script Doctor.
 
 STRICT ARCHITECTURE RULES:
-1. OUTPUT ONLY THE REPLACEMENT OR CONTINUATION TEXT.
+1. OUTPUT ONLY THE CONTENT TEXT ITSELF.
 2. NO INTRODUCTION, NO COMMENTARY, NO CHATTY EXPLANATIONS.
 3. NO MARKDOWN BACKTICKS (e.g., \`\`\`).
-4. IF THE TASK IS TO REWRITE A LINE (Shorten, Rephrase, Subtext, Add Emotion), ONLY OUTPUT THE NEW VERSION OF THAT LINE.
-5. IF THE TASK IS TO EXPAND OR PREDICT, OUTPUT SCREENPLAY BLOCKS (ACTION, DIALOGUE).
-6. CHARACTER NAMES MUST BE ALL CAPS.
-7. STAY IN PRESENT TENSE.
-8. DO NOT INCLUDE SCENE HEADINGS UNLESS THE TASK IS 'PREDICT' OR 'EXPAND'.`;
+4. NO LABELS OR PREFIXES (e.g., do NOT output "ACTION:", "DIALOGUE:", or character names followed by a colon).
+5. IF THE TASK IS TO REWRITE A LINE (Shorten, Rephrase, Subtext, Add Emotion), ONLY OUTPUT THE NEW VERSION OF THAT LINE.
+6. IF THE TASK IS TO EXPAND OR PREDICT, OUTPUT RAW SCREENPLAY CONTENT.
+7. CHARACTER NAMES WITHIN DIALOGUE BLOCKS SHOULD BE ALL CAPS, BUT DO NOT PREFIX THE BLOCK WITH THE NAME.
+8. STAY IN PRESENT TENSE.
+9. DO NOT INCLUDE SCENE HEADINGS UNLESS THE TASK IS 'PREDICT' OR 'EXPAND'.`;
 
     const userPrompt = `STORY CONTEXT (PREVIOUS BEATS):
 ${screenplayContext}

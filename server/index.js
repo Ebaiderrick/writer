@@ -22,7 +22,7 @@ app.post("/api/ai-assist", async (req, res) => {
   console.log(`[${new Date().toISOString()}] AI Request: ${req.body.action} (${req.body.type})`);
   const { type, action, current, context, instruction } = req.body;
 
-  if (!current) {
+  if (current === undefined || current === null) {
     return res.status(400).json({ error: "Missing current block" });
   }
 
