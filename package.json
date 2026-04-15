@@ -1,5 +1,6 @@
 {
   "name": "eyawriter",
+  "type": "module",
   "version": "1.0.0",
   "description": "Screenplay editor with AI assistance",
   "dependencies": {

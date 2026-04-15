@@ -234,7 +234,7 @@ export const AI = (() => {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.error || "The AI assistant request failed.");
+        throw new Error(data.error || `The AI assistant request failed with status ${response.status}.`);
       }
 
       const output = normalizeAiOutput(data);
