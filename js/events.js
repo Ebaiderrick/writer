@@ -146,6 +146,11 @@ export function bindEvents() {
   initResizeHandle(refs.leftResize, "left");
   initResizeHandle(refs.rightResize, "right");
 
+  refs.helpBtn.addEventListener("click", () => refs.helpDialog.showModal());
+  document.querySelectorAll('[data-home-nav="shortcuts"]').forEach(btn => {
+      btn.addEventListener("click", () => refs.helpDialog.showModal());
+  });
+
   // Global Keys & Clicks
   document.addEventListener("keydown", handleGlobalKeydown);
   document.addEventListener("click", (event) => {
@@ -912,7 +917,7 @@ function handleGlobalKeydown(event) {
   // Alt + Key for block types
   if (event.altKey && !event.ctrlKey && !event.metaKey) {
     const map = {
-      s: "scene",
+      s: "shot",
       a: "action",
       c: "character",
       d: "dialogue",
@@ -922,7 +927,8 @@ function handleGlobalKeydown(event) {
       x: "text",
       n: "note",
       u: "dual",
-      i: "image"
+      i: "image",
+      e: "scene"
     };
     if (map[key]) {
       event.preventDefault();

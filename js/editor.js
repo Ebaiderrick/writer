@@ -125,7 +125,7 @@ export function updateActiveTool() {
   document.querySelectorAll("[data-insert]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.insert === state.activeType);
   });
-  refs.activeModeLabel.textContent = "▶";
+  refs.activeModeLabel.textContent = "";
   refs.activeModeLabel.title = `Active block: ${TYPE_LABELS[state.activeType] || "Action"}`;
 }
 

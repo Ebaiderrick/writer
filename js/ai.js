@@ -193,7 +193,7 @@ export const AI = (() => {
     const submitButton = document.createElement("button");
     submitButton.className = "ai-submit-btn";
     submitButton.type = "button";
-    submitButton.innerText = "Go";
+    submitButton.innerText = "▶";
     submitButton.style.padding = "0 10px";
     submitButton.style.borderRadius = "6px";
     submitButton.style.border = "none";
@@ -403,7 +403,7 @@ export const AI = (() => {
   function setLoadingState(submitButton, input, isLoading) {
     if (submitButton) {
       submitButton.disabled = isLoading;
-      submitButton.innerText = isLoading ? "..." : "Go";
+      submitButton.innerText = isLoading ? "..." : "▶";
     }
 
     if (input) {

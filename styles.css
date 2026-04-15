@@ -642,7 +642,7 @@ img {
 }
 
 .active-pill {
-  display: inline-grid;
+  display: none;
   place-items: center;
   min-width: 32px;
   height: 32px;
