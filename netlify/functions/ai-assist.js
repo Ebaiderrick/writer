@@ -1,39 +1,33 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
 import fetch from "node-fetch";
-import { buildPrompt } from "./promptBuilder.js";
 
-dotenv.config();
-
-const app = express();
-const DEFAULT_PORT = Number(process.env.PORT) || 3001;
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "openai/gpt-3.5-turbo";
 const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
 
-app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+export async function handler(event, context) {
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method Not Allowed" };
+  }
 
-app.get("/", (req, res) => {
-  res.send("AI Server Running");
-});
-
-app.post("/api/ai-assist", async (req, res) => {
-  console.log(`[${new Date().toISOString()}] AI Request: ${req.body.action} (${req.body.type})`);
-  const { type, action, current, context, instruction } = req.body;
+  const { type, action, current, context: screenplayContext, instruction } = JSON.parse(event.body);
 
   if (!current) {
-    return res.status(400).json({ error: "Missing current block" });
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Missing current block" }),
+    };
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return res.json({
-      output: `AI is working (test mode) - You wanted to ${action || "assist with"} this ${type || "block"}.`
-    });
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        output: `AI is working (test mode) - You wanted to ${action || "assist with"} this ${type || "block"}.`
+      }),
+    };
   }
 
   try {
-    const prompt = buildPrompt({ type, action, current, context, instruction });
+    const prompt = buildPrompt({ type, action, current, context: screenplayContext, instruction });
     const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
@@ -48,32 +42,89 @@ app.post("/api/ai-assist", async (req, res) => {
         max_tokens: 800
       })
     });
+
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
       console.error("OpenRouter Error:", data);
-      return res.status(response.status).json({
-        error: extractApiError(data) || `AI request failed with status ${response.status}`
-      });
+      return {
+        statusCode: response.status,
+        body: JSON.stringify({
+          error: extractApiError(data) || `AI request failed with status ${response.status}`
+        }),
+      };
     }
 
     const output = extractOutputText(data);
     if (!output) {
-      return res.status(502).json({ error: "AI assistant returned no text." });
+      return {
+        statusCode: 502,
+        body: JSON.stringify({ error: "AI assistant returned no text." }),
+      };
     }
 
-    return res.json({ output });
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ output }),
+    };
   } catch (error) {
     console.error("AI ERROR:", error);
-    return res.status(500).json({
-      error: "AI request failed. Check your server connection and OpenAI configuration."
-    });
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        error: "AI request failed. Check your server connection and OpenAI configuration."
+      }),
+    };
   }
-});
+}
 
-app.listen(DEFAULT_PORT, () => {
-  console.log(`Server running on http://localhost:${DEFAULT_PORT}`);
-});
+function buildPrompt({ type, action, current, context, instruction }) {
+  return `
+You are a professional screenplay writer.
+
+STRICT RULES:
+- Only write in screenplay format
+- No explanations
+- No commentary
+- No lists or notes
+- Maintain consistency with previous scenes
+- Continue naturally
+
+STORY CONTEXT (LAST 3 SCENES):
+${context}
+
+CURRENT BLOCK:
+${current}
+
+TASK:
+${getActionInstruction(type, action)}
+${instruction ? `\nADDITIONAL INSTRUCTION: ${instruction}` : ""}
+`;
+}
+
+function getActionInstruction(type, action) {
+  if (type === "scene" && action === "Expand") {
+    return "Expand this into a full cinematic scene with action and dialogue.";
+  }
+
+  if (type === "scene" && action === "Predict") {
+    return "Continue the story naturally.";
+  }
+
+  if (type === "dialogue" && action === "Rephrase") {
+    return "Rewrite the dialogue to sound more natural.";
+  }
+
+  if (type === "dialogue" && action === "Suggest Reply") {
+    return "Write the next line of dialogue.";
+  }
+
+  if (type === "action") {
+    return "Describe what happens next visually.";
+  }
+
+  return `Perform the action: ${action}`;
+}
 
 function extractOutputText(data) {
   if (typeof data?.output === "string" && data.output.trim()) {
