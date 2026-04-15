@@ -1,18 +1,32 @@
-import fetch from "node-fetch";
-
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "openai/gpt-3.5-turbo";
 const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
 
-export async function handler(event, context) {
+export const handler = async (event) => {
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
+    return {
+      statusCode: 405,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Method Not Allowed" })
+    };
   }
 
-  const { type, action, current, context: screenplayContext, instruction } = JSON.parse(event.body);
+  let body;
+  try {
+    body = JSON.parse(event.body);
+  } catch (e) {
+    return {
+      statusCode: 400,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Invalid JSON" })
+    };
+  }
+
+  const { type, action, current, context: screenplayContext, instruction } = body;
 
   if (!current) {
     return {
       statusCode: 400,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ error: "Missing current block" }),
     };
   }
@@ -20,6 +34,7 @@ export async function handler(event, context) {
   if (!process.env.OPENAI_API_KEY) {
     return {
       statusCode: 200,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         output: `AI is working (test mode) - You wanted to ${action || "assist with"} this ${type || "block"}.`
       }),
@@ -27,7 +42,29 @@ export async function handler(event, context) {
   }
 
   try {
-    const prompt = buildPrompt({ type, action, current, context: screenplayContext, instruction });
+    const prompt = `
+You are a professional screenplay writer.
+
+STRICT RULES:
+- Only write in screenplay format
+- No explanations
+- No commentary
+- No lists or notes
+- Maintain consistency with previous scenes
+- Continue naturally
+
+STORY CONTEXT (LAST 3 SCENES):
+${screenplayContext}
+
+CURRENT BLOCK:
+${current}
+
+TASK:
+${getActionInstruction(type, action)}
+${instruction ? `\nADDITIONAL INSTRUCTION: ${instruction}` : ""}
+`;
+
+    // Using global fetch (available in Node 18+)
     const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
@@ -46,9 +83,9 @@ export async function handler(event, context) {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      console.error("OpenRouter Error:", data);
       return {
         statusCode: response.status,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           error: extractApiError(data) || `AI request failed with status ${response.status}`
         }),
@@ -58,49 +95,27 @@ export async function handler(event, context) {
     const output = extractOutputText(data);
     if (!output) {
       return {
-        statusCode: 502,
+        statusCode: 500,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ error: "AI assistant returned no text." }),
       };
     }
 
     return {
       statusCode: 200,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ output }),
     };
   } catch (error) {
-    console.error("AI ERROR:", error);
     return {
       statusCode: 500,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        error: "AI request failed. Check your server connection and OpenAI configuration."
+        error: `AI request failed: ${error.message}`
       }),
     };
   }
-}
-
-function buildPrompt({ type, action, current, context, instruction }) {
-  return `
-You are a professional screenplay writer.
-
-STRICT RULES:
-- Only write in screenplay format
-- No explanations
-- No commentary
-- No lists or notes
-- Maintain consistency with previous scenes
-- Continue naturally
-
-STORY CONTEXT (LAST 3 SCENES):
-${context}
-
-CURRENT BLOCK:
-${current}
-
-TASK:
-${getActionInstruction(type, action)}
-${instruction ? `\nADDITIONAL INSTRUCTION: ${instruction}` : ""}
-`;
-}
+};
 
 function getActionInstruction(type, action) {
   if (type === "scene" && action === "Expand") {
@@ -127,49 +142,19 @@ function getActionInstruction(type, action) {
 }
 
 function extractOutputText(data) {
+  // Check standard OpenAI format
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content === "string" && content.trim()) {
+    return content.trim();
+  }
+
+  // Check alternative formats
   if (typeof data?.output === "string" && data.output.trim()) {
     return data.output.trim();
   }
 
   if (typeof data?.result === "string" && data.result.trim()) {
     return data.result.trim();
-  }
-
-  if (typeof data?.output_text === "string" && data.output_text.trim()) {
-    return data.output_text.trim();
-  }
-
-  if (Array.isArray(data?.output)) {
-    const segments = [];
-
-    for (const item of data.output) {
-      const content = Array.isArray(item?.content) ? item.content : [];
-      for (const block of content) {
-        if (typeof block?.text === "string" && block.text.trim()) {
-          segments.push(block.text.trim());
-        }
-      }
-    }
-
-    if (segments.length) {
-      return segments.join("\n\n");
-    }
-  }
-
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content === "string" && content.trim()) {
-    return content.trim();
-  }
-
-  if (Array.isArray(content)) {
-    const text = content
-      .map((part) => (typeof part?.text === "string" ? part.text.trim() : ""))
-      .filter(Boolean)
-      .join("\n\n");
-
-    if (text) {
-      return text;
-    }
   }
 
   return "";
