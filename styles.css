@@ -328,7 +328,7 @@ img {
 }
 
 .menu-group-summary::after {
-  content: ">";
+  content: "▶";
   color: var(--accent-strong);
   font-size: 0.74rem;
   transform: rotate(90deg);

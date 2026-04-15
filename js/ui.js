@@ -258,7 +258,7 @@ export function applyTheme() {
 export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
-  refs.toolStripToggle.textContent = state.toolStripCollapsed ? "v" : "^";
+  refs.toolStripToggle.textContent = state.toolStripCollapsed ? "▼" : "▲";
 }
 
 export function renderMetrics() {
@@ -340,13 +340,13 @@ export function revealMetricsPanel() {
     // This needs togglePane from events.js, but ui.js shouldn't depend on events.js
     // We can just manipulate the classes directly here or emit an event.
     refs.leftPane.classList.remove("is-hidden");
-    refs.leftRailToggle.textContent = "<";
+    refs.leftRailToggle.textContent = "◀";
     refs.studioLayout.classList.remove("left-pane-hidden");
     if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
   }
   if (refs.leftPaneBody.classList.contains("is-collapsed")) {
       refs.leftPaneBody.classList.remove("is-collapsed");
-      refs.leftPaneSectionToggle.textContent = "^";
+      refs.leftPaneSectionToggle.textContent = "▲";
   }
   document.querySelector(".section-metrics")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }

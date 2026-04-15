@@ -38,7 +38,7 @@ export function renderEditor() {
       const isCollapsed = project.collapsedSceneIds.includes(line.id);
       collapsedSceneId = isCollapsed ? line.id : "";
       toggle.hidden = false;
-      toggle.textContent = isCollapsed ? ">" : "v";
+      toggle.textContent = isCollapsed ? "▶" : "▼";
       toggle.title = isCollapsed ? "Expand scene" : "Collapse scene";
       toggle.setAttribute("aria-label", isCollapsed ? "Expand scene" : "Collapse scene");
     } else {
@@ -125,7 +125,7 @@ export function updateActiveTool() {
   document.querySelectorAll("[data-insert]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.insert === state.activeType);
   });
-  refs.activeModeLabel.textContent = ">";
+  refs.activeModeLabel.textContent = "▶";
   refs.activeModeLabel.title = `Active block: ${TYPE_LABELS[state.activeType] || "Action"}`;
 }
 

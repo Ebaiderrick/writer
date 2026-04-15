@@ -378,7 +378,7 @@ function handleMetaInput() {
 
 function togglePaneSection(body, button) {
   body.classList.toggle("is-collapsed");
-  button.textContent = body.classList.contains("is-collapsed") ? "v" : "^";
+  button.textContent = body.classList.contains("is-collapsed") ? "▼" : "▲";
 }
 
 function handleBlockInput(id, element) {
@@ -656,7 +656,7 @@ function togglePane(side) {
   const collapsed = pane.classList.toggle("is-hidden");
   if (handle) handle.classList.toggle("is-hidden", collapsed);
   refs.studioLayout.classList.toggle(isLeft ? "left-pane-hidden" : "right-pane-hidden", collapsed);
-  button.textContent = collapsed ? (isLeft ? ">" : "<") : (isLeft ? "<" : ">");
+  button.textContent = collapsed ? (isLeft ? "▶" : "◀") : (isLeft ? "◀" : "▶");
 }
 
 function initResizeHandle(handle, side) {
