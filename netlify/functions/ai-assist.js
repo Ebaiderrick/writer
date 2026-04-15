@@ -42,29 +42,30 @@ export const handler = async (event) => {
   }
 
   try {
-    const prompt = `
-You are a professional screenplay writer.
+    const systemPrompt = `You are an elite Hollywood Screenwriter and Script Doctor.
 
-STRICT RULES:
-- Only write in screenplay format
-- No explanations
-- No commentary
-- No lists or notes
-- Maintain consistency with previous scenes
-- Continue naturally
+STRICT ARCHITECTURE RULES:
+1. OUTPUT ONLY THE REPLACEMENT OR CONTINUATION TEXT.
+2. NO INTRODUCTION, NO COMMENTARY, NO CHATTY EXPLANATIONS.
+3. NO MARKDOWN BACKTICKS (e.g., \`\`\`).
+4. IF THE TASK IS TO REWRITE A LINE (Shorten, Rephrase, Subtext, Add Emotion), ONLY OUTPUT THE NEW VERSION OF THAT LINE.
+5. IF THE TASK IS TO EXPAND OR PREDICT, OUTPUT SCREENPLAY BLOCKS (ACTION, DIALOGUE).
+6. CHARACTER NAMES MUST BE ALL CAPS.
+7. STAY IN PRESENT TENSE.
+8. DO NOT INCLUDE SCENE HEADINGS UNLESS THE TASK IS 'PREDICT' OR 'EXPAND'.`;
 
-STORY CONTEXT (LAST 3 SCENES):
+    const userPrompt = `STORY CONTEXT (PREVIOUS BEATS):
 ${screenplayContext}
 
-CURRENT BLOCK:
-${current}
+CURRENT BLOCK (${type.toUpperCase()}):
+"${current}"
 
 TASK:
 ${getActionInstruction(type, action)}
-${instruction ? `\nADDITIONAL INSTRUCTION: ${instruction}` : ""}
-`;
+${instruction ? `\nSPECIFIC USER INSTRUCTION: ${instruction}` : ""}
 
-    // Using global fetch (available in Node 18+)
+YOUR OUTPUT:`;
+
     const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
@@ -75,8 +76,12 @@ ${instruction ? `\nADDITIONAL INSTRUCTION: ${instruction}` : ""}
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 800
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        max_tokens: 1000,
+        temperature: 0.7
       })
     });
 
@@ -92,7 +97,9 @@ ${instruction ? `\nADDITIONAL INSTRUCTION: ${instruction}` : ""}
       };
     }
 
-    const output = extractOutputText(data);
+    let output = extractOutputText(data);
+    output = cleanAiResponse(output, current);
+
     if (!output) {
       return {
         statusCode: 500,
@@ -118,56 +125,70 @@ ${instruction ? `\nADDITIONAL INSTRUCTION: ${instruction}` : ""}
 };
 
 function getActionInstruction(type, action) {
-  if (type === "scene" && action === "Expand") {
-    return "Expand this into a full cinematic scene with action and dialogue.";
-  }
+  const map = {
+    // Scene Actions
+    "Predict": "Predict the next logical beat of the story. Write the next scene heading and the opening action.",
+    "Expand": "Flesh this scene out with cinematic detail, sharp dialogue, and atmospheric action.",
+    "Fix": "Tighten the pacing and sharpen the dialogue. Rewrite the current block to be more professional.",
+    "Add Conflict": "Introduce a new obstacle or argument. Rewrite the current block or continue from it with conflict.",
+    "Cinematic": "Rewrite the current block with a focus on visual storytelling and atmosphere.",
 
-  if (type === "scene" && action === "Predict") {
-    return "Continue the story naturally.";
-  }
+    // Dialogue Actions
+    "Suggest Reply": "Write the next character's line of dialogue in response to the current one.",
+    "Rephrase": "Rewrite the current line of dialogue to sound more unique and natural. ONLY output the new dialogue text.",
+    "Add Emotion": "Rewrite the current line with more subtext and emotional weight. ONLY output the new dialogue text.",
+    "Shorten": "Rewrite the current line to be punchy and brief. ONLY output the new dialogue text.",
+    "Subtext": "Rewrite the current line so the character means something else. ONLY output the new dialogue text.",
 
-  if (type === "dialogue" && action === "Rephrase") {
-    return "Rewrite the dialogue to sound more natural.";
-  }
+    // Action/General
+    "Continue": "Write the immediate next visual beat. Keep the momentum going.",
+    "Visualize": "Rewrite the current action block with more texture and sensory detail.",
+    "Add Tension": "Rewrite or continue the current block to ramp up the stakes.",
+    "Describe": "Paint a clearer picture of this specific moment.",
 
-  if (type === "dialogue" && action === "Suggest Reply") {
-    return "Write the next line of dialogue.";
-  }
+    // Shots
+    "Camera Angle": "Suggest a dynamic camera angle for this shot.",
+    "Improve Shot": "Make this camera direction more professional (e.g. CLOSE ON, POV).",
+    "Add Movement": "Add a sense of motion to the shot (e.g. PAN, TRACKING)."
+  };
 
-  if (type === "action") {
-    return "Describe what happens next visually.";
-  }
-
-  return `Perform the action: ${action}`;
+  return map[action] || `Improve this ${type} by making it more professional.`;
 }
 
 function extractOutputText(data) {
-  // Check standard OpenAI format
   const content = data?.choices?.[0]?.message?.content;
   if (typeof content === "string" && content.trim()) {
     return content.trim();
   }
-
-  // Check alternative formats
-  if (typeof data?.output === "string" && data.output.trim()) {
-    return data.output.trim();
-  }
-
-  if (typeof data?.result === "string" && data.result.trim()) {
-    return data.result.trim();
-  }
-
   return "";
+}
+
+function cleanAiResponse(text, current) {
+  let cleaned = text;
+
+  // Remove markdown backticks
+  cleaned = cleaned.replace(/^```[a-z]*\n/i, "").replace(/\n```$/g, "").trim();
+
+  // Remove repetition of the prompt if the AI got confused
+  if (cleaned.startsWith(current) && cleaned.length > current.length + 5) {
+      cleaned = cleaned.substring(current.length).trim();
+      cleaned = cleaned.replace(/^[:\-\s\.]+/g, "");
+  }
+
+  // Remove quotes around the entire response if the AI added them
+  if (cleaned.startsWith('"') && cleaned.endsWith('"') && (cleaned.match(/"/g) || []).length === 2) {
+      cleaned = cleaned.substring(1, cleaned.length - 1).trim();
+  }
+
+  return cleaned;
 }
 
 function extractApiError(data) {
   if (typeof data?.error === "string" && data.error.trim()) {
     return data.error.trim();
   }
-
   if (typeof data?.error?.message === "string" && data.error.message.trim()) {
     return data.error.message.trim();
   }
-
   return "";
 }
