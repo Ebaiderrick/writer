@@ -18,6 +18,7 @@ import {
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt
 } from './ui.js';
+import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
@@ -127,6 +128,7 @@ export function bindEvents() {
 
   refs.grammarCheckToggle.addEventListener("change", () => {
     state.grammarCheck = refs.grammarCheckToggle.checked;
+    document.body.classList.toggle("grammar-mode-active", state.grammarCheck);
     queueSave();
   });
 
@@ -939,6 +941,16 @@ function handleGlobalKeydown(event) {
     if (map[key]) {
       event.preventDefault();
       handleToolSelection(map[key]);
+    }
+
+    // Alt + G for AI Grammar
+    if (key === 'g' && state.aiAssist) {
+      event.preventDefault();
+      const activeEl = getActiveEditableBlock();
+      if (activeEl) {
+        const row = activeEl.closest('.script-block-row');
+        if (row) AI.triggerAction(row, "Grammar");
+      }
     }
   }
 

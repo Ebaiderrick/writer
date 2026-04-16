@@ -1,27 +1,27 @@
 import { test, expect } from '@playwright/test';
+import { login } from './helper.js';
 
 test('grammar check toggle and ai menu integration', async ({ page }) => {
-  await page.goto('http://localhost:8001/index.html');
+  await page.goto('http://localhost:8000/index.html');
+  await login(page);
   await page.click('#newProjectBtn');
   await page.waitForSelector('.script-block');
 
-  // 1. Verify toggle exists
-  const toggle = page.locator('#grammarCheckToggle');
-  await expect(toggle).toBeVisible();
-
-  // 2. Enable AI and Grammar check
+  // Enable AI Assist and grammar check
   await page.check('#aiAssistToggle');
   await page.check('#grammarCheckToggle');
 
-  // 3. Trigger AI menu
+  // Check if body has class
+  await expect(page.locator('body')).toHaveClass(/grammar-mode-active/);
+
+  // Focus block and click AI button
   const block = page.locator('.script-block').first();
   await block.click();
-  await page.hover('.script-block-row');
-  await page.click('.ai-btn');
+  const aiBtn = page.locator('.ai-btn').first();
+  await aiBtn.click();
 
-  // 4. Verify 'Grammar' option is present
-  await expect(page.locator('.ai-menu-item:has-text("Grammar")')).toBeVisible();
-
-  // Take screenshot
-  await page.screenshot({ path: 'verification/grammar_ui.png' });
+  // Verify "Grammar" is in the menu and has special class
+  const grammarItem = page.locator('.ai-menu-item').filter({ hasText: 'Grammar' });
+  await expect(grammarItem).toBeVisible();
+  await expect(grammarItem).toHaveClass(/is-grammar/);
 });

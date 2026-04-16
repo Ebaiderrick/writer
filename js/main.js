@@ -1,13 +1,22 @@
 import { loadProjects } from './project.js';
 import { bindEvents, renderStudio } from './events.js';
-import { showHome, renderHome, applyToolbarState, applyTheme, applyViewState } from './ui.js';
+import { showHome, renderHome, applyToolbarState, applyTheme, applyViewState, showAuth } from './ui.js';
 import { initBackground } from './background.js';
 import { AI } from './ai.js';
+import { Auth } from './auth.js';
 
 function boot() {
   loadProjects();
   bindEvents();
-  showHome();
+  Auth.init();
+
+  const session = localStorage.getItem("eyawriter_session");
+  if (session) {
+    showHome();
+  } else {
+    showAuth();
+  }
+
   renderHome();
   applyToolbarState();
   applyTheme();

@@ -1,10 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { login } from './helper.js';
 
 test('AI button appears on empty lines', async ({ page }) => {
   await page.goto('http://localhost:8000');
-
-  // Wait for the app to load
-  await page.waitForSelector('body');
+  await login(page);
 
   // Click "New Script" button on home page
   const newScriptBtn = page.locator('#newProjectBtn');
@@ -31,12 +30,11 @@ test('AI button appears on empty lines', async ({ page }) => {
   // Check if AI button is visible
   const aiBtn = row.locator('.ai-btn');
   await expect(aiBtn).toBeVisible();
-
-  await page.screenshot({ path: 'verification/ai_empty_line.png' });
 });
 
 test('AI interaction flow - action and instruction', async ({ page }) => {
   await page.goto('http://localhost:8000');
+  await login(page);
 
   // Click "New Script" button
   await page.click('#newProjectBtn');
@@ -47,7 +45,7 @@ test('AI interaction flow - action and instruction', async ({ page }) => {
   // Enable AI Assist
   await page.check('#aiAssistToggle');
 
-  // Fill some text (it starts as ACTION type by default)
+  // Fill some text
   const firstBlock = page.locator('.script-block').first();
   await firstBlock.fill('A lone traveler walks across the desert.');
 
@@ -62,7 +60,7 @@ test('AI interaction flow - action and instruction', async ({ page }) => {
   // Wait for menu
   await page.waitForSelector('.ai-menu', { state: 'visible' });
 
-  // Click "Visualize" (present for Action blocks)
+  // Click "Visualize"
   const visualizeBtn = page.locator('.ai-menu-item').filter({ hasText: 'Visualize' }).first();
   await visualizeBtn.click();
 
@@ -77,7 +75,4 @@ test('AI interaction flow - action and instruction', async ({ page }) => {
 
   // Type something
   await input.fill('The heat is shimmering off the sand.');
-
-  // Take screenshot of the menu
-  await page.screenshot({ path: 'verification/ai_menu_flow.png' });
 });

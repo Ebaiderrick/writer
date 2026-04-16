@@ -118,6 +118,7 @@ export const AI = (() => {
       const item = document.createElement("div");
       item.className = "ai-menu-item";
       item.innerText = action;
+      if (action === "Grammar") item.classList.add("is-grammar");
       item.style.padding = "6px 10px";
       item.style.cursor = "pointer";
 
@@ -263,7 +264,11 @@ export const AI = (() => {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.error || `The AI assistant request failed with status ${response.status}.`);
+        let msg = data.error || `AI assistant failed (Status ${response.status})`;
+        if (response.status === 401) msg = "Invalid API Key. Please check your OpenRouter configuration.";
+        if (response.status === 402) msg = "Insufficient credits in your OpenRouter account.";
+        if (response.status === 429) msg = "Rate limit exceeded. Please wait a moment.";
+        throw new Error(msg);
       }
 
       const output = normalizeAiOutput(data);
@@ -518,5 +523,24 @@ export const AI = (() => {
     return button;
   }
 
-  return { init };
+  function triggerAction(blockRow, action) {
+    activeBlock = blockRow.querySelector(".script-block");
+    if (!activeBlock) return;
+
+    if (action === "Grammar") {
+      // For grammar, we often want to run it immediately if there is text
+      const text = activeBlock.innerText.trim();
+      if (text) {
+        openMenu(blockRow);
+        showInput(action);
+        // We could auto-submit here, but let's let the user see the context first
+      } else {
+        openMenu(blockRow);
+      }
+    } else {
+      openMenu(blockRow);
+    }
+  }
+
+  return { init, triggerAction };
 })();

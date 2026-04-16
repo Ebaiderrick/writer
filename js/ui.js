@@ -4,7 +4,14 @@ import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from './utils.js';
 
+export function showAuth() {
+  refs.homeView.hidden = true;
+  refs.studioView.hidden = true;
+  document.getElementById("authView").hidden = false;
+}
+
 export function showHome() {
+  document.getElementById("authView").hidden = true;
   refs.homeView.hidden = false;
   refs.studioView.hidden = true;
 }
@@ -257,6 +264,7 @@ export function applyTheme() {
 
 export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
+  document.body.classList.toggle("grammar-mode-active", state.grammarCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
   refs.toolStripToggle.textContent = state.toolStripCollapsed ? "▼" : "▲";
 }
