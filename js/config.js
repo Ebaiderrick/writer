@@ -40,6 +40,7 @@ export const state = {
   visibleSuggestions: [],
   saveTimer: null,
   aiAssist: false,
+  grammarCheck: false,
   toolStripCollapsed: false,
   autoNumberScenes: false,
   theme: "rose",

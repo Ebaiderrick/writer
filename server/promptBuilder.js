@@ -47,6 +47,7 @@ function getActionInstruction(type, action) {
     "Visualize": "Rewrite the current action block with more texture and sensory detail.",
     "Add Tension": "Rewrite or continue the current block to ramp up the stakes.",
     "Describe": "Paint a clearer picture of this specific moment.",
+    "Grammar": "Proofread and fix all spelling, grammar, and punctuation issues in this block. Maintain the existing style and format exactly.",
 
     // Shots
     "Camera Angle": "Suggest a dynamic camera angle for this shot.",

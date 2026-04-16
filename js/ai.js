@@ -18,18 +18,29 @@ export const AI = (() => {
   }
 
   function getActions(type) {
+    const actions = [];
     switch (type) {
       case "scene":
-        return ["Predict", "Expand", "Fix", "Add Conflict", "Cinematic"];
+        actions.push("Predict", "Expand", "Fix", "Add Conflict", "Cinematic");
+        break;
       case "dialogue":
-        return ["Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext"];
+        actions.push("Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext");
+        break;
       case "action":
-        return ["Continue", "Visualize", "Add Tension", "Describe"];
+        actions.push("Continue", "Visualize", "Add Tension", "Describe");
+        break;
       case "shot":
-        return ["Camera Angle", "Improve Shot", "Add Movement"];
+        actions.push("Camera Angle", "Improve Shot", "Add Movement");
+        break;
       default:
-        return ["Expand"];
+        actions.push("Expand");
     }
+
+    if (state.grammarCheck) {
+      actions.unshift("Grammar");
+    }
+
+    return actions;
   }
 
   function handleHover(event) {

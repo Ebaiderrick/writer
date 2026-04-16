@@ -21,6 +21,7 @@ export const refs = {
   autoNumberToggle: document.querySelector("#autoNumberToggle"),
   typewriterToggle: document.querySelector("#typewriterToggle"),
   aiAssistToggle: document.querySelector("#aiAssistToggle"),
+  grammarCheckToggle: document.querySelector("#grammarCheckToggle"),
   aiPanel: document.querySelector("#aiPanel"),
   aiSuggestBtn: document.querySelector("#aiSuggestBtn"),
   saveBtn: document.querySelector("#saveBtn"),

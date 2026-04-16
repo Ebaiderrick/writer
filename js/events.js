@@ -125,6 +125,11 @@ export function bindEvents() {
     queueSave();
   });
 
+  refs.grammarCheckToggle.addEventListener("change", () => {
+    state.grammarCheck = refs.grammarCheckToggle.checked;
+    queueSave();
+  });
+
   refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);
 
   // Layout Toggles
@@ -348,6 +353,7 @@ export function openProject(projectId) {
   state.activeType = project.lines[0]?.type || "action";
 
   refs.aiAssistToggle.checked = state.aiAssist;
+  refs.grammarCheckToggle.checked = state.grammarCheck;
   refs.autoNumberToggle.checked = state.autoNumberScenes;
   refs.aiPanel.hidden = !state.aiAssist;
 
