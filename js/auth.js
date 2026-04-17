@@ -144,6 +144,11 @@ export const Auth = (() => {
     setTimeout(() => { otpError.textContent = ""; }, 2500);
   }
 
+function logout() {
+    localStorage.removeItem("eyawriter_session");
+    location.reload();
+  }
+
   function loginSuccess(email) {
     localStorage.setItem("eyawriter_session", JSON.stringify({ email, loggedIn: true }));
     document.getElementById("authView").hidden = true;
@@ -154,5 +159,5 @@ export const Auth = (() => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  return { init };
+  return { init, logout };
 })();

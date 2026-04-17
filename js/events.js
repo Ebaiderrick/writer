@@ -18,7 +18,8 @@ import {
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt
 } from './ui.js';
-import { AI } from './ai.js';
+import { AI } from "./ai.js";
+import { Auth } from "./auth.js";
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
@@ -31,6 +32,9 @@ export function bindEvents() {
     const project = createProject();
     openProject(project.id);
   });
+
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) logoutBtn.addEventListener("click", () => Auth.logout());
 
   refs.goHomeBtn.addEventListener("click", () => {
     persistProjects(true);
@@ -126,13 +130,12 @@ export function bindEvents() {
     queueSave();
   });
 
+  refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);
   refs.grammarCheckToggle.addEventListener("change", () => {
     state.grammarCheck = refs.grammarCheckToggle.checked;
     document.body.classList.toggle("grammar-mode-active", state.grammarCheck);
     queueSave();
   });
-
-  refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);
 
   // Layout Toggles
   refs.leftRailToggle.addEventListener("click", () => togglePane("left"));
@@ -152,11 +155,6 @@ export function bindEvents() {
 
   initResizeHandle(refs.leftResize, "left");
   initResizeHandle(refs.rightResize, "right");
-
-  refs.helpBtn.addEventListener("click", () => refs.helpDialog.showModal());
-  document.querySelectorAll('[data-home-nav="shortcuts"]').forEach(btn => {
-      btn.addEventListener("click", () => refs.helpDialog.showModal());
-  });
 
   // Global Keys & Clicks
   document.addEventListener("keydown", handleGlobalKeydown);
@@ -355,7 +353,6 @@ export function openProject(projectId) {
   state.activeType = project.lines[0]?.type || "action";
 
   refs.aiAssistToggle.checked = state.aiAssist;
-  refs.grammarCheckToggle.checked = state.grammarCheck;
   refs.autoNumberToggle.checked = state.autoNumberScenes;
   refs.aiPanel.hidden = !state.aiAssist;
 
@@ -391,7 +388,7 @@ function handleMetaInput() {
 
 function togglePaneSection(body, button) {
   body.classList.toggle("is-collapsed");
-  button.textContent = body.classList.contains("is-collapsed") ? "▼" : "▲";
+  button.textContent = body.classList.contains("is-collapsed") ? "v" : "^";
 }
 
 function handleBlockInput(id, element) {
@@ -669,7 +666,7 @@ function togglePane(side) {
   const collapsed = pane.classList.toggle("is-hidden");
   if (handle) handle.classList.toggle("is-hidden", collapsed);
   refs.studioLayout.classList.toggle(isLeft ? "left-pane-hidden" : "right-pane-hidden", collapsed);
-  button.textContent = collapsed ? (isLeft ? "▶" : "◀") : (isLeft ? "◀" : "▶");
+  button.textContent = collapsed ? (isLeft ? ">" : "<") : (isLeft ? "<" : ">");
 }
 
 function initResizeHandle(handle, side) {
@@ -925,7 +922,7 @@ function handleGlobalKeydown(event) {
   // Alt + Key for block types
   if (event.altKey && !event.ctrlKey && !event.metaKey) {
     const map = {
-      s: "shot",
+      s: "scene",
       a: "action",
       c: "character",
       d: "dialogue",
@@ -935,8 +932,7 @@ function handleGlobalKeydown(event) {
       x: "text",
       n: "note",
       u: "dual",
-      i: "image",
-      e: "scene"
+      i: "image"
     };
     if (map[key]) {
       event.preventDefault();
@@ -949,7 +945,7 @@ function handleGlobalKeydown(event) {
       const activeEl = getActiveEditableBlock();
       if (activeEl) {
         const row = activeEl.closest('.script-block-row');
-        if (row) AI.triggerAction(row, "Grammar");
+        if (row) AI.triggerAction(row, 'Grammar');
       }
     }
   }

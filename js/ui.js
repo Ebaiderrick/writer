@@ -7,11 +7,11 @@ import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from '.
 export function showAuth() {
   refs.homeView.hidden = true;
   refs.studioView.hidden = true;
-  document.getElementById("authView").hidden = false;
+  refs.authView.hidden = false;
 }
 
 export function showHome() {
-  document.getElementById("authView").hidden = true;
+  refs.authView.hidden = true;
   refs.homeView.hidden = false;
   refs.studioView.hidden = true;
 }
