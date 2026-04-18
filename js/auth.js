@@ -78,6 +78,7 @@ export const Auth = (() => {
     aContainer.classList.toggle("is-txl");
     bContainer.classList.toggle("is-txl");
     bContainer.classList.toggle("is-z200");
+    aContainer.classList.toggle("is-hidden-form");
   }
 
   function handleSignUp(e) {
@@ -144,11 +145,6 @@ export const Auth = (() => {
     setTimeout(() => { otpError.textContent = ""; }, 2500);
   }
 
-function logout() {
-    localStorage.removeItem("eyawriter_session");
-    location.reload();
-  }
-
   function loginSuccess(email) {
     localStorage.setItem("eyawriter_session", JSON.stringify({ email, loggedIn: true }));
     document.getElementById("authView").hidden = true;
@@ -159,5 +155,5 @@ function logout() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  return { init, logout };
+  return { init };
 })();

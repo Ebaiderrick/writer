@@ -267,7 +267,9 @@ export const AI = (() => {
         let msg = data.error || `AI assistant failed (Status ${response.status})`;
         if (response.status === 401) msg = "Invalid API Key. Please check your OpenRouter configuration.";
         if (response.status === 402) msg = "Insufficient credits in your OpenRouter account.";
+        if (response.status === 403) msg = "Access forbidden. Your OpenRouter key may be restricted.";
         if (response.status === 429) msg = "Rate limit exceeded. Please wait a moment.";
+        if (response.status === 502) msg = "The AI model is temporarily unavailable. Please try again later.";
         throw new Error(msg);
       }
 
@@ -528,12 +530,10 @@ export const AI = (() => {
     if (!activeBlock) return;
 
     if (action === "Grammar") {
-      // For grammar, we often want to run it immediately if there is text
       const text = activeBlock.innerText.trim();
       if (text) {
         openMenu(blockRow);
-        showInput(action);
-        // We could auto-submit here, but let's let the user see the context first
+        runAI(action, "", null, null);
       } else {
         openMenu(blockRow);
       }

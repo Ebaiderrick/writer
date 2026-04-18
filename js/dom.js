@@ -1,5 +1,4 @@
 export const refs = {
-  authView: document.querySelector("#authView"),
   homeView: document.querySelector("#homeView"),
   studioView: document.querySelector("#studioView"),
   toolStrip: document.querySelector("#toolStrip"),
