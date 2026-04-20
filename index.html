@@ -293,7 +293,7 @@
             <div class="nav-menu-section">
               <span class="nav-menu-label">Tools</span>
               <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
-              <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
+              <button class="nav-menu-button" type="button" data-menu-action="toggle-spelling-check">Spelling Check</button>
               <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
             </div>
           </div>
@@ -405,8 +405,8 @@
                 <span>AI Assistance</span>
               </label>
               <label class="option-check">
-                <input id="grammarCheckToggle" type="checkbox">
-                <span>Grammar check</span>
+                <input id="spellingCheckToggle" type="checkbox">
+                <span>Spelling check</span>
               </label>
             </div>
           </div>
@@ -617,6 +617,35 @@
     </div>
   </template>
 
+  <div id="contextMenu" class="context-menu" hidden>
+    <div class="menu-item" data-action="cut">Cut <span class="menu-shortcut">Ctrl+X</span></div>
+    <div class="menu-item" data-action="copy">Copy <span class="menu-shortcut">Ctrl+C</span></div>
+    <div class="menu-item" data-action="paste">Paste <span class="menu-shortcut">Ctrl+V</span></div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" data-action="search">Search <span class="menu-shortcut">Ctrl+F</span></div>
+    <div class="menu-divider"></div>
+    <div class="menu-item has-submenu">
+      Text Formatting
+      <div class="submenu">
+        <div class="menu-item" data-action="bold">Bold <span class="menu-shortcut">Ctrl+B</span></div>
+        <div class="menu-item" data-action="italic">Italic <span class="menu-shortcut">Ctrl+I</span></div>
+        <div class="menu-item" data-action="underline">Underline <span class="menu-shortcut">Ctrl+U</span></div>
+      </div>
+    </div>
+    <div class="menu-item has-submenu">
+      Capitalization
+      <div class="submenu">
+        <div class="menu-item" data-action="caps-all">CAPITALIZE ALL</div>
+        <div class="menu-item" data-action="caps-each">Capitalize Each Word</div>
+        <div class="menu-item" data-action="caps-low">low key</div>
+        <div class="menu-item" data-action="caps-random">rAnDoM cApS</div>
+      </div>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" data-action="ai-grammar">AI Grammar Check <span class="menu-shortcut">Alt+G</span></div>
+    <div class="menu-item" data-action="intelligent-split">Intelligent Split <span class="menu-shortcut">`+Enter</span></div>
+  </div>
+
   <dialog id="customModal" class="custom-modal">
     <div class="modal-content">
       <h3 id="modalTitle" class="modal-title"></h3>
@@ -653,7 +682,7 @@
         <p><kbd>Alt + N</kbd><span>Note</span></p>
         <p><kbd>Alt + U</kbd><span>Dual</span></p>
         <p><kbd>Alt + I</kbd><span>Image</span></p>
-        <p><kbd>Alt + G</kbd><span>Grammar Check</span></p>
+        <p><kbd>Alt + G</kbd><span>AI Grammar Check</span></p>
         <p><kbd>Tab</kbd><span>Cycle block type</span></p>
         <p><kbd>▲ / ▼</kbd><span>Previous / Next Block</span></p>
         <p><kbd>Ctrl + ▲ / ▼</kbd><span>Previous / Next Scene</span></p>

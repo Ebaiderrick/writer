@@ -36,7 +36,7 @@ export const AI = (() => {
         actions.push("Expand");
     }
 
-    if (state.grammarCheck) {
+    if (state.spellingCheck) {
       actions.unshift("Grammar");
     }
 

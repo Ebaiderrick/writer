@@ -264,7 +264,7 @@ export function applyTheme() {
 
 export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
-  document.body.classList.toggle("grammar-mode-active", state.grammarCheck);
+  document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
   refs.toolStripToggle.textContent = state.toolStripCollapsed ? "▼" : "▲";
 }

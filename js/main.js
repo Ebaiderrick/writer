@@ -4,6 +4,7 @@ import { showHome, renderHome, applyToolbarState, applyTheme, applyViewState, sh
 import { initBackground } from './background.js';
 import { AI } from './ai.js';
 import { Auth } from './auth.js';
+import { ContextMenu } from './contextMenu.js';
 
 function boot() {
   loadProjects();
@@ -23,6 +24,7 @@ function boot() {
   applyViewState();
   initBackground();
   AI.init();
+  ContextMenu.init();
 }
 
 // Check if DOM is already loaded

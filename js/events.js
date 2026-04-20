@@ -1,5 +1,6 @@
 import { state, TYPE_SEQUENCE, TYPE_LABELS } from './config.js';
 import { refs } from './dom.js';
+import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
@@ -126,9 +127,10 @@ export function bindEvents() {
     queueSave();
   });
 
-  refs.grammarCheckToggle.addEventListener("change", () => {
-    state.grammarCheck = refs.grammarCheckToggle.checked;
-    document.body.classList.toggle("grammar-mode-active", state.grammarCheck);
+  refs.spellingCheckToggle.addEventListener("change", () => {
+    state.spellingCheck = refs.spellingCheckToggle.checked;
+    document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
+    renderStudio();
     queueSave();
   });
 
@@ -193,6 +195,11 @@ export function bindEvents() {
       if (e.target.classList.contains("script-block")) {
           handleBlockKeydown(e, e.target.dataset.id);
       }
+  });
+
+  refs.screenplayEditor.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    ContextMenu.show(e.clientX, e.clientY);
   });
 
   refs.screenplayEditor.addEventListener("copy", (e) => {
@@ -361,7 +368,7 @@ export function openProject(projectId) {
   state.activeType = project.lines[0]?.type || "action";
 
   refs.aiAssistToggle.checked = state.aiAssist;
-  refs.grammarCheckToggle.checked = state.grammarCheck;
+  refs.spellingCheckToggle.checked = state.spellingCheck;
   refs.autoNumberToggle.checked = state.autoNumberScenes;
   refs.aiPanel.hidden = !state.aiAssist;
 
@@ -453,6 +460,28 @@ function handleBlockInput(id, element) {
 
 let lastKeyDownCode = "";
 
+export function intelligentSplit(element) {
+  const id = element.dataset.id;
+  const project = getCurrentProject();
+  const index = getLineIndex(id);
+  const line = project?.lines[index];
+  if (!line) return;
+
+  const offset = getCaretOffset(element);
+  const textBefore = line.text.substring(0, offset);
+  const textAfter = line.text.substring(offset);
+
+  line.text = textBefore;
+  // Get the next type in sequence
+  const currentTypeIdx = TYPE_SEQUENCE.indexOf(line.type);
+  const nextType = TYPE_SEQUENCE[(currentTypeIdx + 1) % TYPE_SEQUENCE.length];
+  const newId = addBlock(nextType, textAfter, index + 1);
+
+  renderStudio();
+  focusBlock(newId, !textAfter);
+  queueSave();
+}
+
 function handleBlockKeydown(event, id) {
   const project = getCurrentProject();
   const index = getLineIndex(id);
@@ -464,19 +493,7 @@ function handleBlockKeydown(event, id) {
   // Handle Break function (Backtick + Enter)
   if (event.key === "Enter" && lastKeyDownCode === "Backquote") {
     event.preventDefault();
-    const offset = getCaretOffset(event.target);
-    const textBefore = line.text.substring(0, offset);
-    const textAfter = line.text.substring(offset);
-
-    line.text = textBefore;
-    // Get the next type in sequence
-    const currentTypeIdx = TYPE_SEQUENCE.indexOf(line.type);
-    const nextType = TYPE_SEQUENCE[(currentTypeIdx + 1) % TYPE_SEQUENCE.length];
-    const newId = addBlock(nextType, textAfter, index + 1);
-
-    renderStudio();
-    focusBlock(newId, !textAfter);
-    queueSave();
+    intelligentSplit(event.target);
     return;
   }
 
@@ -824,6 +841,13 @@ function handleMenuAction(action) {
       refs.aiPanel.hidden = !state.aiAssist;
       applyToolbarState();
       updateMenuStateButtons();
+      queueSave();
+      break;
+    case "toggle-spelling-check":
+      state.spellingCheck = !state.spellingCheck;
+      refs.spellingCheckToggle.checked = state.spellingCheck;
+      document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
+      renderStudio();
       queueSave();
       break;
     case "show-work-tracking":
