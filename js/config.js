@@ -45,5 +45,7 @@ export const state = {
   autoNumberScenes: false,
   theme: "rose",
   viewOptions: { ...DEFAULT_VIEW_OPTIONS },
-  filterQuery: ""
+  filterQuery: "",
+  history: [],
+  historyIndex: -1
 };

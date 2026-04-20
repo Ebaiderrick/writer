@@ -4,7 +4,7 @@ import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
   syncProjectFromInputs, serializeScript, replaceWithSample as restoreSample,
-  getDefaultText
+  getDefaultText, pushHistory, undo, redo
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
@@ -351,6 +351,12 @@ export function openProject(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
   state.currentProjectId = project.id;
+
+  // Reset history for the new project
+  state.history = [];
+  state.historyIndex = -1;
+  pushHistory();
+
   state.activeBlockId = project.lines[0]?.id || null;
   state.activeType = project.lines[0]?.type || "action";
 
@@ -445,11 +451,36 @@ function handleBlockInput(id, element) {
   queueSave();
 }
 
+let lastKeyDownCode = "";
+
 function handleBlockKeydown(event, id) {
   const project = getCurrentProject();
   const index = getLineIndex(id);
   const line = project?.lines[index];
   if (!line) return;
+
+  const code = event.code;
+
+  // Handle Break function (Backtick + Enter)
+  if (event.key === "Enter" && lastKeyDownCode === "Backquote") {
+    event.preventDefault();
+    const offset = getCaretOffset(event.target);
+    const textBefore = line.text.substring(0, offset);
+    const textAfter = line.text.substring(offset);
+
+    line.text = textBefore;
+    // Get the next type in sequence
+    const currentTypeIdx = TYPE_SEQUENCE.indexOf(line.type);
+    const nextType = TYPE_SEQUENCE[(currentTypeIdx + 1) % TYPE_SEQUENCE.length];
+    const newId = addBlock(nextType, textAfter, index + 1);
+
+    renderStudio();
+    focusBlock(newId, !textAfter);
+    queueSave();
+    return;
+  }
+
+  lastKeyDownCode = code;
 
   if (event.key === "Delete") {
     event.preventDefault();
@@ -747,10 +778,12 @@ function handleMenuAction(action) {
       renderHome();
       break;
     case "undo":
-      execEditorCommand("undo");
+      undo();
+      renderStudio();
       break;
     case "redo":
-      execEditorCommand("redo");
+      redo();
+      renderStudio();
       break;
     case "insert-page-break":
       insertMenuBlock("text", "--- PAGE BREAK ---");
@@ -885,16 +918,18 @@ function handleGlobalKeydown(event) {
   if ((event.ctrlKey || event.metaKey) && key === "z") {
     event.preventDefault();
     if (event.shiftKey) {
-        execEditorCommand("redo");
+        redo();
     } else {
-        execEditorCommand("undo");
+        undo();
     }
+    renderStudio();
     return;
   }
 
   if ((event.ctrlKey || event.metaKey) && key === "y") {
     event.preventDefault();
-    execEditorCommand("redo");
+    redo();
+    renderStudio();
     return;
   }
 

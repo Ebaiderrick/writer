@@ -1027,6 +1027,11 @@ img {
   font-size: 0.95rem;
 }
 
+html[data-theme="dark"] .section-scenes .list-item-title,
+html[data-theme="navy"] .section-scenes .list-item-title {
+  color: var(--accent);
+}
+
 .list-item-meta {
   display: block;
   margin-top: 4px;
@@ -1229,7 +1234,9 @@ img {
 .script-block[data-type="image"] {
   display: inline-block;
   border: none;
-  background: #fff6f5;
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-radius: 4px;
 }
 
 .typewriter-mode .center-pane {
