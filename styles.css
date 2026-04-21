@@ -1731,7 +1731,11 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #ecf0f3;
+  padding: 24px;
+  overflow: auto;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), rgba(236, 240, 243, 0.96) 35%),
+    #ecf0f3;
   font-family: 'Montserrat', sans-serif;
 }
 
@@ -1741,10 +1745,9 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 
 .auth-main {
   position: relative;
-  width: 1000px;
-  min-width: 1000px;
+  width: min(100%, 1000px);
   min-height: 600px;
-  height: 600px;
+  height: min(600px, calc(100vh - 48px));
   padding: 25px;
   background-color: #ecf0f3;
   box-shadow: 10px 10px 10px #d1d9e6, -10px -10px 10px #f9f9f9;
@@ -1752,18 +1755,13 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   overflow: hidden;
 }
 
-@media (max-width: 1200px) { .auth-main { transform: scale(.7); } }
-@media (max-width: 1000px) { .auth-main { transform: scale(.6); } }
-@media (max-width: 800px) { .auth-main { transform: scale(.5); } }
-@media (max-width: 600px) { .auth-main { transform: scale(.4); } }
-
 .auth-container {
   display: flex;
   justify-content: center;
   align-items: center;
   position: absolute;
   top: 0;
-  width: 600px;
+  width: min(60%, 600px);
   height: 100%;
   padding: 25px;
   background-color: #ecf0f3;
@@ -1816,7 +1814,7 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 }
 
 .auth-input {
-  width: 350px;
+  width: min(350px, 100%);
   height: 40px;
   margin: 4px 0;
   padding-left: 25px;
@@ -1874,13 +1872,13 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 
 .a-container {
   z-index: 100;
-  left: calc(100% - 600px);
+  left: calc(100% - min(60%, 600px));
   opacity: 1;
   pointer-events: all;
 }
 
 .b-container {
-  left: calc(100% - 600px);
+  left: calc(100% - min(60%, 600px));
   z-index: 0;
   opacity: 0;
   pointer-events: none;
@@ -1894,7 +1892,7 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   top: 0;
   left: 0;
   height: 100%;
-  width: 400px;
+  width: min(40%, 400px);
   padding: 50px;
   z-index: 200;
   transition: 1.25s;
@@ -1928,7 +1926,7 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   align-items: center;
   flex-direction: column;
   position: absolute;
-  width: 400px;
+  width: min(40%, 400px);
   padding: 50px 55px;
   transition: 1.25s;
 }
@@ -1977,7 +1975,7 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 }
 
 .is-txr {
-  left: calc(100% - 400px);
+  left: calc(100% - min(40%, 400px));
   transform-origin: left;
 }
 
@@ -2002,8 +2000,8 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 }
 
 @keyframes is-gx {
-  0%, 10%, 100% { width: 400px; }
-  30%, 50% { width: 500px; }
+  0%, 10%, 100% { width: min(40%, 400px); }
+  30%, 50% { width: min(50%, 500px); }
 }
 
 /* OTP Modal */
@@ -2022,7 +2020,7 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 }
 
 .otp-modal {
-  width: 400px;
+  width: min(400px, calc(100vw - 48px));
   padding: 40px;
   background: #ecf0f3;
   border-radius: 12px;
@@ -2151,4 +2149,89 @@ body.grammar-mode-active .script-block:hover {
 
 .google-btn svg {
   margin-right: 8px;
+}
+
+@media (max-width: 900px) {
+  .auth-view {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .auth-main {
+    width: 100%;
+    min-height: auto;
+    height: auto;
+    padding: 16px;
+    display: grid;
+    gap: 16px;
+  }
+
+  .auth-switch,
+  .auth-container,
+  .switch__container {
+    position: relative;
+    width: 100%;
+    left: auto !important;
+    top: auto;
+    height: auto;
+    min-height: 0;
+    transform: none !important;
+    animation: none !important;
+  }
+
+  .auth-switch {
+    order: 1;
+    padding: 24px 18px;
+    box-shadow: 4px 4px 10px #d1d9e6, -4px -4px 10px #f9f9f9;
+  }
+
+  .a-container,
+  .b-container {
+    order: 2;
+    padding: 16px 10px 10px;
+    opacity: 1;
+    pointer-events: all;
+    z-index: auto;
+  }
+
+  .a-container.is-hidden-form,
+  .b-container:not(.is-z200) {
+    display: none;
+  }
+
+  .switch__container {
+    padding: 0;
+  }
+
+  .switch__circle,
+  .switch__circle--t {
+    display: none;
+  }
+
+  .auth-form {
+    height: auto;
+  }
+
+  .auth-title,
+  .switch__title {
+    font-size: 28px;
+  }
+
+  .auth-input,
+  .google-btn,
+  .auth-button,
+  .switch__button {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .otp-inputs {
+    gap: 6px;
+  }
+
+  .otp-box {
+    width: 40px;
+    height: 48px;
+    font-size: 20px;
+  }
 }
