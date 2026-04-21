@@ -1053,7 +1053,7 @@ async function insertHyperlink() {
   insertMenuBlock("text", text);
 }
 
-async function findInScript() {
+export async function findInScript() {
   const project = getCurrentProject();
   if (!project) return;
   const query = await customPrompt("Find text in this script:", state.filterQuery, "Find");

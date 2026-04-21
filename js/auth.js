@@ -5,35 +5,43 @@ const SESSION_STORAGE_KEY = 'eyawriter_session';
 
 export const Auth = (() => {
   /* Panel switch */
-  const switchCtn = document.querySelector('#switch-cnt');
-  const switchC1 = document.querySelector('#switch-c1');
-  const switchC2 = document.querySelector('#switch-c2');
-  const switchCircle = document.querySelectorAll('.switch__circle');
-  const switchBtns = document.querySelectorAll('.switch-btn');
-  const aContainer = document.querySelector('#a-container');
-  const bContainer = document.querySelector('#b-container');
+  let switchCtn, switchC1, switchC2, switchCircle, switchBtns, aContainer, bContainer;
 
   /* OTP */
-  const otpOverlay = document.getElementById('otp-overlay');
-  const otpBoxes = document.querySelectorAll('.otp-box');
-  const otpSubmit = document.getElementById('otp-submit');
-  const otpResend = document.getElementById('otp-resend');
-  const otpError = document.getElementById('otp-error');
-  const otpDisplay = document.getElementById('otp-email-display');
+  let otpOverlay, otpBoxes, otpSubmit, otpResend, otpError, otpDisplay;
 
-  const signupForm = document.getElementById('signup-form');
-  const signinForm = document.getElementById('signin-form');
-  const signupNameInput = document.getElementById('signup-name');
-  const signupEmailInput = document.getElementById('signup-email');
-  const signupPassInput = document.getElementById('signup-pass');
-  const signupPass2Input = document.getElementById('signup-pass2');
-  const signinEmailInput = document.getElementById('signin-email');
-  const signinPassInput = document.getElementById('signin-pass');
+  let signupForm, signinForm, signupNameInput, signupEmailInput, signupPassInput, signupPass2Input, signinEmailInput, signinPassInput;
 
   let generatedOTP = '';
   let pendingSignup = null;
 
   function init() {
+    switchCtn = document.querySelector('#switch-cnt');
+    switchC1 = document.querySelector('#switch-c1');
+    switchC2 = document.querySelector('#switch-c2');
+    switchCircle = document.querySelectorAll('.switch__circle');
+    switchBtns = document.querySelectorAll('.switch-btn');
+    aContainer = document.querySelector('#a-container');
+    bContainer = document.querySelector('#b-container');
+
+    otpOverlay = document.getElementById('otp-overlay');
+    otpBoxes = document.querySelectorAll('.otp-box');
+    otpSubmit = document.getElementById('otp-submit');
+    otpResend = document.getElementById('otp-resend');
+    otpError = document.getElementById('otp-error');
+    otpDisplay = document.getElementById('otp-email-display');
+
+    signupForm = document.getElementById('signup-form');
+    signinForm = document.getElementById('signin-form');
+    signupNameInput = document.getElementById('signup-name');
+    signupEmailInput = document.getElementById('signup-email');
+    signupPassInput = document.getElementById('signup-pass');
+    signupPass2Input = document.getElementById('signup-pass2');
+    signinEmailInput = document.getElementById('signin-email');
+    signinPassInput = document.getElementById('signin-pass');
+
+    if (!signupForm || !signinForm) return;
+
     switchBtns.forEach((btn) => btn.addEventListener('click', changeForm));
 
     otpBoxes.forEach((box, i) => {
@@ -72,7 +80,10 @@ export const Auth = (() => {
     otpResend.addEventListener('click', resendOTP);
 
     signupForm.addEventListener('submit', handleSignUp);
-    signinForm.addEventListener('submit', handleSignIn);
+    signinForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        handleSignIn(e);
+    });
 
     document.getElementById('google-signup').addEventListener('click', () => alert('Google flow is not connected yet. Please sign up with email for now.'));
     document.getElementById('google-signin').addEventListener('click', () => alert('Google flow is not connected yet. Please sign in with email for now.'));
@@ -119,7 +130,7 @@ export const Auth = (() => {
   }
 
   function handleSignIn(e) {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
 
     const email = normalizeEmail(signinEmailInput.value);
     const password = signinPassInput.value;
@@ -225,7 +236,7 @@ export const Auth = (() => {
 
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
     signinForm.reset();
-    document.getElementById('authView').hidden = true;
+    if (otpOverlay) otpOverlay.classList.remove('active');
     showHome();
   }
 

@@ -7,11 +7,11 @@ import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from '.
 export function showAuth() {
   refs.homeView.hidden = true;
   refs.studioView.hidden = true;
-  document.getElementById("authView").hidden = false;
+  refs.authView.hidden = false;
 }
 
 export function showHome() {
-  document.getElementById("authView").hidden = true;
+  refs.authView.hidden = true;
   refs.homeView.hidden = false;
   refs.studioView.hidden = true;
 }
@@ -363,13 +363,13 @@ export function revealMetricsPanel() {
  * Custom modern modal system
  */
 const modalRefs = {
-    dialog: document.querySelector("#customModal"),
-    title: document.querySelector("#modalTitle"),
-    message: document.querySelector("#modalMessage"),
-    inputContainer: document.querySelector("#modalInputContainer"),
-    input: document.querySelector("#modalInput"),
-    cancelBtn: document.querySelector("#modalCancelBtn"),
-    confirmBtn: document.querySelector("#modalConfirmBtn")
+    get dialog() { return document.querySelector("#customModal"); },
+    get title() { return document.querySelector("#modalTitle"); },
+    get message() { return document.querySelector("#modalMessage"); },
+    get inputContainer() { return document.querySelector("#modalInputContainer"); },
+    get input() { return document.querySelector("#modalInput"); },
+    get cancelBtn() { return document.querySelector("#modalCancelBtn"); },
+    get confirmBtn() { return document.querySelector("#modalConfirmBtn"); }
 };
 
 function showModal({ title, message, showInput = false, defaultValue = "", confirmLabel = "OK", cancelLabel = "Cancel", showCancel = true, showConfirm = true }) {
