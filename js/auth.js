@@ -85,6 +85,14 @@ export const Auth = (() => {
         handleSignIn(e);
     });
 
+    const demoBtn = document.getElementById('demo-login-btn');
+    if (demoBtn) {
+      demoBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        handleDemoLogin();
+      });
+    }
+
     document.getElementById('google-signup').addEventListener('click', () => alert('Google flow is not connected yet. Please sign up with email for now.'));
     document.getElementById('google-signin').addEventListener('click', () => alert('Google flow is not connected yet. Please sign in with email for now.'));
   }
@@ -143,6 +151,26 @@ export const Auth = (() => {
     if (user.password !== password) return alert('Incorrect password. Please try again.');
 
     loginSuccess(user);
+  }
+
+  function handleDemoLogin() {
+    const demoUser = {
+      id: 'user_demo123',
+      name: 'Demo Writer',
+      email: 'demo@eyawriter.com',
+      password: 'demo',
+      createdAt: new Date().toISOString(),
+      verifiedAt: new Date().toISOString()
+    };
+
+    // Ensure user exists in local storage
+    const users = getUsers();
+    if (!users.find(u => u.email === demoUser.email)) {
+      users.push(demoUser);
+      saveUsers(users);
+    }
+
+    loginSuccess(demoUser);
   }
 
   function showOTP(email) {

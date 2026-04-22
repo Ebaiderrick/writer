@@ -1,18 +1,18 @@
 import { loadProjects } from './project.js';
 import { bindEvents, renderStudio } from './events.js';
-import { showHome, renderHome, applyToolbarState, applyTheme, applyViewState, showAuth } from './ui.js';
+import { showAuth, showHome, renderHome, applyToolbarState, applyTheme, applyViewState } from './ui.js';
 import { initBackground } from './background.js';
 import { AI } from './ai.js';
-import { Auth } from './auth.js';
 import { ContextMenu } from './contextMenu.js';
+import { Auth } from './auth.js';
 
 function boot() {
   loadProjects();
   bindEvents();
-  Auth.init();
 
+  Auth.init();
   const session = Auth.getSession();
-  if (session?.loggedIn) {
+  if (session && session.loggedIn) {
     showHome();
   } else {
     showAuth();

@@ -5,7 +5,7 @@ import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
   syncProjectFromInputs, serializeScript, replaceWithSample as restoreSample,
-  getDefaultText, pushHistory, undo, redo
+  getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
@@ -286,6 +286,7 @@ export function bindEvents() {
   refs.screenplayEditor.addEventListener("focusout", (e) => {
     if (e.target.classList.contains("script-block")) {
         const id = e.target.dataset.id;
+        if (id === state.activeBlockId) return;
         const line = getLine(id);
         const project = getCurrentProject();
         if (line && !line.text.trim() && project && project.lines.length > 1) {
@@ -1000,11 +1001,11 @@ function handleGlobalKeydown(event) {
       e: "scene"
     };
 
-    const actionKey = map[charCode] ? charCode : (map[key] ? key : null);
+    const blockType = map[charCode] || map[key];
 
-    if (actionKey) {
+    if (blockType) {
       event.preventDefault();
-      handleToolSelection(map[actionKey]);
+      handleToolSelection(blockType);
     }
 
     // Alt + G for AI Grammar

@@ -1926,9 +1926,10 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   align-items: center;
   flex-direction: column;
   position: absolute;
-  width: min(40%, 400px);
+  width: 100%;
   padding: 50px 55px;
   transition: 1.25s;
+  z-index: 10;
 }
 
 .switch__container:not(.is-hidden) {
@@ -1985,7 +1986,7 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 }
 
 .is-z200 {
-  z-index: 300;
+  z-index: 400;
   opacity: 1 !important;
   pointer-events: all !important;
 }
@@ -2131,13 +2132,25 @@ body.grammar-mode-active .script-block:hover {
   box-shadow: inset 4px 4px 4px #d1d9e6, inset -4px -4px 4px #f9f9f9;
 }
 
+.auth-footer-links {
+  display: flex;
+  justify-content: space-between;
+  width: min(350px, 100%);
+  margin-top: 15px;
+}
+
 .auth-link {
   color: #181818;
   font-size: 13px;
-  margin-top: 15px;
   border-bottom: 1px solid #a0a5a8;
   line-height: 1.5;
   text-decoration: none;
+}
+
+.demo-link {
+  color: #4B70E2;
+  font-weight: 600;
+  border-bottom-color: #4B70E2;
 }
 
 .auth-span {
