@@ -1,10 +1,10 @@
 import { state } from "./config.js";
 import { AI } from "./ai.js";
-import { findInScript, intelligentSplit } from "./events.js";
 import { getActiveEditableBlock } from "./editor.js";
 
 export const ContextMenu = (() => {
   let menuEl = null;
+  const handlers = {};
 
   function init() {
     menuEl = document.getElementById("contextMenu");
@@ -12,14 +12,20 @@ export const ContextMenu = (() => {
     window.addEventListener("resize", hide);
     window.addEventListener("scroll", hide, true);
 
-    menuEl.addEventListener("click", (e) => {
-      const item = e.target.closest(".menu-item");
-      if (!item || item.classList.contains("has-submenu")) return;
+    if (menuEl) {
+      menuEl.addEventListener("click", (e) => {
+        const item = e.target.closest(".menu-item");
+        if (!item || item.classList.contains("has-submenu")) return;
 
-      const action = item.dataset.action;
-      handleAction(action);
-      hide();
-    });
+        const action = item.dataset.action;
+        handleAction(action);
+        hide();
+      });
+    }
+  }
+
+  function setHandler(action, fn) {
+    handlers[action] = fn;
   }
 
   function show(x, y) {
@@ -28,7 +34,6 @@ export const ContextMenu = (() => {
     menuEl.hidden = false;
     menuEl.style.display = "block";
 
-    // Position menu
     const winW = window.innerWidth;
     const winH = window.innerHeight;
     const menuW = menuEl.offsetWidth;
@@ -60,6 +65,13 @@ export const ContextMenu = (() => {
   }
 
   function handleAction(action) {
+    // If a custom handler is registered, use it
+    if (handlers[action]) {
+      handlers[action]();
+      return;
+    }
+
+    // Default handlers
     switch (action) {
       case "cut":
         document.execCommand("cut");
@@ -72,11 +84,7 @@ export const ContextMenu = (() => {
           document.execCommand("insertText", false, text);
         }).catch(err => {
           console.error("Failed to read clipboard:", err);
-          // Fallback to native paste if possible, though execCommand('paste') is usually blocked
         });
-        break;
-      case "search":
-        findInScript();
         break;
       case "bold":
         document.execCommand("bold");
@@ -102,9 +110,6 @@ export const ContextMenu = (() => {
       case "ai-grammar":
         triggerAiGrammar();
         break;
-      case "intelligent-split":
-        triggerIntelligentSplit();
-        break;
     }
   }
 
@@ -112,7 +117,6 @@ export const ContextMenu = (() => {
     const selection = window.getSelection();
     if (!selection.rangeCount) return;
 
-    const range = selection.getRangeAt(0);
     const text = selection.toString();
     if (!text) return;
 
@@ -136,25 +140,12 @@ export const ContextMenu = (() => {
   }
 
   function triggerAiGrammar() {
-    const selection = window.getSelection();
-    let row = null;
-    if (selection.rangeCount && selection.anchorNode) {
-        row = selection.anchorNode.parentElement.closest(".script-block-row");
-    }
-    if (!row && state.activeBlockId) {
-        row = document.querySelector(`.script-block-row[data-id="${state.activeBlockId}"]`);
-    }
-    if (row) {
-        AI.triggerAction(row, "Grammar");
+    const activeId = state.activeBlockId;
+    if (activeId) {
+        const row = document.querySelector(`.script-block-row[data-id="${activeId}"]`);
+        if (row) AI.triggerAction(row, "Grammar");
     }
   }
 
-  function triggerIntelligentSplit() {
-    const activeBlock = getActiveEditableBlock();
-    if (activeBlock) {
-        intelligentSplit(activeBlock);
-    }
-  }
-
-  return { init, show, hide };
+  return { init, show, hide, setHandler };
 })();

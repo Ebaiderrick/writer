@@ -27,6 +27,13 @@ import {
 } from './utils.js';
 
 export function bindEvents() {
+  // Context Menu Handlers
+  ContextMenu.setHandler("search", findInScript);
+  ContextMenu.setHandler("intelligent-split", () => {
+    const target = getActiveEditableBlock();
+    if (target) intelligentSplit(target);
+  });
+
   // Navigation
   refs.newProjectBtn.addEventListener("click", () => {
     const project = createProject();
@@ -468,8 +475,13 @@ export function intelligentSplit(element) {
   if (!line) return;
 
   const offset = getCaretOffset(element);
-  const textBefore = line.text.substring(0, offset);
+  let textBefore = line.text.substring(0, offset);
   const textAfter = line.text.substring(offset);
+
+  // Consume the backtick if it was just typed at the caret position
+  if (textBefore.endsWith("`")) {
+      textBefore = textBefore.slice(0, -1);
+  }
 
   line.text = textBefore;
   // Get the next type in sequence
@@ -1053,7 +1065,7 @@ async function insertHyperlink() {
   insertMenuBlock("text", text);
 }
 
-async function findInScript() {
+export async function findInScript() {
   const project = getCurrentProject();
   if (!project) return;
   const query = await customPrompt("Find text in this script:", state.filterQuery, "Find");

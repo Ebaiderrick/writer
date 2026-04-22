@@ -1,314 +1,159 @@
 import { showHome } from './ui.js';
 
-const USERS_STORAGE_KEY = 'eyawriter_users';
-const SESSION_STORAGE_KEY = 'eyawriter_session';
-
 export const Auth = (() => {
   /* Panel switch */
-  const switchCtn = document.querySelector('#switch-cnt');
-  const switchC1 = document.querySelector('#switch-c1');
-  const switchC2 = document.querySelector('#switch-c2');
-  const switchCircle = document.querySelectorAll('.switch__circle');
-  const switchBtns = document.querySelectorAll('.switch-btn');
-  const aContainer = document.querySelector('#a-container');
-  const bContainer = document.querySelector('#b-container');
+  const switchCtn = document.querySelector("#switch-cnt");
+  const switchC1 = document.querySelector("#switch-c1");
+  const switchC2 = document.querySelector("#switch-c2");
+  const switchCircle = document.querySelectorAll(".switch__circle");
+  const switchBtns = document.querySelectorAll(".switch-btn");
+  const aContainer = document.querySelector("#a-container");
+  const bContainer = document.querySelector("#b-container");
 
   /* OTP */
-  const otpOverlay = document.getElementById('otp-overlay');
-  const otpBoxes = document.querySelectorAll('.otp-box');
-  const otpSubmit = document.getElementById('otp-submit');
-  const otpResend = document.getElementById('otp-resend');
-  const otpError = document.getElementById('otp-error');
-  const otpDisplay = document.getElementById('otp-email-display');
+  const otpOverlay = document.getElementById("otp-overlay");
+  const otpBoxes = document.querySelectorAll(".otp-box");
+  const otpSubmit = document.getElementById("otp-submit");
+  const otpResend = document.getElementById("otp-resend");
+  const otpError = document.getElementById("otp-error");
+  const otpDisplay = document.getElementById("otp-email-display");
 
-  const signupForm = document.getElementById('signup-form');
-  const signinForm = document.getElementById('signin-form');
-  const signupNameInput = document.getElementById('signup-name');
-  const signupEmailInput = document.getElementById('signup-email');
-  const signupPassInput = document.getElementById('signup-pass');
-  const signupPass2Input = document.getElementById('signup-pass2');
-  const signinEmailInput = document.getElementById('signin-email');
-  const signinPassInput = document.getElementById('signin-pass');
-
-  let generatedOTP = '';
-  let pendingSignup = null;
+  let generatedOTP = "";
+  let otpEmail = "";
 
   function init() {
-    switchBtns.forEach((btn) => btn.addEventListener('click', changeForm));
+    switchBtns.forEach(btn => btn.addEventListener("click", changeForm));
 
+    // OTP input navigation
     otpBoxes.forEach((box, i) => {
-      box.addEventListener('input', () => {
-        box.value = box.value.replace(/\D/g, '').slice(-1);
-        box.classList.toggle('filled', box.value !== '');
+      box.addEventListener("input", () => {
+        box.value = box.value.replace(/\D/g, "").slice(-1);
+        box.classList.toggle("filled", box.value !== "");
         if (box.value && i < otpBoxes.length - 1) {
           otpBoxes[i + 1].focus();
         }
       });
 
-      box.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !box.value && i > 0) {
+      box.addEventListener("keydown", (e) => {
+        if (e.key === "Backspace" && !box.value && i > 0) {
           otpBoxes[i - 1].focus();
         }
       });
 
-      box.addEventListener('paste', (e) => {
+      box.addEventListener("paste", (e) => {
         e.preventDefault();
-        const pasted = (e.clipboardData || window.clipboardData)
-          .getData('text')
-          .replace(/\D/g, '')
-          .slice(0, otpBoxes.length);
-
-        otpBoxes.forEach((otpBox, index) => {
-          otpBox.value = pasted[index] || '';
-          otpBox.classList.toggle('filled', Boolean(otpBox.value));
+        const pasted = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "");
+        [...pasted].slice(0, 6).forEach((char, j) => {
+          if (otpBoxes[j]) {
+            otpBoxes[j].value = char;
+            otpBoxes[j].classList.add("filled");
+          }
         });
-
-        const nextIndex = Math.min(pasted.length, otpBoxes.length - 1);
-        otpBoxes[nextIndex].focus();
+        const next = Math.min(pasted.length, 5);
+        otpBoxes[next].focus();
       });
     });
 
-    otpSubmit.addEventListener('click', verifyOTP);
-    otpResend.addEventListener('click', resendOTP);
+    otpSubmit.addEventListener("click", verifyOTP);
+    otpResend.addEventListener("click", resendOTP);
 
-    signupForm.addEventListener('submit', handleSignUp);
-    signinForm.addEventListener('submit', handleSignIn);
+    // Forms
+    document.getElementById("signup-form").addEventListener("submit", handleSignUp);
+    document.getElementById("signin-form").addEventListener("submit", handleSignIn);
 
-    document.getElementById('google-signup').addEventListener('click', () => alert('Google flow is not connected yet. Please sign up with email for now.'));
-    document.getElementById('google-signin').addEventListener('click', () => alert('Google flow is not connected yet. Please sign in with email for now.'));
+    // Google buttons
+    document.getElementById("google-signup").addEventListener("click", () => alert("Google flow simulated."));
+    document.getElementById("google-signin").addEventListener("click", () => alert("Google flow simulated."));
   }
 
   function changeForm() {
-    switchCtn.classList.add('is-gx');
-    setTimeout(() => switchCtn.classList.remove('is-gx'), 1500);
+    switchCtn.classList.add("is-gx");
+    setTimeout(() => switchCtn.classList.remove("is-gx"), 600);
 
-    switchCtn.classList.toggle('is-txr');
-    switchCircle[0].classList.toggle('is-txr');
-    switchCircle[1].classList.toggle('is-txr');
-    switchC1.classList.toggle('is-hidden');
-    switchC2.classList.toggle('is-hidden');
-    aContainer.classList.toggle('is-txl');
-    bContainer.classList.toggle('is-txl');
-    bContainer.classList.toggle('is-z200');
-    aContainer.classList.toggle('is-hidden-form');
+    switchCtn.classList.toggle("is-txr");
+    switchCircle[0].classList.toggle("is-txr");
+    switchCircle[1].classList.toggle("is-txr");
+    switchC1.classList.toggle("is-hidden");
+    switchC2.classList.toggle("is-hidden");
+    aContainer.classList.toggle("is-txl");
+    bContainer.classList.toggle("is-txl");
+    bContainer.classList.toggle("is-z200");
+    aContainer.classList.toggle("is-hidden-form");
   }
 
   function handleSignUp(e) {
     e.preventDefault();
+    const name = document.getElementById("signup-name").value.trim();
+    const email = document.getElementById("signup-email").value.trim();
+    const pass = document.getElementById("signup-pass").value;
+    const pass2 = document.getElementById("signup-pass2").value;
 
-    const name = signupNameInput.value.trim();
-    const email = normalizeEmail(signupEmailInput.value);
-    const password = signupPassInput.value;
-    const passwordRepeat = signupPass2Input.value;
-
-    if (!name) return alert('Please enter your name.');
-    if (!isValidEmail(email)) return alert('Please enter a valid email.');
-    if (password.length < 6) return alert('Password must be at least 6 characters.');
-    if (password !== passwordRepeat) return alert('Passwords do not match.');
-    if (findUserByEmail(email)) return alert('An account with this email already exists. Please sign in instead.');
-
-    pendingSignup = {
-      id: createId('user'),
-      name,
-      email,
-      password,
-      createdAt: new Date().toISOString()
-    };
+    if (!name) return alert("Please enter your name.");
+    if (!isValidEmail(email)) return alert("Please enter a valid email.");
+    if (pass.length < 6) return alert("Password must be at least 6 characters.");
+    if (pass !== pass2) return alert("Passwords do not match.");
 
     showOTP(email);
   }
 
   function handleSignIn(e) {
     e.preventDefault();
+    const email = document.getElementById("signin-email").value.trim();
+    const pass = document.getElementById("signin-pass").value;
 
-    const email = normalizeEmail(signinEmailInput.value);
-    const password = signinPassInput.value;
+    if (!isValidEmail(email)) return alert("Please enter a valid email.");
+    if (!pass) return alert("Please enter your password.");
 
-    if (!isValidEmail(email)) return alert('Please enter a valid email.');
-    if (!password) return alert('Please enter your password.');
-
-    const user = findUserByEmail(email);
-    if (!user) return alert('No account was found for this email. Please sign up first.');
-    if (user.password !== password) return alert('Incorrect password. Please try again.');
-
-    loginSuccess(user);
+    // Demo login
+    loginSuccess(email);
   }
 
   function showOTP(email) {
+    otpEmail = email;
     generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
     otpDisplay.textContent = email;
-    otpBoxes.forEach((box) => {
-      box.value = '';
-      box.classList.remove('filled');
-    });
-    otpError.textContent = '';
-    otpOverlay.classList.add('active');
+    otpBoxes.forEach(b => { b.value = ""; b.classList.remove("filled"); });
+    otpError.textContent = "";
+    otpOverlay.classList.add("active");
     otpBoxes[0].focus();
-    console.log('OTP (demo):', generatedOTP);
+    console.log("OTP (demo):", generatedOTP);
   }
 
   function verifyOTP() {
-    if (!pendingSignup) {
-      otpError.textContent = 'Your signup session expired. Please try again.';
-      otpOverlay.classList.remove('active');
+    const entered = [...otpBoxes].map(b => b.value).join("");
+    if (entered.length < 6) {
+      otpError.textContent = "Please enter all 6 digits.";
       return;
     }
-
-    const entered = [...otpBoxes].map((box) => box.value).join('');
-    if (entered.length < otpBoxes.length) {
-      otpError.textContent = 'Please enter all 6 digits.';
-      return;
-    }
-
-    if (entered !== generatedOTP) {
-      otpError.textContent = 'Incorrect code. Try again.';
-      otpBoxes.forEach((box) => {
-        box.value = '';
-        box.classList.remove('filled');
-      });
+    if (entered === generatedOTP) {
+      otpError.textContent = "";
+      otpOverlay.classList.remove("active");
+      loginSuccess(otpEmail);
+    } else {
+      otpError.textContent = "Incorrect code. Try again.";
+      otpBoxes.forEach(b => { b.value = ""; b.classList.remove("filled"); });
       otpBoxes[0].focus();
-      return;
     }
-
-    const users = getUsers();
-    const existingUser = users.find((user) => user.email === pendingSignup.email);
-    if (existingUser) {
-      otpOverlay.classList.remove('active');
-      pendingSignup = null;
-      otpError.textContent = '';
-      alert('An account with this email already exists. Please sign in instead.');
-      focusSignIn(existingUser.email);
-      return;
-    }
-
-    const user = {
-      ...pendingSignup,
-      verifiedAt: new Date().toISOString()
-    };
-
-    users.push(user);
-    saveUsers(users);
-    pendingSignup = null;
-    otpOverlay.classList.remove('active');
-    otpError.textContent = '';
-    signupForm.reset();
-    loginSuccess(user);
   }
 
   function resendOTP() {
-    if (!pendingSignup) {
-      otpError.textContent = 'Start signup again to request a new code.';
-      return;
-    }
-
     generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
-    otpBoxes.forEach((box) => {
-      box.value = '';
-      box.classList.remove('filled');
-    });
-    otpError.textContent = 'New code sent!';
-    console.log('New OTP (demo):', generatedOTP);
+    otpBoxes.forEach(b => { b.value = ""; b.classList.remove("filled"); });
+    otpError.textContent = "New code sent!";
+    console.log("New OTP (demo):", generatedOTP);
     otpBoxes[0].focus();
-    setTimeout(() => {
-      otpError.textContent = '';
-    }, 2500);
+    setTimeout(() => { otpError.textContent = ""; }, 2500);
   }
 
-  function loginSuccess(user) {
-    const session = {
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-      loggedIn: true,
-      loggedInAt: new Date().toISOString()
-    };
-
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-    signinForm.reset();
-    document.getElementById('authView').hidden = true;
+  function loginSuccess(email) {
+    localStorage.setItem("eyawriter_session", JSON.stringify({ email, loggedIn: true }));
+    document.getElementById("authView").hidden = true;
     showHome();
-  }
-
-  function getSession() {
-    try {
-      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!raw) return null;
-
-      const session = JSON.parse(raw);
-      const email = normalizeEmail(session?.email);
-      const user = findUserByEmail(email);
-      if (!user) {
-        localStorage.removeItem(SESSION_STORAGE_KEY);
-        return null;
-      }
-
-      return {
-        ...session,
-        email: user.email,
-        name: user.name,
-        userId: user.id,
-        loggedIn: true
-      };
-    } catch (error) {
-      console.error('Unable to restore session', error);
-      localStorage.removeItem(SESSION_STORAGE_KEY);
-      return null;
-    }
-  }
-
-  function getUsers() {
-    try {
-      const raw = localStorage.getItem(USERS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed)
-        ? parsed
-            .filter((user) => user && typeof user.email === 'string')
-            .map((user) => ({
-              ...user,
-              email: normalizeEmail(user.email),
-              name: String(user.name || '').trim()
-            }))
-        : [];
-    } catch (error) {
-      console.error('Unable to load saved users', error);
-      return [];
-    }
-  }
-
-  function saveUsers(users) {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-  }
-
-  function findUserByEmail(email) {
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) {
-      return null;
-    }
-
-    return getUsers().find((user) => user.email === normalizedEmail) || null;
-  }
-
-  function focusSignIn(email = '') {
-    const isSignUpVisible = !switchC1.classList.contains('is-hidden');
-    if (isSignUpVisible) {
-      changeForm();
-    }
-    signinEmailInput.value = email;
-    signinPassInput.value = '';
-    signinEmailInput.focus();
-  }
-
-  function normalizeEmail(email) {
-    return String(email || '').trim().toLowerCase();
-  }
-
-  function createId(prefix) {
-    return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
   }
 
   function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  return { init, getSession };
+  return { init };
 })();

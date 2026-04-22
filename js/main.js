@@ -11,8 +11,8 @@ function boot() {
   bindEvents();
   Auth.init();
 
-  const session = Auth.getSession();
-  if (session?.loggedIn) {
+  const session = localStorage.getItem("eyawriter_session");
+  if (session) {
     showHome();
   } else {
     showAuth();
@@ -27,8 +27,9 @@ function boot() {
   ContextMenu.init();
 }
 
+// Check if DOM is already loaded
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot);
+    document.addEventListener('DOMContentLoaded', boot);
 } else {
-  boot();
+    boot();
 }
