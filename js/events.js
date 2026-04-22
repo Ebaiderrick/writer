@@ -11,7 +11,7 @@ import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions
 } from './editor.js';
-import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
+import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
 import { paginateScriptLines } from './pagination.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
@@ -1109,8 +1109,9 @@ function exportJson() {
 
 function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
-    const content = buildPrintableDocument(project);
-    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword");
+    if (!project) return;
+    const content = buildWordDocument(project);
+    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword;charset=utf-8");
 }
 
 function exportPdf() { openPreviewWindow(true); }
@@ -1119,10 +1120,14 @@ function openPreviewWindow(autoPrint) {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
   const previewWindow = window.open("", "_blank", "noopener,noreferrer");
-  if (!previewWindow) return;
+  if (!previewWindow) {
+    customAlert("Allow pop-ups for this site so EyaWriter can open the print window for PDF export.", "PDF Export");
+    return;
+  }
   previewWindow.document.open();
   previewWindow.document.write(buildPrintableDocument(project, autoPrint));
   previewWindow.document.close();
+  previewWindow.focus();
 }
 
 function buildPreparedExportLines(project) {

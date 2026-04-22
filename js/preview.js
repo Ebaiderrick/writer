@@ -133,12 +133,128 @@ export function buildPrintableDocument(project, autoPrint = false) {
   <title>${escapeHtml(project.title)}</title>
   <style>${getPrintableStyles()}</style>
 </head>
-<body data-theme="${escapeHtml(state.theme)}">
+  <body data-theme="${escapeHtml(state.theme)}">
   <main class="print-shell">
     ${coverMarkup}
     ${scriptMarkup}
   </main>
-  ${autoPrint ? "<script>window.addEventListener('load', function () { window.print(); });<\/script>" : ""}
+  ${autoPrint ? "<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 350); }); window.addEventListener('afterprint', function () { window.close(); });<\/script>" : ""}
+</body>
+</html>`;
+}
+
+export function buildWordDocument(project) {
+  const previewData = buildPreviewData(project);
+  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\nby\n\n${escapeHtml(project.author || "Author")}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
+  const coverMarkup = `
+    <section class="word-page cover-page">
+      <pre class="word-cover-text">${coverText}</pre>
+    </section>
+  `;
+
+  const scriptMarkup = previewData.scriptPages.map((pageLines, index) => {
+    const pageNum = index + 1;
+    const pageHeader = (pageNum > 1 && state.viewOptions.pageNumbers) ? `<div class="word-page-number">${pageNum}.</div>` : "";
+
+    return `
+      <section class="word-page">
+        ${pageHeader}
+        <div class="word-body">
+          ${pageLines.map((line) => `<p class="word-line ${line.type}">${escapeHtml(line.displayText)}</p>`).join("")}
+        </div>
+      </section>
+    `;
+  }).join("");
+
+  return `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta charset="UTF-8">
+  <meta name="ProgId" content="Word.Document">
+  <meta name="Generator" content="EyaWriter">
+  <title>${escapeHtml(project.title)}</title>
+  <style>
+    @page WordSection {
+      size: 8.5in 11in;
+      margin: 1.0in 1.0in 1.0in 1.5in;
+    }
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: #111111;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 12pt;
+    }
+    .word-shell {
+      width: 100%;
+    }
+    .word-page {
+      page: WordSection;
+      position: relative;
+      width: 100%;
+      min-height: 9in;
+    }
+    .word-page + .word-page {
+      page-break-before: always;
+      break-before: page;
+    }
+    .cover-page {
+      min-height: 9in;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .word-cover-text {
+      white-space: pre-wrap;
+      margin: 0;
+    }
+    .word-page-number {
+      position: absolute;
+      top: -0.5in;
+      right: 0;
+    }
+    .word-body {
+      width: 100%;
+    }
+    .word-line {
+      margin: 0 0 12pt;
+      white-space: pre-wrap;
+      line-height: 1.2;
+    }
+    .word-line.scene,
+    .word-line.shot,
+    .word-line.transition {
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .word-line.character,
+    .word-line.dual {
+      margin-left: 2.2in;
+      width: 2.4in;
+      text-transform: uppercase;
+      font-weight: bold;
+    }
+    .word-line.dialogue {
+      margin-left: 1.5in;
+      width: 3.5in;
+    }
+    .word-line.parenthetical {
+      margin-left: 1.9in;
+      width: 2.5in;
+    }
+    .word-line.transition {
+      margin-left: auto;
+      width: 2.0in;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <main class="word-shell">
+    ${coverMarkup}
+    ${scriptMarkup}
+  </main>
 </body>
 </html>`;
 }
