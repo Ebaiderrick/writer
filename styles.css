@@ -1434,9 +1434,12 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .help-sheet {
-    width: min(240px, calc(100vw - 24px));
+    width: min(360px, calc(100vw - 24px));
+    min-height: 360px;
     padding: 14px 12px;
     border-radius: 12px;
+    display: grid;
+    grid-template-rows: auto 1fr;
 }
 
 .modal-title {
@@ -1513,31 +1516,37 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .shortcut-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+  align-content: start;
 }
 
 .shortcut-grid p {
   margin: 0;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
   padding: 6px 8px;
   border: none;
   font-size: 0.8rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--control-bg) 84%, transparent);
 }
 
 kbd {
   padding: 2px 6px;
   border: none;
-  background: transparent;
-  color: #ffffff;
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+  color: var(--theme-tertiary);
   font-weight: 700;
+  border-radius: 6px;
+  width: fit-content;
 }
 
 .shortcut-grid span {
   color: var(--theme-tertiary);
-  text-align: right;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .is-hidden {

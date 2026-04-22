@@ -131,6 +131,7 @@ export function bindEvents() {
   refs.spellingCheckToggle.addEventListener("change", () => {
     state.spellingCheck = refs.spellingCheckToggle.checked;
     document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
+    document.body.classList.toggle("grammar-mode-active", state.spellingCheck);
     renderStudio();
     queueSave();
   });
@@ -371,6 +372,8 @@ export function openProject(projectId) {
 
   refs.aiAssistToggle.checked = state.aiAssist;
   refs.spellingCheckToggle.checked = state.spellingCheck;
+  document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
+  document.body.classList.toggle("grammar-mode-active", state.spellingCheck);
   refs.autoNumberToggle.checked = state.autoNumberScenes;
   refs.aiPanel.hidden = !state.aiAssist;
 

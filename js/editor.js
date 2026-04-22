@@ -52,6 +52,10 @@ export function renderEditor() {
     block.dataset.id = line.id;
     block.dataset.type = line.type;
     block.textContent = line.text;
+    block.spellcheck = state.spellingCheck;
+    block.setAttribute("spellcheck", state.spellingCheck ? "true" : "false");
+    block.setAttribute("autocorrect", state.spellingCheck ? "on" : "off");
+    block.setAttribute("autocapitalize", state.spellingCheck ? "sentences" : "off");
 
     const hiddenByScene = !filterSet && Boolean(collapsedSceneId && line.type !== "scene");
     const hiddenByFilter = Boolean(filterSet && !filterSet.has(line.id));
