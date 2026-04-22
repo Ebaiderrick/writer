@@ -170,9 +170,10 @@ export function buildWordDocument(project) {
     const pageHeader = (pageNum > 1 && state.viewOptions.pageNumbers)
       ? `<div class="word-page-number">${pageNum}.</div>`
       : `<div class="word-page-number word-page-number-placeholder"></div>`;
+    const pageClassName = index === 0 ? "word-page word-script-page word-script-page-first" : "word-page word-script-page";
 
     return `
-      <div class="word-page">
+      <div class="${pageClassName}">
         ${pageHeader}
         <div class="word-body">
           ${pageLines.map((line) => `<p class="word-line ${line.type}" style="${buildWordLineStyle(line.type)}">${escapeHtml(line.displayText)}</p>`).join("")}
@@ -180,9 +181,7 @@ export function buildWordDocument(project) {
       </div>
     `;
   });
-
-  const pageBreakMarkup = '<div class="word-page-break"><span>&nbsp;</span></div>';
-  const scriptMarkup = scriptPagesMarkup.join(pageBreakMarkup);
+  const scriptMarkup = scriptPagesMarkup.join("");
 
   return `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -214,6 +213,19 @@ export function buildWordDocument(project) {
     }
     .cover-page {
       min-height: 9in;
+      page-break-after: always;
+      break-after: page;
+      mso-break-type: page;
+    }
+    .word-script-page {
+      page-break-before: always;
+      break-before: page;
+      mso-break-type: page;
+    }
+    .word-script-page-first {
+      page-break-before: always;
+      break-before: page;
+      mso-break-type: page;
     }
     .word-cover-table {
       width: 100%;
@@ -259,12 +271,6 @@ export function buildWordDocument(project) {
       top: -0.5in;
       right: 0;
     }
-    .word-page-break {
-      page-break-after: always;
-      break-after: page;
-      height: 0;
-      overflow: hidden;
-    }
     .word-body {
       width: 100%;
     }
@@ -278,7 +284,6 @@ export function buildWordDocument(project) {
 <body>
   <main class="word-shell">
     ${coverMarkup}
-    ${pageBreakMarkup}
     ${scriptMarkup}
   </main>
 </body>
