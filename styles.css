@@ -251,16 +251,17 @@ img {
   position: absolute;
   top: calc(100% + 6px);
   z-index: 30;
-  min-width: 220px;
-  padding: 10px;
+  min-width: 196px;
+  padding: 8px;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface-strong);
   box-shadow: var(--shadow);
+  color: var(--ink);
 }
 
 .nav-menu-wide {
-  min-width: 286px;
+  min-width: 238px;
 }
 
 .nav-menu-section + .nav-menu-section {
@@ -275,9 +276,9 @@ img {
 
 .nav-menu-label {
   display: block;
-  margin-bottom: 10px;
-  color: var(--muted);
-  font-size: 0.82rem;
+  margin-bottom: 8px;
+  color: color-mix(in srgb, var(--ink) 58%, var(--muted));
+  font-size: 0.76rem;
   font-weight: 600;
 }
 
@@ -290,18 +291,19 @@ img {
 
 .theme-option,
 .nav-menu-button {
-  min-height: 34px;
-  padding: 6px 10px;
+  min-height: 30px;
+  padding: 5px 8px;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--control-bg);
-  color: var(--ink);
+  color: color-mix(in srgb, var(--ink) 90%, var(--muted));
   cursor: pointer;
+  font-size: 0.82rem;
 }
 
 .menu-group {
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 94%, var(--control-bg));
 }
 
@@ -315,12 +317,12 @@ img {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 36px;
-  padding: 8px 10px;
+  min-height: 30px;
+  padding: 6px 8px;
   cursor: pointer;
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: var(--ink);
+  color: color-mix(in srgb, var(--ink) 90%, var(--muted));
 }
 
 .menu-group-summary::-webkit-details-marker {
@@ -342,7 +344,7 @@ img {
 .menu-group-body {
   display: grid;
   gap: 8px;
-  padding: 0 10px 10px;
+  padding: 0 6px 6px;
 }
 
 .menu-group-inline {
@@ -2175,13 +2177,14 @@ body.grammar-mode-active .script-block:hover {
 
 .context-menu {
   position: fixed;
-  min-width: 220px;
-  padding: 8px 0;
+  min-width: 176px;
+  padding: 6px 0;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface-strong);
   box-shadow: 0 18px 48px rgba(16, 24, 40, 0.22);
   z-index: 2000;
+  color: var(--ink);
 }
 
 .menu-item {
@@ -2189,11 +2192,12 @@ body.grammar-mode-active .script-block:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 10px 14px;
-  color: var(--ink);
+  gap: 12px;
+  padding: 7px 10px;
+  color: color-mix(in srgb, var(--ink) 90%, var(--muted));
   cursor: pointer;
   white-space: nowrap;
+  font-size: 0.82rem;
 }
 
 .menu-item:hover {
@@ -2207,8 +2211,8 @@ body.grammar-mode-active .script-block:hover {
 }
 
 .menu-shortcut {
-  color: var(--muted);
-  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--ink) 42%, var(--muted));
+  font-size: 0.72rem;
 }
 
 .menu-divider {
@@ -2221,10 +2225,10 @@ body.grammar-mode-active .script-block:hover {
   position: absolute;
   top: 0;
   left: calc(100% - 6px);
-  min-width: 220px;
-  padding: 8px 0;
+  min-width: 176px;
+  padding: 6px 0;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface-strong);
   box-shadow: 0 18px 48px rgba(16, 24, 40, 0.22);
   display: none;
