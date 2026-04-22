@@ -1270,6 +1270,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 18px;
+  position: relative;
 }
 
 .preview-page-sheet.cover {
@@ -1293,6 +1294,14 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   align-content: start;
   width: min(100%, var(--script-line-width));
   margin: 0 auto;
+}
+
+.preview-page-number {
+  position: absolute;
+  top: 18px;
+  right: 26px;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .preview-page-footer {

@@ -34,6 +34,13 @@ export function renderPreview() {
     const scriptPage = document.createElement("section");
     scriptPage.className = "preview-page-sheet";
 
+    if (state.viewOptions.pageNumbers && pageIndex > 0) {
+      const pageNumber = document.createElement("div");
+      pageNumber.className = "preview-page-number";
+      pageNumber.textContent = `${pageIndex + 1}.`;
+      scriptPage.appendChild(pageNumber);
+    }
+
     const body = document.createElement("div");
     body.className = "preview-page-body";
 
@@ -50,10 +57,10 @@ export function renderPreview() {
 
     scriptPage.appendChild(body);
 
-    if (state.viewOptions.pageNumbers || state.viewOptions.pageCount) {
+    if (state.viewOptions.pageCount && !state.viewOptions.pageNumbers) {
       const footer = document.createElement("div");
       footer.className = "preview-page-footer";
-      footer.textContent = buildPreviewFooterLabel(pageIndex + 1, previewData.scriptPages.length);
+      footer.textContent = `${previewData.scriptPages.length} pages`;
       scriptPage.appendChild(footer);
     }
 
@@ -88,16 +95,6 @@ export function buildPreviewData(project) {
 }
 
 function buildPreviewFooterLabel(pageNumber, totalPages) {
-  // Page numbering requirement from memory:
-  // top-right corner, 0.5" from top, flush with right margin,
-  // formatted with trailing period (e.g., "2."), omitted from first page.
-  // This function currently handles the preview panel footer.
-  if (state.viewOptions.pageNumbers && state.viewOptions.pageCount) {
-    return `Page ${pageNumber} of ${totalPages}`;
-  }
-  if (state.viewOptions.pageNumbers) {
-    return `Page ${pageNumber}.`;
-  }
   if (state.viewOptions.pageCount) {
     return `${totalPages} pages`;
   }
@@ -111,7 +108,6 @@ export function buildPrintableDocument(project, autoPrint = false) {
     <section class="print-page cover-page">
       <pre class="print-cover-text">${coverText}</pre>
     </section>
-    <div class="print-page-break" aria-hidden="true"></div>
   `;
 
   const scriptMarkup = previewData.scriptPages.map((pageLines, index) => {
@@ -173,6 +169,10 @@ function getPrintableStyles() {
       break-after: page;
       font-size: 12pt;
     }
+    .print-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
     .print-page-number {
       position: absolute;
       top: 0.5in;
@@ -225,11 +225,6 @@ function getPrintableStyles() {
       margin-left: auto;
       width: 2.4in;
       text-align: right;
-    }
-    .print-page-break {
-      height: 0;
-      page-break-after: always;
-      break-after: page;
     }
     @page {
       size: letter;

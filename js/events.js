@@ -4,7 +4,7 @@ import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
-  syncProjectFromInputs, serializeScript, replaceWithSample as restoreSample,
+  syncProjectFromInputs, replaceWithSample as restoreSample,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker
 } from './project.js';
 import {
@@ -12,6 +12,7 @@ import {
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
+import { paginateScriptLines } from './pagination.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
@@ -1091,7 +1092,13 @@ function clearScriptFilter() {
 
 function exportTxt() {
   const project = syncProjectFromInputs() || getCurrentProject();
-  const content = [project.title, project.author, "", serializeScript(project)].join("\n");
+  if (!project) return;
+  const preparedLines = buildPreparedExportLines(project);
+  const cover = [project.title, project.author, project.contact, project.company, project.details, project.logline].filter(Boolean).join("\n");
+  const pages = paginateScriptLines(preparedLines)
+    .map((pageLines) => pageLines.map((line) => line.displayText).join("\n\n"))
+    .filter(Boolean);
+  const content = [cover, ...pages].filter(Boolean).join("\n\f\n");
   downloadFile(`${slugify(project.title)}.txt`, content, "text/plain");
 }
 
@@ -1116,6 +1123,29 @@ function openPreviewWindow(autoPrint) {
   previewWindow.document.open();
   previewWindow.document.write(buildPrintableDocument(project, autoPrint));
   previewWindow.document.close();
+}
+
+function buildPreparedExportLines(project) {
+  let sceneNumber = 0;
+
+  return project.lines.reduce((accumulator, line) => {
+    const normalized = normalizeLineText(line.text, line.type);
+    if (!normalized) {
+      return accumulator;
+    }
+
+    if (line.type === "scene") {
+      sceneNumber += 1;
+    }
+
+    accumulator.push({
+      id: line.id,
+      type: line.type,
+      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
+    });
+
+    return accumulator;
+  }, []);
 }
 
 function importFile(event) {
