@@ -154,13 +154,15 @@ export function buildWordDocument(project) {
 
   const scriptMarkup = previewData.scriptPages.map((pageLines, index) => {
     const pageNum = index + 1;
-    const pageHeader = (pageNum > 1 && state.viewOptions.pageNumbers) ? `<div class="word-page-number">${pageNum}.</div>` : "";
+    const pageHeader = (pageNum > 1 && state.viewOptions.pageNumbers)
+      ? `<div class="word-page-number">${pageNum}.</div>`
+      : `<div class="word-page-number word-page-number-placeholder"></div>`;
 
     return `
       <section class="word-page">
         ${pageHeader}
         <div class="word-body">
-          ${pageLines.map((line) => `<p class="word-line ${line.type}">${escapeHtml(line.displayText)}</p>`).join("")}
+          ${pageLines.map((line) => `<p class="word-line ${line.type}" style="${buildWordLineStyle(line.type)}">${escapeHtml(line.displayText)}</p>`).join("")}
         </div>
       </section>
     `;
@@ -222,32 +224,6 @@ export function buildWordDocument(project) {
       white-space: pre-wrap;
       line-height: 1.2;
     }
-    .word-line.scene,
-    .word-line.shot,
-    .word-line.transition {
-      font-weight: bold;
-      text-transform: uppercase;
-    }
-    .word-line.character,
-    .word-line.dual {
-      margin-left: 2.2in;
-      width: 2.4in;
-      text-transform: uppercase;
-      font-weight: bold;
-    }
-    .word-line.dialogue {
-      margin-left: 1.5in;
-      width: 3.5in;
-    }
-    .word-line.parenthetical {
-      margin-left: 1.9in;
-      width: 2.5in;
-    }
-    .word-line.transition {
-      margin-left: auto;
-      width: 2.0in;
-      text-align: right;
-    }
   </style>
 </head>
 <body>
@@ -257,6 +233,32 @@ export function buildWordDocument(project) {
   </main>
 </body>
 </html>`;
+}
+
+function buildWordLineStyle(type) {
+  const base = [
+    "margin-top:0",
+    "margin-bottom:12pt",
+    "white-space:pre-wrap",
+    "line-height:1.2"
+  ];
+
+  switch (type) {
+    case "scene":
+    case "shot":
+      return `${base.join(";")};font-weight:bold;text-transform:uppercase;`;
+    case "transition":
+      return `${base.join(";")};font-weight:bold;text-transform:uppercase;margin-left:3.7in;text-align:right;`;
+    case "character":
+    case "dual":
+      return `${base.join(";")};font-weight:bold;text-transform:uppercase;margin-left:2.2in;`;
+    case "dialogue":
+      return `${base.join(";")};margin-left:1.5in;margin-right:1.5in;`;
+    case "parenthetical":
+      return `${base.join(";")};margin-left:1.9in;margin-right:2.0in;`;
+    default:
+      return `${base.join(";")};`;
+  }
 }
 
 function getPrintableStyles() {

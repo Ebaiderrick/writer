@@ -789,7 +789,7 @@ function handleMenuAction(action) {
       openPreviewWindow(false);
       break;
     case "print-project":
-      openPreviewWindow(true);
+      printWithHiddenFrame();
       break;
     case "exit-studio":
       persistProjects(true);
@@ -1110,11 +1110,11 @@ function exportJson() {
 function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
     if (!project) return;
-    const content = buildWordDocument(project);
+    const content = `\uFEFF${buildWordDocument(project)}`;
     downloadFile(`${slugify(project.title)}.doc`, content, "application/msword;charset=utf-8");
 }
 
-function exportPdf() { openPreviewWindow(true); }
+function exportPdf() { printWithHiddenFrame(); }
 
 function openPreviewWindow(autoPrint) {
   const project = syncProjectFromInputs() || getCurrentProject();
@@ -1128,6 +1128,51 @@ function openPreviewWindow(autoPrint) {
   previewWindow.document.write(buildPrintableDocument(project, autoPrint));
   previewWindow.document.close();
   previewWindow.focus();
+}
+
+function printWithHiddenFrame() {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project) return;
+
+  const existingFrame = document.querySelector("#printExportFrame");
+  if (existingFrame) {
+    existingFrame.remove();
+  }
+
+  const frame = document.createElement("iframe");
+  frame.id = "printExportFrame";
+  frame.style.position = "fixed";
+  frame.style.right = "0";
+  frame.style.bottom = "0";
+  frame.style.width = "0";
+  frame.style.height = "0";
+  frame.style.border = "0";
+  frame.setAttribute("aria-hidden", "true");
+  document.body.appendChild(frame);
+
+  const cleanup = () => window.setTimeout(() => frame.remove(), 1500);
+  frame.onload = () => {
+    const frameWindow = frame.contentWindow;
+    if (!frameWindow) {
+      cleanup();
+      customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+      return;
+    }
+
+    frameWindow.focus();
+    window.setTimeout(() => {
+      try {
+        frameWindow.print();
+      } catch (error) {
+        console.error("Unable to start PDF print flow", error);
+        customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+      } finally {
+        cleanup();
+      }
+    }, 350);
+  };
+
+  frame.srcdoc = buildPrintableDocument(project, false);
 }
 
 function buildPreparedExportLines(project) {
