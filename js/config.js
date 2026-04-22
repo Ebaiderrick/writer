@@ -43,7 +43,7 @@ export const state = {
   spellingCheck: false,
   toolStripCollapsed: false,
   autoNumberScenes: false,
-  theme: "rose",
+  theme: "cedar",
   viewOptions: { ...DEFAULT_VIEW_OPTIONS },
   filterQuery: "",
   history: [],

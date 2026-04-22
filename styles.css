@@ -1,21 +1,22 @@
 :root {
-  --bg: #fffafa;
+  --bg: #f4efe7;
   --panel: #ffffff;
-  --line: #f0e4e4;
-  --muted: #a68a88;
-  --ink: #3d2b2a;
-  --accent: #d48a8a;
-  --accent-strong: #b56b6b;
-  --accent-soft: #f9f0f0;
-  --soft: #faf5f5;
-  --rose: #f7eaea;
+  --line: #ddd2c0;
+  --muted: #8f7d68;
+  --ink: #2c241b;
+  --accent: #1f7a6b;
+  --accent-strong: #12584c;
+  --accent-soft: #e4f0ed;
+  --soft: #f7f2ea;
+  --rose: #e8ddd0;
+  --theme-tertiary: #1f7a6b;
   --shadow: 0 14px 36px rgba(0, 0, 0, 0.06);
-  --surface-strong: #fffdfd;
-  --surface-muted: #fffafa;
-  --editor-shell: linear-gradient(180deg, #fffdfd 0%, #fff5f4 100%);
+  --surface-strong: #fffdf8;
+  --surface-muted: #f7f1e8;
+  --editor-shell: linear-gradient(180deg, #fffdf8 0%, #f2ebe1 100%);
   --paper-bg: #ffffff;
-  --paper-ink: #1e1313;
-  --control-bg: #fff4f3;
+  --paper-ink: #241b13;
+  --control-bg: #f0e6d8;
   --left-pane-width: 260px;
   --right-pane-width: 300px;
   --topbar-height: 58px;
@@ -44,6 +45,7 @@ html[data-theme="dark"] {
   --accent-soft: #2a1010;
   --soft: #141414;
   --rose: #1a0e0e;
+  --theme-tertiary: #ff6b5d;
   --shadow: 0 14px 36px rgba(0, 0, 0, 0.6);
   --surface-strong: rgba(10, 10, 10, 0.98);
   --surface-muted: #0d0d0d;
@@ -64,6 +66,7 @@ html[data-theme="white"] {
   --accent-soft: #e6eeff;
   --soft: #f4f7fd;
   --rose: #e8eef8;
+  --theme-tertiary: #1a5fd4;
   --shadow: 0 14px 36px rgba(26, 95, 212, 0.09);
   --surface-strong: rgba(255, 255, 255, 0.99);
   --surface-muted: #f5f8ff;
@@ -84,6 +87,7 @@ html[data-theme="navy"] {
   --accent-soft: #071e36;
   --soft: #0a1828;
   --rose: #0c2040;
+  --theme-tertiary: #38b4f5;
   --shadow: 0 14px 36px rgba(0, 10, 30, 0.5);
   --surface-strong: rgba(10, 22, 38, 0.97);
   --surface-muted: #091525;
@@ -1430,7 +1434,9 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .help-sheet {
-    width: min(720px, calc(100vw - 32px));
+    width: min(240px, calc(100vw - 24px));
+    padding: 14px 12px;
+    border-radius: 12px;
 }
 
 .modal-title {
@@ -1507,23 +1513,31 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .shortcut-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 6px;
 }
 
 .shortcut-grid p {
   margin: 0;
   display: flex;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 6px 8px;
   border: none;
+  font-size: 0.8rem;
 }
 
 kbd {
-  padding: 3px 7px;
+  padding: 2px 6px;
   border: none;
-  background: #f6f6f6;
+  background: transparent;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.shortcut-grid span {
+  color: var(--theme-tertiary);
+  text-align: right;
 }
 
 .is-hidden {
