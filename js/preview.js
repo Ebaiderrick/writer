@@ -145,10 +145,21 @@ export function buildPrintableDocument(project, autoPrint = false) {
 
 export function buildWordDocument(project) {
   const previewData = buildPreviewData(project);
-  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\nby\n\n${escapeHtml(project.author || "Author")}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
   const coverMarkup = `
     <section class="word-page cover-page">
-      <pre class="word-cover-text">${coverText}</pre>
+      <table class="word-cover-table" role="presentation">
+        <tr>
+          <td class="word-cover-cell">
+            <p class="word-cover-title">${escapeHtml(project.title)}</p>
+            <p class="word-cover-byline">by</p>
+            <p class="word-cover-author">${escapeHtml(project.author || "Author")}</p>
+            <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
+            <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
+            <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
+            <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
+          </td>
+        </tr>
+      </table>
     </section>
   `;
 
@@ -202,14 +213,43 @@ export function buildWordDocument(project) {
     }
     .cover-page {
       min-height: 9in;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
+      page-break-after: always;
+      break-after: page;
     }
-    .word-cover-text {
-      white-space: pre-wrap;
+    .word-cover-table {
+      width: 100%;
+      height: 9in;
+      border-collapse: collapse;
+    }
+    .word-cover-cell {
+      vertical-align: middle;
+      text-align: center;
+      padding: 0;
+    }
+    .word-cover-title,
+    .word-cover-byline,
+    .word-cover-author,
+    .word-cover-meta,
+    .word-cover-logline {
       margin: 0;
+    }
+    .word-cover-title {
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 28pt;
+    }
+    .word-cover-byline {
+      margin-bottom: 18pt;
+    }
+    .word-cover-author {
+      margin-bottom: 28pt;
+    }
+    .word-cover-meta {
+      margin-bottom: 8pt;
+    }
+    .word-cover-logline {
+      margin-top: 24pt;
+      white-space: pre-wrap;
     }
     .word-page-number {
       position: absolute;
