@@ -146,38 +146,43 @@ export function buildPrintableDocument(project, autoPrint = false) {
 export function buildWordDocument(project) {
   const previewData = buildPreviewData(project);
   const coverMarkup = `
-    <section class="word-page cover-page">
+    <div class="word-page cover-page">
       <table class="word-cover-table" role="presentation">
         <tr>
-          <td class="word-cover-cell">
-            <p class="word-cover-title">${escapeHtml(project.title)}</p>
-            <p class="word-cover-byline">by</p>
-            <p class="word-cover-author">${escapeHtml(project.author || "Author")}</p>
-            <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
-            <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
-            <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
-            <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
+          <td class="word-cover-cell" align="center" valign="middle">
+            <div class="word-cover-stack">
+              <p class="word-cover-title">${escapeHtml(project.title)}</p>
+              <p class="word-cover-byline">by</p>
+              <p class="word-cover-author">${escapeHtml(project.author || "Author")}</p>
+              <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
+              <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
+              <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
+              <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
+            </div>
           </td>
         </tr>
       </table>
-    </section>
+    </div>
   `;
 
-  const scriptMarkup = previewData.scriptPages.map((pageLines, index) => {
+  const scriptPagesMarkup = previewData.scriptPages.map((pageLines, index) => {
     const pageNum = index + 1;
     const pageHeader = (pageNum > 1 && state.viewOptions.pageNumbers)
       ? `<div class="word-page-number">${pageNum}.</div>`
       : `<div class="word-page-number word-page-number-placeholder"></div>`;
 
     return `
-      <section class="word-page">
+      <div class="word-page">
         ${pageHeader}
         <div class="word-body">
           ${pageLines.map((line) => `<p class="word-line ${line.type}" style="${buildWordLineStyle(line.type)}">${escapeHtml(line.displayText)}</p>`).join("")}
         </div>
-      </section>
+      </div>
     `;
-  }).join("");
+  });
+
+  const pageBreakMarkup = '<div class="word-page-break"><span>&nbsp;</span></div>';
+  const scriptMarkup = scriptPagesMarkup.join(pageBreakMarkup);
 
   return `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -207,14 +212,8 @@ export function buildWordDocument(project) {
       width: 100%;
       min-height: 9in;
     }
-    .word-page + .word-page {
-      page-break-before: always;
-      break-before: page;
-    }
     .cover-page {
       min-height: 9in;
-      page-break-after: always;
-      break-after: page;
     }
     .word-cover-table {
       width: 100%;
@@ -225,6 +224,10 @@ export function buildWordDocument(project) {
       vertical-align: middle;
       text-align: center;
       padding: 0;
+    }
+    .word-cover-stack {
+      width: 100%;
+      text-align: center;
     }
     .word-cover-title,
     .word-cover-byline,
@@ -256,6 +259,12 @@ export function buildWordDocument(project) {
       top: -0.5in;
       right: 0;
     }
+    .word-page-break {
+      page-break-after: always;
+      break-after: page;
+      height: 0;
+      overflow: hidden;
+    }
     .word-body {
       width: 100%;
     }
@@ -269,6 +278,7 @@ export function buildWordDocument(project) {
 <body>
   <main class="word-shell">
     ${coverMarkup}
+    ${pageBreakMarkup}
     ${scriptMarkup}
   </main>
 </body>
