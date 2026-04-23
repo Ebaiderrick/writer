@@ -37,7 +37,7 @@ export function loadProjects() {
     state.aiAssist = Boolean(parsed?.aiAssist);
     state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
     state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
-    state.theme = parsed?.theme === "rose" ? "cedar" : (parsed?.theme || "cedar");
+    state.theme = parsed?.theme || "rose";
     state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
     document.documentElement.style.setProperty("--right-pane-width", `${clamp(parsed?.rightWidth || 324, 260, 520)}px`);

@@ -34,13 +34,6 @@ export function renderPreview() {
     const scriptPage = document.createElement("section");
     scriptPage.className = "preview-page-sheet";
 
-    if (state.viewOptions.pageNumbers && pageIndex > 0) {
-      const pageNumber = document.createElement("div");
-      pageNumber.className = "preview-page-number";
-      pageNumber.textContent = `${pageIndex + 1}.`;
-      scriptPage.appendChild(pageNumber);
-    }
-
     const body = document.createElement("div");
     body.className = "preview-page-body";
 
@@ -57,10 +50,10 @@ export function renderPreview() {
 
     scriptPage.appendChild(body);
 
-    if (state.viewOptions.pageCount && !state.viewOptions.pageNumbers) {
+    if (state.viewOptions.pageNumbers || state.viewOptions.pageCount) {
       const footer = document.createElement("div");
       footer.className = "preview-page-footer";
-      footer.textContent = `${previewData.scriptPages.length} pages`;
+      footer.textContent = buildPreviewFooterLabel(pageIndex + 1, previewData.scriptPages.length);
       scriptPage.appendChild(footer);
     }
 
@@ -95,6 +88,16 @@ export function buildPreviewData(project) {
 }
 
 function buildPreviewFooterLabel(pageNumber, totalPages) {
+  // Page numbering requirement from memory:
+  // top-right corner, 0.5" from top, flush with right margin,
+  // formatted with trailing period (e.g., "2."), omitted from first page.
+  // This function currently handles the preview panel footer.
+  if (state.viewOptions.pageNumbers && state.viewOptions.pageCount) {
+    return `Page ${pageNumber} of ${totalPages}`;
+  }
+  if (state.viewOptions.pageNumbers) {
+    return `Page ${pageNumber}.`;
+  }
   if (state.viewOptions.pageCount) {
     return `${totalPages} pages`;
   }
@@ -108,6 +111,7 @@ export function buildPrintableDocument(project, autoPrint = false) {
     <section class="print-page cover-page">
       <pre class="print-cover-text">${coverText}</pre>
     </section>
+    <div class="print-page-break" aria-hidden="true"></div>
   `;
 
   const scriptMarkup = previewData.scriptPages.map((pageLines, index) => {
@@ -133,187 +137,14 @@ export function buildPrintableDocument(project, autoPrint = false) {
   <title>${escapeHtml(project.title)}</title>
   <style>${getPrintableStyles()}</style>
 </head>
-  <body data-theme="${escapeHtml(state.theme)}">
+<body data-theme="${escapeHtml(state.theme)}">
   <main class="print-shell">
     ${coverMarkup}
     ${scriptMarkup}
   </main>
-  ${autoPrint ? "<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 350); }); window.addEventListener('afterprint', function () { window.close(); });<\/script>" : ""}
+  ${autoPrint ? "<script>window.addEventListener('load', function () { window.print(); });<\/script>" : ""}
 </body>
 </html>`;
-}
-
-export function buildWordDocument(project) {
-  const previewData = buildPreviewData(project);
-  const coverMarkup = `
-    <div class="word-page cover-page">
-      <table class="word-cover-table" role="presentation">
-        <tr>
-          <td class="word-cover-cell" align="center" valign="middle">
-            <div class="word-cover-stack">
-              <p class="word-cover-title">${escapeHtml(project.title)}</p>
-              <p class="word-cover-byline">by</p>
-              <p class="word-cover-author">${escapeHtml(project.author || "Author")}</p>
-              <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
-              <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
-              <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
-              <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
-            </div>
-          </td>
-        </tr>
-      </table>
-    </div>
-  `;
-
-  const scriptPagesMarkup = previewData.scriptPages.map((pageLines, index) => {
-    const pageNum = index + 1;
-    const pageHeader = (pageNum > 1 && state.viewOptions.pageNumbers)
-      ? `<div class="word-page-number">${pageNum}.</div>`
-      : `<div class="word-page-number word-page-number-placeholder"></div>`;
-    const pageClassName = index === 0 ? "word-page word-script-page word-script-page-first" : "word-page word-script-page";
-
-    return `
-      <div class="${pageClassName}">
-        ${pageHeader}
-        <div class="word-body">
-          ${pageLines.map((line) => `<p class="word-line ${line.type}" style="${buildWordLineStyle(line.type)}">${escapeHtml(line.displayText)}</p>`).join("")}
-        </div>
-      </div>
-    `;
-  });
-  const scriptMarkup = scriptPagesMarkup.join("");
-
-  return `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-  <meta charset="UTF-8">
-  <meta name="ProgId" content="Word.Document">
-  <meta name="Generator" content="EyaWriter">
-  <title>${escapeHtml(project.title)}</title>
-  <style>
-    @page WordSection {
-      size: 8.5in 11in;
-      margin: 1.0in 1.0in 1.0in 1.5in;
-    }
-    body {
-      margin: 0;
-      background: #ffffff;
-      color: #111111;
-      font-family: "Courier New", Courier, monospace;
-      font-size: 12pt;
-    }
-    .word-shell {
-      width: 100%;
-    }
-    .word-page {
-      page: WordSection;
-      position: relative;
-      width: 100%;
-      min-height: 9in;
-    }
-    .cover-page {
-      min-height: 9in;
-      page-break-after: always;
-      break-after: page;
-      mso-break-type: page;
-    }
-    .word-script-page {
-      page-break-before: always;
-      break-before: page;
-      mso-break-type: page;
-    }
-    .word-script-page-first {
-      page-break-before: always;
-      break-before: page;
-      mso-break-type: page;
-    }
-    .word-cover-table {
-      width: 100%;
-      height: 9in;
-      border-collapse: collapse;
-    }
-    .word-cover-cell {
-      vertical-align: middle;
-      text-align: center;
-      padding: 0;
-    }
-    .word-cover-stack {
-      width: 100%;
-      text-align: center;
-    }
-    .word-cover-title,
-    .word-cover-byline,
-    .word-cover-author,
-    .word-cover-meta,
-    .word-cover-logline {
-      margin: 0;
-    }
-    .word-cover-title {
-      font-weight: bold;
-      text-transform: uppercase;
-      margin-bottom: 28pt;
-    }
-    .word-cover-byline {
-      margin-bottom: 18pt;
-    }
-    .word-cover-author {
-      margin-bottom: 28pt;
-    }
-    .word-cover-meta {
-      margin-bottom: 8pt;
-    }
-    .word-cover-logline {
-      margin-top: 24pt;
-      white-space: pre-wrap;
-    }
-    .word-page-number {
-      position: absolute;
-      top: -0.5in;
-      right: 0;
-    }
-    .word-body {
-      width: 100%;
-    }
-    .word-line {
-      margin: 0 0 12pt;
-      white-space: pre-wrap;
-      line-height: 1.2;
-    }
-  </style>
-</head>
-<body>
-  <main class="word-shell">
-    ${coverMarkup}
-    ${scriptMarkup}
-  </main>
-</body>
-</html>`;
-}
-
-function buildWordLineStyle(type) {
-  const base = [
-    "margin-top:0",
-    "margin-bottom:12pt",
-    "white-space:pre-wrap",
-    "line-height:1.2"
-  ];
-
-  switch (type) {
-    case "scene":
-    case "shot":
-      return `${base.join(";")};font-weight:bold;text-transform:uppercase;`;
-    case "transition":
-      return `${base.join(";")};font-weight:bold;text-transform:uppercase;margin-left:3.7in;text-align:right;`;
-    case "character":
-    case "dual":
-      return `${base.join(";")};font-weight:bold;text-transform:uppercase;margin-left:2.2in;`;
-    case "dialogue":
-      return `${base.join(";")};margin-left:1.5in;margin-right:1.5in;`;
-    case "parenthetical":
-      return `${base.join(";")};margin-left:1.9in;margin-right:2.0in;`;
-    default:
-      return `${base.join(";")};`;
-  }
 }
 
 function getPrintableStyles() {
@@ -341,10 +172,6 @@ function getPrintableStyles() {
       page-break-after: always;
       break-after: page;
       font-size: 12pt;
-    }
-    .print-page:last-child {
-      page-break-after: auto;
-      break-after: auto;
     }
     .print-page-number {
       position: absolute;
@@ -398,6 +225,11 @@ function getPrintableStyles() {
       margin-left: auto;
       width: 2.4in;
       text-align: right;
+    }
+    .print-page-break {
+      height: 0;
+      page-break-after: always;
+      break-after: page;
     }
     @page {
       size: letter;

@@ -4,15 +4,14 @@ import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
-  syncProjectFromInputs, replaceWithSample as restoreSample,
+  syncProjectFromInputs, serializeScript, replaceWithSample as restoreSample,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions
 } from './editor.js';
-import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
-import { paginateScriptLines } from './pagination.js';
+import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
@@ -131,7 +130,6 @@ export function bindEvents() {
   refs.spellingCheckToggle.addEventListener("change", () => {
     state.spellingCheck = refs.spellingCheckToggle.checked;
     document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
-    document.body.classList.toggle("grammar-mode-active", state.spellingCheck);
     renderStudio();
     queueSave();
   });
@@ -372,8 +370,6 @@ export function openProject(projectId) {
 
   refs.aiAssistToggle.checked = state.aiAssist;
   refs.spellingCheckToggle.checked = state.spellingCheck;
-  document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
-  document.body.classList.toggle("grammar-mode-active", state.spellingCheck);
   refs.autoNumberToggle.checked = state.autoNumberScenes;
   refs.aiPanel.hidden = !state.aiAssist;
 
@@ -792,7 +788,7 @@ function handleMenuAction(action) {
       openPreviewWindow(false);
       break;
     case "print-project":
-      printWithHiddenFrame();
+      openPreviewWindow(true);
       break;
     case "exit-studio":
       persistProjects(true);
@@ -1095,13 +1091,7 @@ function clearScriptFilter() {
 
 function exportTxt() {
   const project = syncProjectFromInputs() || getCurrentProject();
-  if (!project) return;
-  const preparedLines = buildPreparedExportLines(project);
-  const cover = [project.title, project.author, project.contact, project.company, project.details, project.logline].filter(Boolean).join("\n");
-  const pages = paginateScriptLines(preparedLines)
-    .map((pageLines) => pageLines.map((line) => line.displayText).join("\n\n"))
-    .filter(Boolean);
-  const content = [cover, ...pages].filter(Boolean).join("\n\f\n");
+  const content = [project.title, project.author, "", serializeScript(project)].join("\n");
   downloadFile(`${slugify(project.title)}.txt`, content, "text/plain");
 }
 
@@ -1112,93 +1102,20 @@ function exportJson() {
 
 function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
-    if (!project) return;
-    const content = `\uFEFF${buildWordDocument(project)}`;
-    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword;charset=utf-8");
+    const content = buildPrintableDocument(project);
+    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword");
 }
 
-function exportPdf() { printWithHiddenFrame(); }
+function exportPdf() { openPreviewWindow(true); }
 
 function openPreviewWindow(autoPrint) {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
   const previewWindow = window.open("", "_blank", "noopener,noreferrer");
-  if (!previewWindow) {
-    customAlert("Allow pop-ups for this site so EyaWriter can open the print window for PDF export.", "PDF Export");
-    return;
-  }
+  if (!previewWindow) return;
   previewWindow.document.open();
   previewWindow.document.write(buildPrintableDocument(project, autoPrint));
   previewWindow.document.close();
-  previewWindow.focus();
-}
-
-function printWithHiddenFrame() {
-  const project = syncProjectFromInputs() || getCurrentProject();
-  if (!project) return;
-
-  const existingFrame = document.querySelector("#printExportFrame");
-  if (existingFrame) {
-    existingFrame.remove();
-  }
-
-  const frame = document.createElement("iframe");
-  frame.id = "printExportFrame";
-  frame.style.position = "fixed";
-  frame.style.right = "0";
-  frame.style.bottom = "0";
-  frame.style.width = "0";
-  frame.style.height = "0";
-  frame.style.border = "0";
-  frame.setAttribute("aria-hidden", "true");
-  document.body.appendChild(frame);
-
-  const cleanup = () => window.setTimeout(() => frame.remove(), 1500);
-  frame.onload = () => {
-    const frameWindow = frame.contentWindow;
-    if (!frameWindow) {
-      cleanup();
-      customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
-      return;
-    }
-
-    frameWindow.focus();
-    window.setTimeout(() => {
-      try {
-        frameWindow.print();
-      } catch (error) {
-        console.error("Unable to start PDF print flow", error);
-        customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
-      } finally {
-        cleanup();
-      }
-    }, 350);
-  };
-
-  frame.srcdoc = buildPrintableDocument(project, false);
-}
-
-function buildPreparedExportLines(project) {
-  let sceneNumber = 0;
-
-  return project.lines.reduce((accumulator, line) => {
-    const normalized = normalizeLineText(line.text, line.type);
-    if (!normalized) {
-      return accumulator;
-    }
-
-    if (line.type === "scene") {
-      sceneNumber += 1;
-    }
-
-    accumulator.push({
-      id: line.id,
-      type: line.type,
-      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
-    });
-
-    return accumulator;
-  }, []);
 }
 
 function importFile(event) {

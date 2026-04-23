@@ -5,14 +5,12 @@ import { getActiveEditableBlock } from "./editor.js";
 
 export const ContextMenu = (() => {
   let menuEl = null;
-  let preservedRange = null;
 
   function init() {
     menuEl = document.getElementById("contextMenu");
     document.addEventListener("click", hide);
     window.addEventListener("resize", hide);
     window.addEventListener("scroll", hide, true);
-    menuEl.addEventListener("mousedown", (e) => e.preventDefault());
 
     menuEl.addEventListener("click", (e) => {
       const item = e.target.closest(".menu-item");
@@ -26,7 +24,6 @@ export const ContextMenu = (() => {
 
   function show(x, y) {
     if (!menuEl) return;
-    preserveSelection();
 
     menuEl.hidden = false;
     menuEl.style.display = "block";
@@ -63,17 +60,15 @@ export const ContextMenu = (() => {
   }
 
   function handleAction(action) {
-    restoreSelection();
     switch (action) {
       case "cut":
-        cutSelection();
+        document.execCommand("cut");
         break;
       case "copy":
-        copySelection();
+        document.execCommand("copy");
         break;
       case "paste":
         navigator.clipboard.readText().then(text => {
-          restoreSelection();
           document.execCommand("insertText", false, text);
         }).catch(err => {
           console.error("Failed to read clipboard:", err);
@@ -114,7 +109,6 @@ export const ContextMenu = (() => {
   }
 
   function applyCapitalization(type) {
-    restoreSelection();
     const selection = window.getSelection();
     if (!selection.rangeCount) return;
 
@@ -142,7 +136,6 @@ export const ContextMenu = (() => {
   }
 
   function triggerAiGrammar() {
-    restoreSelection();
     const selection = window.getSelection();
     let row = null;
     if (selection.rangeCount && selection.anchorNode) {
@@ -157,71 +150,10 @@ export const ContextMenu = (() => {
   }
 
   function triggerIntelligentSplit() {
-    restoreSelection();
     const activeBlock = getActiveEditableBlock();
     if (activeBlock) {
         intelligentSplit(activeBlock);
     }
-  }
-
-  function preserveSelection() {
-    const selection = window.getSelection();
-    if (!selection || !selection.rangeCount) {
-      preservedRange = null;
-      return;
-    }
-    preservedRange = selection.getRangeAt(0).cloneRange();
-  }
-
-  function restoreSelection() {
-    if (!preservedRange) return;
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(preservedRange);
-  }
-
-  function getSelectedText() {
-    restoreSelection();
-    return window.getSelection()?.toString() || "";
-  }
-
-  function copySelection() {
-    const text = getSelectedText();
-    if (!text) return;
-
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch((err) => {
-        console.error("Failed to write clipboard:", err);
-        document.execCommand("copy");
-      });
-      return;
-    }
-
-    document.execCommand("copy");
-  }
-
-  function cutSelection() {
-    const text = getSelectedText();
-    if (!text) return;
-
-    const deleteSelection = () => {
-      restoreSelection();
-      const selection = window.getSelection();
-      if (!selection?.rangeCount) return;
-      selection.getRangeAt(0).deleteContents();
-    };
-
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text)
-        .then(deleteSelection)
-        .catch((err) => {
-          console.error("Failed to write clipboard:", err);
-          document.execCommand("cut");
-        });
-      return;
-    }
-
-    document.execCommand("cut");
   }
 
   return { init, show, hide };

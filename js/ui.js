@@ -249,16 +249,16 @@ export function applyViewState() {
 }
 
 export function setTheme(theme) {
-  state.theme = theme === "rose" ? "cedar" : theme;
+  state.theme = theme;
   applyTheme();
   closeMenus();
   persistProjects(false);
 }
 
 export function applyTheme() {
-  document.documentElement.dataset.theme = state.theme === "rose" ? "cedar" : state.theme;
+  document.documentElement.dataset.theme = state.theme;
   refs.themeButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.themeValue === (state.theme === "rose" ? "cedar" : state.theme));
+    button.classList.toggle("is-active", button.dataset.themeValue === state.theme);
   });
 }
 
