@@ -1,5 +1,17 @@
 import { state } from './config.js';
 
+function hexToVector3(hex) {
+  const normalized = typeof hex === "number"
+    ? hex
+    : Number.parseInt(String(hex).replace("#", ""), 16);
+
+  return new THREE.Vector3(
+    ((normalized >> 16) & 255) / 255,
+    ((normalized >> 8) & 255) / 255,
+    (normalized & 255) / 255
+  );
+}
+
 class TouchTexture {
   constructor() {
     this.size = 64;
@@ -106,6 +118,7 @@ class GradientBackground {
       uSpeed: { value: 1.2 },
       uIntensity: { value: 1.8 },
       uTouchTexture: { value: null },
+      uTouchStrength: { value: 0.8 },
       uGrainIntensity: { value: 0.08 },
       uDarkNavy: { value: new THREE.Vector3(0, 0, 0) },
       uGradientSize: { value: 1.0 },
@@ -139,6 +152,7 @@ class GradientBackground {
         uniform float uSpeed;
         uniform float uIntensity;
         uniform sampler2D uTouchTexture;
+        uniform float uTouchStrength;
         uniform float uGrainIntensity;
         uniform vec3 uDarkNavy;
         uniform float uGradientSize;
@@ -152,42 +166,116 @@ class GradientBackground {
           return fract(sin(dot(grainUv + time, vec2(12.9898, 78.233))) * 43758.5453) * 2.0 - 1.0;
         }
 
-        vec3 getGradientColor(vec2 uv, float time) {
-          float r = uGradientSize;
-          vec2 c1 = vec2(0.5 + sin(time * uSpeed * 0.4) * 0.4, 0.5 + cos(time * uSpeed * 0.5) * 0.4);
-          vec2 c2 = vec2(0.5 + cos(time * uSpeed * 0.6) * 0.5, 0.5 + sin(time * uSpeed * 0.45) * 0.5);
-          vec2 c3 = vec2(0.5 + sin(time * uSpeed * 0.35) * 0.45, 0.5 + cos(time * uSpeed * 0.55) * 0.45);
-          vec2 c4 = vec2(0.5 + cos(time * uSpeed * 0.5) * 0.4, 0.5 + sin(time * uSpeed * 0.4) * 0.4);
-          vec2 c5 = vec2(0.5 + sin(time * uSpeed * 0.7) * 0.35, 0.5 + cos(time * uSpeed * 0.6) * 0.35);
-          vec2 c6 = vec2(0.5 + cos(time * uSpeed * 0.45) * 0.5, 0.5 + sin(time * uSpeed * 0.65) * 0.5);
+        vec2 rotateAroundCenter(vec2 point, float angle) {
+          point -= 0.5;
+          point = vec2(
+            point.x * cos(angle) - point.y * sin(angle),
+            point.x * sin(angle) + point.y * cos(angle)
+          );
+          return point + 0.5;
+        }
 
-          float i1 = 1.0 - smoothstep(0.0, r, length(uv - c1));
-          float i2 = 1.0 - smoothstep(0.0, r, length(uv - c2));
-          float i3 = 1.0 - smoothstep(0.0, r, length(uv - c3));
-          float i4 = 1.0 - smoothstep(0.0, r, length(uv - c4));
-          float i5 = 1.0 - smoothstep(0.0, r, length(uv - c5));
-          float i6 = 1.0 - smoothstep(0.0, r, length(uv - c6));
+        vec3 getGradientColor(vec2 uv, float time) {
+          float gradientRadius = uGradientSize;
+
+          vec2 c1 = vec2(0.5 + sin(time * uSpeed * 0.40) * 0.40, 0.5 + cos(time * uSpeed * 0.50) * 0.40);
+          vec2 c2 = vec2(0.5 + cos(time * uSpeed * 0.60) * 0.50, 0.5 + sin(time * uSpeed * 0.45) * 0.50);
+          vec2 c3 = vec2(0.5 + sin(time * uSpeed * 0.35) * 0.45, 0.5 + cos(time * uSpeed * 0.55) * 0.45);
+          vec2 c4 = vec2(0.5 + cos(time * uSpeed * 0.50) * 0.40, 0.5 + sin(time * uSpeed * 0.40) * 0.40);
+          vec2 c5 = vec2(0.5 + sin(time * uSpeed * 0.70) * 0.35, 0.5 + cos(time * uSpeed * 0.60) * 0.35);
+          vec2 c6 = vec2(0.5 + cos(time * uSpeed * 0.45) * 0.50, 0.5 + sin(time * uSpeed * 0.65) * 0.50);
+          vec2 c7 = vec2(0.5 + sin(time * uSpeed * 0.55) * 0.38, 0.5 + cos(time * uSpeed * 0.48) * 0.42);
+          vec2 c8 = vec2(0.5 + cos(time * uSpeed * 0.65) * 0.36, 0.5 + sin(time * uSpeed * 0.52) * 0.44);
+          vec2 c9 = vec2(0.5 + sin(time * uSpeed * 0.42) * 0.41, 0.5 + cos(time * uSpeed * 0.58) * 0.39);
+          vec2 c10 = vec2(0.5 + cos(time * uSpeed * 0.48) * 0.37, 0.5 + sin(time * uSpeed * 0.62) * 0.43);
+          vec2 c11 = vec2(0.5 + sin(time * uSpeed * 0.68) * 0.33, 0.5 + cos(time * uSpeed * 0.44) * 0.46);
+          vec2 c12 = vec2(0.5 + cos(time * uSpeed * 0.38) * 0.39, 0.5 + sin(time * uSpeed * 0.56) * 0.41);
+
+          float i1 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c1));
+          float i2 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c2));
+          float i3 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c3));
+          float i4 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c4));
+          float i5 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c5));
+          float i6 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c6));
+          float i7 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c7));
+          float i8 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c8));
+          float i9 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c9));
+          float i10 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c10));
+          float i11 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c11));
+          float i12 = 1.0 - smoothstep(0.0, gradientRadius, length(uv - c12));
+
+          vec2 rotatedUv1 = rotateAroundCenter(uv, time * uSpeed * 0.15);
+          vec2 rotatedUv2 = rotateAroundCenter(uv, -time * uSpeed * 0.12);
+          float radialInfluence1 = 1.0 - smoothstep(0.0, 0.8, length(rotatedUv1 - 0.5));
+          float radialInfluence2 = 1.0 - smoothstep(0.0, 0.8, length(rotatedUv2 - 0.5));
 
           vec3 color = vec3(0.0);
           color += uColor1 * i1 * (0.55 + 0.45 * sin(time * uSpeed)) * uColor1Weight;
-          color += uColor2 * i2 * (0.55 + 0.45 * cos(time * uSpeed * 1.2)) * uColor2Weight;
-          color += uColor3 * i3 * (0.55 + 0.45 * sin(time * uSpeed * 0.8)) * uColor1Weight;
-          color += uColor4 * i4 * (0.55 + 0.45 * cos(time * uSpeed * 1.3)) * uColor2Weight;
-          color += uColor5 * i5 * (0.55 + 0.45 * sin(time * uSpeed * 1.1)) * uColor1Weight;
-          color += uColor6 * i6 * (0.55 + 0.45 * cos(time * uSpeed * 0.9)) * uColor2Weight;
+          color += uColor2 * i2 * (0.55 + 0.45 * cos(time * uSpeed * 1.20)) * uColor2Weight;
+          color += uColor3 * i3 * (0.55 + 0.45 * sin(time * uSpeed * 0.80)) * uColor1Weight;
+          color += uColor4 * i4 * (0.55 + 0.45 * cos(time * uSpeed * 1.30)) * uColor2Weight;
+          color += uColor5 * i5 * (0.55 + 0.45 * sin(time * uSpeed * 1.10)) * uColor1Weight;
+          color += uColor6 * i6 * (0.55 + 0.45 * cos(time * uSpeed * 0.90)) * uColor2Weight;
+
+          if (uGradientCount > 6.0) {
+            color += uColor1 * i7 * (0.55 + 0.45 * sin(time * uSpeed * 1.40)) * uColor1Weight;
+            color += uColor2 * i8 * (0.55 + 0.45 * cos(time * uSpeed * 1.50)) * uColor2Weight;
+            color += uColor3 * i9 * (0.55 + 0.45 * sin(time * uSpeed * 1.60)) * uColor1Weight;
+            color += uColor4 * i10 * (0.55 + 0.45 * cos(time * uSpeed * 1.70)) * uColor2Weight;
+          }
+
+          if (uGradientCount > 10.0) {
+            color += uColor5 * i11 * (0.55 + 0.45 * sin(time * uSpeed * 1.80)) * uColor1Weight;
+            color += uColor6 * i12 * (0.55 + 0.45 * cos(time * uSpeed * 1.90)) * uColor2Weight;
+          }
+
+          color += mix(uColor1, uColor3, radialInfluence1) * 0.32 * uColor1Weight;
+          color += mix(uColor2, uColor4, radialInfluence2) * 0.28 * uColor2Weight;
 
           color = clamp(color, 0.0, 1.0) * uIntensity;
-          return mix(uDarkNavy, color, max(length(color) * 1.2, 0.15));
+
+          float luminance = dot(color, vec3(0.299, 0.587, 0.114));
+          color = mix(vec3(luminance), color, 1.2);
+          color = pow(color, vec3(0.94));
+
+          float brightness = length(color);
+          float mixFactor = max(brightness * 1.1, 0.12);
+          color = mix(uDarkNavy, color, mixFactor);
+
+          float maxBrightness = 1.0;
+          if (brightness > maxBrightness) {
+            color *= maxBrightness / brightness;
+          }
+
+          return clamp(color, 0.0, 1.0);
         }
 
         void main() {
           vec2 uv = vUv;
           vec4 touchTex = texture2D(uTouchTexture, uv);
-          uv.x += -(touchTex.r * 2.0 - 1.0) * 0.8 * touchTex.b;
-          uv.y += -(touchTex.g * 2.0 - 1.0) * 0.8 * touchTex.b;
+          float vx = -(touchTex.r * 2.0 - 1.0);
+          float vy = -(touchTex.g * 2.0 - 1.0);
+          float touchIntensity = touchTex.b;
+
+          uv += vec2(vx, vy) * (uTouchStrength * touchIntensity);
+
+          float dist = length(uv - vec2(0.5));
+          float ripple = sin(dist * 20.0 - uTime * 3.0) * 0.04 * touchIntensity * uTouchStrength;
+          float wave = sin(dist * 15.0 - uTime * 2.0) * 0.03 * touchIntensity * (uTouchStrength * 0.8);
+          uv += vec2(ripple + wave);
 
           vec3 color = getGradientColor(uv, uTime);
           color += grain(uv, uTime) * uGrainIntensity;
+
+          float timeShift = uTime * 0.5;
+          color.r += sin(timeShift) * 0.02;
+          color.g += cos(timeShift * 1.4) * 0.02;
+          color.b += sin(timeShift * 1.2) * 0.02;
+
+          float brightness = length(color);
+          float mixFactor = max(brightness * 1.1, 0.12);
+          color = mix(uDarkNavy, color, mixFactor);
+
           gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
         }
       `
@@ -223,6 +311,7 @@ class LiquidApp {
     this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
     this.camera.position.z = 50;
     this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0xf4efe7);
     this.clock = new THREE.Clock();
 
     this.touchTexture = new TouchTexture();
@@ -231,20 +320,92 @@ class LiquidApp {
 
     this.palettes = {
       cedar: {
-        colors: [new THREE.Vector3(0.95, 0.45, 0.25), new THREE.Vector3(0.1, 0.3, 0.25), new THREE.Vector3(0.9, 0.8, 0.7)],
-        base: new THREE.Vector3(0.1, 0.05, 0.02)
+        background: 0xf4efe7,
+        base: hexToVector3(0xf8f2e8),
+        colors: [
+          hexToVector3(0xf6eee1),
+          hexToVector3(0xaebfb6),
+          hexToVector3(0xe1c5af),
+          hexToVector3(0xd7dfd2),
+          hexToVector3(0xcfa890),
+          hexToVector3(0xf5eadb)
+        ],
+        settings: {
+          speed: 0.38,
+          intensity: 0.92,
+          grainIntensity: 0.02,
+          gradientSize: 0.95,
+          gradientCount: 6.0,
+          color1Weight: 0.86,
+          color2Weight: 0.9,
+          touchStrength: 0.22
+        }
       },
       white: {
-        colors: [new THREE.Vector3(0.1, 0.4, 0.8), new THREE.Vector3(0.4, 0.8, 1.0), new THREE.Vector3(0.9, 0.95, 1.0)],
-        base: new THREE.Vector3(0.95, 0.97, 1.0)
+        background: 0xf0f4fa,
+        base: hexToVector3(0xf5f8ff),
+        colors: [
+          hexToVector3(0xeef4ff),
+          hexToVector3(0xd5e3fb),
+          hexToVector3(0xdcecf8),
+          hexToVector3(0xe7eefc),
+          hexToVector3(0xffffff),
+          hexToVector3(0xdde8ff)
+        ],
+        settings: {
+          speed: 0.32,
+          intensity: 0.82,
+          grainIntensity: 0.015,
+          gradientSize: 1.05,
+          gradientCount: 5.0,
+          color1Weight: 0.88,
+          color2Weight: 0.78,
+          touchStrength: 0.16
+        }
       },
-      dark: { // Scheme 5
-        colors: [new THREE.Vector3(0.945, 0.353, 0.133), new THREE.Vector3(0.0, 0.259, 0.22), new THREE.Vector3(0, 0, 0)],
-        base: new THREE.Vector3(0.01, 0.02, 0.05)
+      dark: {
+        background: 0x0a0e27,
+        base: hexToVector3(0x0a0e27),
+        colors: [
+          hexToVector3(0xf15a22),
+          hexToVector3(0x004238),
+          hexToVector3(0xf15a22),
+          hexToVector3(0x000000),
+          hexToVector3(0xf15a22),
+          hexToVector3(0x000000)
+        ],
+        settings: {
+          speed: 1.5,
+          intensity: 1.8,
+          grainIntensity: 0.08,
+          gradientSize: 0.45,
+          gradientCount: 12.0,
+          color1Weight: 0.5,
+          color2Weight: 1.8,
+          touchStrength: 0.8
+        }
       },
-      navy: { // Scheme 1
-        colors: [new THREE.Vector3(0.945, 0.353, 0.133), new THREE.Vector3(0.039, 0.055, 0.153), new THREE.Vector3(0.1, 0.2, 0.4)],
-        base: new THREE.Vector3(0.039, 0.055, 0.153)
+      navy: {
+        background: 0x0a0e27,
+        base: hexToVector3(0x0a0e27),
+        colors: [
+          hexToVector3(0xf15a22),
+          hexToVector3(0x0a0e27),
+          hexToVector3(0xf15a22),
+          hexToVector3(0x0a0e27),
+          hexToVector3(0xf15a22),
+          hexToVector3(0x0a0e27)
+        ],
+        settings: {
+          speed: 1.5,
+          intensity: 1.8,
+          grainIntensity: 0.08,
+          gradientSize: 0.45,
+          gradientCount: 12.0,
+          color1Weight: 0.5,
+          color2Weight: 1.8,
+          touchStrength: 0.8
+        }
       }
     };
 
@@ -263,27 +424,25 @@ class LiquidApp {
     const theme = state.theme === "rose" ? "cedar" : state.theme;
     const p = this.palettes[theme] || this.palettes.cedar;
     const u = this.gradient.uniforms;
-    u.uColor1.value.copy(p.colors[0]);
-    u.uColor2.value.copy(p.colors[1]);
-    u.uColor3.value.copy(p.colors[2] || p.colors[0]);
-    u.uColor4.value.copy(p.colors[0]);
-    u.uColor5.value.copy(p.colors[1]);
-    u.uColor6.value.copy(p.colors[2] || p.colors[1]);
-    u.uDarkNavy.value.copy(p.base);
+    const colors = p.colors;
 
-    if (theme === 'dark' || theme === 'navy') {
-        u.uGradientSize.value = 0.45;
-        u.uGradientCount.value = 12.0;
-        u.uSpeed.value = 1.5;
-        u.uColor1Weight.value = 0.5;
-        u.uColor2Weight.value = 1.8;
-    } else {
-        u.uGradientSize.value = 1.0;
-        u.uGradientCount.value = 6.0;
-        u.uSpeed.value = 1.2;
-        u.uColor1Weight.value = 1.0;
-        u.uColor2Weight.value = 1.0;
-    }
+    u.uColor1.value.copy(colors[0]);
+    u.uColor2.value.copy(colors[1]);
+    u.uColor3.value.copy(colors[2] || colors[0]);
+    u.uColor4.value.copy(colors[3] || colors[1] || colors[0]);
+    u.uColor5.value.copy(colors[4] || colors[2] || colors[0]);
+    u.uColor6.value.copy(colors[5] || colors[3] || colors[1] || colors[0]);
+    u.uDarkNavy.value.copy(p.base);
+    this.scene.background = new THREE.Color(p.background);
+
+    u.uSpeed.value = p.settings.speed;
+    u.uIntensity.value = p.settings.intensity;
+    u.uGrainIntensity.value = p.settings.grainIntensity;
+    u.uGradientSize.value = p.settings.gradientSize;
+    u.uGradientCount.value = p.settings.gradientCount;
+    u.uColor1Weight.value = p.settings.color1Weight;
+    u.uColor2Weight.value = p.settings.color2Weight;
+    u.uTouchStrength.value = p.settings.touchStrength;
   }
 
   onMouseMove(e) {
