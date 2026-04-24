@@ -3,11 +3,12 @@ import { refs } from './dom.js';
 import { getCurrentProject, syncProjectFromInputs } from './project.js';
 import { paginateScriptLines } from './pagination.js';
 import { escapeHtml, createTextNode, formatLineText } from './utils.js';
+import { t } from './i18n.js';
 
 export function renderCoverPreview() {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
-  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\nby\n\n${escapeHtml(project.author || "Author")}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
+  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\n${escapeHtml(t("cover.by"))}\n\n${escapeHtml(project.author || t("cover.authorFallback"))}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
   refs.coverPreview.innerHTML = `
     <div class="cover-sheet">
       <pre class="cover-text">${coverText}</pre>
@@ -26,20 +27,13 @@ export function renderPreview() {
 
   const coverPage = document.createElement("section");
   coverPage.className = "preview-page-sheet cover";
-  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\nby\n\n${escapeHtml(project.author || "Author")}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
+  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\n${escapeHtml(t("cover.by"))}\n\n${escapeHtml(project.author || t("cover.authorFallback"))}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
   coverPage.innerHTML = `<pre class="preview-cover-text">${coverText}</pre>`;
   pages.appendChild(coverPage);
 
   previewData.scriptPages.forEach((pageLines, pageIndex) => {
     const scriptPage = document.createElement("section");
     scriptPage.className = "preview-page-sheet";
-
-    if (state.viewOptions.pageNumbers && pageIndex > 0) {
-      const pageNumber = document.createElement("div");
-      pageNumber.className = "preview-page-number";
-      pageNumber.textContent = `${pageIndex + 1}.`;
-      scriptPage.appendChild(pageNumber);
-    }
 
     const body = document.createElement("div");
     body.className = "preview-page-body";
@@ -52,15 +46,15 @@ export function renderPreview() {
     });
 
     if (!pageLines.length) {
-      body.appendChild(createTextNode("Your screenplay preview appears here."));
+      body.appendChild(createTextNode(t("preview.placeholder")));
     }
 
     scriptPage.appendChild(body);
 
-    if (state.viewOptions.pageCount && !state.viewOptions.pageNumbers) {
+    if (state.viewOptions.pageNumbers) {
       const footer = document.createElement("div");
       footer.className = "preview-page-footer";
-      footer.textContent = `${previewData.scriptPages.length} pages`;
+      footer.textContent = buildPageNumberLabel(pageIndex + 1, previewData.scriptPages.length);
       scriptPage.appendChild(footer);
     }
 
@@ -94,16 +88,13 @@ export function buildPreviewData(project) {
   };
 }
 
-function buildPreviewFooterLabel(pageNumber, totalPages) {
-  if (state.viewOptions.pageCount) {
-    return `${totalPages} pages`;
-  }
-  return "";
+function buildPageNumberLabel(pageNumber, totalPages) {
+  return t("preview.pageNumber", { page: pageNumber, total: totalPages });
 }
 
 export function buildPrintableDocument(project, autoPrint = false) {
   const previewData = buildPreviewData(project);
-  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\nby\n\n${escapeHtml(project.author || "Author")}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
+  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\n${escapeHtml(t("cover.by"))}\n\n${escapeHtml(project.author || t("cover.authorFallback"))}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
   const coverMarkup = `
     <section class="print-page cover-page">
       <pre class="print-cover-text">${coverText}</pre>
@@ -112,22 +103,21 @@ export function buildPrintableDocument(project, autoPrint = false) {
 
   const scriptMarkup = previewData.scriptPages.map((pageLines, index) => {
     const pageNum = index + 1;
-    const pageHeader = (pageNum > 1 && state.viewOptions.pageNumbers) ? `<div class="print-page-number">${pageNum}.</div>` : "";
+    const pageFooter = state.viewOptions.pageNumbers
+      ? `<div class="print-footer">${escapeHtml(buildPageNumberLabel(pageNum, previewData.scriptPages.length))}</div>`
+      : "";
 
     return `
     <section class="print-page">
-      ${pageHeader}
       <div class="print-body">
         ${pageLines.map((line) => `<p class="print-line ${line.type}">${escapeHtml(line.displayText)}</p>`).join("")}
       </div>
-      ${(state.viewOptions.pageCount && !state.viewOptions.pageNumbers)
-        ? `<div class="print-footer">${escapeHtml(buildPreviewFooterLabel(pageNum, previewData.scriptPages.length))}</div>`
-        : ""}
+      ${pageFooter}
     </section>
   `}).join("");
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeHtml(state.language)}">
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(project.title)}</title>
@@ -152,8 +142,8 @@ export function buildWordDocument(project) {
           <td class="word-cover-cell" align="center" valign="middle">
             <div class="word-cover-stack">
               <p class="word-cover-title">${escapeHtml(project.title)}</p>
-              <p class="word-cover-byline">by</p>
-              <p class="word-cover-author">${escapeHtml(project.author || "Author")}</p>
+              <p class="word-cover-byline">${escapeHtml(t("cover.by"))}</p>
+              <p class="word-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
               <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
               <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
               <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
@@ -167,8 +157,8 @@ export function buildWordDocument(project) {
 
   const scriptPagesMarkup = previewData.scriptPages.map((pageLines, index) => {
     const pageNum = index + 1;
-    const pageHeader = (pageNum > 1 && state.viewOptions.pageNumbers)
-      ? `<div class="word-page-number">${pageNum}.</div>`
+    const pageHeader = state.viewOptions.pageNumbers
+      ? `<div class="word-page-number">${escapeHtml(buildPageNumberLabel(pageNum, previewData.scriptPages.length))}</div>`
       : `<div class="word-page-number word-page-number-placeholder"></div>`;
     const pageClassName = index === 0 ? "word-page word-script-page word-script-page-first" : "word-page word-script-page";
 
@@ -268,8 +258,9 @@ export function buildWordDocument(project) {
     }
     .word-page-number {
       position: absolute;
-      top: -0.5in;
+      bottom: 0.2in;
       right: 0;
+      font-size: 10pt;
     }
     .word-body {
       width: 100%;
@@ -346,13 +337,6 @@ function getPrintableStyles() {
       page-break-after: auto;
       break-after: auto;
     }
-    .print-page-number {
-      position: absolute;
-      top: 0.5in;
-      right: 1.0in;
-      font-family: "Courier New", Courier, monospace;
-      font-size: 12pt;
-    }
     .cover-page {
       display: flex;
       flex-direction: column;
@@ -367,6 +351,7 @@ function getPrintableStyles() {
     }
     .print-body {
       width: 100%;
+      padding-bottom: 0.35in;
     }
     .print-line {
       margin: 0 0 12pt;
@@ -396,6 +381,14 @@ function getPrintableStyles() {
       margin-left: auto;
       width: 2.4in;
       text-align: right;
+    }
+    .print-footer {
+      position: absolute;
+      right: 1.0in;
+      bottom: 0.5in;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 10pt;
+      color: #444;
     }
     @page {
       size: letter;

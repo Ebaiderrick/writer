@@ -1,4 +1,4 @@
-import { SCENE_TIMES, TYPE_SEQUENCE } from './config.js';
+import { SCENE_TIMES, TYPE_SEQUENCE, state } from './config.js';
 
 const FORCED_DISPLAY_UPPERCASE_TYPES = new Set(["scene", "shot"]);
 
@@ -28,7 +28,9 @@ export function formatDateTime(value) {
   if (Number.isNaN(date.getTime())) {
     return "Recently";
   }
-  return date.toLocaleString(undefined, {
+  const locale = ({ en: "en-US", fr: "fr-FR", de: "de-DE" })[state.language] || undefined;
+  return date.toLocaleString(locale, {
+    localeMatcher: "best fit",
     day: "2-digit",
     month: "short",
     year: "numeric",

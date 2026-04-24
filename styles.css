@@ -357,6 +357,38 @@ img {
   padding-top: 2px;
 }
 
+.recent-projects-group {
+  border: none;
+  background: transparent;
+}
+
+.recent-projects-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  color: color-mix(in srgb, var(--ink) 58%, var(--muted));
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.recent-projects-summary::-webkit-details-marker {
+  display: none;
+}
+
+.recent-projects-summary::after {
+  content: "\25BE";
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  transition: transform 140ms ease;
+}
+
+.recent-projects-group:not([open]) .recent-projects-summary::after {
+  transform: rotate(-90deg);
+}
+
 .nav-menu-button {
   width: 100%;
   display: flex;
@@ -380,10 +412,11 @@ img {
 .recent-project-list {
   display: grid;
   gap: 8px;
+  margin-top: 8px;
 }
 
 .recent-project-list:empty::before {
-  content: "Recent projects appear here.";
+  content: attr(data-empty-label);
   display: block;
   color: var(--muted);
   font-size: 0.8rem;
@@ -1345,11 +1378,13 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .preview-page-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
+  width: 100%;
+  align-self: end;
+  justify-self: end;
+  padding-top: 6px;
   color: var(--muted);
   font-size: 0.78rem;
+  text-align: right;
 }
 
 .preview-line {
@@ -1466,10 +1501,9 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .help-sheet {
-    width: min(680px, calc(100vw - 24px));
-    max-height: calc(100vh - 24px);
-    aspect-ratio: 1 / 1;
-    padding: 16px;
+    width: min(620px, calc(100vw - 48px));
+    max-height: min(540px, calc(100vh - 96px));
+    padding: 18px;
     border-radius: 16px;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
@@ -1555,7 +1589,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   align-content: start;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: 2px;
 }
 
 .shortcut-grid p {
@@ -1564,8 +1598,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 6px;
   align-items: center;
-  min-height: 42px;
-  padding: 5px 8px;
+  min-height: 34px;
+  padding: 4px 8px;
   border: none;
   font-size: 0.76rem;
   border-radius: 10px;
@@ -1587,10 +1621,18 @@ kbd {
 .shortcut-grid span {
   color: var(--theme-tertiary);
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.language-options {
+  grid-template-columns: 1fr;
+}
+
+.language-options .theme-option {
+  width: 100%;
 }
 
 .block-customizer-list {

@@ -1,9 +1,10 @@
-import { state, TYPE_LABELS, LEFT_PANE_BLOCK_DEFS } from './config.js';
+import { state, LEFT_PANE_BLOCK_DEFS } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
 import { updateBackground } from './background.js';
+import { applyTranslations, t } from './i18n.js';
 
 const MENU_GLYPHS = {
   left: "&#9664;",
@@ -42,10 +43,10 @@ export function renderHome() {
     const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
 
     node.querySelector(".project-card-title").textContent = project.title;
-    node.querySelector(".project-scenes").textContent = `Scenes: ${sceneCount}`;
-    node.querySelector(".project-characters").textContent = `Characters: ${characterCount}`;
-    node.querySelector(".project-card-logline").textContent = project.logline || "Description automatically appears here as the script grows.";
-    node.querySelector(".project-card-updated").textContent = `Modified: ${formatDateTime(project.updatedAt)}`;
+    node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
+    node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
+    node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
+    node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
 
     // Note: Event listeners will be bound in events.js, but we need the IDs here
     node.dataset.projectId = project.id;
@@ -55,6 +56,7 @@ export function renderHome() {
   });
 
   renderRecentProjectMenus();
+  applyTranslations();
 }
 
 export function renderRecentProjectMenus() {
@@ -69,6 +71,7 @@ export function renderRecentProjectMenus() {
 
   containers.forEach((container) => {
     container.innerHTML = "";
+    container.dataset.emptyLabel = t("recent.empty");
     projects.forEach((project) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -88,10 +91,12 @@ export function renderSceneList() {
     .filter((line) => line.type === "scene");
 
   refs.sceneList.innerHTML = "";
-  refs.sceneCount.textContent = `${scenes.length} ${scenes.length === 1 ? "scene" : "scenes"}`;
+  refs.sceneCount.textContent = scenes.length === 1
+    ? t("scene.countOne", { count: scenes.length })
+    : t("scene.countOther", { count: scenes.length });
 
   if (!scenes.length) {
-    refs.sceneList.appendChild(createTextNode("Scene headings will appear here."));
+    refs.sceneList.appendChild(createTextNode(t("scene.empty")));
     return;
   }
 
@@ -146,20 +151,20 @@ export function renderCharacterList() {
 
   refs.characterList.innerHTML = "";
   if (!characters.size) {
-    refs.characterList.appendChild(createTextNode("Characters will appear here."));
+    refs.characterList.appendChild(createTextNode(t("character.empty")));
     return;
   }
 
   const template = document.querySelector("#listItemTemplate");
   [...characters.values()]
     .sort((a, b) => b.count - a.count || a.firstIndex - b.firstIndex)
-    .forEach((character) => {
-      const node = template.content.firstElementChild.cloneNode(true);
-      node.querySelector(".list-item-title").textContent = character.name;
-      node.querySelector(".list-item-meta").textContent = `${character.count} entries`;
-      node.dataset.lineId = character.firstId;
-      node.dataset.characterName = character.name;
-      refs.characterList.appendChild(node);
+      .forEach((character) => {
+        const node = template.content.firstElementChild.cloneNode(true);
+        node.querySelector(".list-item-title").textContent = character.name;
+        node.querySelector(".list-item-meta").textContent = t("character.entries", { count: character.count });
+        node.dataset.lineId = character.firstId;
+        node.dataset.characterName = character.name;
+        refs.characterList.appendChild(node);
     });
 }
 
@@ -179,7 +184,7 @@ export function showCharacterScenes(characterName, onSelect) {
   });
 
   if (sceneIds.size === 0) {
-    customAlert(`${characterName} doesn't have any dialogue scenes yet.`, "No scenes found");
+    customAlert(t("character.noScenesBody", { name: characterName }), t("character.noScenesTitle"));
     return;
   }
 
@@ -214,10 +219,10 @@ export function showCharacterScenes(characterName, onSelect) {
   });
 
   showModal({
-    title: `Scenes featuring ${characterName}`,
+    title: t("character.scenesFeaturing", { name: characterName }),
     message: container,
     showCancel: true,
-    cancelLabel: "Close",
+    cancelLabel: t("help.close"),
     showConfirm: false
   });
 }
@@ -233,6 +238,19 @@ export function syncInputsFromProject(project) {
 
 function getLeftPaneBlockMeta(key) {
   return LEFT_PANE_BLOCK_DEFS.find((block) => block.key === key) || null;
+}
+
+function getLeftPaneBlockLabel(key) {
+  const meta = getLeftPaneBlockMeta(key);
+  const translationKeys = {
+    current: "pane.currentScript",
+    tools: "pane.projectTools",
+    scenes: "pane.scenes",
+    characters: "pane.characters",
+    metrics: "pane.metrics"
+  };
+
+  return t(translationKeys[key] || "") || meta?.label || key;
 }
 
 function positionMenuUnderTrigger(menu, trigger) {
@@ -268,17 +286,18 @@ export function renderLeftPaneBlockControls() {
 
     const row = document.createElement("div");
     row.className = "block-customizer-item";
+    const label = getLeftPaneBlockLabel(block.key);
     const labelMarkup = block.key === "current"
-      ? `<span class="block-customizer-label is-fixed"><span>${escapeHtml(meta.label)}</span></span>`
+      ? `<span class="block-customizer-label is-fixed"><span>${escapeHtml(label)}</span></span>`
       : `<label class="block-customizer-label">
           <input type="checkbox" data-left-pane-visibility="${escapeHtml(block.key)}" ${block.visible ? "checked" : ""}>
-          <span>${escapeHtml(meta.label)}</span>
+          <span>${escapeHtml(label)}</span>
         </label>`;
     row.innerHTML = `
       ${labelMarkup}
       <div class="block-customizer-actions">
-        <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(meta.label)} up" data-left-pane-move="up" data-left-pane-key="${escapeHtml(block.key)}" ${index === 0 ? "disabled" : ""}>${MENU_GLYPHS.up}</button>
-        <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(meta.label)} down" data-left-pane-move="down" data-left-pane-key="${escapeHtml(block.key)}" ${index === state.leftPaneBlocks.length - 1 ? "disabled" : ""}>${MENU_GLYPHS.down}</button>
+        <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(label)} up" data-left-pane-move="up" data-left-pane-key="${escapeHtml(block.key)}" ${index === 0 ? "disabled" : ""}>${MENU_GLYPHS.up}</button>
+        <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(label)} down" data-left-pane-move="down" data-left-pane-key="${escapeHtml(block.key)}" ${index === state.leftPaneBlocks.length - 1 ? "disabled" : ""}>${MENU_GLYPHS.down}</button>
       </div>
     `;
     refs.leftPaneBlockControls.appendChild(row);
@@ -302,7 +321,7 @@ export function renderLeftPaneLayout() {
       return;
     }
 
-    const label = section.dataset.leftPaneLabel || getLeftPaneBlockMeta(block.key)?.label || block.key;
+    const label = getLeftPaneBlockLabel(block.key);
     section.style.order = String(index + 1);
     section.hidden = !block.visible;
     if (block.visible) {
@@ -488,16 +507,19 @@ export async function showProofreadReport() {
   const loneCharacters = project.lines.filter((line, index) => line.type === "character" && !project.lines[index + 1]?.text?.trim()).length;
 
   if (emptyScenes) {
-    issues.push(`${emptyScenes} empty scene heading${emptyScenes === 1 ? "" : "s"}`);
+    issues.push(t(emptyScenes === 1 ? "proofread.emptyScenesOne" : "proofread.emptyScenesOther", { count: emptyScenes }));
   }
   if (weakSceneLines) {
-    issues.push(`${weakSceneLines} scene heading${weakSceneLines === 1 ? "" : "s"} without a standard INT./EXT. start`);
+    issues.push(t(weakSceneLines === 1 ? "proofread.weakSceneOne" : "proofread.weakSceneOther", { count: weakSceneLines }));
   }
   if (loneCharacters) {
-    issues.push(`${loneCharacters} character cue${loneCharacters === 1 ? "" : "s"} with no following line`);
+    issues.push(t(loneCharacters === 1 ? "proofread.loneCharacterOne" : "proofread.loneCharacterOther", { count: loneCharacters }));
   }
 
-  await customAlert(issues.length ? `Proofread highlights:\n- ${issues.join("\n- ")}` : "No obvious screenplay-format issues were found in the current draft.", "Proofread Report");
+  await customAlert(
+    issues.length ? t("proofread.highlights", { items: issues.join("\n- ") }) : t("proofread.none"),
+    t("proofread.title")
+  );
 }
 
 export async function showWorkTracking() {
@@ -508,12 +530,12 @@ export async function showWorkTracking() {
   const scenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
   const words = (serializeScript(project).match(/\b[\w'-]+\b/g) || []).length;
   await customAlert([
-    `Project: ${project.title}`,
-    `Created: ${formatDateTime(project.createdAt)}`,
-    `Last updated: ${formatDateTime(project.updatedAt)}`,
-    `Scenes: ${scenes}`,
-    `Words: ${words.toLocaleString()}`
-  ].join("\n"), "Work Tracking");
+    t("work.project", { title: project.title }),
+    t("work.created", { value: formatDateTime(project.createdAt) }),
+    t("work.updated", { value: formatDateTime(project.updatedAt) }),
+    t("work.scenes", { count: scenes }),
+    t("work.words", { count: words.toLocaleString() })
+  ].join("\n"), t("work.title"));
 }
 
 export function revealMetricsPanel() {
@@ -554,7 +576,16 @@ const modalRefs = {
     get confirmBtn() { return document.querySelector("#modalConfirmBtn"); }
 };
 
-function showModal({ title, message, showInput = false, defaultValue = "", confirmLabel = "OK", cancelLabel = "Cancel", showCancel = true, showConfirm = true }) {
+function showModal({
+    title,
+    message,
+    showInput = false,
+    defaultValue = "",
+    confirmLabel = t("modal.ok"),
+    cancelLabel = t("modal.cancel"),
+    showCancel = true,
+    showConfirm = true
+}) {
     return new Promise((resolve) => {
         modalRefs.title.textContent = title;
         if (message instanceof HTMLElement) {
@@ -601,14 +632,14 @@ function showModal({ title, message, showInput = false, defaultValue = "", confi
     });
 }
 
-export async function customAlert(message, title = "Alert") {
+export async function customAlert(message, title = t("modal.alert")) {
     return showModal({ title, message, showCancel: false });
 }
 
-export async function customConfirm(message, title = "Confirm") {
+export async function customConfirm(message, title = t("modal.confirm")) {
     return showModal({ title, message });
 }
 
-export async function customPrompt(message, defaultValue = "", title = "Prompt") {
+export async function customPrompt(message, defaultValue = "", title = t("modal.prompt")) {
     return showModal({ title, message, showInput: true, defaultValue });
 }

@@ -28,6 +28,7 @@ import {
   placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
   formatLineText
 } from './utils.js';
+import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
 
 export function bindEvents() {
   // Navigation
@@ -59,6 +60,18 @@ export function bindEvents() {
 
   refs.themeButtons.forEach((button) => {
     button.addEventListener("click", () => setTheme(button.dataset.themeValue));
+  });
+
+  refs.languageButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setLanguage(button.dataset.languageValue);
+      renderHome();
+      if (!refs.studioView.hidden) {
+        renderStudio();
+      }
+      persistProjects(false);
+      closeMenus();
+    });
   });
 
   document.querySelectorAll("[data-menu-action]").forEach((button) => {
@@ -433,6 +446,7 @@ export function renderStudio() {
   setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
   setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  applyTranslations();
 }
 
 export function duplicateActiveBlock() {
@@ -1173,9 +1187,9 @@ export async function findInScript() {
     clearScriptFilter();
     return;
   }
-  const match = project.lines.find((line) => `${TYPE_LABELS[line.type]} ${line.text}`.toLowerCase().includes(cleaned));
+  const match = project.lines.find((line) => `${TYPE_LABELS[line.type]} ${getTypeLabel(line.type)} ${line.text}`.toLowerCase().includes(cleaned));
   if (!match) {
-    await customAlert(`No matches found for "${query}".`, "No Matches");
+    await customAlert(t("editor.noMatches", { query }), "No Matches");
     return;
   }
   state.filterQuery = "";

@@ -112,8 +112,12 @@
               <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
             </div>
             <div class="nav-menu-section">
-              <span class="nav-menu-label">Recent Projects</span>
-              <div id="homeRecentProjects" class="recent-project-list"></div>
+              <details id="homeRecentProjectsToggle" class="recent-projects-group" open>
+                <summary class="recent-projects-summary">
+                  <span class="recent-projects-label">Recent Projects</span>
+                </summary>
+                <div id="homeRecentProjects" class="recent-project-list"></div>
+              </details>
             </div>
           </div>
           <div id="homeThemeMenu" class="nav-menu" hidden>
@@ -171,10 +175,12 @@
                 <button class="nav-menu-button" type="button" data-menu-action="new-project">New Project</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
                 <button class="nav-menu-button" type="button" data-menu-action="import-file">Import</button>
-                <div class="menu-group-inline">
-                  <span class="nav-menu-label">Recent Projects</span>
+                <details id="studioRecentProjectsToggle" class="recent-projects-group menu-group-inline" open>
+                  <summary class="recent-projects-summary">
+                    <span class="recent-projects-label">Recent Projects</span>
+                  </summary>
                   <div id="studioRecentProjects" class="recent-project-list"></div>
-                </div>
+                </details>
               </div>
             </details>
               <details class="menu-group">
@@ -284,7 +290,7 @@
               </div>
             </details>
             <div class="nav-menu-section">
-              <button class="nav-menu-button" type="button" data-view-toggle="pageNumbers">Page Number</button>
+              <button class="nav-menu-button" type="button" data-view-toggle="pageNumbers">Page numbering</button>
               <button class="nav-menu-button" type="button" data-menu-action="fullscreen">Full Screen</button>
             </div>
             <details class="menu-group">
@@ -328,6 +334,16 @@
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-auto-number">Auto Number Scenes</button>
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-typewriter-focus">Typewriter Focus</button>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Language</summary>
+              <div class="menu-group-body">
+                <div class="theme-options language-options">
+                  <button class="theme-option" type="button" data-language-value="en">English</button>
+                  <button class="theme-option" type="button" data-language-value="fr">French</button>
+                  <button class="theme-option" type="button" data-language-value="de">German</button>
+                </div>
               </div>
             </details>
           </div>
@@ -510,7 +526,7 @@
                 <div class="project-tools-actions">
                   <button id="loadSampleBtn" class="ghost-button project-tool-button" type="button">Load sample</button>
                   <label class="ghost-button import-button project-tool-button">
-                    Import
+                    <span class="import-button-label">Import</span>
                     <input id="fileInput" type="file" accept=".txt,.fountain,.md,.json">
                   </label>
                   <button id="saveBtn" class="ghost-button project-tool-button" type="button">Save</button>

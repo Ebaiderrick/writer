@@ -5,6 +5,7 @@ import { initBackground } from './background.js';
 import { AI } from './ai.js';
 import { ContextMenu } from './contextMenu.js';
 import { Auth } from './auth.js';
+import { applyTranslations } from './i18n.js';
 
 function boot() {
   loadProjects();
@@ -22,6 +23,7 @@ function boot() {
   applyToolbarState();
   applyTheme();
   applyViewState();
+  applyTranslations();
   initBackground();
   AI.init();
   ContextMenu.init();

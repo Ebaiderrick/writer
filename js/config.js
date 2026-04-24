@@ -56,6 +56,7 @@ export const state = {
   toolStripCollapsed: false,
   autoNumberScenes: false,
   theme: "cedar",
+  language: "en",
   viewOptions: { ...DEFAULT_VIEW_OPTIONS },
   leftPaneBlocks: DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block })),
   filterQuery: "",

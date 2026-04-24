@@ -1,4 +1,4 @@
-import { state, TYPE_LABELS, DEFAULT_SUGGESTIONS } from './config.js';
+import { state, DEFAULT_SUGGESTIONS } from './config.js';
 import { refs } from './dom.js';
 import {
   getCurrentProject, getLine, getLineIndex, queueSave,
@@ -9,6 +9,7 @@ import {
   selectElementText, buildContinuedSceneSuggestions, formatLineText
 } from './utils.js';
 import { createTextNode as createUINode } from './utils.js';
+import { getTypeLabel, t } from './i18n.js';
 
 export function renderEditor() {
   const project = getCurrentProject();
@@ -47,7 +48,7 @@ export function renderEditor() {
 
     row.dataset.sceneOwner = currentSceneId;
     row.dataset.type = line.type;
-    const label = TYPE_LABELS[line.type];
+    const label = getTypeLabel(line.type);
     tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
     block.dataset.id = line.id;
     block.dataset.type = line.type;
@@ -70,7 +71,7 @@ export function renderEditor() {
   });
 
   if (!visibleRows && state.filterQuery.trim()) {
-    refs.screenplayEditor.appendChild(createUINode(`No lines match "${state.filterQuery}".`));
+    refs.screenplayEditor.appendChild(createUINode(t("editor.noMatches", { query: state.filterQuery })));
   }
 }
 
@@ -96,7 +97,7 @@ export function buildVisibleFilterSet(project) {
 }
 
 function buildSearchText(line) {
-  return `${TYPE_LABELS[line.type]} ${normalizeLineText(line.text, line.type)}`.toLowerCase();
+  return `${getTypeLabel(line.type)} ${normalizeLineText(line.text, line.type)}`.toLowerCase();
 }
 
 export function getSceneIdForIndex(index, project = getCurrentProject()) {
@@ -130,7 +131,7 @@ export function updateActiveTool() {
     button.classList.toggle("is-active", button.dataset.insert === state.activeType);
   });
   refs.activeModeLabel.textContent = "";
-  refs.activeModeLabel.title = `Active block: ${TYPE_LABELS[state.activeType] || "Action"}`;
+  refs.activeModeLabel.title = t("editor.activeBlockTitle", { type: getTypeLabel(state.activeType || "action") || getTypeLabel("action") });
 }
 
 export function updateSuggestions() {
@@ -146,7 +147,7 @@ export function updateSuggestions() {
   }
 
   refs.suggestionTray.hidden = false;
-  refs.suggestionTitle.textContent = `${TYPE_LABELS[type]} suggestions`;
+  refs.suggestionTitle.textContent = t("editor.suggestions", { type: getTypeLabel(type) });
 
   state.visibleSuggestions.forEach((suggestion, index) => {
     const button = document.createElement("button");

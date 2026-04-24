@@ -73,5 +73,6 @@ export const refs = {
   get homeRecentProjects() { return getCached("#homeRecentProjects"); },
   get studioRecentProjects() { return getCached("#studioRecentProjects"); },
   get menuTriggers() { return getCached("[data-menu-trigger]", true); },
-  get themeButtons() { return getCached("[data-theme-value]", true); }
-};
+  get themeButtons() { return getCached("[data-theme-value]", true); },
+  get languageButtons() { return getCached("[data-language-value]", true); }
+  };
