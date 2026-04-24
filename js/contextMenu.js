@@ -1,6 +1,6 @@
 import { state } from "./config.js";
 import { AI } from "./ai.js";
-import { findInScript, intelligentSplit } from "./events.js";
+import { duplicateActiveBlock, findInScript, intelligentSplit } from "./events.js";
 import { getActiveEditableBlock } from "./editor.js";
 
 export const ContextMenu = (() => {
@@ -80,6 +80,9 @@ export const ContextMenu = (() => {
           // Fallback to native paste if possible, though execCommand('paste') is usually blocked
         });
         break;
+      case "duplicate":
+        duplicateSelectionOrBlock();
+        break;
       case "search":
         findInScript();
         break;
@@ -94,6 +97,9 @@ export const ContextMenu = (() => {
         break;
       case "caps-all":
         applyCapitalization("all");
+        break;
+      case "caps-sentence":
+        applyCapitalization("sentence");
         break;
       case "caps-each":
         applyCapitalization("each");
@@ -127,6 +133,9 @@ export const ContextMenu = (() => {
       case "all":
         transformed = text.toUpperCase();
         break;
+      case "sentence":
+        transformed = toSentenceCase(text);
+        break;
       case "each":
         transformed = text.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
         break;
@@ -139,6 +148,12 @@ export const ContextMenu = (() => {
     }
 
     document.execCommand("insertText", false, transformed);
+  }
+
+  function toSentenceCase(text) {
+    return text
+      .toLowerCase()
+      .replace(/(^\s*[a-z])|([.!?]\s+[a-z])/g, (match) => match.toUpperCase());
   }
 
   function triggerAiGrammar() {
@@ -222,6 +237,27 @@ export const ContextMenu = (() => {
     }
 
     document.execCommand("cut");
+  }
+
+  function duplicateSelectionOrBlock() {
+    restoreSelection();
+    const selection = window.getSelection();
+    const text = selection?.toString() || "";
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const startNode = range?.startContainer?.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range?.startContainer;
+    const endNode = range?.endContainer?.nodeType === Node.TEXT_NODE ? range.endContainer.parentElement : range?.endContainer;
+    const startBlock = startNode?.closest?.(".script-block");
+    const endBlock = endNode?.closest?.(".script-block");
+
+    if (text && startBlock && startBlock === endBlock && range) {
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand("insertText", false, text);
+      return;
+    }
+
+    duplicateActiveBlock();
   }
 
   return { init, show, hide };

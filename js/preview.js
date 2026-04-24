@@ -2,7 +2,7 @@ import { state } from './config.js';
 import { refs } from './dom.js';
 import { getCurrentProject, syncProjectFromInputs } from './project.js';
 import { paginateScriptLines } from './pagination.js';
-import { escapeHtml, createTextNode, normalizeLineText } from './utils.js';
+import { escapeHtml, createTextNode, formatLineText } from './utils.js';
 
 export function renderCoverPreview() {
   const project = syncProjectFromInputs() || getCurrentProject();
@@ -75,7 +75,7 @@ export function buildPreviewData(project) {
   let sceneNumber = 0;
 
   project.lines.forEach((line) => {
-    const normalized = normalizeLineText(line.text, line.type);
+    const normalized = formatLineText(line.text, line.type);
     if (!normalized) {
       return;
     }
@@ -301,12 +301,12 @@ function buildWordLineStyle(type) {
   switch (type) {
     case "scene":
     case "shot":
-      return `${base.join(";")};font-weight:bold;text-transform:uppercase;`;
+      return `${base.join(";")};font-weight:bold;`;
     case "transition":
-      return `${base.join(";")};font-weight:bold;text-transform:uppercase;margin-left:3.7in;text-align:right;`;
+      return `${base.join(";")};font-weight:bold;margin-left:3.7in;text-align:right;`;
     case "character":
     case "dual":
-      return `${base.join(";")};font-weight:bold;text-transform:uppercase;margin-left:2.2in;`;
+      return `${base.join(";")};font-weight:bold;margin-left:2.2in;`;
     case "dialogue":
       return `${base.join(";")};margin-left:1.5in;margin-right:1.5in;`;
     case "parenthetical":
@@ -377,13 +377,11 @@ function getPrintableStyles() {
     .print-line.shot,
     .print-line.transition {
       font-weight: bold;
-      text-transform: uppercase;
     }
     .print-line.character,
     .print-line.dual {
       margin-left: 2.2in;
       width: 2.4in;
-      text-transform: uppercase;
       font-weight: bold;
     }
     .print-line.dialogue {

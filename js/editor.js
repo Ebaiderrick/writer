@@ -6,7 +6,7 @@ import {
 } from './project.js';
 import {
   normalizeLineText, selectTextSuffix, placeCaretAtEnd,
-  selectElementText, buildContinuedSceneSuggestions
+  selectElementText, buildContinuedSceneSuggestions, formatLineText
 } from './utils.js';
 import { createTextNode as createUINode } from './utils.js';
 
@@ -173,8 +173,8 @@ export function buildSuggestions(type, currentText) {
     return [lead, ...all]
       .filter(Boolean)
       .filter((value, index, list) => list.indexOf(value) === index)
-      .filter((value) => !trimmed || value.includes(trimmed))
-      .map((value) => ({ label: value, value }));
+      .filter((value) => !trimmed || value.toUpperCase().includes(trimmed))
+      .map((value) => ({ label: formatLineText(value, "character"), value }));
   }
 
   if (type === "scene") {
@@ -185,20 +185,20 @@ export function buildSuggestions(type, currentText) {
     const carryOvers = previousScene ? buildContinuedSceneSuggestions(previousScene) : [];
     return [...new Set([...DEFAULT_SUGGESTIONS.scene, ...carryOvers, ...sceneHeadings])]
       .filter((value) => !trimmed || value.toUpperCase().includes(trimmed))
-      .map((value) => ({ label: value, value }));
+      .map((value) => ({ label: formatLineText(value, "scene"), value }));
   }
 
   if (type === "transition") {
     return [...new Set(DEFAULT_SUGGESTIONS.transition)]
       .filter((value) => !trimmed || value.includes(trimmed))
-      .map((value) => ({ label: value, value }));
+      .map((value) => ({ label: formatLineText(value, "transition"), value }));
   }
 
   if (type === "shot" || type === "parenthetical" || type === "note" || type === "image") {
     return (DEFAULT_SUGGESTIONS[type] || [])
       .filter((value) => !trimmed || value.toUpperCase().includes(trimmed))
       .map((value) => ({
-        label: type === "parenthetical" ? `(${value})` : (type === "note" ? `[${value}]` : value),
+        label: type === "parenthetical" ? `(${value})` : (type === "note" ? `[${value}]` : formatLineText(value, type)),
         value
       }));
   }

@@ -24,7 +24,8 @@ import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
-  placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText
+  placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
+  formatLineText
 } from './utils.js';
 
 export function bindEvents() {
@@ -101,12 +102,7 @@ export function bindEvents() {
   refs.fileInput.addEventListener("change", importFile);
 
   refs.autoCapsToggle.addEventListener("change", () => {
-    const project = getCurrentProject();
-    if (!project) return;
-    project.lines = project.lines.map((line) => ({
-      ...line,
-      text: normalizeLineText(stripWrapperChars(line.text), line.type)
-    }));
+    applyToolbarState();
     renderStudio();
     queueSave();
   });
@@ -200,7 +196,14 @@ export function bindEvents() {
   });
 
   refs.screenplayEditor.addEventListener("contextmenu", (e) => {
+    const target = e.target.nodeType === Node.TEXT_NODE ? e.target.parentElement : e.target;
+    const block = target?.closest?.(".script-block");
+    if (block?.dataset?.id) {
+      setActiveBlock(block.dataset.id);
+      block.focus({ preventScroll: true });
+    }
     e.preventDefault();
+    e.stopPropagation();
     ContextMenu.show(e.clientX, e.clientY);
   });
 
@@ -397,6 +400,20 @@ export function renderStudio() {
   renderMetrics();
   renderRecentProjectMenus();
   applyViewState();
+}
+
+export function duplicateActiveBlock() {
+  const project = getCurrentProject();
+  const index = getLineIndex(state.activeBlockId);
+  if (!project || index < 0) {
+    return;
+  }
+
+  const line = project.lines[index];
+  const newId = addBlock(line.type, line.text, index + 1);
+  renderStudio();
+  focusBlock(newId, true);
+  queueSave();
 }
 
 function handleMetaInput() {
@@ -965,15 +982,7 @@ function handleGlobalKeydown(event) {
   // Duplicate Block
   if ((event.ctrlKey || event.metaKey) && key === "d") {
     event.preventDefault();
-    const project = getCurrentProject();
-    const index = getLineIndex(state.activeBlockId);
-    if (index >= 0) {
-        const line = project.lines[index];
-        const newId = addBlock(line.type, line.text, index + 1);
-        renderStudio();
-        focusBlock(newId, true);
-        queueSave();
-    }
+    duplicateActiveBlock();
     return;
   }
 
@@ -1182,7 +1191,7 @@ function buildPreparedExportLines(project) {
   let sceneNumber = 0;
 
   return project.lines.reduce((accumulator, line) => {
-    const normalized = normalizeLineText(line.text, line.type);
+    const normalized = formatLineText(line.text, line.type);
     if (!normalized) {
       return accumulator;
     }

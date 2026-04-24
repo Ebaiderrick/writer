@@ -1197,10 +1197,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   background: transparent;
 }
 
-.script-block[data-type="scene"],
-.script-block[data-type="transition"],
-.script-block[data-type="character"],
-.script-block[data-type="shot"] {
+body.auto-caps-enabled .script-block[data-type="scene"],
+body.auto-caps-enabled .script-block[data-type="transition"],
+body.auto-caps-enabled .script-block[data-type="character"],
+body.auto-caps-enabled .script-block[data-type="shot"] {
   text-transform: uppercase;
 }
 
@@ -1233,10 +1233,13 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   text-align: right;
 }
 
+body.auto-caps-enabled .script-block[data-type="dual"] {
+  text-transform: uppercase;
+}
+
 .script-block[data-type="dual"] {
   margin-left: var(--script-dual-offset);
   width: var(--script-dual-width);
-  text-transform: uppercase;
   font-weight: bold;
 }
 
@@ -1331,7 +1334,6 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .preview-line.shot,
 .preview-line.transition {
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .preview-line.transition {
@@ -1344,7 +1346,6 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .preview-line.dual {
   margin-left: var(--script-character-offset);
   width: var(--script-character-width);
-  text-transform: uppercase;
   font-weight: bold;
 }
 

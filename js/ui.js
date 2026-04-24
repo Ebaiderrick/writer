@@ -2,7 +2,7 @@ import { state, TYPE_LABELS } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
-import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from './utils.js';
+import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
 import { updateBackground } from './background.js';
 
 export function showAuth() {
@@ -91,7 +91,7 @@ export function renderSceneList() {
   const template = document.querySelector("#listItemTemplate");
   scenes.forEach((scene, order) => {
     const node = template.content.firstElementChild.cloneNode(true);
-    node.querySelector(".list-item-title").textContent = `${order + 1}. ${normalizeLineText(scene.text, "scene")}`;
+    node.querySelector(".list-item-title").textContent = `${order + 1}. ${formatLineText(scene.text, "scene")}`;
     node.querySelector(".list-item-meta").textContent = getSceneFirstLine(project, scene.index);
     node.dataset.lineId = scene.id;
     refs.sceneList.appendChild(node);
@@ -103,7 +103,7 @@ export function getSceneFirstLine(project, sceneIndex) {
     const line = project.lines[index];
     if (line.type === "scene") break;
 
-    const text = normalizeLineText(line.text, line.type);
+    const text = formatLineText(line.text, line.type);
     if (!text) continue;
 
     if (line.type === "character" || line.type === "dual") {
@@ -112,7 +112,7 @@ export function getSceneFirstLine(project, sceneIndex) {
         const nextLine = project.lines[j];
         if (nextLine.type === "scene") break;
         if (nextLine.type === "dialogue" && nextLine.text.trim()) {
-          return `${text}: "${normalizeLineText(nextLine.text, "dialogue")}"`;
+          return `${text}: "${formatLineText(nextLine.text, "dialogue")}"`;
         }
       }
     }
@@ -130,7 +130,7 @@ export function renderCharacterList() {
     if ((line.type !== "character" && line.type !== "dual") || !line.text.trim()) {
       return;
     }
-    const name = normalizeLineText(line.text, line.type);
+    const name = formatLineText(line.text, line.type);
     const key = name.trim().toUpperCase();
     const current = characters.get(key) || { name: name.trim(), count: 0, firstId: line.id, firstIndex: index };
     current.count += 1;
@@ -194,7 +194,7 @@ export function showCharacterScenes(characterName, onSelect) {
 
     const sceneIndex = project.lines.findIndex(l => l.id === sceneId);
     const sceneNumber = project.lines.slice(0, sceneIndex + 1).filter(l => l.type === 'scene').length;
-    const heading = normalizeLineText(sceneLine.text, "scene");
+    const heading = formatLineText(sceneLine.text, "scene");
     const displayHeading = state.autoNumberScenes ? `${sceneNumber}. ${heading}` : heading;
 
     const subtext = getSceneFirstLine(project, sceneIndex);
@@ -266,6 +266,7 @@ export function applyTheme() {
 
 export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
+  document.body.classList.toggle("auto-caps-enabled", refs.autoCapsToggle?.checked !== false);
   document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
   refs.toolStripToggle.textContent = state.toolStripCollapsed ? "▼" : "▲";

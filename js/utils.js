@@ -73,11 +73,16 @@ export function normalizeLineText(text, type) {
     return inner.toUpperCase().startsWith("IMAGE:") ? inner : `IMAGE: ${inner}`;
   }
 
-  if (AUTO_UPPERCASE_TYPES.has(type) && refs.autoCapsToggle.checked) {
-    return compact.toUpperCase();
-  }
-
   return compact;
+}
+
+export function shouldDisplayUppercase(type) {
+  return AUTO_UPPERCASE_TYPES.has(type) && Boolean(refs.autoCapsToggle?.checked);
+}
+
+export function formatLineText(text, type) {
+  const normalized = normalizeLineText(text, type);
+  return shouldDisplayUppercase(type) ? normalized.toUpperCase() : normalized;
 }
 
 export function getCaretOffset(element) {
