@@ -1,4 +1,4 @@
-import { state, TYPE_LABELS } from './config.js';
+import { state, TYPE_LABELS, LEFT_PANE_BLOCK_DEFS } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
@@ -224,6 +224,131 @@ export function syncInputsFromProject(project) {
   refs.loglineInput.value = project.logline;
 }
 
+function getLeftPaneBlockMeta(key) {
+  return LEFT_PANE_BLOCK_DEFS.find((block) => block.key === key) || null;
+}
+
+function getLeftPaneBlockState(key) {
+  return state.leftPaneBlocks.find((block) => block.key === key) || null;
+}
+
+export function renderLeftPaneBlockControls() {
+  if (!refs.leftPaneBlockControls) {
+    return;
+  }
+
+  refs.leftPaneBlockControls.innerHTML = "";
+  state.leftPaneBlocks.forEach((block, index) => {
+    const meta = getLeftPaneBlockMeta(block.key);
+    if (!meta) {
+      return;
+    }
+
+    const row = document.createElement("div");
+    row.className = "block-customizer-item";
+    row.innerHTML = `
+      <label class="block-customizer-label">
+        <input type="checkbox" data-left-pane-visibility="${escapeHtml(block.key)}" ${block.visible ? "checked" : ""}>
+        <span>${escapeHtml(meta.label)}</span>
+      </label>
+      <div class="block-customizer-actions">
+        <button class="block-customizer-move" type="button" data-left-pane-move="up" data-left-pane-key="${escapeHtml(block.key)}" ${index === 0 ? "disabled" : ""}>▲</button>
+        <button class="block-customizer-move" type="button" data-left-pane-move="down" data-left-pane-key="${escapeHtml(block.key)}" ${index === state.leftPaneBlocks.length - 1 ? "disabled" : ""}>▼</button>
+      </div>
+    `;
+    refs.leftPaneBlockControls.appendChild(row);
+  });
+}
+
+export function renderLeftPaneLayout() {
+  if (!refs.leftPaneBody) {
+    return;
+  }
+
+  const sections = new Map(
+    Array.from(refs.leftPaneBody.querySelectorAll("[data-left-pane-block]"))
+      .map((section) => [section.dataset.leftPaneBlock, section])
+  );
+  let visibleCount = 0;
+
+  state.leftPaneBlocks.forEach((block, index) => {
+    const section = sections.get(block.key);
+    if (!section) {
+      return;
+    }
+
+    const label = section.dataset.leftPaneLabel || getLeftPaneBlockMeta(block.key)?.label || block.key;
+    section.style.order = String(index + 1);
+    section.hidden = !block.visible;
+    if (block.visible) {
+      visibleCount += 1;
+    }
+
+    const body = section.querySelector(".panel-section-body");
+    if (body) {
+      body.hidden = block.collapsed;
+    }
+
+    const toggle = section.querySelector("[data-left-pane-section-toggle]");
+    if (toggle) {
+      toggle.textContent = block.collapsed ? "►" : "▼";
+      toggle.setAttribute("aria-expanded", String(!block.collapsed));
+      toggle.setAttribute("aria-label", `${block.collapsed ? "Expand" : "Collapse"} ${label}`);
+    }
+  });
+
+  if (refs.leftPaneEmptyState) {
+    refs.leftPaneEmptyState.hidden = visibleCount > 0;
+  }
+
+  renderLeftPaneBlockControls();
+}
+
+export function toggleLeftPaneSection(key) {
+  const block = getLeftPaneBlockState(key);
+  if (!block) {
+    return;
+  }
+
+  block.collapsed = !block.collapsed;
+  renderLeftPaneLayout();
+  persistProjects(false);
+}
+
+export function setLeftPaneBlockVisibility(key, visible) {
+  const block = getLeftPaneBlockState(key);
+  if (!block) {
+    return;
+  }
+
+  block.visible = visible;
+  if (visible) {
+    block.collapsed = false;
+  }
+  renderLeftPaneLayout();
+  persistProjects(false);
+}
+
+export function moveLeftPaneBlock(key, direction) {
+  const index = state.leftPaneBlocks.findIndex((block) => block.key === key);
+  if (index < 0) {
+    return;
+  }
+
+  const nextIndex = direction === "up"
+    ? Math.max(0, index - 1)
+    : Math.min(state.leftPaneBlocks.length - 1, index + 1);
+
+  if (nextIndex === index) {
+    return;
+  }
+
+  const [block] = state.leftPaneBlocks.splice(index, 1);
+  state.leftPaneBlocks.splice(nextIndex, 0, block);
+  renderLeftPaneLayout();
+  persistProjects(false);
+}
+
 export function updateMenuStateButtons() {
   document.querySelectorAll("[data-view-toggle]").forEach((button) => {
     button.classList.toggle("is-active", Boolean(state.viewOptions[button.dataset.viewToggle]));
@@ -255,8 +380,8 @@ export function updateMenuStateButtons() {
 }
 
 export function applyViewState() {
-  document.body.classList.toggle("show-ruler", state.viewOptions.ruler);
-  document.body.classList.toggle("outline-hidden", !state.viewOptions.showOutline);
+  document.body.classList.remove("show-ruler");
+  document.body.classList.remove("outline-hidden");
   document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
   updateMenuStateButtons();
 }
@@ -359,6 +484,14 @@ export async function showWorkTracking() {
 }
 
 export function revealMetricsPanel() {
+  const metricsBlock = getLeftPaneBlockState("metrics");
+  if (metricsBlock) {
+    metricsBlock.visible = true;
+    metricsBlock.collapsed = false;
+    renderLeftPaneLayout();
+    persistProjects(false);
+  }
+
   if (refs.leftPane.classList.contains("is-hidden")) {
     // This needs togglePane from events.js, but ui.js shouldn't depend on events.js
     // We can just manipulate the classes directly here or emit an event.
@@ -371,7 +504,7 @@ export function revealMetricsPanel() {
       refs.leftPaneBody.classList.remove("is-collapsed");
       refs.leftPaneSectionToggle.textContent = "▲";
   }
-  document.querySelector(".section-metrics")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  document.querySelector('[data-left-pane-block="metrics"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 /**

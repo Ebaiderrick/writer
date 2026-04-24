@@ -1,4 +1,4 @@
-import { STORAGE_KEY, state, TYPE_LABELS, DEFAULT_VIEW_OPTIONS } from './config.js';
+import { STORAGE_KEY, state, TYPE_LABELS, DEFAULT_VIEW_OPTIONS, DEFAULT_LEFT_PANE_BLOCKS } from './config.js';
 import { uid, normalizeLineText, stripWrapperChars, clamp } from './utils.js';
 import { refs } from './dom.js';
 
@@ -39,6 +39,7 @@ export function loadProjects() {
     state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
     state.theme = parsed?.theme === "rose" ? "cedar" : (parsed?.theme || "cedar");
     state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
+    state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
     document.documentElement.style.setProperty("--right-pane-width", `${clamp(parsed?.rightWidth || 324, 260, 520)}px`);
   } catch (error) {
@@ -46,6 +47,7 @@ export function loadProjects() {
     state.projects = [cloneProject(sampleProject, true)];
     state.currentProjectId = state.projects[0].id;
     state.viewOptions = { ...DEFAULT_VIEW_OPTIONS };
+    state.leftPaneBlocks = DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block }));
   }
 }
 
@@ -131,6 +133,7 @@ export function persistProjects(forceSavedBadge = false) {
     autoNumberScenes: state.autoNumberScenes,
     theme: state.theme,
     viewOptions: state.viewOptions,
+    leftPaneBlocks: state.leftPaneBlocks,
     leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
     rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
   }));
@@ -221,12 +224,42 @@ export function syncProjectFromInputs() {
 
 export function sanitizeViewOptions(options) {
   return {
-    ruler: Boolean(options?.ruler),
+    ruler: false,
     pageNumbers: options?.pageNumbers === undefined ? true : Boolean(options.pageNumbers),
-    pageCount: options?.pageCount === undefined ? true : Boolean(options.pageCount),
-    showOutline: options?.showOutline === undefined ? true : Boolean(options.showOutline),
+    pageCount: false,
+    showOutline: true,
     textSize: clamp(options?.textSize ?? DEFAULT_VIEW_OPTIONS.textSize, 11, 14)
   };
+}
+
+export function sanitizeLeftPaneBlocks(blocks) {
+  const defaults = new Map(DEFAULT_LEFT_PANE_BLOCKS.map((block) => [block.key, block]));
+  const seen = new Set();
+  const sanitized = [];
+
+  if (Array.isArray(blocks)) {
+    blocks.forEach((block) => {
+      const key = block?.key;
+      if (!defaults.has(key) || seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      sanitized.push({
+        key,
+        visible: block.visible === undefined ? defaults.get(key).visible : Boolean(block.visible),
+        collapsed: Boolean(block.collapsed)
+      });
+    });
+  }
+
+  DEFAULT_LEFT_PANE_BLOCKS.forEach((block) => {
+    if (seen.has(block.key)) {
+      return;
+    }
+    sanitized.push({ ...block });
+  });
+
+  return sanitized;
 }
 
 export function serializeScript(project) {

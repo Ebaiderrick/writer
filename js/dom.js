@@ -47,6 +47,8 @@ export const refs = {
   get leftPane() { return getCached("#leftPane"); },
   get rightPane() { return getCached("#rightPane"); },
   get leftPaneBody() { return getCached("#leftPaneBody"); },
+  get leftPaneBlockControls() { return getCached("#leftPaneBlockControls"); },
+  get leftPaneEmptyState() { return getCached("#leftPaneEmptyState"); },
   get rightPaneBody() { return getCached("#rightPaneBody"); },
   get leftRailToggle() { return getCached("#leftRailToggle"); },
   get rightRailToggle() { return getCached("#rightRailToggle"); },

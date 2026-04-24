@@ -1,5 +1,7 @@
 import { SCENE_TIMES, TYPE_SEQUENCE } from './config.js';
 
+const FORCED_DISPLAY_UPPERCASE_TYPES = new Set(["scene", "shot"]);
+
 export function uid(prefix = "line") {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -77,7 +79,7 @@ export function normalizeLineText(text, type) {
 }
 
 export function shouldDisplayUppercase(type) {
-  return false;
+  return FORCED_DISPLAY_UPPERCASE_TYPES.has(type);
 }
 
 export function formatLineText(text, type) {

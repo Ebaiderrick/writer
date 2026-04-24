@@ -18,7 +18,8 @@ import {
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
-  updateMenuStateButtons, customAlert, customConfirm, customPrompt
+  updateMenuStateButtons, customAlert, customConfirm, customPrompt,
+  renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -140,6 +141,27 @@ export function bindEvents() {
 
   refs.leftPaneSectionToggle.addEventListener("click", () => togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle));
   refs.rightPaneSectionToggle.addEventListener("click", () => togglePaneSection(refs.rightPaneBody, refs.rightPaneSectionToggle));
+
+  refs.leftPaneBody.addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-left-pane-section-toggle]");
+    if (toggle) {
+      toggleLeftPaneSection(toggle.dataset.leftPaneSectionToggle);
+    }
+  });
+
+  refs.leftPaneBlockControls?.addEventListener("click", (event) => {
+    const moveBtn = event.target.closest("[data-left-pane-move]");
+    if (moveBtn) {
+      moveLeftPaneBlock(moveBtn.dataset.leftPaneKey, moveBtn.dataset.leftPaneMove);
+    }
+  });
+
+  refs.leftPaneBlockControls?.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("[data-left-pane-visibility]");
+    if (checkbox) {
+      setLeftPaneBlockVisibility(checkbox.dataset.leftPaneVisibility, checkbox.checked);
+    }
+  });
 
   refs.duplicateProjectBtn.addEventListener("click", duplicateProject);
   refs.loadSampleBtn.addEventListener("click", replaceWithSample);
@@ -393,6 +415,7 @@ export function renderStudio() {
   renderCharacterList();
   renderMetrics();
   renderRecentProjectMenus();
+  renderLeftPaneLayout();
   applyViewState();
   applyToolbarState();
 }

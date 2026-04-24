@@ -26,10 +26,22 @@ export const DEFAULT_SUGGESTIONS = {
 export const DEFAULT_VIEW_OPTIONS = {
   ruler: false,
   pageNumbers: true,
-  pageCount: true,
+  pageCount: false,
   showOutline: true,
   textSize: 12
 };
+export const LEFT_PANE_BLOCK_DEFS = [
+  { key: "current", label: "Current Script" },
+  { key: "characters", label: "Characters" },
+  { key: "scenes", label: "Scenes" },
+  { key: "metrics", label: "Metrics" },
+  { key: "tools", label: "Project Tools" }
+];
+export const DEFAULT_LEFT_PANE_BLOCKS = LEFT_PANE_BLOCK_DEFS.map(({ key }) => ({
+  key,
+  visible: true,
+  collapsed: false
+}));
 export const PAGE_UNIT_CAPACITY = 54;
 
 export const state = {
@@ -45,6 +57,7 @@ export const state = {
   autoNumberScenes: false,
   theme: "cedar",
   viewOptions: { ...DEFAULT_VIEW_OPTIONS },
+  leftPaneBlocks: DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block })),
   filterQuery: "",
   history: [],
   historyIndex: -1

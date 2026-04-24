@@ -79,6 +79,25 @@ test('changing block type no longer destroys the original text casing', async ({
   await expect(page.locator('.script-block').first()).toHaveText('Good Morning');
 });
 
+test('scene and shot enforce uppercase bold display without losing stored text', async ({ page }) => {
+  const block = await openEditor(page);
+  const firstBlock = page.locator('.script-block').first();
+
+  await block.click();
+  await page.keyboard.type('Interior loft - dawn');
+  await page.keyboard.press('Alt+e');
+
+  await expect(firstBlock).toHaveCSS('text-transform', 'uppercase');
+  expect(await firstBlock.evaluate((el) => getComputedStyle(el).fontWeight)).toMatch(/700|bold/);
+
+  await page.keyboard.press('Alt+s');
+  await expect(firstBlock).toHaveCSS('text-transform', 'uppercase');
+  expect(await firstBlock.evaluate((el) => getComputedStyle(el).fontWeight)).toMatch(/700|bold/);
+
+  await page.keyboard.press('Alt+a');
+  await expect(firstBlock).toHaveText('Interior loft - dawn');
+});
+
 test('parenthetical typing preserves spaces immediately and revision moves under tools', async ({ page }) => {
   const block = await openEditor(page);
 
@@ -91,4 +110,37 @@ test('parenthetical typing preserves spaces immediately and revision moves under
   await expect(page.locator('[data-menu-trigger="studioRevisionMenu"]')).toHaveCount(0);
   await expect(page.locator('#studioToolsMenu .menu-group-summary').filter({ hasText: 'Revision' })).toBeVisible();
   await expect(page.locator('[data-menu-trigger="studioSettingsMenu"]')).toBeVisible();
+});
+
+test('left pane blocks can be reordered, hidden, and collapsed from tools', async ({ page }) => {
+  await openEditor(page);
+
+  await page.locator('[data-menu-trigger="studioToolsMenu"]').click();
+  await page.locator('#leftPaneBlockControls [data-left-pane-key="metrics"][data-left-pane-move="up"]').evaluate((button) => button.click());
+  await page.locator('#leftPaneBlockControls [data-left-pane-key="metrics"][data-left-pane-move="up"]').evaluate((button) => button.click());
+  await page.locator('#leftPaneBlockControls [data-left-pane-visibility="characters"]').evaluate((checkbox) => {
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  const order = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('[data-left-pane-block]'))
+      .filter((section) => !section.hidden)
+      .sort((a, b) => Number(a.style.order) - Number(b.style.order))
+      .map((section) => section.dataset.leftPaneBlock)
+  );
+  expect(order[1]).toBe('metrics');
+  await expect(page.locator('[data-left-pane-block="characters"]')).toBeHidden();
+
+  await page.locator('[data-left-pane-section-toggle="metrics"]').click();
+  await expect(page.locator('[data-left-pane-block="metrics"] .panel-section-body')).toBeHidden();
+});
+
+test('view menu removes ruler, page count, and show outline options', async ({ page }) => {
+  await openEditor(page);
+
+  await page.locator('[data-menu-trigger="studioViewMenu"]').click();
+  await expect(page.locator('#studioViewMenu')).not.toContainText('Ruler');
+  await expect(page.locator('#studioViewMenu')).not.toContainText('Page Count');
+  await expect(page.locator('#studioViewMenu')).not.toContainText('Show Outline');
 });

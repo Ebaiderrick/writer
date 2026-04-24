@@ -263,10 +263,7 @@
               </div>
             </details>
             <div class="nav-menu-section">
-              <button class="nav-menu-button" type="button" data-view-toggle="ruler">Ruler</button>
               <button class="nav-menu-button" type="button" data-view-toggle="pageNumbers">Page Number</button>
-              <button class="nav-menu-button" type="button" data-view-toggle="pageCount">Page Count</button>
-              <button class="nav-menu-button" type="button" data-view-toggle="showOutline">Show Outline</button>
               <button class="nav-menu-button" type="button" data-menu-action="fullscreen">Full Screen</button>
             </div>
             <details class="menu-group">
@@ -282,7 +279,7 @@
             </details>
           </div>
 
-          <div id="studioToolsMenu" class="nav-menu" hidden>
+          <div id="studioToolsMenu" class="nav-menu nav-menu-wide" hidden>
             <details class="menu-group" open>
               <summary class="menu-group-summary">Tools</summary>
               <div class="menu-group-body">
@@ -297,6 +294,10 @@
                 <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
                 <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
               </div>
+            </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Customize Active Blocks</summary>
+              <div id="leftPaneBlockControls" class="menu-group-body block-customizer-list"></div>
             </details>
           </div>
 
@@ -438,13 +439,15 @@
             </div>
 
             <div id="leftPaneBody" class="pane-shell-body">
-              <section class="panel cover-panel section-current">
+              <section class="panel cover-panel section-current" data-left-pane-block="current" data-left-pane-label="Current Script">
                 <div class="panel-head">
                   <div>
                     <h3>Current Script</h3>
                     <p>Simple overview like your reference</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="current" aria-label="Collapse Current Script">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div class="field-grid">
                   <label class="field field-wide">
                     <span>Title</span>
@@ -471,15 +474,18 @@
                     <textarea id="loglineInput"></textarea>
                   </label>
                 </div>
+                </div>
               </section>
 
-              <section class="panel list-panel section-tools">
+              <section class="panel list-panel section-tools" data-left-pane-block="tools" data-left-pane-label="Project Tools">
                 <div class="panel-head">
                   <div>
                     <h3>Project Tools</h3>
                     <p>Keep every control close by</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="tools" aria-label="Collapse Project Tools">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div class="project-tools-actions">
                   <button id="loadSampleBtn" class="ghost-button project-tool-button" type="button">Load sample</button>
                   <label class="ghost-button import-button project-tool-button">
@@ -496,42 +502,53 @@
                   <button id="duplicateProjectBtn" class="ghost-button" type="button">Duplicate</button>
                   <button id="deleteProjectBtn" class="ghost-button danger-button" type="button">Delete</button>
                 </div>
+                </div>
               </section>
 
-              <section class="panel list-panel section-scenes">
+              <section class="panel list-panel section-scenes" data-left-pane-block="scenes" data-left-pane-label="Scenes">
                 <div class="panel-head">
                   <div>
                     <h3>Scenes</h3>
                     <p id="sceneCount">0 scenes</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="scenes" aria-label="Collapse Scenes">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div id="sceneList" class="list-stack"></div>
+                </div>
               </section>
 
-              <section class="panel list-panel section-characters">
+              <section class="panel list-panel section-characters" data-left-pane-block="characters" data-left-pane-label="Characters">
                 <div class="panel-head">
                   <div>
                     <h3>Characters</h3>
                     <p>Suggested again when needed</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="characters" aria-label="Collapse Characters">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div id="characterList" class="list-stack"></div>
+                </div>
               </section>
 
-              <section class="panel metrics-panel section-metrics">
+              <section class="panel metrics-panel section-metrics" data-left-pane-block="metrics" data-left-pane-label="Metrics">
                 <div class="panel-head">
                   <div>
                     <h3>Metrics</h3>
                     <p>Live writing totals</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="metrics" aria-label="Collapse Metrics">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div class="metric-grid">
                   <div><span>Words</span><strong id="wordCount">0</strong></div>
                   <div><span>Pages est.</span><strong id="pageCount">0</strong></div>
                   <div><span>Characters</span><strong id="characterCount">0</strong></div>
                   <div><span>Notes</span><strong id="noteCount">0</strong></div>
                 </div>
+                </div>
               </section>
+              <p id="leftPaneEmptyState" class="pane-empty-state" hidden>No active blocks selected. Use Tools to customize this pane.</p>
             </div>
           </div>
         </aside>
