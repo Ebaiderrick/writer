@@ -6,20 +6,10 @@
   <title>EyaWriter</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <div class="mesh-background" aria-hidden="true">
-    <div class="gradient-container">
-      <div class="gradient-canvas" id="color-base">
-        <div class="blobs-container">
-          <div class="blob" id="color-0"></div>
-          <div class="blob" id="color-1"></div>
-          <div class="blob" id="color-2"></div>
-          <div class="blob" id="color-3"></div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div id="liquid-bg-container" style="position: fixed; inset: 0; z-index: 0; pointer-events: none;"></div>
 
   <div class="app-shell">
     <!-- Auth View -->

@@ -608,7 +608,9 @@ img {
   justify-content: space-between;
   padding: 8px 14px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface-strong);
+  background: color-mix(in srgb, var(--surface-strong) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .workspace-brand {
@@ -661,7 +663,9 @@ img {
   z-index: 19;
   padding: 4px 12px 6px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface-strong);
+  background: color-mix(in srgb, var(--surface-strong) 75%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .tool-strip-row {
@@ -726,8 +730,8 @@ img {
   place-items: center;
   border: none;
   border-radius: 10px;
-  background: var(--control-bg);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--control-bg) 90%, black 5%);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
 .tool-icon svg {

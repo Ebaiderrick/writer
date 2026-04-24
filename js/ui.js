@@ -3,6 +3,7 @@ import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from './utils.js';
+import { updateBackground } from './background.js';
 
 export function showAuth() {
   refs.homeView.hidden = true;
@@ -260,6 +261,7 @@ export function applyTheme() {
   refs.themeButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.themeValue === (state.theme === "rose" ? "cedar" : state.theme));
   });
+  updateBackground();
 }
 
 export function applyToolbarState() {
