@@ -159,8 +159,8 @@
             <button class="nav-link" type="button" data-menu-trigger="studioEditMenu">Edit</button>
             <button class="nav-link" type="button" data-menu-trigger="studioFormatMenu">Format</button>
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
             <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tools</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioRevisionMenu">Revision</button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
 
@@ -283,20 +283,31 @@
           </div>
 
           <div id="studioToolsMenu" class="nav-menu" hidden>
-            <div class="nav-menu-section">
-              <span class="nav-menu-label">Tools</span>
-              <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
-              <button class="nav-menu-button" type="button" data-menu-action="toggle-spelling-check">Spelling Check</button>
-              <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
-            </div>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Tools</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-spelling-check">Spelling Check</button>
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Revision</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
+                <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
+              </div>
+            </details>
           </div>
 
-          <div id="studioRevisionMenu" class="nav-menu" hidden>
-            <div class="nav-menu-section">
-              <span class="nav-menu-label">Revision</span>
-              <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
-              <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
-            </div>
+          <div id="studioSettingsMenu" class="nav-menu" hidden>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Editor</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-auto-number">Auto Number Scenes</button>
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-typewriter-focus">Typewriter Focus</button>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -381,10 +392,6 @@
             </div>
 
             <div class="studio-options">
-              <label class="option-check">
-                <input id="autoCapsToggle" type="checkbox" checked>
-                <span>Auto capitals</span>
-              </label>
               <label class="option-check">
                 <input id="autoNumberToggle" type="checkbox">
                 <span>Auto number</span>

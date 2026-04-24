@@ -101,12 +101,6 @@ export function bindEvents() {
   refs.exportPdfBtn.addEventListener("click", exportPdf);
   refs.fileInput.addEventListener("change", importFile);
 
-  refs.autoCapsToggle.addEventListener("change", () => {
-    applyToolbarState();
-    renderStudio();
-    queueSave();
-  });
-
   refs.autoNumberToggle.addEventListener("change", () => {
     state.autoNumberScenes = refs.autoNumberToggle.checked;
     renderStudio();
@@ -115,6 +109,7 @@ export function bindEvents() {
 
   refs.typewriterToggle.addEventListener("change", () => {
     document.body.classList.toggle("typewriter-mode", refs.typewriterToggle.checked);
+    applyToolbarState();
   });
 
   refs.aiAssistToggle.addEventListener("change", () => {
@@ -200,11 +195,10 @@ export function bindEvents() {
     const block = target?.closest?.(".script-block");
     if (block?.dataset?.id) {
       setActiveBlock(block.dataset.id);
-      block.focus({ preventScroll: true });
     }
     e.preventDefault();
     e.stopPropagation();
-    ContextMenu.show(e.clientX, e.clientY);
+    ContextMenu.show(e.clientX, e.clientY, block || getActiveEditableBlock());
   });
 
   refs.screenplayEditor.addEventListener("copy", (e) => {
@@ -400,6 +394,7 @@ export function renderStudio() {
   renderMetrics();
   renderRecentProjectMenus();
   applyViewState();
+  applyToolbarState();
 }
 
 export function duplicateActiveBlock() {
@@ -871,6 +866,17 @@ function handleMenuAction(action) {
       document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
       renderStudio();
       queueSave();
+      break;
+    case "toggle-auto-number":
+      refs.autoNumberToggle.checked = !refs.autoNumberToggle.checked;
+      state.autoNumberScenes = refs.autoNumberToggle.checked;
+      renderStudio();
+      queueSave();
+      break;
+    case "toggle-typewriter-focus":
+      refs.typewriterToggle.checked = !refs.typewriterToggle.checked;
+      document.body.classList.toggle("typewriter-mode", refs.typewriterToggle.checked);
+      applyToolbarState();
       break;
     case "show-work-tracking":
       showWorkTracking();

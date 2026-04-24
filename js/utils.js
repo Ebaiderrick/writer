@@ -1,5 +1,4 @@
-import { AUTO_UPPERCASE_TYPES, SCENE_TIMES, TYPE_SEQUENCE } from './config.js';
-import { refs } from './dom.js';
+import { SCENE_TIMES, TYPE_SEQUENCE } from './config.js';
 
 export function uid(prefix = "line") {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -36,9 +35,10 @@ export function formatDateTime(value) {
   });
 }
 
-export function stripWrapperChars(value) {
+export function stripWrapperChars(value, trim = true) {
   if (!value) return "";
-  return value.replace(/[\(\)\[\]]/g, "").trim();
+  const stripped = value.replace(/[\(\)\[\]]/g, "");
+  return trim ? stripped.trim() : stripped;
 }
 
 export function normalizeLineText(text, type) {
@@ -59,12 +59,12 @@ export function normalizeLineText(text, type) {
   }
 
   if (type === "note") {
-    const stripped = stripWrapperChars(compact);
+    const stripped = stripWrapperChars(compact, false);
     return stripped ? `[${stripped}]` : "";
   }
 
   if (type === "parenthetical") {
-    const stripped = stripWrapperChars(compact);
+    const stripped = stripWrapperChars(compact, false);
     return stripped ? `(${stripped})` : "";
   }
 
@@ -77,7 +77,7 @@ export function normalizeLineText(text, type) {
 }
 
 export function shouldDisplayUppercase(type) {
-  return AUTO_UPPERCASE_TYPES.has(type) && Boolean(refs.autoCapsToggle?.checked);
+  return false;
 }
 
 export function formatLineText(text, type) {

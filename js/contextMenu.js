@@ -6,6 +6,8 @@ import { getActiveEditableBlock } from "./editor.js";
 export const ContextMenu = (() => {
   let menuEl = null;
   let preservedRange = null;
+  let preservedScope = "caret";
+  let preservedBlock = null;
 
   function init() {
     menuEl = document.getElementById("contextMenu");
@@ -24,9 +26,9 @@ export const ContextMenu = (() => {
     });
   }
 
-  function show(x, y) {
+  function show(x, y, targetBlock = null) {
     if (!menuEl) return;
-    preserveSelection();
+    preserveSelection(targetBlock);
 
     menuEl.hidden = false;
     menuEl.style.display = "block";
@@ -179,13 +181,35 @@ export const ContextMenu = (() => {
     }
   }
 
-  function preserveSelection() {
+  function preserveSelection(targetBlock = null) {
     const selection = window.getSelection();
-    if (!selection || !selection.rangeCount) {
-      preservedRange = null;
+    const activeRange = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const selectedText = selection?.toString() || "";
+    const hasExplicitSelection = Boolean(
+      activeRange &&
+      selectedText &&
+      !selection.isCollapsed &&
+      isRangeWithinBlock(activeRange, targetBlock)
+    );
+
+    preservedBlock = targetBlock || getBlockFromRange(activeRange);
+
+    if (hasExplicitSelection && activeRange) {
+      preservedRange = activeRange.cloneRange();
+      preservedScope = "selection";
       return;
     }
-    preservedRange = selection.getRangeAt(0).cloneRange();
+
+    if (preservedBlock) {
+      const range = document.createRange();
+      range.selectNodeContents(preservedBlock);
+      preservedRange = range;
+      preservedScope = "block";
+      return;
+    }
+
+    preservedRange = activeRange ? activeRange.cloneRange() : null;
+    preservedScope = selectedText ? "selection" : "caret";
   }
 
   function restoreSelection() {
@@ -193,6 +217,23 @@ export const ContextMenu = (() => {
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(preservedRange);
+    preservedBlock?.focus?.({ preventScroll: true });
+  }
+
+  function isRangeWithinBlock(range, block) {
+    if (!range || !block) {
+      return false;
+    }
+    return getBlockFromNode(range.startContainer) === block && getBlockFromNode(range.endContainer) === block;
+  }
+
+  function getBlockFromNode(node) {
+    const element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    return element?.closest?.(".script-block") || null;
+  }
+
+  function getBlockFromRange(range) {
+    return range ? getBlockFromNode(range.startContainer) : null;
   }
 
   function getSelectedText() {
@@ -240,6 +281,11 @@ export const ContextMenu = (() => {
   }
 
   function duplicateSelectionOrBlock() {
+    if (preservedScope === "block") {
+      duplicateActiveBlock();
+      return;
+    }
+
     restoreSelection();
     const selection = window.getSelection();
     const text = selection?.toString() || "";

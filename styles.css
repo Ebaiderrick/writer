@@ -1439,12 +1439,14 @@ body.auto-caps-enabled .script-block[data-type="dual"] {
 }
 
 .help-sheet {
-    width: min(360px, calc(100vw - 24px));
-    min-height: 360px;
-    padding: 14px 12px;
-    border-radius: 12px;
+    width: min(560px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    aspect-ratio: 1 / 1;
+    padding: 16px;
+    border-radius: 16px;
     display: grid;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
 }
 
 .modal-title {
@@ -1521,9 +1523,12 @@ body.auto-caps-enabled .script-block[data-type="dual"] {
 
 .shortcut-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
   align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .shortcut-grid p {
@@ -1531,10 +1536,12 @@ body.auto-caps-enabled .script-block[data-type="dual"] {
   display: grid;
   grid-template-columns: 1fr;
   gap: 4px;
-  padding: 6px 8px;
+  align-content: start;
+  min-height: 84px;
+  padding: 8px 10px;
   border: none;
   font-size: 0.8rem;
-  border-radius: 8px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--control-bg) 84%, transparent);
 }
 

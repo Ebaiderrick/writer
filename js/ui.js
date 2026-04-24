@@ -237,6 +237,18 @@ export function updateMenuStateButtons() {
     button.classList.toggle("is-active", state.aiAssist);
   });
 
+  document.querySelectorAll("[data-menu-action='toggle-spelling-check']").forEach((button) => {
+    button.classList.toggle("is-active", state.spellingCheck);
+  });
+
+  document.querySelectorAll("[data-menu-action='toggle-auto-number']").forEach((button) => {
+    button.classList.toggle("is-active", Boolean(refs.autoNumberToggle?.checked));
+  });
+
+  document.querySelectorAll("[data-menu-action='toggle-typewriter-focus']").forEach((button) => {
+    button.classList.toggle("is-active", Boolean(refs.typewriterToggle?.checked));
+  });
+
   document.querySelectorAll("[data-menu-action='filter']").forEach((button) => {
     button.classList.toggle("is-active", Boolean(state.filterQuery));
   });
@@ -266,10 +278,10 @@ export function applyTheme() {
 
 export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
-  document.body.classList.toggle("auto-caps-enabled", refs.autoCapsToggle?.checked !== false);
   document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
   refs.toolStripToggle.textContent = state.toolStripCollapsed ? "▼" : "▲";
+  updateMenuStateButtons();
 }
 
 export function renderMetrics() {
