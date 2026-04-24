@@ -1,24 +1,34 @@
 import { loadProjects } from './project.js';
 import { bindEvents, renderStudio } from './events.js';
-import { showHome, renderHome, applyToolbarState, applyTheme, applyViewState } from './ui.js';
+import { showAuth, showHome, renderHome, applyToolbarState, applyTheme, applyViewState } from './ui.js';
 import { initBackground } from './background.js';
 import { AI } from './ai.js';
+import { ContextMenu } from './contextMenu.js';
+import { Auth } from './auth.js';
 
 function boot() {
   loadProjects();
   bindEvents();
-  showHome();
+
+  Auth.init();
+  const session = Auth.getSession();
+  if (session && session.loggedIn) {
+    showHome();
+  } else {
+    showAuth();
+  }
+
   renderHome();
   applyToolbarState();
   applyTheme();
   applyViewState();
   initBackground();
   AI.init();
+  ContextMenu.init();
 }
 
-// Check if DOM is already loaded
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
+  document.addEventListener('DOMContentLoaded', boot);
 } else {
-    boot();
+  boot();
 }

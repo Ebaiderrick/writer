@@ -1,10 +1,17 @@
 import { state, TYPE_LABELS } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
-import { getCurrentProject, getLineIndex, persistProjects, serializeScript } from './project.js';
+import { getCurrentProject, persistProjects, serializeScript } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, createTextNode } from './utils.js';
 
+export function showAuth() {
+  refs.homeView.hidden = true;
+  refs.studioView.hidden = true;
+  refs.authView.hidden = false;
+}
+
 export function showHome() {
+  refs.authView.hidden = true;
   refs.homeView.hidden = false;
   refs.studioView.hidden = true;
 }
@@ -93,13 +100,22 @@ export function renderSceneList() {
 export function getSceneFirstLine(project, sceneIndex) {
   for (let index = sceneIndex + 1; index < project.lines.length; index += 1) {
     const line = project.lines[index];
-    if (line.type === "scene") {
-      break;
-    }
+    if (line.type === "scene") break;
+
     const text = normalizeLineText(line.text, line.type);
-    if (text) {
-      return text;
+    if (!text) continue;
+
+    if (line.type === "character" || line.type === "dual") {
+      // Find the first dialogue line for this character to give a better preview
+      for (let j = index + 1; j < Math.min(index + 4, project.lines.length); j++) {
+        const nextLine = project.lines[j];
+        if (nextLine.type === "scene") break;
+        if (nextLine.type === "dialogue" && nextLine.text.trim()) {
+          return `${text}: "${normalizeLineText(nextLine.text, "dialogue")}"`;
+        }
+      }
     }
+    return text;
   }
   return "";
 }
@@ -139,6 +155,65 @@ export function renderCharacterList() {
     });
 }
 
+export function showCharacterScenes(characterName, onSelect) {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  const sceneIds = new Set();
+  const targetName = characterName.trim().toUpperCase();
+  project.lines.forEach((line, index) => {
+    if ((line.type === "character" || line.type === "dual") && normalizeLineText(line.text, line.type).trim().toUpperCase() === targetName) {
+      const sceneId = getSceneIdForIndex(index, project);
+      if (sceneId) {
+        sceneIds.add(sceneId);
+      }
+    }
+  });
+
+  if (sceneIds.size === 0) {
+    customAlert(`${characterName} doesn't have any dialogue scenes yet.`, "No scenes found");
+    return;
+  }
+
+  const container = document.createElement("div");
+  container.className = "modal-list";
+
+  const lineIdToIndex = new Map(project.lines.map((l, i) => [l.id, i]));
+  const sortedSceneIds = [...sceneIds].sort((a, b) => {
+    return (lineIdToIndex.get(a) ?? 0) - (lineIdToIndex.get(b) ?? 0);
+  });
+
+  sortedSceneIds.forEach((sceneId) => {
+    const sceneLine = project.lines.find(l => l.id === sceneId);
+    if (!sceneLine) return;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "modal-list-item";
+
+    const sceneIndex = project.lines.findIndex(l => l.id === sceneId);
+    const sceneNumber = project.lines.slice(0, sceneIndex + 1).filter(l => l.type === 'scene').length;
+    const heading = normalizeLineText(sceneLine.text, "scene");
+    const displayHeading = state.autoNumberScenes ? `${sceneNumber}. ${heading}` : heading;
+
+    const subtext = getSceneFirstLine(project, sceneIndex);
+    btn.innerHTML = `<strong>${escapeHtml(displayHeading)}</strong><small>${escapeHtml(subtext)}</small>`;
+    btn.onclick = () => {
+      onSelect(sceneId);
+      modalRefs.dialog.close();
+    };
+    container.appendChild(btn);
+  });
+
+  showModal({
+    title: `Scenes featuring ${characterName}`,
+    message: container,
+    showCancel: true,
+    cancelLabel: "Close",
+    showConfirm: false
+  });
+}
+
 export function syncInputsFromProject(project) {
   refs.titleInput.value = project.title;
   refs.authorInput.value = project.author;
@@ -174,80 +249,24 @@ export function applyViewState() {
 }
 
 export function setTheme(theme) {
-  state.theme = theme;
+  state.theme = theme === "rose" ? "cedar" : theme;
   applyTheme();
   closeMenus();
   persistProjects(false);
 }
 
 export function applyTheme() {
-  document.documentElement.dataset.theme = state.theme;
+  document.documentElement.dataset.theme = state.theme === "rose" ? "cedar" : state.theme;
   refs.themeButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.themeValue === state.theme);
+    button.classList.toggle("is-active", button.dataset.themeValue === (state.theme === "rose" ? "cedar" : state.theme));
   });
 }
 
 export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
+  document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
-  refs.toolStripToggle.textContent = state.toolStripCollapsed ? "v" : "^";
-}
-
-export function showCharacterScenes(characterName, onSelect) {
-  const project = getCurrentProject();
-  if (!project) return;
-
-  const sceneIds = new Set();
-  const targetName = characterName.trim().toUpperCase();
-  project.lines.forEach((line, index) => {
-    if ((line.type === "character" || line.type === "dual") && normalizeLineText(line.text, line.type).trim().toUpperCase() === targetName) {
-      const sceneId = getSceneIdForIndex(index, project);
-      if (sceneId) {
-        sceneIds.add(sceneId);
-      }
-    }
-  });
-
-  if (sceneIds.size === 0) {
-    customAlert(`${characterName} doesn't have any dialogue scenes yet.`, "No scenes found");
-    return;
-  }
-
-  const container = document.createElement("div");
-  container.className = "modal-list";
-
-  const sortedSceneIds = [...sceneIds].sort((a, b) => {
-    return project.lines.findIndex(l => l.id === a) - project.lines.findIndex(l => l.id === b);
-  });
-
-  sortedSceneIds.forEach((sceneId) => {
-    const sceneLine = project.lines.find(l => l.id === sceneId);
-    if (!sceneLine) return;
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "modal-list-item";
-
-    const sceneIndex = project.lines.findIndex(l => l.id === sceneId);
-    const sceneNumber = project.lines.slice(0, sceneIndex + 1).filter(l => l.type === 'scene').length;
-    const heading = normalizeLineText(sceneLine.text, "scene");
-    const displayHeading = state.autoNumberScenes ? `${sceneNumber}. ${heading}` : heading;
-
-    const subtext = getSceneFirstLine(project, sceneIndex);
-    btn.innerHTML = `<strong>${displayHeading}</strong><small style="display:block;opacity:0.7;font-size:0.8em;margin-top:4px">${subtext}</small>`;
-    btn.onclick = () => {
-      onSelect(sceneId);
-      modalRefs.dialog.close();
-    };
-    container.appendChild(btn);
-  });
-
-  showModal({
-    title: `Scenes featuring ${characterName}`,
-    message: container,
-    showCancel: true,
-    cancelLabel: "Close"
-  });
+  refs.toolStripToggle.textContent = state.toolStripCollapsed ? "▼" : "▲";
 }
 
 export function renderMetrics() {
@@ -329,13 +348,13 @@ export function revealMetricsPanel() {
     // This needs togglePane from events.js, but ui.js shouldn't depend on events.js
     // We can just manipulate the classes directly here or emit an event.
     refs.leftPane.classList.remove("is-hidden");
-    refs.leftRailToggle.textContent = "<";
+    refs.leftRailToggle.textContent = "◀";
     refs.studioLayout.classList.remove("left-pane-hidden");
     if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
   }
   if (refs.leftPaneBody.classList.contains("is-collapsed")) {
       refs.leftPaneBody.classList.remove("is-collapsed");
-      refs.leftPaneSectionToggle.textContent = "^";
+      refs.leftPaneSectionToggle.textContent = "▲";
   }
   document.querySelector(".section-metrics")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
@@ -344,16 +363,16 @@ export function revealMetricsPanel() {
  * Custom modern modal system
  */
 const modalRefs = {
-    dialog: document.querySelector("#customModal"),
-    title: document.querySelector("#modalTitle"),
-    message: document.querySelector("#modalMessage"),
-    inputContainer: document.querySelector("#modalInputContainer"),
-    input: document.querySelector("#modalInput"),
-    cancelBtn: document.querySelector("#modalCancelBtn"),
-    confirmBtn: document.querySelector("#modalConfirmBtn")
+    get dialog() { return document.querySelector("#customModal"); },
+    get title() { return document.querySelector("#modalTitle"); },
+    get message() { return document.querySelector("#modalMessage"); },
+    get inputContainer() { return document.querySelector("#modalInputContainer"); },
+    get input() { return document.querySelector("#modalInput"); },
+    get cancelBtn() { return document.querySelector("#modalCancelBtn"); },
+    get confirmBtn() { return document.querySelector("#modalConfirmBtn"); }
 };
 
-function showModal({ title, message, showInput = false, defaultValue = "", confirmLabel = "OK", cancelLabel = "Cancel", showCancel = true }) {
+function showModal({ title, message, showInput = false, defaultValue = "", confirmLabel = "OK", cancelLabel = "Cancel", showCancel = true, showConfirm = true }) {
     return new Promise((resolve) => {
         modalRefs.title.textContent = title;
         if (message instanceof HTMLElement) {
@@ -365,6 +384,7 @@ function showModal({ title, message, showInput = false, defaultValue = "", confi
         modalRefs.inputContainer.hidden = !showInput;
         modalRefs.input.value = defaultValue;
         modalRefs.confirmBtn.textContent = confirmLabel;
+        modalRefs.confirmBtn.hidden = !showConfirm;
         modalRefs.cancelBtn.textContent = cancelLabel;
         modalRefs.cancelBtn.hidden = !showCancel;
 

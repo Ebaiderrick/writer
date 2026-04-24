@@ -22,7 +22,89 @@
   </div>
 
   <div class="app-shell">
-    <section id="homeView" class="home-view">
+    <!-- Auth View -->
+    <section id="authView" class="auth-view">
+      <div class="auth-main">
+        <!-- Sign Up Panel -->
+        <div class="auth-container a-container" id="a-container">
+          <form class="auth-form" id="signup-form">
+            <img src="logo.png" alt="EyaWriter Logo" class="auth-logo">
+            <h2 class="auth-title">Create Account</h2>
+            <div class="auth-social">
+              <button class="google-btn" id="google-signup" type="button">
+                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.58-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+                Continue with Google
+              </button>
+            </div>
+            <span class="auth-span">or use email</span>
+            <input class="auth-input" type="text" placeholder="Name" id="signup-name">
+            <input class="auth-input" type="email" placeholder="Email" id="signup-email">
+            <input class="auth-input" type="password" placeholder="Password" id="signup-pass">
+            <input class="auth-input" type="password" placeholder="Repeat Password" id="signup-pass2">
+            <button class="auth-button button submit" id="signup-btn" type="submit">SIGN UP</button>
+          </form>
+        </div>
+
+        <!-- Sign In Panel -->
+        <div class="auth-container b-container" id="b-container">
+          <form class="auth-form" id="signin-form">
+            <img src="logo.png" alt="EyaWriter Logo" class="auth-logo">
+            <h2 class="auth-title">Sign In</h2>
+            <div class="auth-social">
+              <button class="google-btn" id="google-signin" type="button">
+                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.58-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+                Continue with Google
+              </button>
+            </div>
+            <span class="auth-span">or use your email account</span>
+            <input class="auth-input" type="email" placeholder="Email" id="signin-email">
+            <input class="auth-input" type="password" placeholder="Password" id="signin-pass">
+            <div class="auth-footer-links">
+              <a class="auth-link" href="#">Forgot your password?</a>
+              <a class="auth-link demo-link" href="#" id="demo-login-btn">Try Demo Account</a>
+            </div>
+            <button class="auth-button button submit" id="signin-btn" type="submit">SIGN IN</button>
+          </form>
+        </div>
+
+        <!-- Slide Panel -->
+        <div class="auth-switch" id="switch-cnt">
+          <div class="switch__circle"></div>
+          <div class="switch__circle switch__circle--t"></div>
+          <div class="switch__container" id="switch-c1">
+            <h2 class="switch__title">Welcome Back!</h2>
+            <p class="switch__description">To keep connected with us please login with your personal info</p>
+            <button class="switch__button button switch-btn" type="button">SIGN IN</button>
+          </div>
+          <div class="switch__container is-hidden" id="switch-c2">
+            <h2 class="switch__title">Welcome to EyaWriter</h2>
+            <p class="switch__description">Enter your personal details and start journey with us</p>
+            <button class="switch__button button switch-btn" type="button">SIGN UP</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- OTP Modal -->
+      <div class="otp-overlay" id="otp-overlay">
+        <div class="otp-modal">
+          <h3 class="otp-title">Verify your email</h3>
+          <p class="otp-sub">Enter the 6-digit code sent to <span id="otp-email-display"></span></p>
+          <div class="otp-inputs">
+            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
+            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
+            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
+            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
+            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
+            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
+          </div>
+          <p class="otp-error" id="otp-error"></p>
+          <button class="auth-button otp-submit" id="otp-submit" type="button">VERIFY</button>
+          <button class="otp-resend" id="otp-resend" type="button">Resend code</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="homeView" class="home-view" hidden>
       <header class="home-topbar">
         <div class="nav-stack">
           <nav class="home-nav" aria-label="Primary navigation">
@@ -47,7 +129,7 @@
           <div id="homeThemeMenu" class="nav-menu" hidden>
             <span class="nav-menu-label">Theme</span>
             <div class="theme-options">
-              <button class="theme-option" type="button" data-theme-value="rose">Rose</button>
+              <button class="theme-option" type="button" data-theme-value="cedar">Cedar</button>
               <button class="theme-option" type="button" data-theme-value="dark">Dark</button>
               <button class="theme-option" type="button" data-theme-value="white">White</button>
               <button class="theme-option" type="button" data-theme-value="navy">Dark Blue</button>
@@ -183,7 +265,7 @@
               <summary class="menu-group-summary">Theme</summary>
               <div class="menu-group-body">
                 <div class="theme-options">
-                  <button class="theme-option" type="button" data-theme-value="rose">Rose</button>
+                  <button class="theme-option" type="button" data-theme-value="cedar">Cedar</button>
                   <button class="theme-option" type="button" data-theme-value="dark">Dark</button>
                   <button class="theme-option" type="button" data-theme-value="white">White</button>
                   <button class="theme-option" type="button" data-theme-value="navy">Dark Blue</button>
@@ -214,6 +296,7 @@
             <div class="nav-menu-section">
               <span class="nav-menu-label">Tools</span>
               <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
+              <button class="nav-menu-button" type="button" data-menu-action="toggle-spelling-check">Spelling Check</button>
               <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
             </div>
           </div>
@@ -235,7 +318,7 @@
 
       <section id="toolStrip" class="tool-strip">
         <div class="tool-strip-row">
-          <button id="leftRailToggle" class="collapse-arrow" type="button" aria-label="Collapse left pane">&lt;</button>
+          <button id="leftRailToggle" class="collapse-arrow" type="button" aria-label="Collapse left pane">◀</button>
 
           <div class="tool-groups">
             <div class="tool-buttons" id="toolButtons">
@@ -324,17 +407,21 @@
                 <input id="aiAssistToggle" type="checkbox">
                 <span>AI Assistance</span>
               </label>
+              <label class="option-check">
+                <input id="spellingCheckToggle" type="checkbox">
+                <span>Spelling check</span>
+              </label>
             </div>
           </div>
 
           <div class="strip-end-controls">
-            <button id="toolStripToggle" class="collapse-arrow" type="button" aria-label="Collapse function bar upward">^</button>
-            <button id="rightRailToggle" class="collapse-arrow" type="button" aria-label="Collapse right pane">&gt;</button>
+            <button id="toolStripToggle" class="collapse-arrow" type="button" aria-label="Collapse function bar upward">▲</button>
+            <button id="rightRailToggle" class="collapse-arrow" type="button" aria-label="Collapse right pane">▶</button>
           </div>
         </div>
 
         <div class="tool-strip-foot">
-          <span id="activeModeLabel" class="active-pill" title="Active block">&gt;</span>
+          <span id="activeModeLabel" class="active-pill" title="Active block"></span>
           <div id="suggestionTray" class="suggestion-tray" hidden>
             <span id="suggestionTitle" class="suggestion-title">Suggestions</span>
             <div id="suggestionList" class="suggestion-list"></div>
@@ -350,7 +437,7 @@
                 <h2>Active Block</h2>
                 <p>Script details, scenes, characters, and metrics</p>
               </div>
-              <button id="leftPaneSectionToggle" class="pane-collapse" type="button" aria-label="Collapse active block">^</button>
+              <button id="leftPaneSectionToggle" class="pane-collapse" type="button" aria-label="Collapse active block">▲</button>
             </div>
 
             <div id="leftPaneBody" class="pane-shell-body">
@@ -471,10 +558,8 @@
             </section>
 
             <section class="page-wrap">
-              <div id="screenplay">
-                <div id="coverPreview" class="cover-preview"></div>
-                <div id="screenplayEditor" class="screenplay-editor" contenteditable="true" aria-label="Screenplay editor"></div>
-              </div>
+              <div id="coverPreview" class="cover-preview"></div>
+              <div id="screenplayEditor" class="screenplay-editor" aria-label="Screenplay editor"></div>
             </section>
           </div>
         </main>
@@ -488,7 +573,7 @@
                 <h2>Preview</h2>
                 <p>Print-style page</p>
               </div>
-              <button id="rightPaneSectionToggle" class="pane-collapse" type="button" aria-label="Collapse preview">^</button>
+              <button id="rightPaneSectionToggle" class="pane-collapse" type="button" aria-label="Collapse preview">▲</button>
             </div>
             <div id="rightPaneBody" class="pane-shell-body">
               <section class="panel preview-panel">
@@ -528,8 +613,41 @@
   </template>
 
   <template id="blockTemplate">
-    <div class="line" contenteditable="true" spellcheck="true"></div>
+    <div class="script-block-row">
+      <button class="scene-toggle" type="button" hidden aria-label="Collapse scene">▼</button>
+      <span class="block-tag"></span>
+      <div class="script-block" contenteditable="true" spellcheck="true"></div>
+    </div>
   </template>
+
+  <div id="contextMenu" class="context-menu" hidden>
+    <div class="menu-item" data-action="cut">Cut <span class="menu-shortcut">Ctrl+X</span></div>
+    <div class="menu-item" data-action="copy">Copy <span class="menu-shortcut">Ctrl+C</span></div>
+    <div class="menu-item" data-action="paste">Paste <span class="menu-shortcut">Ctrl+V</span></div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" data-action="search">Search <span class="menu-shortcut">Ctrl+F</span></div>
+    <div class="menu-divider"></div>
+    <div class="menu-item has-submenu">
+      Text Formatting
+      <div class="submenu">
+        <div class="menu-item" data-action="bold">Bold <span class="menu-shortcut">Ctrl+B</span></div>
+        <div class="menu-item" data-action="italic">Italic <span class="menu-shortcut">Ctrl+I</span></div>
+        <div class="menu-item" data-action="underline">Underline <span class="menu-shortcut">Ctrl+U</span></div>
+      </div>
+    </div>
+    <div class="menu-item has-submenu">
+      Capitalization
+      <div class="submenu">
+        <div class="menu-item" data-action="caps-all">CAPITALIZE ALL</div>
+        <div class="menu-item" data-action="caps-each">Capitalize Each Word</div>
+        <div class="menu-item" data-action="caps-low">low key</div>
+        <div class="menu-item" data-action="caps-random">rAnDoM cApS</div>
+      </div>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" data-action="ai-grammar">AI Grammar Check <span class="menu-shortcut">Alt+G</span></div>
+    <div class="menu-item" data-action="intelligent-split">Intelligent Split <span class="menu-shortcut">`+Enter</span></div>
+  </div>
 
   <dialog id="customModal" class="custom-modal">
     <div class="modal-content">
@@ -556,20 +674,21 @@
         <p><kbd>Ctrl/Cmd + Z</kbd><span>Undo</span></p>
         <p><kbd>Ctrl/Cmd + Y</kbd><span>Redo</span></p>
         <p><kbd>Ctrl/Cmd + D</kbd><span>Duplicate Block</span></p>
-        <p><kbd>Alt + S</kbd><span>Scene (KeyS)</span></p>
-        <p><kbd>Alt + A</kbd><span>Action (KeyA)</span></p>
-        <p><kbd>Alt + C</kbd><span>Character (KeyC)</span></p>
-        <p><kbd>Alt + D</kbd><span>Dialogue (KeyD)</span></p>
-        <p><kbd>Alt + T</kbd><span>Transition (KeyT)</span></p>
-        <p><kbd>Alt + P</kbd><span>Parenthetical (KeyP)</span></p>
-        <p><kbd>Alt + O</kbd><span>Shot (KeyO)</span></p>
-        <p><kbd>Alt + X</kbd><span>Text (KeyX)</span></p>
-        <p><kbd>Alt + N</kbd><span>Note (KeyN)</span></p>
-        <p><kbd>Alt + U</kbd><span>Dual (KeyU)</span></p>
-        <p><kbd>Alt + I</kbd><span>Image (KeyI)</span></p>
+        <p><kbd>Alt + E</kbd><span>Scene</span></p>
+        <p><kbd>Alt + A</kbd><span>Action</span></p>
+        <p><kbd>Alt + C</kbd><span>Character</span></p>
+        <p><kbd>Alt + D</kbd><span>Dialogue</span></p>
+        <p><kbd>Alt + T</kbd><span>Transition</span></p>
+        <p><kbd>Alt + P</kbd><span>Parenthetical</span></p>
+        <p><kbd>Alt + S</kbd><span>Shot</span></p>
+        <p><kbd>Alt + X</kbd><span>Text</span></p>
+        <p><kbd>Alt + N</kbd><span>Note</span></p>
+        <p><kbd>Alt + U</kbd><span>Dual</span></p>
+        <p><kbd>Alt + I</kbd><span>Image</span></p>
+        <p><kbd>Alt + G</kbd><span>AI Grammar Check</span></p>
         <p><kbd>Tab</kbd><span>Cycle block type</span></p>
-        <p><kbd>↑ / ↓</kbd><span>Previous / Next Block</span></p>
-        <p><kbd>Ctrl + ↑ / ↓</kbd><span>Previous / Next Scene</span></p>
+        <p><kbd>▲ / ▼</kbd><span>Previous / Next Block</span></p>
+        <p><kbd>Ctrl + ▲ / ▼</kbd><span>Previous / Next Scene</span></p>
         <p><kbd>1-9</kbd><span>Choose suggestion</span></p>
       </div>
     </form>

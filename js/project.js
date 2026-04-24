@@ -37,7 +37,7 @@ export function loadProjects() {
     state.aiAssist = Boolean(parsed?.aiAssist);
     state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
     state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
-    state.theme = parsed?.theme || "rose";
+    state.theme = parsed?.theme === "rose" ? "cedar" : (parsed?.theme || "cedar");
     state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
     document.documentElement.style.setProperty("--right-pane-width", `${clamp(parsed?.rightWidth || 324, 260, 520)}px`);
@@ -144,7 +144,64 @@ export function queueSave() {
       refs.saveBadge.textContent = "Saving...";
   }
   clearTimeout(state.saveTimer);
-  state.saveTimer = window.setTimeout(() => persistProjects(false), 200);
+  state.saveTimer = window.setTimeout(() => {
+    persistProjects(false);
+    pushHistory();
+  }, 200);
+}
+
+export function pushHistory() {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  // Clone the current state
+  const snapshot = project.lines.map(l => ({ ...l }));
+
+  // If we're pushing a new state that is identical to the current history state, skip
+  if (state.historyIndex >= 0) {
+    const last = state.history[state.historyIndex];
+    if (JSON.stringify(last) === JSON.stringify(snapshot)) return;
+  }
+
+  // Truncate any "redo" history if we're in the middle of the stack
+  if (state.historyIndex < state.history.length - 1) {
+    state.history = state.history.slice(0, state.historyIndex + 1);
+  }
+
+  state.history.push(snapshot);
+
+  // Limit to 10 undos (11 items total: current + 10 previous)
+  if (state.history.length > 11) {
+    state.history.shift();
+  } else {
+    state.historyIndex++;
+  }
+}
+
+export function undo() {
+  if (state.historyIndex <= 0) return;
+  state.historyIndex--;
+  restoreFromHistory();
+}
+
+export function redo() {
+  if (state.historyIndex >= state.history.length - 1) return;
+  state.historyIndex++;
+  restoreFromHistory();
+}
+
+function restoreFromHistory() {
+  const project = getCurrentProject();
+  const snapshot = state.history[state.historyIndex];
+  if (!project || !snapshot) return;
+
+  project.lines = snapshot.map(l => ({ ...l }));
+  project.updatedAt = new Date().toISOString();
+
+  // We need to import renderStudio here or pass it in.
+  // Since project.js is a low-level module, we'll rely on the caller to re-render.
+  // But wait, many functions in project.js are called and then renderStudio is called in events.js.
+  // Let's just update the state and let the event handler handle the render.
 }
 
 export function syncProjectFromInputs() {

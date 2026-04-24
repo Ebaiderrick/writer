@@ -1,16 +1,18 @@
 import { state, TYPE_SEQUENCE, TYPE_LABELS } from './config.js';
 import { refs } from './dom.js';
+import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
-  syncProjectFromInputs, serializeScript, replaceWithSample as restoreSample,
-  getDefaultText
+  syncProjectFromInputs, replaceWithSample as restoreSample,
+  getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
-  getOwningSceneId, getPreviousSceneHeading, getCharacterAutocomplete, updateSuggestions
+  getOwningSceneId, getCharacterAutocomplete, updateSuggestions
 } from './editor.js';
-import { renderPreview, renderCoverPreview, buildPrintableDocument, exportScript } from './preview.js';
+import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
+import { paginateScriptLines } from './pagination.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
@@ -18,6 +20,7 @@ import {
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt
 } from './ui.js';
+import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
@@ -125,6 +128,14 @@ export function bindEvents() {
     queueSave();
   });
 
+  refs.spellingCheckToggle.addEventListener("change", () => {
+    state.spellingCheck = refs.spellingCheckToggle.checked;
+    document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
+    document.body.classList.toggle("grammar-mode-active", state.spellingCheck);
+    renderStudio();
+    queueSave();
+  });
+
   refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);
 
   // Layout Toggles
@@ -143,18 +154,13 @@ export function bindEvents() {
   refs.loadSampleBtn.addEventListener("click", replaceWithSample);
   refs.deleteProjectBtn.addEventListener("click", deleteProject);
 
-  refs.helpBtn.addEventListener("click", () => {
-    refs.helpDialog.showModal();
-  });
-
-  document.querySelectorAll("[data-home-nav='shortcuts']").forEach(btn => {
-    btn.addEventListener("click", () => {
-      refs.helpDialog.showModal();
-    });
-  });
-
   initResizeHandle(refs.leftResize, "left");
   initResizeHandle(refs.rightResize, "right");
+
+  refs.helpBtn.addEventListener("click", () => refs.helpDialog.showModal());
+  document.querySelectorAll('[data-home-nav="shortcuts"]').forEach(btn => {
+      btn.addEventListener("click", () => refs.helpDialog.showModal());
+  });
 
   // Global Keys & Clicks
   document.addEventListener("keydown", handleGlobalKeydown);
@@ -166,76 +172,133 @@ export function bindEvents() {
 
   // Delegated Editor Events
   refs.screenplayEditor.addEventListener("focusin", (e) => {
-      if (e.target.classList.contains("line")) {
+      if (e.target.classList.contains("script-block")) {
           setActiveBlock(e.target.dataset.id);
       }
   });
 
   refs.screenplayEditor.addEventListener("click", (e) => {
-    if (e.target.closest(".line")) {
-        setActiveBlock(e.target.closest(".line").dataset.id);
+    if (e.target.closest(".script-block")) {
+        setActiveBlock(e.target.closest(".script-block").dataset.id);
+    }
+    if (e.target.closest(".scene-toggle")) {
+        const row = e.target.closest(".script-block-row");
+        toggleSceneCollapse(row.dataset.id);
     }
   });
 
   refs.screenplayEditor.addEventListener("input", (e) => {
-      if (e.target.classList.contains("line")) {
+      if (e.target.classList.contains("script-block")) {
           handleBlockInput(e.target.dataset.id, e.target);
       }
   });
 
   refs.screenplayEditor.addEventListener("keydown", (e) => {
-      if (e.target.classList.contains("line")) {
+      if (e.target.classList.contains("script-block")) {
           handleBlockKeydown(e, e.target.dataset.id);
       }
+  });
+
+  refs.screenplayEditor.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    ContextMenu.show(e.clientX, e.clientY);
   });
 
   refs.screenplayEditor.addEventListener("copy", (e) => {
       const selection = window.getSelection();
       if (selection.isCollapsed) return;
 
-      const range = selection.getRangeAt(0);
-      const fragment = range.cloneContents();
-      const lines = [];
+      const project = getCurrentProject();
+      if (!project) return;
 
-      fragment.querySelectorAll(".line").forEach(line => {
-          lines.push({
-              type: line.dataset.type,
-              text: line.innerText
-          });
+      const selectedLines = [];
+      const range = selection.getRangeAt(0);
+      const blocks = refs.screenplayEditor.querySelectorAll(".script-block");
+
+      blocks.forEach(block => {
+          if (selection.containsNode(block, true)) {
+              const line = getLine(block.dataset.id);
+              if (line) selectedLines.push(line.text);
+          }
       });
 
-      if (lines.length > 0) {
-          e.clipboardData.setData("application/json", JSON.stringify(lines));
-          e.clipboardData.setData("text/plain", selection.toString());
+      if (selectedLines.length > 0) {
+          e.clipboardData.setData("text/plain", selectedLines.join("\n"));
           e.preventDefault();
       }
   });
 
   refs.screenplayEditor.addEventListener("paste", (e) => {
+      if (!e.target.classList.contains("script-block")) return;
+
       e.preventDefault();
-      const json = e.clipboardData.getData("application/json");
+      const text = e.clipboardData.getData("text/plain");
+      if (!text) return;
+
+      const pastedLines = text.split(/\r?\n/);
       const project = getCurrentProject();
-      if (!project) return;
-
       const activeId = state.activeBlockId;
-      const index = getLineIndex(activeId);
+      if (!project || !activeId) return;
 
-      if (json) {
-          const lines = JSON.parse(json);
-          lines.forEach((line, i) => {
-              addBlock(line.type, line.text, index + 1 + i);
-          });
+      const index = getLineIndex(activeId);
+      const currentLine = project.lines[index];
+      const offset = getCaretOffset(e.target);
+
+      const textBefore = currentLine.text.substring(0, offset);
+      const textAfter = currentLine.text.substring(offset);
+
+      if (pastedLines.length === 1) {
+          // Simple single line paste
+          currentLine.text = textBefore + pastedLines[0] + textAfter;
+          renderStudio();
+          focusBlock(activeId);
+          setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${activeId}"]`), offset + pastedLines[0].length);
       } else {
-          const text = e.clipboardData.getData("text/plain");
-          const pastedLines = text.split(/\r?\n/).filter(l => l.trim());
-          pastedLines.forEach((lineText, i) => {
-              const type = inferTypeFromText(lineText, "", "");
-              addBlock(type, lineText, index + 1 + i);
-          });
+          // Multi-line natural paste
+          // 1. Update current block with text before cursor + first pasted line
+          currentLine.text = textBefore + pastedLines[0];
+
+          // 2. Create new blocks for middle lines
+          const middleLines = pastedLines.slice(1, -1);
+          const newBlocks = middleLines.map(content => ({
+              id: uid(),
+              type: inferTypeFromText(content, "", ""),
+              text: content
+          }));
+
+          // 3. Create final block with last pasted line + text after cursor
+          const lastContent = pastedLines[pastedLines.length - 1];
+          const finalBlock = {
+              id: uid(),
+              type: inferTypeFromText(lastContent, "", ""),
+              text: lastContent + textAfter
+          };
+
+          project.lines.splice(index + 1, 0, ...newBlocks, finalBlock);
+
+          project.updatedAt = new Date().toISOString();
+          renderStudio();
+          focusBlock(finalBlock.id);
+          setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${finalBlock.id}"]`), lastContent.length);
       }
 
-      renderStudio();
       queueSave();
+  });
+
+  refs.screenplayEditor.addEventListener("focusout", (e) => {
+    if (e.target.classList.contains("script-block")) {
+        const id = e.target.dataset.id;
+        if (id === state.activeBlockId) return;
+        const line = getLine(id);
+        const project = getCurrentProject();
+        if (line && !line.text.trim() && project && project.lines.length > 1) {
+            const index = getLineIndex(id);
+            project.lines.splice(index, 1);
+            project.updatedAt = new Date().toISOString();
+            renderStudio();
+            queueSave();
+        }
+    }
   });
 
   // Project Grid (Delegated)
@@ -298,10 +361,19 @@ export function openProject(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
   state.currentProjectId = project.id;
+
+  // Reset history for the new project
+  state.history = [];
+  state.historyIndex = -1;
+  pushHistory();
+
   state.activeBlockId = project.lines[0]?.id || null;
   state.activeType = project.lines[0]?.type || "action";
 
   refs.aiAssistToggle.checked = state.aiAssist;
+  refs.spellingCheckToggle.checked = state.spellingCheck;
+  document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
+  document.body.classList.toggle("grammar-mode-active", state.spellingCheck);
   refs.autoNumberToggle.checked = state.autoNumberScenes;
   refs.aiPanel.hidden = !state.aiAssist;
 
@@ -337,7 +409,7 @@ function handleMetaInput() {
 
 function togglePaneSection(body, button) {
   body.classList.toggle("is-collapsed");
-  button.textContent = body.classList.contains("is-collapsed") ? "v" : "^";
+  button.textContent = body.classList.contains("is-collapsed") ? "▼" : "▲";
 }
 
 function handleBlockInput(id, element) {
@@ -361,20 +433,22 @@ function handleBlockInput(id, element) {
   }
 
   if (!autoCompleted && normalized !== beforeText) {
-    // Stage 3: Auto-CONT'D logic
-    if (line.type === "scene" && normalized.endsWith(" -")) {
-        const currentLoc = normalized.split(" -")[0].trim().toUpperCase();
-        const prevHeading = getPreviousSceneHeading(getLineIndex(id));
-        if (prevHeading) {
-            const prevLoc = prevHeading.split(" -")[0].trim().toUpperCase();
-            if (currentLoc && currentLoc === prevLoc) {
-                normalized += " CONT'D";
-            }
-        }
+    let newOffset = offset;
+    // If we added a '(' at the beginning, shift offset
+    if (line.type === "parenthetical" && !beforeText.startsWith("(") && normalized.startsWith("(")) {
+        newOffset++;
+    }
+    if (line.type === "note" && !beforeText.startsWith("[") && normalized.startsWith("[")) {
+        newOffset++;
     }
 
-    element.textContent = normalized;
-    setCaretOffset(element, offset);
+    const activeLine = getLine(state.activeBlockId);
+    if (activeLine && (activeLine.type === "parenthetical" || activeLine.type === "note") && (normalized === "" || normalized === "()" || normalized === "[]")) {
+        // Don't force set if it breaks typing feel for empty wrappers
+    } else {
+        element.textContent = normalized;
+        setCaretOffset(element, newOffset);
+    }
   }
 
   line.text = normalized;
@@ -389,11 +463,46 @@ function handleBlockInput(id, element) {
   queueSave();
 }
 
+let lastKeyDownCode = "";
+
+export function intelligentSplit(element) {
+  const id = element.dataset.id;
+  const project = getCurrentProject();
+  const index = getLineIndex(id);
+  const line = project?.lines[index];
+  if (!line) return;
+
+  const offset = getCaretOffset(element);
+  const textBefore = line.text.substring(0, offset);
+  const textAfter = line.text.substring(offset);
+
+  line.text = textBefore;
+  // Get the next type in sequence
+  const currentTypeIdx = TYPE_SEQUENCE.indexOf(line.type);
+  const nextType = TYPE_SEQUENCE[(currentTypeIdx + 1) % TYPE_SEQUENCE.length];
+  const newId = addBlock(nextType, textAfter, index + 1);
+
+  renderStudio();
+  focusBlock(newId, !textAfter);
+  queueSave();
+}
+
 function handleBlockKeydown(event, id) {
   const project = getCurrentProject();
   const index = getLineIndex(id);
   const line = project?.lines[index];
   if (!line) return;
+
+  const code = event.code;
+
+  // Handle Break function (Backtick + Enter)
+  if (event.key === "Enter" && lastKeyDownCode === "Backquote") {
+    event.preventDefault();
+    intelligentSplit(event.target);
+    return;
+  }
+
+  lastKeyDownCode = code;
 
   if (event.key === "Delete") {
     event.preventDefault();
@@ -441,7 +550,7 @@ function handleBlockKeydown(event, id) {
       state.activeBlockId = prevLine.id;
       project.updatedAt = new Date().toISOString();
       renderStudio();
-      const prevElement = refs.screenplayEditor.querySelector(`.line[data-id="${prevLine.id}"]`);
+      const prevElement = refs.screenplayEditor.querySelector(`.script-block[data-id="${prevLine.id}"]`);
       focusBlock(prevLine.id);
       setCaretOffset(prevElement, prevTextLength);
       queueSave();
@@ -456,7 +565,7 @@ function handleBlockKeydown(event, id) {
       project.updatedAt = new Date().toISOString();
       renderStudio();
       focusBlock(targetId);
-      placeCaretAtEnd(refs.screenplayEditor.querySelector(`.line[data-id="${targetId}"]`));
+      placeCaretAtEnd(refs.screenplayEditor.querySelector(`.script-block[data-id="${targetId}"]`));
       queueSave();
       return;
     }
@@ -545,17 +654,8 @@ function changeBlockType(id, nextType) {
   const project = getCurrentProject();
   if (!line || !project) return;
 
-  const oldType = line.type;
   line.type = nextType;
-
-  let text = line.text;
-  if (nextType === "scene") {
-    if (!text || text === "Untitled Scene" || oldType === "character") {
-      text = "";
-    }
-  }
-
-  line.text = normalizeConvertedText(text, nextType);
+  line.text = normalizeConvertedText(line.text, nextType);
   project.updatedAt = new Date().toISOString();
   state.activeType = nextType;
   renderStudio();
@@ -571,7 +671,7 @@ function normalizeConvertedText(text, type) {
   return normalizeLineText(stripped, type);
 }
 
-export function toggleSceneCollapse(sceneId) {
+function toggleSceneCollapse(sceneId) {
   const project = getCurrentProject();
   if (!project) return;
   const collapsed = new Set(project.collapsedSceneIds);
@@ -595,15 +695,7 @@ function applySuggestion(value) {
   const line = getLine(state.activeBlockId);
   const project = getCurrentProject();
   if (!line || !project) return;
-
-  if (line.type === "scene" && line.text.includes(" -")) {
-    const parts = line.text.split(" -");
-    parts[parts.length - 1] = " " + value;
-    line.text = normalizeLineText(parts.join(" -"), line.type);
-  } else {
-    line.text = normalizeLineText(value, line.type);
-  }
-
+  line.text = normalizeLineText(value, line.type);
   project.updatedAt = new Date().toISOString();
   renderStudio();
   focusBlock(line.id);
@@ -630,7 +722,7 @@ function togglePane(side) {
   const collapsed = pane.classList.toggle("is-hidden");
   if (handle) handle.classList.toggle("is-hidden", collapsed);
   refs.studioLayout.classList.toggle(isLeft ? "left-pane-hidden" : "right-pane-hidden", collapsed);
-  button.textContent = collapsed ? (isLeft ? ">" : "<") : (isLeft ? "<" : ">");
+  button.textContent = collapsed ? (isLeft ? "▶" : "◀") : (isLeft ? "◀" : "▶");
 }
 
 function initResizeHandle(handle, side) {
@@ -663,14 +755,6 @@ function initResizeHandle(handle, side) {
 }
 
 function handleMenuAction(action) {
-  const project = getCurrentProject();
-  const meta = project ? {
-      title: project.title,
-      author: project.author,
-      email: project.contact,
-      phone: project.company
-  } : {};
-
   switch (action) {
     case "new-project":
       openProject(createProject().id);
@@ -705,10 +789,10 @@ function handleMenuAction(action) {
       exportPdf();
       break;
     case "preview-new-tab":
-      if (project) exportScript(project.lines, meta);
+      openPreviewWindow(false);
       break;
     case "print-project":
-      if (project) exportScript(project.lines, meta);
+      printWithHiddenFrame();
       break;
     case "exit-studio":
       persistProjects(true);
@@ -716,10 +800,12 @@ function handleMenuAction(action) {
       renderHome();
       break;
     case "undo":
-      execEditorCommand("undo");
+      undo();
+      renderStudio();
       break;
     case "redo":
-      execEditorCommand("redo");
+      redo();
+      renderStudio();
       break;
     case "insert-page-break":
       insertMenuBlock("text", "--- PAGE BREAK ---");
@@ -760,6 +846,13 @@ function handleMenuAction(action) {
       refs.aiPanel.hidden = !state.aiAssist;
       applyToolbarState();
       updateMenuStateButtons();
+      queueSave();
+      break;
+    case "toggle-spelling-check":
+      state.spellingCheck = !state.spellingCheck;
+      refs.spellingCheckToggle.checked = state.spellingCheck;
+      document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
+      renderStudio();
       queueSave();
       break;
     case "show-work-tracking":
@@ -841,6 +934,7 @@ async function removeProject(id) {
 
 function handleGlobalKeydown(event) {
   const key = event.key.toLowerCase();
+  const code = event.code;
 
   // Ctrl/Cmd + S to Save
   if ((event.ctrlKey || event.metaKey) && key === "s") {
@@ -853,16 +947,18 @@ function handleGlobalKeydown(event) {
   if ((event.ctrlKey || event.metaKey) && key === "z") {
     event.preventDefault();
     if (event.shiftKey) {
-        execEditorCommand("redo");
+        redo();
     } else {
-        execEditorCommand("undo");
+        undo();
     }
+    renderStudio();
     return;
   }
 
   if ((event.ctrlKey || event.metaKey) && key === "y") {
     event.preventDefault();
-    execEditorCommand("redo");
+    redo();
+    renderStudio();
     return;
   }
 
@@ -893,23 +989,37 @@ function handleGlobalKeydown(event) {
 
   // Alt + Key for block types
   if (event.altKey && !event.ctrlKey && !event.metaKey) {
-    const code = event.code;
+    const charCode = code?.startsWith('Key') ? code.substring(3).toLowerCase() : key;
     const map = {
-      KeyS: "scene",
-      KeyA: "action",
-      KeyC: "character",
-      KeyD: "dialogue",
-      KeyT: "transition",
-      KeyP: "parenthetical",
-      KeyO: "shot",
-      KeyX: "text",
-      KeyN: "note",
-      KeyU: "dual",
-      KeyI: "image"
+      s: "shot",
+      a: "action",
+      c: "character",
+      d: "dialogue",
+      t: "transition",
+      p: "parenthetical",
+      o: "shot",
+      x: "text",
+      n: "note",
+      u: "dual",
+      i: "image",
+      e: "scene"
     };
-    if (map[code]) {
+
+    const blockType = map[charCode] || map[key];
+
+    if (blockType) {
       event.preventDefault();
-      handleToolSelection(map[code]);
+      handleToolSelection(blockType);
+    }
+
+    // Alt + G for AI Grammar
+    if ((charCode === 'g' || key === 'g') && state.aiAssist) {
+      event.preventDefault();
+      const activeEl = getActiveEditableBlock();
+      if (activeEl) {
+        const row = activeEl.closest('.script-block-row');
+        if (row) AI.triggerAction(row, "Grammar");
+      }
     }
   }
 
@@ -948,7 +1058,7 @@ async function insertHyperlink() {
   insertMenuBlock("text", text);
 }
 
-async function findInScript() {
+export async function findInScript() {
   const project = getCurrentProject();
   if (!project) return;
   const query = await customPrompt("Find text in this script:", state.filterQuery, "Find");
@@ -985,7 +1095,13 @@ function clearScriptFilter() {
 
 function exportTxt() {
   const project = syncProjectFromInputs() || getCurrentProject();
-  const content = [project.title, project.author, "", serializeScript(project)].join("\n");
+  if (!project) return;
+  const preparedLines = buildPreparedExportLines(project);
+  const cover = [project.title, project.author, project.contact, project.company, project.details, project.logline].filter(Boolean).join("\n");
+  const pages = paginateScriptLines(preparedLines)
+    .map((pageLines) => pageLines.map((line) => line.displayText).join("\n\n"))
+    .filter(Boolean);
+  const content = [cover, ...pages].filter(Boolean).join("\n\f\n");
   downloadFile(`${slugify(project.title)}.txt`, content, "text/plain");
 }
 
@@ -996,21 +1112,93 @@ function exportJson() {
 
 function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
-    const content = buildPrintableDocument(project);
-    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword");
+    if (!project) return;
+    const content = `\uFEFF${buildWordDocument(project)}`;
+    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword;charset=utf-8");
 }
 
-function exportPdf() {
+function exportPdf() { printWithHiddenFrame(); }
+
+function openPreviewWindow(autoPrint) {
   const project = syncProjectFromInputs() || getCurrentProject();
-  if (project) {
-      const meta = {
-          title: project.title,
-          author: project.author,
-          email: project.contact,
-          phone: project.company
-      };
-      exportScript(project.lines, meta);
+  if (!project) return;
+  const previewWindow = window.open("", "_blank", "noopener,noreferrer");
+  if (!previewWindow) {
+    customAlert("Allow pop-ups for this site so EyaWriter can open the print window for PDF export.", "PDF Export");
+    return;
   }
+  previewWindow.document.open();
+  previewWindow.document.write(buildPrintableDocument(project, autoPrint));
+  previewWindow.document.close();
+  previewWindow.focus();
+}
+
+function printWithHiddenFrame() {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project) return;
+
+  const existingFrame = document.querySelector("#printExportFrame");
+  if (existingFrame) {
+    existingFrame.remove();
+  }
+
+  const frame = document.createElement("iframe");
+  frame.id = "printExportFrame";
+  frame.style.position = "fixed";
+  frame.style.right = "0";
+  frame.style.bottom = "0";
+  frame.style.width = "0";
+  frame.style.height = "0";
+  frame.style.border = "0";
+  frame.setAttribute("aria-hidden", "true");
+  document.body.appendChild(frame);
+
+  const cleanup = () => window.setTimeout(() => frame.remove(), 1500);
+  frame.onload = () => {
+    const frameWindow = frame.contentWindow;
+    if (!frameWindow) {
+      cleanup();
+      customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+      return;
+    }
+
+    frameWindow.focus();
+    window.setTimeout(() => {
+      try {
+        frameWindow.print();
+      } catch (error) {
+        console.error("Unable to start PDF print flow", error);
+        customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+      } finally {
+        cleanup();
+      }
+    }, 350);
+  };
+
+  frame.srcdoc = buildPrintableDocument(project, false);
+}
+
+function buildPreparedExportLines(project) {
+  let sceneNumber = 0;
+
+  return project.lines.reduce((accumulator, line) => {
+    const normalized = normalizeLineText(line.text, line.type);
+    if (!normalized) {
+      return accumulator;
+    }
+
+    if (line.type === "scene") {
+      sceneNumber += 1;
+    }
+
+    accumulator.push({
+      id: line.id,
+      type: line.type,
+      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
+    });
+
+    return accumulator;
+  }, []);
 }
 
 function importFile(event) {

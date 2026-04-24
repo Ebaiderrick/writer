@@ -40,9 +40,12 @@ export const state = {
   visibleSuggestions: [],
   saveTimer: null,
   aiAssist: false,
+  spellingCheck: false,
   toolStripCollapsed: false,
   autoNumberScenes: false,
-  theme: "rose",
+  theme: "cedar",
   viewOptions: { ...DEFAULT_VIEW_OPTIONS },
-  filterQuery: ""
+  filterQuery: "",
+  history: [],
+  historyIndex: -1
 };
