@@ -243,20 +243,23 @@ export function sanitizeLeftPaneBlocks(blocks) {
       if (!defaults.has(key) || seen.has(key)) {
         return;
       }
-      seen.add(key);
-      sanitized.push({
-        key,
-        visible: block.visible === undefined ? defaults.get(key).visible : Boolean(block.visible),
-        collapsed: Boolean(block.collapsed)
+        seen.add(key);
+        sanitized.push({
+          key,
+          visible: key === "current" ? true : (block.visible === undefined ? defaults.get(key).visible : Boolean(block.visible)),
+          collapsed: Boolean(block.collapsed)
+        });
       });
-    });
   }
 
   DEFAULT_LEFT_PANE_BLOCKS.forEach((block) => {
     if (seen.has(block.key)) {
       return;
     }
-    sanitized.push({ ...block });
+    sanitized.push({
+      ...block,
+      visible: block.key === "current" ? true : block.visible
+    });
   });
 
   return sanitized;

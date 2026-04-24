@@ -334,7 +334,7 @@ img {
 }
 
 .menu-group-summary::after {
-  content: "▶";
+  content: "\25B6";
   color: var(--accent-strong);
   font-size: 0.74rem;
   transform: rotate(90deg);
@@ -968,6 +968,9 @@ img {
   width: 24px;
   min-width: 24px;
   height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   border-radius: 7px;
   background: var(--control-bg);
@@ -1236,6 +1239,12 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   margin-left: var(--script-character-offset);
   width: var(--script-character-width);
   font-weight: bold;
+}
+
+.script-block[data-type="action"],
+.preview-line.action {
+  text-align: justify;
+  text-align-last: left;
 }
 
 .script-block[data-type="dialogue"] {
@@ -1600,8 +1609,21 @@ kbd {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  width: 100%;
   font-size: 0.8rem;
   color: color-mix(in srgb, var(--ink) 90%, var(--muted));
+}
+
+.block-customizer-label.is-fixed::after {
+  content: "Always on";
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 84%, transparent);
+  color: var(--accent-strong);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .block-customizer-label span {
@@ -1622,6 +1644,9 @@ kbd {
 .block-customizer-move {
   width: 24px;
   height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   border-radius: 7px;
   background: var(--control-bg);

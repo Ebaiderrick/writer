@@ -116,6 +116,7 @@ test('left pane blocks can be reordered, hidden, and collapsed from tools', asyn
   await openEditor(page);
 
   await page.locator('[data-menu-trigger="studioToolsMenu"]').click();
+  await expect(page.locator('#leftPaneBlockControls [data-left-pane-visibility="current"]')).toHaveCount(0);
   await page.locator('#leftPaneBlockControls [data-left-pane-key="metrics"][data-left-pane-move="up"]').evaluate((button) => button.click());
   await page.locator('#leftPaneBlockControls [data-left-pane-key="metrics"][data-left-pane-move="up"]').evaluate((button) => button.click());
   await page.locator('#leftPaneBlockControls [data-left-pane-visibility="characters"]').evaluate((checkbox) => {
@@ -143,4 +144,22 @@ test('view menu removes ruler, page count, and show outline options', async ({ p
   await expect(page.locator('#studioViewMenu')).not.toContainText('Ruler');
   await expect(page.locator('#studioViewMenu')).not.toContainText('Page Count');
   await expect(page.locator('#studioViewMenu')).not.toContainText('Show Outline');
+});
+
+test('file and edit menus expose the new export and text controls', async ({ page }) => {
+  await openEditor(page);
+
+  await page.locator('[data-menu-trigger="studioFileMenu"]').click();
+  await page.locator('#studioFileMenu .menu-group-summary').filter({ hasText: 'Manage' }).click();
+  await page.locator('#studioFileMenu .menu-group-summary').filter({ hasText: 'Export' }).click();
+  await expect(page.locator('#studioFileMenu [data-menu-action="save-home"]')).toBeVisible();
+  await expect(page.locator('#studioFileMenu [data-menu-action="export-txt"]')).toBeVisible();
+
+  await page.locator('[data-menu-trigger="studioEditMenu"]').click();
+  await page.locator('#studioEditMenu .menu-group-summary').filter({ hasText: 'Capitalization' }).click();
+  await expect(page.locator('#studioEditMenu [data-menu-action="text-caps-sentence"]')).toBeVisible();
+  await expect(page.locator('#studioEditMenu [data-menu-action="text-copy"]')).toBeVisible();
+  await expect(page.locator('#studioEditMenu [data-menu-action="text-cut"]')).toBeVisible();
+  await expect(page.locator('#studioEditMenu [data-menu-action="text-paste"]')).toBeVisible();
+  await expect(page.locator('#studioEditMenu [data-menu-action="text-duplicate"]')).toBeVisible();
 });

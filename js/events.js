@@ -37,9 +37,7 @@ export function bindEvents() {
   });
 
   refs.goHomeBtn.addEventListener("click", () => {
-    persistProjects(true);
-    showHome();
-    renderHome();
+    saveAndGoHome();
   });
 
   // Meta Inputs
@@ -131,16 +129,29 @@ export function bindEvents() {
   refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);
 
   // Layout Toggles
-  refs.leftRailToggle.addEventListener("click", () => togglePane("left"));
-  refs.rightRailToggle.addEventListener("click", () => togglePane("right"));
-  refs.toolStripToggle.addEventListener("click", () => {
-      state.toolStripCollapsed = !state.toolStripCollapsed;
-      applyToolbarState();
-      persistProjects(false);
+  refs.leftRailToggle.addEventListener("click", () => {
+    togglePane("left");
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
   });
+  refs.rightRailToggle.addEventListener("click", () => {
+    togglePane("right");
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+  });
+  refs.toolStripToggle.addEventListener("click", () => {
+        state.toolStripCollapsed = !state.toolStripCollapsed;
+        applyToolbarState();
+        setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "&#9660;" : "&#9650;");
+        persistProjects(false);
+    });
 
-  refs.leftPaneSectionToggle.addEventListener("click", () => togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle));
-  refs.rightPaneSectionToggle.addEventListener("click", () => togglePaneSection(refs.rightPaneBody, refs.rightPaneSectionToggle));
+  refs.leftPaneSectionToggle.addEventListener("click", () => {
+    togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle);
+    setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  });
+  refs.rightPaneSectionToggle.addEventListener("click", () => {
+    togglePaneSection(refs.rightPaneBody, refs.rightPaneSectionToggle);
+    setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  });
 
   refs.leftPaneBody.addEventListener("click", (event) => {
     const toggle = event.target.closest("[data-left-pane-section-toggle]");
@@ -418,6 +429,10 @@ export function renderStudio() {
   renderLeftPaneLayout();
   applyViewState();
   applyToolbarState();
+  setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
+  setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+  setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
 }
 
 export function duplicateActiveBlock() {
@@ -444,7 +459,7 @@ function handleMetaInput() {
 
 function togglePaneSection(body, button) {
   body.classList.toggle("is-collapsed");
-  button.textContent = body.classList.contains("is-collapsed") ? "▼" : "▲";
+  button.innerHTML = body.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;";
 }
 
 function handleBlockInput(id, element) {
@@ -757,7 +772,7 @@ function togglePane(side) {
   const collapsed = pane.classList.toggle("is-hidden");
   if (handle) handle.classList.toggle("is-hidden", collapsed);
   refs.studioLayout.classList.toggle(isLeft ? "left-pane-hidden" : "right-pane-hidden", collapsed);
-  button.textContent = collapsed ? (isLeft ? "▶" : "◀") : (isLeft ? "◀" : "▶");
+  button.innerHTML = collapsed ? (isLeft ? "&#9654;" : "&#9664;") : (isLeft ? "&#9664;" : "&#9654;");
 }
 
 function initResizeHandle(handle, side) {
@@ -802,6 +817,9 @@ function handleMenuAction(action) {
     case "save-project":
       persistProjects(true);
       break;
+    case "save-home":
+      saveAndGoHome();
+      break;
     case "rename-project":
       renameCurrentProject();
       break;
@@ -813,6 +831,9 @@ function handleMenuAction(action) {
       break;
     case "import-file":
       refs.fileInput.click();
+      break;
+    case "export-txt":
+      exportTxt();
       break;
     case "export-json":
       exportJson();
@@ -856,6 +877,40 @@ function handleMenuAction(action) {
         if (target) { target.focus(); selectElementText(target); }
         break;
     }
+    case "text-copy":
+      ContextMenu.performAction("copy", getActiveEditableBlock());
+      break;
+    case "text-cut":
+      ContextMenu.performAction("cut", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-paste":
+      ContextMenu.performAction("paste", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-duplicate":
+      ContextMenu.performAction("duplicate", getActiveEditableBlock());
+      break;
+    case "text-caps-all":
+      ContextMenu.performAction("caps-all", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-caps-sentence":
+      ContextMenu.performAction("caps-sentence", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-caps-each":
+      ContextMenu.performAction("caps-each", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-caps-low":
+      ContextMenu.performAction("caps-low", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-caps-random":
+      ContextMenu.performAction("caps-random", getActiveEditableBlock());
+      queueSave();
+      break;
     case "find":
       findInScript();
       break;
@@ -919,6 +974,18 @@ function execEditorCommand(command) {
   target.focus();
   if (typeof document.execCommand === "function") {
     document.execCommand(command);
+  }
+}
+
+function saveAndGoHome() {
+  persistProjects(true);
+  showHome();
+  renderHome();
+}
+
+function setButtonGlyph(button, entity) {
+  if (button) {
+    button.innerHTML = entity;
   }
 }
 

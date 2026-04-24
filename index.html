@@ -177,23 +177,25 @@
                 </div>
               </div>
             </details>
-            <details class="menu-group">
-              <summary class="menu-group-summary">Manage</summary>
-              <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="save-project">Save Project</button>
-                <button class="nav-menu-button" type="button" data-menu-action="rename-project">Rename</button>
-                <button class="nav-menu-button" type="button" data-menu-action="duplicate-project">Duplicate</button>
-                <button class="nav-menu-button nav-menu-button-danger" type="button" data-menu-action="delete-project">Delete</button>
-              </div>
-            </details>
-            <details class="menu-group">
-              <summary class="menu-group-summary">Export</summary>
-              <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="export-word">Export as Word</button>
-                <button class="nav-menu-button" type="button" data-menu-action="export-pdf">Export as PDF</button>
-                <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
-              </div>
-            </details>
+              <details class="menu-group">
+                <summary class="menu-group-summary">Manage</summary>
+                <div class="menu-group-body">
+                  <button class="nav-menu-button" type="button" data-menu-action="save-project">Save Project</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="save-home">Save &amp; Home</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="rename-project">Rename</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="duplicate-project">Duplicate</button>
+                  <button class="nav-menu-button nav-menu-button-danger" type="button" data-menu-action="delete-project">Delete</button>
+                </div>
+              </details>
+              <details class="menu-group">
+                <summary class="menu-group-summary">Export</summary>
+                <div class="menu-group-body">
+                  <button class="nav-menu-button" type="button" data-menu-action="export-txt">Export as TXT</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="export-word">Export as Word</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="export-pdf">Export as PDF</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
+                </div>
+              </details>
             <details class="menu-group">
               <summary class="menu-group-summary">Output</summary>
               <div class="menu-group-body">
@@ -204,13 +206,32 @@
             </details>
           </div>
 
-          <div id="studioEditMenu" class="nav-menu" hidden>
+          <div id="studioEditMenu" class="nav-menu nav-menu-wide" hidden>
             <details class="menu-group" open>
               <summary class="menu-group-summary">History</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="undo">Undo</button>
                 <button class="nav-menu-button" type="button" data-menu-action="redo">Redo</button>
                 <button class="nav-menu-button" type="button" data-menu-action="select-all">Select All</button>
+              </div>
+            </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Text</summary>
+              <div class="menu-group-body">
+                <details class="menu-group">
+                  <summary class="menu-group-summary">Capitalization</summary>
+                  <div class="menu-group-body">
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-sentence">Sentence Case</button>
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-each">Title Case</button>
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-all">UPPERCASE</button>
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-low">lowercase</button>
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-random">Random Case</button>
+                  </div>
+                </details>
+                <button class="nav-menu-button" type="button" data-menu-action="text-copy">Copy</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-cut">Cut</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-paste">Paste</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-duplicate">Duplicate</button>
               </div>
             </details>
             <details class="menu-group">

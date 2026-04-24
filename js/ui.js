@@ -5,6 +5,13 @@ import { getCurrentProject, persistProjects, serializeScript } from './project.j
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
 import { updateBackground } from './background.js';
 
+const MENU_GLYPHS = {
+  left: "&#9664;",
+  right: "&#9654;",
+  up: "&#9650;",
+  down: "&#9660;"
+};
+
 export function showAuth() {
   refs.homeView.hidden = true;
   refs.studioView.hidden = true;
@@ -228,6 +235,21 @@ function getLeftPaneBlockMeta(key) {
   return LEFT_PANE_BLOCK_DEFS.find((block) => block.key === key) || null;
 }
 
+function positionMenuUnderTrigger(menu, trigger) {
+  if (!menu || !trigger || window.innerWidth <= 900) {
+    return;
+  }
+
+  const container = trigger.closest(".nav-stack") || menu.offsetParent || document.body;
+  const containerRect = container.getBoundingClientRect();
+  const triggerRect = trigger.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const maxLeft = Math.max(0, containerRect.width - menuRect.width);
+  const alignedLeft = triggerRect.left - containerRect.left;
+
+  menu.style.left = `${Math.min(Math.max(alignedLeft, 0), maxLeft)}px`;
+}
+
 function getLeftPaneBlockState(key) {
   return state.leftPaneBlocks.find((block) => block.key === key) || null;
 }
@@ -246,14 +268,17 @@ export function renderLeftPaneBlockControls() {
 
     const row = document.createElement("div");
     row.className = "block-customizer-item";
+    const labelMarkup = block.key === "current"
+      ? `<span class="block-customizer-label is-fixed"><span>${escapeHtml(meta.label)}</span></span>`
+      : `<label class="block-customizer-label">
+          <input type="checkbox" data-left-pane-visibility="${escapeHtml(block.key)}" ${block.visible ? "checked" : ""}>
+          <span>${escapeHtml(meta.label)}</span>
+        </label>`;
     row.innerHTML = `
-      <label class="block-customizer-label">
-        <input type="checkbox" data-left-pane-visibility="${escapeHtml(block.key)}" ${block.visible ? "checked" : ""}>
-        <span>${escapeHtml(meta.label)}</span>
-      </label>
+      ${labelMarkup}
       <div class="block-customizer-actions">
-        <button class="block-customizer-move" type="button" data-left-pane-move="up" data-left-pane-key="${escapeHtml(block.key)}" ${index === 0 ? "disabled" : ""}>▲</button>
-        <button class="block-customizer-move" type="button" data-left-pane-move="down" data-left-pane-key="${escapeHtml(block.key)}" ${index === state.leftPaneBlocks.length - 1 ? "disabled" : ""}>▼</button>
+        <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(meta.label)} up" data-left-pane-move="up" data-left-pane-key="${escapeHtml(block.key)}" ${index === 0 ? "disabled" : ""}>${MENU_GLYPHS.up}</button>
+        <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(meta.label)} down" data-left-pane-move="down" data-left-pane-key="${escapeHtml(block.key)}" ${index === state.leftPaneBlocks.length - 1 ? "disabled" : ""}>${MENU_GLYPHS.down}</button>
       </div>
     `;
     refs.leftPaneBlockControls.appendChild(row);
@@ -291,7 +316,7 @@ export function renderLeftPaneLayout() {
 
     const toggle = section.querySelector("[data-left-pane-section-toggle]");
     if (toggle) {
-      toggle.textContent = block.collapsed ? "►" : "▼";
+      toggle.innerHTML = block.collapsed ? MENU_GLYPHS.right : MENU_GLYPHS.down;
       toggle.setAttribute("aria-expanded", String(!block.collapsed));
       toggle.setAttribute("aria-label", `${block.collapsed ? "Expand" : "Collapse"} ${label}`);
     }
@@ -316,6 +341,10 @@ export function toggleLeftPaneSection(key) {
 }
 
 export function setLeftPaneBlockVisibility(key, visible) {
+  if (key === "current") {
+    return;
+  }
+
   const block = getLeftPaneBlockState(key);
   if (!block) {
     return;
@@ -383,6 +412,7 @@ export function applyViewState() {
   document.body.classList.remove("show-ruler");
   document.body.classList.remove("outline-hidden");
   document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
+  refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
   updateMenuStateButtons();
 }
 
@@ -405,7 +435,7 @@ export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
   document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
-  refs.toolStripToggle.textContent = state.toolStripCollapsed ? "▼" : "▲";
+  refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
   updateMenuStateButtons();
 }
 
@@ -441,6 +471,9 @@ export function toggleMenu(menuId) {
   closeMenus();
   menu.hidden = !willOpen;
   trigger?.classList.toggle("is-open", willOpen);
+  if (willOpen) {
+    positionMenuUnderTrigger(menu, trigger);
+  }
 }
 
 export async function showProofreadReport() {
@@ -496,14 +529,15 @@ export function revealMetricsPanel() {
     // This needs togglePane from events.js, but ui.js shouldn't depend on events.js
     // We can just manipulate the classes directly here or emit an event.
     refs.leftPane.classList.remove("is-hidden");
-    refs.leftRailToggle.textContent = "◀";
+    refs.leftRailToggle.innerHTML = MENU_GLYPHS.left;
     refs.studioLayout.classList.remove("left-pane-hidden");
     if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
   }
   if (refs.leftPaneBody.classList.contains("is-collapsed")) {
       refs.leftPaneBody.classList.remove("is-collapsed");
-      refs.leftPaneSectionToggle.textContent = "▲";
+      refs.leftPaneSectionToggle.innerHTML = MENU_GLYPHS.up;
   }
+  refs.leftPaneSectionToggle.innerHTML = refs.leftPaneBody.classList.contains("is-collapsed") ? MENU_GLYPHS.down : MENU_GLYPHS.up;
   document.querySelector('[data-left-pane-block="metrics"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 

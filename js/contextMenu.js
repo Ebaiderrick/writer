@@ -121,6 +121,12 @@ export const ContextMenu = (() => {
     }
   }
 
+  function performAction(action, targetBlock = null) {
+    preserveSelection(targetBlock || getActiveEditableBlock());
+    handleAction(action);
+    hide();
+  }
+
   function applyCapitalization(type) {
     restoreSelection();
     const selection = window.getSelection();
@@ -306,5 +312,5 @@ export const ContextMenu = (() => {
     duplicateActiveBlock();
   }
 
-  return { init, show, hide };
+  return { init, show, hide, performAction };
 })();
