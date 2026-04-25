@@ -418,10 +418,6 @@ export function updateMenuStateButtons() {
     button.classList.toggle("is-active", Boolean(refs.autoNumberToggle?.checked));
   });
 
-  document.querySelectorAll("[data-menu-action='toggle-typewriter-focus']").forEach((button) => {
-    button.classList.toggle("is-active", Boolean(refs.typewriterToggle?.checked));
-  });
-
   document.querySelectorAll("[data-menu-action='filter']").forEach((button) => {
     button.classList.toggle("is-active", Boolean(state.filterQuery));
   });

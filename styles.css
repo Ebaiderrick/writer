@@ -817,35 +817,47 @@ img {
 
 .tool-strip-foot {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   gap: 16px;
   margin-top: 4px;
 }
 
 .suggestion-tray {
-  display: grid;
-  justify-items: end;
-  gap: 8px;
+  min-width: 220px;
+  max-width: 300px;
+  padding: 0;
+  z-index: 1995;
 }
 
 .suggestion-title {
-  font-size: 0.76rem;
+  display: block;
+  padding: 9px 10px 7px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 
 .suggestion-list {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+  display: grid;
+  gap: 0;
+  padding: 4px 0;
 }
 
 .suggestion-pill {
-  padding: 3px 7px;
-  font-size: 0.74rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  justify-content: flex-start;
+  font: inherit;
   cursor: pointer;
-  color: var(--accent-strong);
-  background: #fff7f6;
+  color: color-mix(in srgb, var(--ink) 92%, var(--muted));
+}
+
+.suggestion-pill:hover {
+  background: var(--control-bg);
 }
 
 .studio-layout {

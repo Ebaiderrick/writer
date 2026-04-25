@@ -147,7 +147,7 @@ export function updateSuggestions() {
   const line = getLine(state.activeBlockId);
   const type = line?.type || state.activeType;
   const suggestions = buildSuggestions(type, line?.text || "");
-  renderSuggestionTray(t("editor.suggestions", { type: getTypeLabel(type) }), suggestions);
+  renderSuggestionTray(t("editor.suggestions", { type: getTypeLabel(type) }), suggestions, getActiveBlockSuggestionAnchor());
 }
 
 export function buildSuggestions(type, currentText) {
@@ -261,11 +261,12 @@ export function clearSuggestionContext() {
   state.suggestionContext = null;
 }
 
-export function showSpellingSuggestions(context) {
+export function showSpellingSuggestions(context, anchor = null) {
   state.suggestionContext = context;
   renderSuggestionTray(
     t("editor.spellingSuggestions", { word: context.word }),
-    context.suggestions.map((value) => ({ label: value, value }))
+    context.suggestions.map((value) => ({ label: value, value })),
+    anchor
   );
 }
 
@@ -293,12 +294,21 @@ function renderBlockContent(block, line, project, spellingLexicon = null) {
   renderSpellingIssues(block, line.text, issues);
 }
 
-function renderSuggestionTray(title, suggestions) {
+export function hideSuggestionTray(clearSuggestions = false) {
+  refs.suggestionTray.hidden = true;
+  refs.suggestionTray.style.left = "";
+  refs.suggestionTray.style.top = "";
+  if (clearSuggestions) {
+    state.visibleSuggestions = [];
+  }
+}
+
+function renderSuggestionTray(title, suggestions, anchor = null) {
   state.visibleSuggestions = suggestions.slice(0, 9);
   refs.suggestionList.innerHTML = "";
 
   if (!state.visibleSuggestions.length) {
-    refs.suggestionTray.hidden = true;
+    hideSuggestionTray(true);
     return;
   }
 
@@ -308,9 +318,55 @@ function renderSuggestionTray(title, suggestions) {
   state.visibleSuggestions.forEach((suggestion, index) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "suggestion-pill";
+    button.className = "menu-item suggestion-pill";
     button.textContent = `${index + 1}. ${suggestion.label}`;
     button.dataset.suggestionValue = suggestion.value;
     refs.suggestionList.appendChild(button);
   });
+
+  positionSuggestionTray(anchor);
+}
+
+function positionSuggestionTray(anchor = null) {
+  if (refs.suggestionTray.hidden) {
+    return;
+  }
+
+  const tray = refs.suggestionTray;
+  const resolved = anchor || getActiveBlockSuggestionAnchor();
+  const margin = 12;
+  tray.style.left = "0px";
+  tray.style.top = "0px";
+
+  const trayWidth = tray.offsetWidth || 240;
+  const trayHeight = tray.offsetHeight || 120;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let left = margin;
+  let top = margin;
+
+  if (resolved?.rect) {
+    const { rect } = resolved;
+    const rightAligned = rect.right + margin;
+    const leftAligned = rect.left - trayWidth - margin;
+    left = rightAligned + trayWidth <= viewportWidth - margin
+      ? rightAligned
+      : Math.max(margin, leftAligned);
+    top = rect.top;
+  } else if (Number.isFinite(resolved?.x) && Number.isFinite(resolved?.y)) {
+    left = resolved.x + 6;
+    top = resolved.y + 6;
+  }
+
+  left = Math.max(margin, Math.min(left, viewportWidth - trayWidth - margin));
+  top = Math.max(margin, Math.min(top, viewportHeight - trayHeight - margin));
+
+  tray.style.left = `${left}px`;
+  tray.style.top = `${top}px`;
+}
+
+function getActiveBlockSuggestionAnchor() {
+  const block = getActiveEditableBlock();
+  return block ? { rect: block.getBoundingClientRect() } : null;
 }

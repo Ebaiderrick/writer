@@ -333,7 +333,6 @@
               <summary class="menu-group-summary">Editor</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-auto-number">Auto Number Scenes</button>
-                <button class="nav-menu-button" type="button" data-menu-action="toggle-typewriter-focus">Typewriter Focus</button>
               </div>
             </details>
             <details class="menu-group">
@@ -435,10 +434,6 @@
                 <span>Auto number</span>
               </label>
               <label class="option-check">
-                <input id="typewriterToggle" type="checkbox">
-                <span>Typewriter focus</span>
-              </label>
-              <label class="option-check">
                 <input id="aiAssistToggle" type="checkbox">
                 <span>AI Assistance</span>
               </label>
@@ -457,12 +452,13 @@
 
         <div class="tool-strip-foot">
           <span id="activeModeLabel" class="active-pill" title="Active block"></span>
-          <div id="suggestionTray" class="suggestion-tray" hidden>
-            <span id="suggestionTitle" class="suggestion-title">Suggestions</span>
-            <div id="suggestionList" class="suggestion-list"></div>
-          </div>
         </div>
       </section>
+
+      <div id="suggestionTray" class="suggestion-tray context-menu" hidden>
+        <span id="suggestionTitle" class="suggestion-title">Suggestions</span>
+        <div id="suggestionList" class="suggestion-list"></div>
+      </div>
 
       <section id="studioLayout" class="studio-layout">
         <aside id="leftPane" class="left-pane">

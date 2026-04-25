@@ -10,7 +10,7 @@ import {
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
-  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay
+  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
 import { paginateScriptLines } from './pagination.js';
@@ -32,7 +32,7 @@ import {
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
 import {
   applyWordCase, clearSpellingHighlights, ensureLanguageDictionary, getSpellingContextAtOffset,
-  hasLanguageDictionary, highlightSpellingIssue
+  hasLanguageDictionary, highlightSpellingIssue, getSpellingSuggestions
 } from './spelling.js';
 
 export function bindEvents() {
@@ -125,11 +125,6 @@ export function bindEvents() {
     queueSave();
   });
 
-  refs.typewriterToggle.addEventListener("change", () => {
-    document.body.classList.toggle("typewriter-mode", refs.typewriterToggle.checked);
-    applyToolbarState();
-  });
-
   refs.aiAssistToggle.addEventListener("change", () => {
     state.aiAssist = refs.aiAssistToggle.checked;
     refs.aiPanel.hidden = !state.aiAssist;
@@ -208,6 +203,10 @@ export function bindEvents() {
       if (!event.target.closest(".nav-stack")) {
         closeMenus();
       }
+      if (!event.target.closest("#suggestionTray") && !event.target.closest(".script-block")) {
+        hideSuggestionTray(true);
+        clearSuggestionContext();
+      }
   });
 
   // Delegated Editor Events
@@ -221,7 +220,7 @@ export function bindEvents() {
     const block = e.target.closest(".script-block");
     if (block) {
         setActiveBlock(block.dataset.id);
-        await maybeShowSpellingSuggestions(block);
+        await maybeShowSpellingSuggestions(block, e.target, e.clientX, e.clientY);
     }
     if (e.target.closest(".scene-toggle")) {
         const row = e.target.closest(".script-block-row");
@@ -997,11 +996,6 @@ function handleMenuAction(action) {
       renderStudio();
       queueSave();
       break;
-    case "toggle-typewriter-focus":
-      refs.typewriterToggle.checked = !refs.typewriterToggle.checked;
-      document.body.classList.toggle("typewriter-mode", refs.typewriterToggle.checked);
-      applyToolbarState();
-      break;
     case "show-work-tracking":
       showWorkTracking();
       break;
@@ -1059,7 +1053,7 @@ function primeSpellingDictionary() {
     });
 }
 
-async function maybeShowSpellingSuggestions(block) {
+async function maybeShowSpellingSuggestions(block, target = null, clientX = null, clientY = null) {
   if (!state.spellingCheck) {
     return;
   }
@@ -1079,6 +1073,13 @@ async function maybeShowSpellingSuggestions(block) {
     }
   }
 
+  const clickedContext = resolveClickedSpellingContext(block, line, project, target, clientX, clientY);
+  if (clickedContext) {
+    showSpellingSuggestions(clickedContext, { x: clientX, y: clientY });
+    highlightSpellingIssue(block, clickedContext);
+    return;
+  }
+
   const offset = getCaretOffset(block);
   const context = getSpellingContextAtOffset(line.text, offset, {
     language: state.language,
@@ -1092,8 +1093,91 @@ async function maybeShowSpellingSuggestions(block) {
     return;
   }
 
-  showSpellingSuggestions(context);
+  showSpellingSuggestions(context, { rect: block.getBoundingClientRect() });
   highlightSpellingIssue(block, context);
+}
+
+function resolveClickedSpellingContext(block, line, project, target, clientX, clientY) {
+  const directIssue = target?.closest?.(".spelling-error");
+  const pointIssue = getSpellingIssueFromPoint(block, clientX, clientY);
+  const issue = directIssue || pointIssue;
+
+  if (issue) {
+    const start = Number(issue.dataset.spellingStart);
+    const end = Number(issue.dataset.spellingEnd);
+    const word = issue.dataset.spellingWord || line.text.slice(start, end);
+    const suggestions = getSpellingSuggestions(word, {
+      language: state.language,
+      project
+    });
+
+    if (suggestions.length) {
+      return {
+        mode: "spelling",
+        lineId: line.id,
+        start,
+        end,
+        word,
+        suggestions
+      };
+    }
+  }
+
+  const offsetFromPoint = getCaretOffsetFromPoint(block, clientX, clientY);
+  if (offsetFromPoint >= 0) {
+    return getSpellingContextAtOffset(line.text, offsetFromPoint, {
+      language: state.language,
+      project,
+      lineId: line.id
+    });
+  }
+
+  return null;
+}
+
+function getSpellingIssueFromPoint(block, clientX, clientY) {
+  return getPointContext(block, clientX, clientY)?.element?.closest?.(".spelling-error") || null;
+}
+
+function getCaretOffsetFromPoint(block, clientX, clientY) {
+  return getPointContext(block, clientX, clientY)?.offset ?? -1;
+}
+
+function getPointContext(block, clientX, clientY) {
+  if (!block || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+
+  let container = null;
+  let offset = 0;
+
+  if (typeof document.caretPositionFromPoint === "function") {
+    const position = document.caretPositionFromPoint(clientX, clientY);
+    container = position?.offsetNode || null;
+    offset = position?.offset || 0;
+  } else if (typeof document.caretRangeFromPoint === "function") {
+    const range = document.caretRangeFromPoint(clientX, clientY);
+    container = range?.startContainer || null;
+    offset = range?.startOffset || 0;
+  }
+
+  if (!container) {
+    return null;
+  }
+
+  const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : container;
+  if (!element || !block.contains(element)) {
+    return null;
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(block);
+  range.setEnd(container, offset);
+
+  return {
+    element,
+    offset: range.toString().length
+  };
 }
 
 function setButtonGlyph(button, entity) {
