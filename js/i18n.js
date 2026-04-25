@@ -231,6 +231,7 @@ const TRANSLATIONS = {
     "type.image": "Image",
     "editor.activeBlockTitle": "Active block: {type}",
     "editor.suggestions": "{type} suggestions",
+    "editor.spellingSuggestions": "Fix \"{word}\"",
     "editor.noMatches": "No lines match \"{query}\"."
   },
   fr: {
@@ -461,6 +462,7 @@ const TRANSLATIONS = {
     "type.image": "Image",
     "editor.activeBlockTitle": "Bloc actif : {type}",
     "editor.suggestions": "Suggestions {type}",
+    "editor.spellingSuggestions": "Corriger \"{word}\"",
     "editor.noMatches": "Aucune ligne ne correspond a \"{query}\"."
   },
   de: {
@@ -691,6 +693,7 @@ const TRANSLATIONS = {
     "type.image": "Bild",
     "editor.activeBlockTitle": "Aktiver Block: {type}",
     "editor.suggestions": "{type}-Vorschläge",
+    "editor.spellingSuggestions": "\"{word}\" korrigieren",
     "editor.noMatches": "Keine Zeilen passen zu \"{query}\"."
   }
 };

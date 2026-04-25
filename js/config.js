@@ -50,6 +50,7 @@ export const state = {
   activeBlockId: null,
   activeType: "action",
   visibleSuggestions: [],
+  suggestionContext: null,
   saveTimer: null,
   aiAssist: false,
   spellingCheck: false,

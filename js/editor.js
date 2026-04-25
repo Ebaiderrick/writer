@@ -10,6 +10,10 @@ import {
 } from './utils.js';
 import { createTextNode as createUINode } from './utils.js';
 import { getTypeLabel, t } from './i18n.js';
+import {
+  buildProjectLexicon, buildSpellingIssues, clearSpellingHighlights,
+  hasLanguageDictionary, renderSpellingIssues
+} from './spelling.js';
 
 export function renderEditor() {
   const project = getCurrentProject();
@@ -17,6 +21,9 @@ export function renderEditor() {
   refs.screenplayEditor.innerHTML = "";
   const template = document.querySelector("#blockTemplate");
   const filterSet = buildVisibleFilterSet(project);
+  const spellingLexicon = state.spellingCheck && hasLanguageDictionary(state.language)
+    ? buildProjectLexicon(project, state.language)
+    : null;
   let currentSceneId = "";
   let collapsedSceneId = "";
   let visibleRows = 0;
@@ -52,11 +59,11 @@ export function renderEditor() {
     tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
     block.dataset.id = line.id;
     block.dataset.type = line.type;
-    block.textContent = line.text;
     block.spellcheck = state.spellingCheck;
     block.setAttribute("spellcheck", state.spellingCheck ? "true" : "false");
     block.setAttribute("autocorrect", state.spellingCheck ? "on" : "off");
     block.setAttribute("autocapitalize", state.spellingCheck ? "sentences" : "off");
+    renderBlockContent(block, line, project, spellingLexicon);
 
     const hiddenByScene = !filterSet && Boolean(collapsedSceneId && line.type !== "scene");
     const hiddenByFilter = Boolean(filterSet && !filterSet.has(line.id));
@@ -119,6 +126,8 @@ export function getOwningSceneId(lineId) {
 export function setActiveBlock(id) {
   state.activeBlockId = id;
   state.activeType = getLine(id)?.type || "action";
+  clearSuggestionContext();
+  clearSpellingHighlights(refs.screenplayEditor);
   refs.screenplayEditor.querySelectorAll(".script-block-row").forEach((row) => {
     row.classList.toggle("is-active", row.dataset.id === id);
   });
@@ -138,25 +147,7 @@ export function updateSuggestions() {
   const line = getLine(state.activeBlockId);
   const type = line?.type || state.activeType;
   const suggestions = buildSuggestions(type, line?.text || "");
-  state.visibleSuggestions = suggestions.slice(0, 9);
-  refs.suggestionList.innerHTML = "";
-
-  if (!state.visibleSuggestions.length) {
-    refs.suggestionTray.hidden = true;
-    return;
-  }
-
-  refs.suggestionTray.hidden = false;
-  refs.suggestionTitle.textContent = t("editor.suggestions", { type: getTypeLabel(type) });
-
-  state.visibleSuggestions.forEach((suggestion, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "suggestion-pill";
-    button.textContent = `${index + 1}. ${suggestion.label}`;
-    button.dataset.suggestionValue = suggestion.value;
-    refs.suggestionList.appendChild(button);
-  });
+  renderSuggestionTray(t("editor.suggestions", { type: getTypeLabel(type) }), suggestions);
 }
 
 export function buildSuggestions(type, currentText) {
@@ -264,4 +255,62 @@ export function focusBlock(id, selectAll = false) {
 
 export function getActiveEditableBlock() {
   return refs.screenplayEditor.querySelector(`.script-block[data-id="${state.activeBlockId}"]`);
+}
+
+export function clearSuggestionContext() {
+  state.suggestionContext = null;
+}
+
+export function showSpellingSuggestions(context) {
+  state.suggestionContext = context;
+  renderSuggestionTray(
+    t("editor.spellingSuggestions", { word: context.word }),
+    context.suggestions.map((value) => ({ label: value, value }))
+  );
+}
+
+export function refreshEditableBlockDisplay(block, line = getLine(block?.dataset?.id), project = getCurrentProject()) {
+  if (!block || !line) {
+    return;
+  }
+  const spellingLexicon = state.spellingCheck && hasLanguageDictionary(state.language)
+    ? buildProjectLexicon(project, state.language)
+    : null;
+  renderBlockContent(block, line, project, spellingLexicon);
+}
+
+function renderBlockContent(block, line, project, spellingLexicon = null) {
+  if (!state.spellingCheck || !hasLanguageDictionary(state.language)) {
+    block.textContent = line.text;
+    return;
+  }
+
+  const issues = buildSpellingIssues(line.text, {
+    language: state.language,
+    project,
+    lexicon: spellingLexicon || buildProjectLexicon(project, state.language)
+  });
+  renderSpellingIssues(block, line.text, issues);
+}
+
+function renderSuggestionTray(title, suggestions) {
+  state.visibleSuggestions = suggestions.slice(0, 9);
+  refs.suggestionList.innerHTML = "";
+
+  if (!state.visibleSuggestions.length) {
+    refs.suggestionTray.hidden = true;
+    return;
+  }
+
+  refs.suggestionTray.hidden = false;
+  refs.suggestionTitle.textContent = title;
+
+  state.visibleSuggestions.forEach((suggestion, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "suggestion-pill";
+    button.textContent = `${index + 1}. ${suggestion.label}`;
+    button.dataset.suggestionValue = suggestion.value;
+    refs.suggestionList.appendChild(button);
+  });
 }

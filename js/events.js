@@ -9,7 +9,8 @@ import {
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
-  getOwningSceneId, getCharacterAutocomplete, updateSuggestions
+  getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
+  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
 import { paginateScriptLines } from './pagination.js';
@@ -29,6 +30,10 @@ import {
   formatLineText
 } from './utils.js';
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
+import {
+  applyWordCase, clearSpellingHighlights, ensureLanguageDictionary, getSpellingContextAtOffset,
+  hasLanguageDictionary, highlightSpellingIssue
+} from './spelling.js';
 
 export function bindEvents() {
   // Navigation
@@ -69,6 +74,7 @@ export function bindEvents() {
       if (!refs.studioView.hidden) {
         renderStudio();
       }
+      primeSpellingDictionary();
       persistProjects(false);
       closeMenus();
     });
@@ -132,10 +138,7 @@ export function bindEvents() {
   });
 
   refs.spellingCheckToggle.addEventListener("change", () => {
-    state.spellingCheck = refs.spellingCheckToggle.checked;
-    document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
-    document.body.classList.toggle("grammar-mode-active", state.spellingCheck);
-    renderStudio();
+    setSpellingCheck(refs.spellingCheckToggle.checked);
     queueSave();
   });
 
@@ -214,9 +217,11 @@ export function bindEvents() {
       }
   });
 
-  refs.screenplayEditor.addEventListener("click", (e) => {
-    if (e.target.closest(".script-block")) {
-        setActiveBlock(e.target.closest(".script-block").dataset.id);
+  refs.screenplayEditor.addEventListener("click", async (e) => {
+    const block = e.target.closest(".script-block");
+    if (block) {
+        setActiveBlock(block.dataset.id);
+        await maybeShowSpellingSuggestions(block);
     }
     if (e.target.closest(".scene-toggle")) {
         const row = e.target.closest(".script-block-row");
@@ -423,6 +428,7 @@ export function openProject(projectId) {
   syncInputsFromProject(project);
   showStudio();
   renderStudio();
+  primeSpellingDictionary();
   if (state.activeBlockId) {
     focusBlock(state.activeBlockId);
   }
@@ -447,6 +453,7 @@ export function renderStudio() {
   setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   applyTranslations();
+  updateSuggestions();
 }
 
 export function duplicateActiveBlock() {
@@ -517,6 +524,17 @@ function handleBlockInput(id, element) {
 
   line.text = normalized;
   project.updatedAt = new Date().toISOString();
+  clearSuggestionContext();
+
+  const shouldRefreshSpelling = state.spellingCheck
+    && hasLanguageDictionary(state.language)
+    && Boolean(window.getSelection()?.isCollapsed);
+  const caretOffset = shouldRefreshSpelling ? getCaretOffset(element) : 0;
+  if (shouldRefreshSpelling) {
+    refreshEditableBlockDisplay(element, line, project);
+    setCaretOffset(element, Math.min(caretOffset, element.textContent.length));
+  }
+
   setActiveBlock(id);
   renderPreview();
   renderSceneList();
@@ -759,6 +777,24 @@ function applySuggestion(value) {
   const line = getLine(state.activeBlockId);
   const project = getCurrentProject();
   if (!line || !project) return;
+
+  if (state.suggestionContext?.mode === "spelling" && state.suggestionContext.lineId === line.id) {
+    const { start, end, word } = state.suggestionContext;
+    const replacement = applyWordCase(value, word);
+    line.text = normalizeLineText(`${line.text.slice(0, start)}${replacement}${line.text.slice(end)}`, line.type);
+    clearSuggestionContext();
+    project.updatedAt = new Date().toISOString();
+    renderStudio();
+    focusBlock(line.id);
+    const activeBlock = refs.screenplayEditor.querySelector(`.script-block[data-id="${line.id}"]`);
+    if (activeBlock) {
+      setCaretOffset(activeBlock, Math.min(start + replacement.length, activeBlock.textContent.length));
+    }
+    queueSave();
+    return;
+  }
+
+  clearSuggestionContext();
   line.text = normalizeLineText(value, line.type);
   project.updatedAt = new Date().toISOString();
   renderStudio();
@@ -953,11 +989,7 @@ function handleMenuAction(action) {
       queueSave();
       break;
     case "toggle-spelling-check":
-      state.spellingCheck = !state.spellingCheck;
-      refs.spellingCheckToggle.checked = state.spellingCheck;
-      document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
-      renderStudio();
-      queueSave();
+      setSpellingCheck(!state.spellingCheck);
       break;
     case "toggle-auto-number":
       refs.autoNumberToggle.checked = !refs.autoNumberToggle.checked;
@@ -978,6 +1010,9 @@ function handleMenuAction(action) {
       break;
   }
   closeMenus();
+  if (action === "toggle-spelling-check") {
+    queueSave();
+  }
 }
 
 function execEditorCommand(command) {
@@ -995,6 +1030,70 @@ function saveAndGoHome() {
   persistProjects(true);
   showHome();
   renderHome();
+}
+
+function setSpellingCheck(enabled) {
+  state.spellingCheck = enabled;
+  refs.spellingCheckToggle.checked = enabled;
+  document.body.classList.toggle("spelling-mode-active", enabled);
+  document.body.classList.toggle("grammar-mode-active", enabled);
+  clearSuggestionContext();
+  clearSpellingHighlights(refs.screenplayEditor);
+  renderStudio();
+  primeSpellingDictionary();
+}
+
+function primeSpellingDictionary() {
+  if (!state.spellingCheck) {
+    return;
+  }
+
+  ensureLanguageDictionary(state.language)
+    .then(() => {
+      if (state.spellingCheck && !refs.studioView.hidden) {
+        renderStudio();
+      }
+    })
+    .catch((error) => {
+      console.error("Unable to load spelling dictionary:", error);
+    });
+}
+
+async function maybeShowSpellingSuggestions(block) {
+  if (!state.spellingCheck) {
+    return;
+  }
+
+  const line = getLine(block.dataset.id);
+  const project = getCurrentProject();
+  if (!line || !project) {
+    return;
+  }
+
+  if (!hasLanguageDictionary(state.language)) {
+    try {
+      await ensureLanguageDictionary(state.language);
+    } catch (error) {
+      console.error("Unable to load spelling suggestions:", error);
+      return;
+    }
+  }
+
+  const offset = getCaretOffset(block);
+  const context = getSpellingContextAtOffset(line.text, offset, {
+    language: state.language,
+    project,
+    lineId: line.id
+  });
+
+  if (!context) {
+    clearSpellingHighlights(refs.screenplayEditor);
+    updateSuggestions();
+    return;
+  }
+
+  showSpellingSuggestions(context);
+  highlightSpellingIssue(block, context);
 }
 
 function setButtonGlyph(button, entity) {

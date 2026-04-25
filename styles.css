@@ -2273,12 +2273,23 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 }
 
 body.grammar-mode-active .script-block {
-  text-decoration: underline wavy transparent;
-  transition: text-decoration-color 0.3s;
+  text-decoration: none;
 }
 
-body.grammar-mode-active .script-block:hover {
-  text-decoration-color: rgba(75, 112, 226, 0.3);
+.spelling-error {
+  cursor: pointer;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: rgba(210, 73, 73, 0.9);
+  text-underline-offset: 0.18em;
+  border-radius: 4px;
+  transition: background-color 0.18s ease, text-decoration-color 0.18s ease;
+}
+
+body.grammar-mode-active .spelling-error:hover,
+.spelling-error.is-selected {
+  background: rgba(210, 73, 73, 0.12);
+  text-decoration-color: rgba(210, 73, 73, 1);
 }
 
 /* Specific styling for the AI suggestion if grammar check is on */
