@@ -2,6 +2,69 @@ import { STORAGE_KEY, state, TYPE_LABELS, DEFAULT_VIEW_OPTIONS, DEFAULT_LEFT_PAN
 import { uid, normalizeLineText, stripWrapperChars, clamp } from './utils.js';
 import { refs } from './dom.js';
 import { t } from './i18n.js';
+import { auth, db } from './firebase.js';
+import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+let firestoreSyncTimer = null;
+
+function queueFirestoreSync() {
+  clearTimeout(firestoreSyncTimer);
+  firestoreSyncTimer = setTimeout(syncCurrentProjectToFirestore, 1500);
+}
+
+async function syncCurrentProjectToFirestore() {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const project = getCurrentProject();
+  if (!project) return;
+  try {
+    await setDoc(doc(db, 'users', userId, 'projects', project.id), {
+      ...project,
+      syncedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Firestore sync failed', err);
+  }
+}
+
+export async function fetchCloudProjects(userId) {
+  const snapshot = await getDocs(collection(db, 'users', userId, 'projects'));
+  return snapshot.docs.map(d => sanitizeProject(d.data()));
+}
+
+export async function importLocalProjectsToCloud(userId, projects) {
+  for (const p of projects) {
+    await setDoc(doc(db, 'users', userId, 'projects', p.id), {
+      ...p,
+      syncedAt: new Date().toISOString()
+    });
+  }
+}
+
+export async function deleteProjectFromCloud(projectId) {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'projects', projectId));
+  } catch (err) {
+    console.error('Firestore delete failed', err);
+  }
+}
+
+export function setProjectsFromCloud(cloudProjects) {
+  state.projects = cloudProjects.length > 0 ? cloudProjects : [cloneProject(sampleProject, true)];
+  state.currentProjectId = state.projects[0].id;
+  try {
+    const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...existing,
+      currentProjectId: state.currentProjectId,
+      projects: state.projects
+    }));
+  } catch (err) {
+    console.error('Failed to cache cloud projects locally', err);
+  }
+}
 
 export const sampleProject = {
   id: "sample-project",
@@ -164,6 +227,7 @@ export function persistProjects(forceSavedBadge = false) {
   if (refs.saveBadge) {
       refs.saveBadge.textContent = forceSavedBadge ? t("save.savedLocal") : t("save.saved");
   }
+  queueFirestoreSync();
 }
 
 export function queueSave() {

@@ -5,7 +5,8 @@ import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
   syncProjectFromInputs, replaceWithSample as restoreSample,
-  getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker
+  getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
+  deleteProjectFromCloud
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
@@ -1440,6 +1441,7 @@ async function removeProject(id) {
   }
   state.currentProjectId = state.projects[0].id;
   persistProjects(true);
+  deleteProjectFromCloud(id);
   showHome();
   renderHome();
 }

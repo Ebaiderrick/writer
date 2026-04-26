@@ -1,16 +1,36 @@
-import { showHome } from './ui.js';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  updateProfile
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { auth, db } from './firebase.js';
+import { showHome, showAuth, renderHome, customAlert, customConfirm } from './ui.js';
+import { state } from './config.js';
+import { refs } from './dom.js';
+import {
+  fetchCloudProjects,
+  importLocalProjectsToCloud,
+  setProjectsFromCloud
+} from './project.js';
 
-const USERS_STORAGE_KEY = 'eyawriter_users';
-const SESSION_STORAGE_KEY = 'eyawriter_session';
+const SESSION_KEY = 'eyawriter_session';
+const EMAILJS_SERVICE = 'service_j18y8zo';
+const EMAILJS_TEMPLATE = 'template_6qr97mn';
+const EMAILJS_PUBLIC_KEY = 'VI5qc4g4cH9d0vpvr';
+
+const googleProvider = new GoogleAuthProvider();
 
 export const Auth = (() => {
-  /* Panel switch */
   let switchCtn, switchC1, switchC2, switchCircle, switchBtns, aContainer, bContainer;
-
-  /* OTP */
   let otpOverlay, otpBoxes, otpSubmit, otpResend, otpError, otpDisplay;
-
-  let signupForm, signinForm, signupNameInput, signupEmailInput, signupPassInput, signupPass2Input, signinEmailInput, signinPassInput;
+  let signupForm, signinForm;
+  let signupNameInput, signupEmailInput, signupPassInput, signupPass2Input;
+  let signinEmailInput, signinPassInput;
 
   let generatedOTP = '';
   let pendingSignup = null;
@@ -42,65 +62,97 @@ export const Auth = (() => {
 
     if (!signupForm || !signinForm) return;
 
-    switchBtns.forEach((btn) => btn.addEventListener('click', changeForm));
+    // Init EmailJS with public key
+    if (window.emailjs) window.emailjs.init(EMAILJS_PUBLIC_KEY);
+
+    switchBtns.forEach(btn => btn.addEventListener('click', changeForm));
 
     otpBoxes.forEach((box, i) => {
       box.addEventListener('input', () => {
         box.value = box.value.replace(/\D/g, '').slice(-1);
         box.classList.toggle('filled', box.value !== '');
-        if (box.value && i < otpBoxes.length - 1) {
-          otpBoxes[i + 1].focus();
-        }
+        if (box.value && i < otpBoxes.length - 1) otpBoxes[i + 1].focus();
       });
-
-      box.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !box.value && i > 0) {
-          otpBoxes[i - 1].focus();
-        }
+      box.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !box.value && i > 0) otpBoxes[i - 1].focus();
       });
-
-      box.addEventListener('paste', (e) => {
+      box.addEventListener('paste', e => {
         e.preventDefault();
         const pasted = (e.clipboardData || window.clipboardData)
-          .getData('text')
-          .replace(/\D/g, '')
-          .slice(0, otpBoxes.length);
-
-        otpBoxes.forEach((otpBox, index) => {
-          otpBox.value = pasted[index] || '';
-          otpBox.classList.toggle('filled', Boolean(otpBox.value));
+          .getData('text').replace(/\D/g, '').slice(0, otpBoxes.length);
+        otpBoxes.forEach((b, idx) => {
+          b.value = pasted[idx] || '';
+          b.classList.toggle('filled', Boolean(b.value));
         });
-
-        const nextIndex = Math.min(pasted.length, otpBoxes.length - 1);
-        otpBoxes[nextIndex].focus();
+        otpBoxes[Math.min(pasted.length, otpBoxes.length - 1)].focus();
       });
     });
 
     otpSubmit.addEventListener('click', verifyOTP);
     otpResend.addEventListener('click', resendOTP);
-
     signupForm.addEventListener('submit', handleSignUp);
-    signinForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        handleSignIn(e);
+    signinForm.addEventListener('submit', handleSignIn);
+
+    document.getElementById('google-signup')?.addEventListener('click', handleGoogleSignIn);
+    document.getElementById('google-signin')?.addEventListener('click', handleGoogleSignIn);
+    document.getElementById('demo-login-btn')?.addEventListener('click', handleDemoLogin);
+    document.getElementById('signOutBtn')?.addEventListener('click', handleSignOut);
+
+    onAuthStateChanged(auth, async firebaseUser => {
+      if (firebaseUser) {
+        cacheSession(firebaseUser);
+        await syncProjectsOnLogin(firebaseUser.uid);
+        if (refs.authView && !refs.authView.hidden) showHome();
+        renderHome();
+      } else {
+        const session = getCachedSession();
+        if (!session?.isDemoSession) {
+          clearSession();
+          if (
+            (refs.homeView && !refs.homeView.hidden) ||
+            (refs.studioView && !refs.studioView.hidden)
+          ) {
+            showAuth();
+          }
+        }
+      }
     });
+  }
 
-    const demoBtn = document.getElementById('demo-login-btn');
-    if (demoBtn) {
-      demoBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        handleDemoLogin();
-      });
+  async function syncProjectsOnLogin(uid) {
+    try {
+      const cloudProjects = await fetchCloudProjects(uid);
+      const localProjects = state.projects.filter(
+        p => p.id !== 'sample-project' && p.lines.some(l => l.text.trim())
+      );
+      const cloudIds = new Set(cloudProjects.map(p => p.id));
+      const localOnly = localProjects.filter(p => !cloudIds.has(p.id));
+
+      if (localOnly.length > 0 && cloudProjects.length > 0) {
+        const shouldImport = await customConfirm(
+          `You have ${localOnly.length} local project(s) not yet in your account. Import them?`,
+          'Import local projects?'
+        );
+        if (shouldImport) {
+          await importLocalProjectsToCloud(uid, localOnly);
+          setProjectsFromCloud([...cloudProjects, ...localOnly]);
+        } else {
+          setProjectsFromCloud(cloudProjects);
+        }
+      } else if (localOnly.length > 0 && cloudProjects.length === 0) {
+        await importLocalProjectsToCloud(uid, localOnly);
+        setProjectsFromCloud(localOnly);
+      } else {
+        setProjectsFromCloud(cloudProjects);
+      }
+    } catch (err) {
+      console.error('Cloud project sync failed', err);
     }
-
-    document.getElementById('google-signup').addEventListener('click', () => alert('Google flow is not connected yet. Please sign up with email for now.'));
-    document.getElementById('google-signin').addEventListener('click', () => alert('Google flow is not connected yet. Please sign in with email for now.'));
   }
 
   function changeForm() {
     switchCtn.classList.add('is-gx');
     setTimeout(() => switchCtn.classList.remove('is-gx'), 1500);
-
     switchCtn.classList.toggle('is-txr');
     switchCircle[0].classList.toggle('is-txr');
     switchCircle[1].classList.toggle('is-txr');
@@ -112,242 +164,195 @@ export const Auth = (() => {
     aContainer.classList.toggle('is-hidden-form');
   }
 
-  function handleSignUp(e) {
+  async function handleSignUp(e) {
     e.preventDefault();
-
     const name = signupNameInput.value.trim();
     const email = normalizeEmail(signupEmailInput.value);
     const password = signupPassInput.value;
-    const passwordRepeat = signupPass2Input.value;
+    const password2 = signupPass2Input.value;
 
-    if (!name) return alert('Please enter your name.');
-    if (!isValidEmail(email)) return alert('Please enter a valid email.');
-    if (password.length < 6) return alert('Password must be at least 6 characters.');
-    if (password !== passwordRepeat) return alert('Passwords do not match.');
-    if (findUserByEmail(email)) return alert('An account with this email already exists. Please sign in instead.');
+    if (!name) return customAlert('Please enter your name.');
+    if (!isValidEmail(email)) return customAlert('Please enter a valid email.');
+    if (password.length < 6) return customAlert('Password must be at least 6 characters.');
+    if (password !== password2) return customAlert('Passwords do not match.');
 
-    pendingSignup = {
-      id: createId('user'),
-      name,
-      email,
-      password,
-      createdAt: new Date().toISOString()
-    };
-
-    showOTP(email);
+    pendingSignup = { name, email, password };
+    await sendOTP(email, name);
+    showOTPOverlay(email);
   }
 
-  function handleSignIn(e) {
-    if (e && e.preventDefault) e.preventDefault();
-
+  async function handleSignIn(e) {
+    if (e?.preventDefault) e.preventDefault();
     const email = normalizeEmail(signinEmailInput.value);
     const password = signinPassInput.value;
 
-    if (!isValidEmail(email)) return alert('Please enter a valid email.');
-    if (!password) return alert('Please enter your password.');
+    if (!isValidEmail(email)) return customAlert('Please enter a valid email.');
+    if (!password) return customAlert('Please enter your password.');
 
-    const user = findUserByEmail(email);
-    if (!user) return alert('No account was found for this email. Please sign up first.');
-    if (user.password !== password) return alert('Incorrect password. Please try again.');
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      signinForm.reset();
+    } catch (err) {
+      customAlert(friendlyError(err));
+    }
+  }
 
-    loginSuccess(user);
+  async function handleGoogleSignIn() {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user') customAlert(friendlyError(err));
+    }
   }
 
   function handleDemoLogin() {
-    const demoUser = {
-      id: 'user_demo123',
-      name: 'Demo Writer',
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      userId: 'user_demo123',
       email: 'demo@eyawriter.com',
-      password: 'demo',
-      createdAt: new Date().toISOString(),
-      verifiedAt: new Date().toISOString()
-    };
-
-    // Ensure user exists in local storage
-    const users = getUsers();
-    if (!users.find(u => u.email === demoUser.email)) {
-      users.push(demoUser);
-      saveUsers(users);
-    }
-
-    loginSuccess(demoUser);
+      name: 'Demo Writer',
+      loggedIn: true,
+      isDemoSession: true,
+      loggedInAt: new Date().toISOString()
+    }));
+    showHome();
+    renderHome();
   }
 
-  function showOTP(email) {
+  async function handleSignOut() {
+    const confirmed = await customConfirm('Sign out of your account?', 'Sign Out');
+    if (!confirmed) return;
+    clearSession();
+    try { await firebaseSignOut(auth); } catch { /* ignore */ }
+    showAuth();
+  }
+
+  async function sendOTP(email, name) {
     generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
+    if (window.emailjs) {
+      try {
+        await window.emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+          to_email: email,
+          to_name: name,
+          otp: generatedOTP
+        });
+      } catch (err) {
+        console.error('EmailJS send failed', err);
+        console.warn('OTP (fallback):', generatedOTP);
+      }
+    } else {
+      console.warn('EmailJS not loaded — OTP:', generatedOTP);
+    }
+  }
+
+  function showOTPOverlay(email) {
     otpDisplay.textContent = email;
-    otpBoxes.forEach((box) => {
-      box.value = '';
-      box.classList.remove('filled');
-    });
+    otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
     otpError.textContent = '';
     otpOverlay.classList.add('active');
     otpBoxes[0].focus();
-    console.log('OTP (demo):', generatedOTP);
   }
 
-  function verifyOTP() {
+  async function verifyOTP() {
     if (!pendingSignup) {
-      otpError.textContent = 'Your signup session expired. Please try again.';
+      otpError.textContent = 'Session expired. Please try again.';
       otpOverlay.classList.remove('active');
       return;
     }
 
-    const entered = [...otpBoxes].map((box) => box.value).join('');
+    const entered = [...otpBoxes].map(b => b.value).join('');
     if (entered.length < otpBoxes.length) {
       otpError.textContent = 'Please enter all 6 digits.';
       return;
     }
-
     if (entered !== generatedOTP) {
       otpError.textContent = 'Incorrect code. Try again.';
-      otpBoxes.forEach((box) => {
-        box.value = '';
-        box.classList.remove('filled');
-      });
+      otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
       otpBoxes[0].focus();
       return;
     }
 
-    const users = getUsers();
-    const existingUser = users.find((user) => user.email === pendingSignup.email);
-    if (existingUser) {
-      otpOverlay.classList.remove('active');
-      pendingSignup = null;
-      otpError.textContent = '';
-      alert('An account with this email already exists. Please sign in instead.');
-      focusSignIn(existingUser.email);
-      return;
-    }
-
-    const user = {
-      ...pendingSignup,
-      verifiedAt: new Date().toISOString()
-    };
-
-    users.push(user);
-    saveUsers(users);
+    const { name, email, password } = pendingSignup;
     pendingSignup = null;
     otpOverlay.classList.remove('active');
     otpError.textContent = '';
-    signupForm.reset();
-    loginSuccess(user);
+
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(credential.user, { displayName: name });
+      await setDoc(doc(db, 'users', credential.user.uid, 'profile'), {
+        uid: credential.user.uid,
+        name,
+        email,
+        createdAt: new Date().toISOString()
+      });
+      signupForm.reset();
+    } catch (err) {
+      customAlert(friendlyError(err));
+    }
   }
 
-  function resendOTP() {
+  async function resendOTP() {
     if (!pendingSignup) {
       otpError.textContent = 'Start signup again to request a new code.';
       return;
     }
-
-    generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
-    otpBoxes.forEach((box) => {
-      box.value = '';
-      box.classList.remove('filled');
-    });
+    await sendOTP(pendingSignup.email, pendingSignup.name);
+    otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
     otpError.textContent = 'New code sent!';
-    console.log('New OTP (demo):', generatedOTP);
     otpBoxes[0].focus();
-    setTimeout(() => {
-      otpError.textContent = '';
-    }, 2500);
+    setTimeout(() => { otpError.textContent = ''; }, 2500);
   }
 
-  function loginSuccess(user) {
-    const session = {
-      userId: user.id,
-      email: user.email,
-      name: user.name,
+  function cacheSession(firebaseUser) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      userId: firebaseUser.uid,
+      email: firebaseUser.email,
+      name: firebaseUser.displayName || firebaseUser.email,
       loggedIn: true,
       loggedInAt: new Date().toISOString()
-    };
+    }));
+  }
 
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-    signinForm.reset();
-    if (otpOverlay) otpOverlay.classList.remove('active');
-    showHome();
+  function getCachedSession() {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      const session = raw ? JSON.parse(raw) : null;
+      return session?.loggedIn ? session : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function clearSession() {
+    localStorage.removeItem(SESSION_KEY);
   }
 
   function getSession() {
-    try {
-      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!raw) return null;
-
-      const session = JSON.parse(raw);
-      const email = normalizeEmail(session?.email);
-      const user = findUserByEmail(email);
-      if (!user) {
-        localStorage.removeItem(SESSION_STORAGE_KEY);
-        return null;
-      }
-
-      return {
-        ...session,
-        email: user.email,
-        name: user.name,
-        userId: user.id,
-        loggedIn: true
-      };
-    } catch (error) {
-      console.error('Unable to restore session', error);
-      localStorage.removeItem(SESSION_STORAGE_KEY);
-      return null;
-    }
+    return getCachedSession();
   }
 
-  function getUsers() {
-    try {
-      const raw = localStorage.getItem(USERS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed)
-        ? parsed
-            .filter((user) => user && typeof user.email === 'string')
-            .map((user) => ({
-              ...user,
-              email: normalizeEmail(user.email),
-              name: String(user.name || '').trim()
-            }))
-        : [];
-    } catch (error) {
-      console.error('Unable to load saved users', error);
-      return [];
-    }
-  }
-
-  function saveUsers(users) {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-  }
-
-  function findUserByEmail(email) {
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) {
-      return null;
-    }
-
-    return getUsers().find((user) => user.email === normalizedEmail) || null;
-  }
-
-  function focusSignIn(email = '') {
-    const isSignUpVisible = !switchC1.classList.contains('is-hidden');
-    if (isSignUpVisible) {
-      changeForm();
-    }
-    signinEmailInput.value = email;
-    signinPassInput.value = '';
-    signinEmailInput.focus();
+  function friendlyError(err) {
+    const map = {
+      'auth/email-already-in-use': 'An account with this email already exists. Please sign in instead.',
+      'auth/invalid-email': 'Please enter a valid email address.',
+      'auth/wrong-password': 'Incorrect password. Please try again.',
+      'auth/user-not-found': 'No account found for this email. Please sign up first.',
+      'auth/invalid-credential': 'Incorrect email or password. Please try again.',
+      'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
+      'auth/weak-password': 'Password must be at least 6 characters.',
+      'auth/network-request-failed': 'Network error. Please check your connection.',
+      'auth/popup-blocked': 'Pop-up was blocked. Please allow pop-ups and try again.'
+    };
+    return map[err.code] || 'Something went wrong. Please try again.';
   }
 
   function normalizeEmail(email) {
     return String(email || '').trim().toLowerCase();
   }
 
-  function createId(prefix) {
-    return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
-  }
-
   function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  return { init, getSession };
+  return { init, getSession, signOut: handleSignOut };
 })();

@@ -13,15 +13,16 @@ function boot() {
   loadProjects();
   bindEvents();
 
-  Auth.init();
+  // Fast-path: show initial view from cached session while Firebase resolves
   const session = Auth.getSession();
   if (session && session.loggedIn) {
     showHome();
   } else {
     showAuth();
   }
-
   renderHome();
+
+  Auth.init();
   applyToolbarState();
   applyTheme();
   applyViewState();
