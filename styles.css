@@ -1386,6 +1386,17 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   pointer-events: none;
 }
 
+/* Local backup enable toggle */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
 /* Local save controls */
 .local-save-controls {
   display: flex;

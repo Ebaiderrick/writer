@@ -43,7 +43,7 @@ export function loadProjects() {
       state.language = ["en", "fr", "de"].includes(parsed?.language) ? parsed.language : "en";
       state.writingLanguage = ["en", "fr", "de"].includes(parsed?.writingLanguage) ? parsed.writingLanguage : state.language;
       state.grammarCheck = Boolean(parsed?.grammarCheck);
-      state.saveMode = parsed?.saveMode === "local" ? "local" : "cloud";
+      state.localBackupEnabled = Boolean(parsed?.localBackupEnabled);
       state.localSaveIntervalMinutes = [5, 10, 60].includes(parsed?.localSaveIntervalMinutes) ? parsed.localSaveIntervalMinutes : 5;
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
     state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
@@ -154,7 +154,7 @@ export function persistProjects(forceSavedBadge = false) {
       language: state.language,
       writingLanguage: state.writingLanguage,
       grammarCheck: state.grammarCheck,
-      saveMode: state.saveMode,
+      localBackupEnabled: state.localBackupEnabled,
       localSaveIntervalMinutes: state.localSaveIntervalMinutes,
       viewOptions: state.viewOptions,
     leftPaneBlocks: state.leftPaneBlocks,

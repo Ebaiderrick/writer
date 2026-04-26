@@ -27,7 +27,7 @@ function boot() {
   applyViewState();
   applyTranslations();
   applySaveModeButtons();
-  if (state.saveMode === "local") {
+  if (state.localBackupEnabled) {
     restoreLocalSaveFile().then((restored) => {
       applySaveModeButtons();
       if (restored) startLocalSaveTimer();

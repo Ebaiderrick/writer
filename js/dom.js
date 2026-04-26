@@ -77,7 +77,7 @@ export const refs = {
   get themeButtons() { return getCached("[data-theme-value]", true); },
   get languageButtons() { return getCached("[data-language-value]", true); },
   get writingLanguageButtons() { return getCached("[data-writing-language-value]", true); },
-  get saveModeButtons() { return getCached("[data-save-mode]", true); },
+  get localBackupToggle() { return getCached("#localBackupToggle"); },
   get localSaveControls() { return getCached("#localSaveControls"); },
   get localSaveInterval() { return getCached("#localSaveInterval"); },
   get chooseLocalSaveFileBtn() { return getCached("#chooseLocalSaveFileBtn"); },

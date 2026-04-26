@@ -356,15 +356,15 @@
               </div>
             </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Save Mode</summary>
+              <summary class="menu-group-summary">Local Backup</summary>
               <div class="menu-group-body">
-                <div class="theme-options save-mode-options">
-                  <button class="theme-option" type="button" data-save-mode="cloud">Cloud</button>
-                  <button class="theme-option" type="button" data-save-mode="local">Local file</button>
-                </div>
+                <label class="menu-row toggle-row">
+                  <span>Enable local backup</span>
+                  <input type="checkbox" id="localBackupToggle">
+                </label>
                 <div id="localSaveControls" class="local-save-controls" hidden>
                   <label class="menu-row" for="localSaveInterval">
-                    <span>Save every</span>
+                    <span>Backup every</span>
                     <select id="localSaveInterval">
                       <option value="5">5 minutes</option>
                       <option value="10">10 minutes</option>

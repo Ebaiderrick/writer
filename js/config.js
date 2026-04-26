@@ -60,7 +60,7 @@ export const state = {
   theme: "cedar",
   language: "en",
   writingLanguage: "en",
-  saveMode: "cloud",
+  localBackupEnabled: false,
   localSaveIntervalMinutes: 5,
   localSaveTimer: null,
   localSaveFileHandle: null,

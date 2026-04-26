@@ -92,14 +92,14 @@ export function bindEvents() {
     });
   });
 
-  refs.saveModeButtons.forEach((button) => {
-    button.addEventListener("click", () => setSaveMode(button.dataset.saveMode));
+  refs.localBackupToggle?.addEventListener("change", () => {
+    toggleLocalBackup(refs.localBackupToggle.checked);
   });
   refs.localSaveInterval?.addEventListener("change", () => {
     const value = parseInt(refs.localSaveInterval.value, 10);
     state.localSaveIntervalMinutes = [5, 10, 60].includes(value) ? value : 5;
     persistProjects(false);
-    if (state.saveMode === "local" && state.localSaveFileHandle) {
+    if (state.localBackupEnabled && state.localSaveFileHandle) {
       startLocalSaveTimer();
     }
   });
@@ -1182,45 +1182,51 @@ function applyWritingLanguageButtons() {
   });
 }
 
-async function setSaveMode(mode) {
-  const next = mode === "local" ? "local" : "cloud";
-  state.saveMode = next;
-  applySaveModeButtons();
-  persistProjects(false);
-
-  if (next === "local") {
+async function toggleLocalBackup(enable) {
+  if (enable) {
     if (!isLocalSaveSupported()) {
-      customAlert("Local save requires a Chromium-based browser (Chrome, Edge, Opera). Staying on cloud mode.");
-      state.saveMode = "cloud";
-      applySaveModeButtons();
-      persistProjects(false);
+      customAlert("Local backup requires a Chromium-based browser (Chrome, Edge, Opera).");
+      if (refs.localBackupToggle) refs.localBackupToggle.checked = false;
       return;
     }
-    if (refs.localSaveControls) refs.localSaveControls.hidden = false;
+    state.localBackupEnabled = true;
+    applyLocalBackupUI();
+    persistProjects(false);
     if (!state.localSaveFileHandle) {
       const result = await chooseLocalSaveFile();
-      if (!result.ok) return;
+      if (!result.ok) {
+        state.localBackupEnabled = false;
+        applyLocalBackupUI();
+        persistProjects(false);
+        return;
+      }
     }
     startLocalSaveTimer();
   } else {
-    if (refs.localSaveControls) refs.localSaveControls.hidden = true;
+    state.localBackupEnabled = false;
+    applyLocalBackupUI();
+    persistProjects(false);
     stopLocalSaveTimer();
   }
 }
 
 export function applySaveModeButtons() {
-  refs.saveModeButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.saveMode === state.saveMode);
-  });
+  applyLocalBackupUI();
+}
+
+function applyLocalBackupUI() {
+  if (refs.localBackupToggle) {
+    refs.localBackupToggle.checked = state.localBackupEnabled;
+  }
   if (refs.localSaveControls) {
-    refs.localSaveControls.hidden = state.saveMode !== "local";
+    refs.localSaveControls.hidden = !state.localBackupEnabled;
   }
   if (refs.localSaveInterval) {
     refs.localSaveInterval.value = String(state.localSaveIntervalMinutes);
   }
   if (refs.localSaveFileLabel) {
     refs.localSaveFileLabel.textContent = state.localSaveFileHandle
-      ? `Saving to: ${state.localSaveFileHandle.name}`
+      ? `Backup file: ${state.localSaveFileHandle.name}`
       : "No file selected";
   }
 }
