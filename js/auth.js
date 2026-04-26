@@ -1,7 +1,8 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
@@ -64,6 +65,15 @@ export const Auth = (() => {
 
     // Init EmailJS with public key
     if (window.emailjs) window.emailjs.init(EMAILJS_PUBLIC_KEY);
+
+    // Handle Google redirect result (fires after returning from Google OAuth)
+    getRedirectResult(auth).then(result => {
+      if (result?.user) {
+        // onAuthStateChanged handles the rest
+      }
+    }).catch(err => {
+      if (err.code !== 'auth/cancelled-popup-request') customAlert(friendlyError(err));
+    });
 
     switchBtns.forEach(btn => btn.addEventListener('click', changeForm));
 
@@ -199,9 +209,9 @@ export const Auth = (() => {
 
   async function handleGoogleSignIn() {
     try {
-      await signInWithPopup(auth, googleProvider);
+      await signInWithRedirect(auth, googleProvider);
     } catch (err) {
-      if (err.code !== 'auth/popup-closed-by-user') customAlert(friendlyError(err));
+      customAlert(friendlyError(err));
     }
   }
 
