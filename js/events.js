@@ -8,7 +8,7 @@ import {
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker
 } from './project.js';
 import {
-  renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
+  renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
   showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
 } from './editor.js';
@@ -352,7 +352,7 @@ export function bindEvents() {
         if (id === state.activeBlockId) return;
         const line = getLine(id);
         const project = getCurrentProject();
-        if (line && !line.text.trim() && project && project.lines.length > 1) {
+        if (line && line.secondary === undefined && !line.text.trim() && project && project.lines.length > 1) {
             const index = getLineIndex(id);
             project.lines.splice(index, 1);
             project.updatedAt = new Date().toISOString();
@@ -504,6 +504,17 @@ function handleBlockInput(id, element) {
   const project = getCurrentProject();
   if (!line || !project) return;
 
+  // Secondary (right) field of a dual row: update line.secondary only
+  if (element.dataset.secondary === "true") {
+    const normalized = normalizeLineText(element.textContent || "", line.type);
+    line.secondary = normalized;
+    project.updatedAt = new Date().toISOString();
+    setActiveBlock(id);
+    renderPreview();
+    queueSave();
+    return;
+  }
+
   const offset = getCaretOffset(element);
   const beforeText = element.textContent || "";
   let normalized = normalizeLineText(beforeText, line.type);
@@ -596,6 +607,27 @@ function handleBlockKeydown(event, id) {
   if (!line) return;
 
   const code = event.code;
+  const isSecondary = event.target.dataset.secondary === "true";
+
+  // --- Dual secondary field: Enter / Tab advance to next dual row ---
+  if (isSecondary && (event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
+    event.preventDefault();
+    line.secondary = normalizeLineText(event.target.textContent || "", line.type);
+    project.updatedAt = new Date().toISOString();
+    if (line.type === "character") {
+      const newId = addBlock("dialogue", "", index + 1);
+      const newLine = getLine(newId);
+      if (newLine) newLine.secondary = "";
+      renderStudio();
+      focusBlock(newId);
+    } else {
+      const newId = addBlock("action", "", index + 1);
+      renderStudio();
+      focusBlock(newId);
+    }
+    queueSave();
+    return;
+  }
 
   // Handle Break function (Backtick + Enter)
   if (event.key === "Enter" && lastKeyDownCode === "Backquote") {
@@ -627,6 +659,11 @@ function handleBlockKeydown(event, id) {
 
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
+    // Primary field of a dual row: move focus to secondary
+    if (line.secondary !== undefined && !isSecondary) {
+      focusSecondaryBlock(id);
+      return;
+    }
     const offset = getCaretOffset(event.target);
     const textBefore = line.text.substring(0, offset);
     const textAfter = line.text.substring(offset);
@@ -652,7 +689,7 @@ function handleBlockKeydown(event, id) {
       state.activeBlockId = prevLine.id;
       project.updatedAt = new Date().toISOString();
       renderStudio();
-      const prevElement = refs.screenplayEditor.querySelector(`.script-block[data-id="${prevLine.id}"]`);
+      const prevElement = refs.screenplayEditor.querySelector(`.script-block[data-id="${prevLine.id}"]:not([data-secondary])`);
       focusBlock(prevLine.id);
       setCaretOffset(prevElement, prevTextLength);
       queueSave();
@@ -667,7 +704,7 @@ function handleBlockKeydown(event, id) {
       project.updatedAt = new Date().toISOString();
       renderStudio();
       focusBlock(targetId);
-      placeCaretAtEnd(refs.screenplayEditor.querySelector(`.script-block[data-id="${targetId}"]`));
+      placeCaretAtEnd(refs.screenplayEditor.querySelector(`.script-block[data-id="${targetId}"]:not([data-secondary])`));
       queueSave();
       return;
     }
@@ -675,7 +712,19 @@ function handleBlockKeydown(event, id) {
 
   if (event.key === "Tab") {
     event.preventDefault();
+    // Primary field of a dual row: move focus to secondary
+    if (line.secondary !== undefined && !isSecondary) {
+      focusSecondaryBlock(id);
+      return;
+    }
     cycleBlockType(id);
+    return;
+  }
+
+  // Image block: '=' opens file picker
+  if (event.key === "=" && line.type === "image") {
+    event.preventDefault();
+    openImageFilePicker(line, id, project);
     return;
   }
 
@@ -731,6 +780,30 @@ function inferNextType(index) {
   if (current === "transition") return "scene";
   if (current === "dual") return "dialogue";
   return "action";
+}
+
+function openImageFilePicker(line, blockId, project) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/jpeg,image/png";
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      customAlert("Image must be under 2 MB. Please choose a smaller file.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      line.text = `IMAGE: ${reader.result}`;
+      project.updatedAt = new Date().toISOString();
+      renderStudio();
+      focusBlock(blockId);
+      queueSave();
+    });
+    reader.readAsDataURL(file);
+  });
+  input.click();
 }
 
 export function addBlock(type, text = "", index) {
@@ -823,6 +896,19 @@ function applySuggestion(value) {
 }
 
 function handleToolSelection(type) {
+  if (type === "dual") {
+    const active = getLine(state.activeBlockId);
+    if (active?.type === "character" && active.secondary === undefined) {
+      active.secondary = "";
+      const project = getCurrentProject();
+      if (project) project.updatedAt = new Date().toISOString();
+      renderStudio();
+      focusSecondaryBlock(active.id);
+      queueSave();
+      return;
+    }
+  }
+
   const active = getLine(state.activeBlockId);
   if (!active) {
     const newId = addBlock(type, "");

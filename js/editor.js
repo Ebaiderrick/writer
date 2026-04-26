@@ -65,6 +65,29 @@ export function renderEditor() {
     block.setAttribute("autocapitalize", state.grammarCheck ? "sentences" : "off");
     renderBlockContent(block, line, project, spellingLexicon);
 
+    if (line.secondary !== undefined) {
+      row.classList.add("is-dual");
+      block.classList.add("dual-primary");
+
+      const secBlock = document.createElement("div");
+      secBlock.className = "script-block dual-secondary";
+      secBlock.contentEditable = "true";
+      secBlock.spellcheck = state.grammarCheck;
+      secBlock.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
+      secBlock.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");
+      secBlock.setAttribute("autocapitalize", state.grammarCheck ? "sentences" : "off");
+      secBlock.dataset.id = line.id;
+      secBlock.dataset.type = line.type;
+      secBlock.dataset.secondary = "true";
+      renderBlockContent(secBlock, { ...line, text: line.secondary }, project, spellingLexicon);
+
+      const columns = document.createElement("div");
+      columns.className = "dual-columns";
+      block.replaceWith(columns);
+      columns.appendChild(block);
+      columns.appendChild(secBlock);
+    }
+
     const hiddenByScene = !filterSet && Boolean(collapsedSceneId && line.type !== "scene");
     const hiddenByFilter = Boolean(filterSet && !filterSet.has(line.id));
     row.classList.toggle("is-scene-hidden", hiddenByScene);
@@ -254,7 +277,15 @@ export function focusBlock(id, selectAll = false) {
 }
 
 export function getActiveEditableBlock() {
-  return refs.screenplayEditor.querySelector(`.script-block[data-id="${state.activeBlockId}"]`);
+  return refs.screenplayEditor.querySelector(`.script-block[data-id="${state.activeBlockId}"]:not([data-secondary])`);
+}
+
+export function focusSecondaryBlock(lineId) {
+  const el = refs.screenplayEditor.querySelector(`.script-block[data-id="${lineId}"][data-secondary="true"]`);
+  if (!el) return;
+  setActiveBlock(lineId);
+  el.focus();
+  placeCaretAtEnd(el);
 }
 
 export function clearSuggestionContext() {
@@ -281,6 +312,15 @@ export function refreshEditableBlockDisplay(block, line = getLine(block?.dataset
 }
 
 function renderBlockContent(block, line, project, spellingLexicon = null) {
+  if (line.type === "image" && line.text.startsWith("IMAGE: data:")) {
+    block.replaceChildren();
+    const img = document.createElement("img");
+    img.src = line.text.slice("IMAGE: ".length);
+    img.className = "image-block-preview";
+    block.appendChild(img);
+    return;
+  }
+
   if (!state.grammarCheck || !hasLanguageDictionary(state.writingLanguage)) {
     block.textContent = line.text;
     return;

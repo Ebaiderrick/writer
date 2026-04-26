@@ -1357,6 +1357,44 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   border-radius: 4px;
 }
 
+/* Dual dialogue two-column layout */
+.script-block-row.is-dual .dual-columns {
+  grid-column: 3;
+  display: flex;
+  gap: 3ch;
+  width: min(100%, var(--script-line-width));
+}
+
+.script-block.dual-primary,
+.script-block.dual-secondary {
+  flex: 1;
+  margin-left: 0 !important;
+  width: auto !important;
+  min-width: 0;
+}
+
+.script-block.dual-secondary {
+  border-left: 2px solid var(--line);
+  padding-left: 1ch;
+}
+
+/* Image upload placeholder */
+.script-block[data-type="image"]:empty::before {
+  content: "Tap '=' to upload";
+  color: var(--muted);
+  font-style: italic;
+  pointer-events: none;
+}
+
+/* Uploaded image preview */
+.image-block-preview {
+  display: block;
+  max-width: 400px;
+  max-height: 400px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
 .typewriter-mode .center-pane {
   background:
     linear-gradient(transparent 0, transparent calc(50% - 1px), rgba(0, 0, 0, 0.08) calc(50% - 1px), rgba(0, 0, 0, 0.08) calc(50% + 1px), transparent calc(50% + 1px)),

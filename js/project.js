@@ -73,11 +73,18 @@ export function sanitizeProject(project) {
     updatedAt: project.updatedAt || new Date().toISOString(),
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     lines: Array.isArray(project.lines) && project.lines.length
-      ? project.lines.map((line) => ({
-          id: line.id || uid(),
-          type: TYPE_LABELS[line.type] ? line.type : "action",
-          text: normalizeLineText(line.text || "", TYPE_LABELS[line.type] ? line.type : "action")
-        }))
+      ? project.lines.map((line) => {
+          const type = TYPE_LABELS[line.type] ? line.type : "action";
+          const sanitized = {
+            id: line.id || uid(),
+            type,
+            text: normalizeLineText(line.text || "", type)
+          };
+          if (typeof line.secondary === "string") {
+            sanitized.secondary = normalizeLineText(line.secondary, type);
+          }
+          return sanitized;
+        })
       : [{ id: uid(), type: "action", text: "" }]
   };
 }
@@ -90,11 +97,11 @@ export function cloneProject(project, withNewId) {
     createdAt: withNewId ? now : project.createdAt,
     updatedAt: now,
     collapsedSceneIds: [...(project.collapsedSceneIds || [])],
-    lines: project.lines.map((line) => ({
-      id: uid(),
-      type: line.type,
-      text: line.text
-    }))
+    lines: project.lines.map((line) => {
+      const cloned = { id: uid(), type: line.type, text: line.text };
+      if (typeof line.secondary === "string") cloned.secondary = line.secondary;
+      return cloned;
+    })
   });
 }
 
