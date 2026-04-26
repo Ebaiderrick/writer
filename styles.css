@@ -2337,6 +2337,16 @@ body.grammar-mode-active .spelling-error:hover,
   text-decoration-color: rgba(210, 73, 73, 1);
 }
 
+.grammar-error {
+  text-decoration-color: rgba(210, 140, 30, 0.9);
+}
+
+body.grammar-mode-active .grammar-error:hover,
+.grammar-error.is-selected {
+  background: rgba(210, 140, 30, 0.12);
+  text-decoration-color: rgba(210, 140, 30, 1);
+}
+
 /* Specific styling for the AI suggestion if grammar check is on */
 .ai-menu-item.is-grammar {
   border-left: 3px solid #4B70E2;

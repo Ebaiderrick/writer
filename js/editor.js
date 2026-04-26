@@ -11,7 +11,7 @@ import {
 import { createTextNode as createUINode } from './utils.js';
 import { getTypeLabel, t } from './i18n.js';
 import {
-  buildProjectLexicon, buildSpellingIssues, clearSpellingHighlights,
+  buildProjectLexicon, buildSpellingIssues, buildGrammarIssues, clearSpellingHighlights,
   hasLanguageDictionary, renderSpellingIssues
 } from './spelling.js';
 
@@ -172,7 +172,7 @@ export function buildSuggestions(type, currentText) {
   if (type === "scene") {
     const sceneHeadings = project.lines
       .filter((line) => line.type === "scene" && line.text.trim())
-      .map((line) => normalizeLineText(line.text, "scene"));
+      .map((line) => normalizeLineText(line.text, "scene").toUpperCase());
     const previousScene = getPreviousSceneHeading(getLineIndex(state.activeBlockId));
     const carryOvers = previousScene ? buildContinuedSceneSuggestions(previousScene) : [];
     return [...new Set([...DEFAULT_SUGGESTIONS.scene, ...carryOvers, ...sceneHeadings])]
@@ -286,11 +286,20 @@ function renderBlockContent(block, line, project, spellingLexicon = null) {
     return;
   }
 
-  const issues = buildSpellingIssues(line.text, {
+  const lexicon = spellingLexicon || buildProjectLexicon(project, state.writingLanguage);
+  const spelling = buildSpellingIssues(line.text, {
     language: state.writingLanguage,
     project,
-    lexicon: spellingLexicon || buildProjectLexicon(project, state.writingLanguage)
+    lexicon
   });
+  const grammar = buildGrammarIssues(line.text, { language: state.writingLanguage });
+
+  // Merge and sort; grammar takes priority over spelling for the same range
+  const spellFiltered = spelling.filter(
+    (s) => !grammar.some((g) => g.start === s.start && g.end === s.end)
+  );
+  const issues = [...spellFiltered, ...grammar].sort((a, b) => a.start - b.start);
+
   renderSpellingIssues(block, line.text, issues);
 }
 
@@ -335,8 +344,7 @@ function positionSuggestionTray(anchor = null) {
   const tray = refs.suggestionTray;
   const resolved = anchor || getActiveBlockSuggestionAnchor();
   const margin = 12;
-  tray.style.left = "0px";
-  tray.style.top = "0px";
+  tray.style.visibility = "hidden";
 
   const trayWidth = tray.offsetWidth || 240;
   const trayHeight = tray.offsetHeight || 120;
@@ -364,6 +372,7 @@ function positionSuggestionTray(anchor = null) {
 
   tray.style.left = `${left}px`;
   tray.style.top = `${top}px`;
+  tray.style.visibility = "";
 }
 
 function getActiveBlockSuggestionAnchor() {

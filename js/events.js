@@ -557,7 +557,11 @@ function handleBlockInput(id, element) {
   renderCharacterList();
   renderMetrics();
   renderHome();
-  updateSuggestions();
+  if (line.type === "scene") {
+    hideSuggestionTray(true);
+  } else {
+    updateSuggestions();
+  }
   queueSave();
 }
 
@@ -1137,6 +1141,14 @@ function resolveClickedSpellingContext(block, line, project, target, clientX, cl
     const start = Number(issue.dataset.spellingStart);
     const end = Number(issue.dataset.spellingEnd);
     const word = issue.dataset.spellingWord || line.text.slice(start, end);
+
+    if (issue.dataset.grammarSuggestions) {
+      const suggestions = JSON.parse(issue.dataset.grammarSuggestions);
+      if (suggestions.length) {
+        return { mode: "spelling", lineId: line.id, start, end, word, suggestions };
+      }
+    }
+
     const suggestions = getSpellingSuggestions(word, {
       language: state.writingLanguage,
       project

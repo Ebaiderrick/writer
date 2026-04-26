@@ -495,6 +495,42 @@ export function getSpellingContextAtOffset(text, offset, options = {}) {
   };
 }
 
+const GRAMMAR_REPEAT_RE = /\b([a-zA-ZÀ-ÖØ-öø-ÿ]{2,})(?:[\s ]+)\1\b/gi;
+const GRAMMAR_MODAL_OF_RE = /\b(should|could|would|must|might)[\s ]+of\b/gi;
+
+export function buildGrammarIssues(text, options = {}) {
+  const language = options.language || "en";
+  if (language !== "en") return [];
+
+  const issues = [];
+  let m;
+
+  GRAMMAR_REPEAT_RE.lastIndex = 0;
+  while ((m = GRAMMAR_REPEAT_RE.exec(text)) !== null) {
+    issues.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      word: m[0],
+      type: "grammar",
+      suggestions: [m[1]]
+    });
+  }
+
+  GRAMMAR_MODAL_OF_RE.lastIndex = 0;
+  while ((m = GRAMMAR_MODAL_OF_RE.exec(text)) !== null) {
+    const verb = m[1].toLowerCase();
+    issues.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      word: m[0],
+      type: "grammar",
+      suggestions: [`${verb} have`]
+    });
+  }
+
+  return issues;
+}
+
 export function renderSpellingIssues(block, text, issues) {
   block.replaceChildren();
   let cursor = 0;
@@ -505,10 +541,13 @@ export function renderSpellingIssues(block, text, issues) {
     }
 
     const mark = document.createElement("span");
-    mark.className = "spelling-error";
+    mark.className = issue.type === "grammar" ? "spelling-error grammar-error" : "spelling-error";
     mark.dataset.spellingStart = String(issue.start);
     mark.dataset.spellingEnd = String(issue.end);
     mark.dataset.spellingWord = issue.word;
+    if (issue.type === "grammar" && issue.suggestions?.length) {
+      mark.dataset.grammarSuggestions = JSON.stringify(issue.suggestions);
+    }
     mark.textContent = text.slice(issue.start, issue.end);
     block.append(mark);
     cursor = issue.end;
