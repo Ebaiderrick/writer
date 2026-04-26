@@ -706,6 +706,13 @@ img {
   justify-content: space-between;
 }
 
+.strip-start-controls {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 64px;
+}
+
 .tool-strip.is-collapsed .tool-groups,
 .tool-strip.is-collapsed .tool-strip-foot {
   display: none;
@@ -793,6 +800,32 @@ img {
 
 .option-check input {
   accent-color: var(--accent);
+}
+
+.mini-radio-option {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: color-mix(in srgb, var(--ink) 78%, var(--muted));
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mini-radio-option input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.mini-radio-option span {
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .import-button {

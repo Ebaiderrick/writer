@@ -38,6 +38,7 @@ export function loadProjects() {
     state.aiAssist = Boolean(parsed?.aiAssist);
       state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
       state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
+      state.backgroundAnimation = parsed?.backgroundAnimation !== false;
       state.theme = parsed?.theme === "rose" ? "cedar" : (parsed?.theme || "cedar");
       state.language = ["en", "fr", "de"].includes(parsed?.language) ? parsed.language : "en";
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
@@ -48,6 +49,7 @@ export function loadProjects() {
     console.error("Unable to load projects", error);
       state.projects = [cloneProject(sampleProject, true)];
       state.currentProjectId = state.projects[0].id;
+      state.backgroundAnimation = true;
       state.language = "en";
       state.viewOptions = { ...DEFAULT_VIEW_OPTIONS };
     state.leftPaneBlocks = DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block }));
@@ -134,6 +136,7 @@ export function persistProjects(forceSavedBadge = false) {
     aiAssist: state.aiAssist,
     toolStripCollapsed: state.toolStripCollapsed,
       autoNumberScenes: state.autoNumberScenes,
+      backgroundAnimation: state.backgroundAnimation,
       theme: state.theme,
       language: state.language,
       viewOptions: state.viewOptions,
@@ -177,8 +180,8 @@ export function pushHistory() {
 
   state.history.push(snapshot);
 
-  // Limit to 10 undos (11 items total: current + 10 previous)
-  if (state.history.length > 11) {
+  // Limit to 30 undos (31 items total: current + 30 previous)
+  if (state.history.length > 31) {
     state.history.shift();
   } else {
     state.historyIndex++;

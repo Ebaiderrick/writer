@@ -125,6 +125,12 @@ export function bindEvents() {
     queueSave();
   });
 
+  refs.bgAnimationToggle?.addEventListener("change", () => {
+    state.backgroundAnimation = refs.bgAnimationToggle.checked;
+    applyToolbarState();
+    persistProjects(false);
+  });
+
   refs.aiAssistToggle.addEventListener("change", () => {
     state.aiAssist = refs.aiAssistToggle.checked;
     refs.aiPanel.hidden = !state.aiAssist;
@@ -422,6 +428,9 @@ export function openProject(projectId) {
   document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
   document.body.classList.toggle("grammar-mode-active", state.spellingCheck);
   refs.autoNumberToggle.checked = state.autoNumberScenes;
+  if (refs.bgAnimationToggle) {
+    refs.bgAnimationToggle.checked = state.backgroundAnimation;
+  }
   refs.aiPanel.hidden = !state.aiAssist;
 
   syncInputsFromProject(project);

@@ -368,5 +368,99 @@ function positionSuggestionTray(anchor = null) {
 
 function getActiveBlockSuggestionAnchor() {
   const block = getActiveEditableBlock();
-  return block ? { rect: block.getBoundingClientRect() } : null;
+  if (!block) {
+    return null;
+  }
+
+  return getCaretSuggestionAnchor(block) || { rect: block.getBoundingClientRect() };
+}
+
+function getCaretSuggestionAnchor(block) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) {
+    return null;
+  }
+
+  const range = selection.getRangeAt(0);
+  if (getBlockFromNode(range.startContainer) !== block || getBlockFromNode(range.endContainer) !== block) {
+    return null;
+  }
+
+  const anchorRange = range.cloneRange();
+  anchorRange.collapse(false);
+  const rect = getRangeRect(anchorRange) || getAdjacentTextRect(anchorRange);
+
+  if (!rect) {
+    return null;
+  }
+
+  return { x: rect.left, y: rect.bottom };
+}
+
+function getAdjacentTextRect(range) {
+  const container = range.startContainer;
+  const offset = range.startOffset;
+
+  if (container.nodeType === Node.TEXT_NODE) {
+    const textLength = container.textContent?.length || 0;
+    if (offset < textLength) {
+      const forwardRange = document.createRange();
+      forwardRange.setStart(container, offset);
+      forwardRange.setEnd(container, Math.min(textLength, offset + 1));
+      return getRangeRect(forwardRange);
+    }
+
+    if (offset > 0) {
+      const backwardRange = document.createRange();
+      backwardRange.setStart(container, offset - 1);
+      backwardRange.setEnd(container, offset);
+      return getRangeRect(backwardRange);
+    }
+
+    return null;
+  }
+
+  const nearbyNode = container.childNodes[offset] || container.childNodes[offset - 1];
+  if (nearbyNode?.nodeType !== Node.TEXT_NODE) {
+    return null;
+  }
+
+  const textLength = nearbyNode.textContent?.length || 0;
+  if (!textLength) {
+    return null;
+  }
+
+  const probeRange = document.createRange();
+  if (container.childNodes[offset]) {
+    probeRange.setStart(nearbyNode, 0);
+    probeRange.setEnd(nearbyNode, 1);
+  } else {
+    probeRange.setStart(nearbyNode, textLength - 1);
+    probeRange.setEnd(nearbyNode, textLength);
+  }
+
+  return getRangeRect(probeRange);
+}
+
+function getRangeRect(range) {
+  if (!range) {
+    return null;
+  }
+
+  const rects = Array.from(range.getClientRects()).filter(isUsableRect);
+  if (rects.length) {
+    return rects[rects.length - 1];
+  }
+
+  const rect = range.getBoundingClientRect();
+  return isUsableRect(rect) ? rect : null;
+}
+
+function isUsableRect(rect) {
+  return Boolean(rect && (rect.width || rect.height));
+}
+
+function getBlockFromNode(node) {
+  const element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+  return element?.closest?.(".script-block") || null;
 }

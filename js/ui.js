@@ -3,7 +3,7 @@ import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
-import { updateBackground } from './background.js';
+import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
 
 const MENU_GLYPHS = {
@@ -451,6 +451,10 @@ export function applyToolbarState() {
   document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
   refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+  if (refs.bgAnimationToggle) {
+    refs.bgAnimationToggle.checked = state.backgroundAnimation;
+  }
+  setBackgroundAnimationEnabled(state.backgroundAnimation);
   updateMenuStateButtons();
 }
 

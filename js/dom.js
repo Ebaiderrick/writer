@@ -31,6 +31,7 @@ export const refs = {
   get suggestionList() { return getCached("#suggestionList"); },
   get autoCapsToggle() { return getCached("#autoCapsToggle"); },
   get autoNumberToggle() { return getCached("#autoNumberToggle"); },
+  get bgAnimationToggle() { return getCached("#bgAnimationToggle"); },
   get typewriterToggle() { return getCached("#typewriterToggle"); },
   get aiAssistToggle() { return getCached("#aiAssistToggle"); },
   get spellingCheckToggle() { return getCached("#spellingCheckToggle"); },

@@ -56,6 +56,7 @@ export const state = {
   spellingCheck: false,
   toolStripCollapsed: false,
   autoNumberScenes: false,
+  backgroundAnimation: true,
   theme: "cedar",
   language: "en",
   viewOptions: { ...DEFAULT_VIEW_OPTIONS },

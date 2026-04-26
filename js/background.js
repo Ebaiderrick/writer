@@ -303,20 +303,54 @@ class LiquidApp {
     const container = document.getElementById("liquid-bg-container");
     if (!container) return;
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    container.appendChild(this.renderer.domElement);
+    this.container = container;
+    this.frameId = 0;
+    this.animationEnabled = true;
+    this.supported = true;
 
-    this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    this.camera.position.z = 50;
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xf4efe7);
-    this.clock = new THREE.Clock();
+    const probeCanvas = document.createElement("canvas");
+    const probeContext = probeCanvas.getContext("webgl2")
+      || probeCanvas.getContext("webgl")
+      || probeCanvas.getContext("experimental-webgl");
 
-    this.touchTexture = new TouchTexture();
-    this.gradient = new GradientBackground(this);
-    this.gradient.uniforms.uTouchTexture.value = this.touchTexture.texture;
+    if (!probeContext) {
+      this.supported = false;
+      this.renderer = null;
+      this.camera = null;
+      this.scene = null;
+      this.clock = null;
+      this.touchTexture = null;
+      this.gradient = null;
+      console.warn("Liquid background disabled: WebGL is not available in this browser.");
+    }
+
+    if (probeContext) {
+      try {
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(this.renderer.domElement);
+
+        this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.z = 50;
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0xf4efe7);
+        this.clock = new THREE.Clock();
+
+        this.touchTexture = new TouchTexture();
+        this.gradient = new GradientBackground(this);
+        this.gradient.uniforms.uTouchTexture.value = this.touchTexture.texture;
+      } catch (error) {
+        this.supported = false;
+        this.renderer = null;
+        this.camera = null;
+        this.scene = null;
+        this.clock = null;
+        this.touchTexture = null;
+        this.gradient = null;
+        console.warn("Liquid background disabled: unable to create WebGL context.", error);
+      }
+    }
 
     this.palettes = {
       cedar: {
@@ -413,14 +447,23 @@ class LiquidApp {
   }
 
   init() {
+    if (!this.supported) {
+      this.setAnimationEnabled(state.backgroundAnimation);
+      return;
+    }
+
     this.gradient.init();
     this.updateColors();
-    this.tick();
+    this.setAnimationEnabled(state.backgroundAnimation);
     window.addEventListener("resize", () => this.onResize());
     window.addEventListener("mousemove", (e) => this.onMouseMove(e));
   }
 
   updateColors() {
+    if (!this.supported || !this.gradient || !this.scene) {
+      return;
+    }
+
     const theme = state.theme === "rose" ? "cedar" : state.theme;
     const p = this.palettes[theme] || this.palettes.cedar;
     const u = this.gradient.uniforms;
@@ -446,6 +489,9 @@ class LiquidApp {
   }
 
   onMouseMove(e) {
+    if (!this.supported || !this.animationEnabled) {
+      return;
+    }
     this.touchTexture.addTouch({ x: e.clientX / window.innerWidth, y: 1 - e.clientY / window.innerHeight });
   }
 
@@ -455,19 +501,72 @@ class LiquidApp {
     return { width: h * this.camera.aspect, height: h };
   }
 
-  tick() {
+  renderFrame() {
+    if (!this.supported || !this.renderer || !this.touchTexture || !this.gradient || !this.camera || !this.scene) {
+      return;
+    }
+
     const delta = Math.min(this.clock.getDelta(), 0.1);
     this.touchTexture.update();
     this.gradient.update(delta);
     this.renderer.render(this.scene, this.camera);
-    requestAnimationFrame(() => this.tick());
+  }
+
+  startLoop() {
+    if (this.frameId) {
+      return;
+    }
+
+    const step = () => {
+      if (!this.animationEnabled) {
+        this.frameId = 0;
+        return;
+      }
+      this.renderFrame();
+      this.frameId = requestAnimationFrame(step);
+    };
+
+    this.frameId = requestAnimationFrame(step);
+  }
+
+  stopLoop() {
+    if (!this.frameId) {
+      return;
+    }
+    cancelAnimationFrame(this.frameId);
+    this.frameId = 0;
+  }
+
+  setAnimationEnabled(enabled) {
+    this.animationEnabled = enabled !== false;
+    this.container.hidden = !this.animationEnabled;
+
+    if (!this.supported) {
+      return;
+    }
+
+    if (!this.animationEnabled) {
+      this.stopLoop();
+      return;
+    }
+
+    this.clock.getDelta();
+    this.renderFrame();
+    this.startLoop();
   }
 
   onResize() {
+    if (!this.supported || !this.renderer || !this.camera || !this.gradient) {
+      return;
+    }
+
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.gradient.onResize();
+    if (this.animationEnabled) {
+      this.renderFrame();
+    }
   }
 }
 
@@ -482,5 +581,11 @@ export const initBackground = () => {
 export const updateBackground = () => {
   if (appInstance) {
     appInstance.updateColors();
+  }
+};
+
+export const setBackgroundAnimationEnabled = (enabled) => {
+  if (appInstance) {
+    appInstance.setAnimationEnabled(enabled);
   }
 };
