@@ -1,6 +1,7 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
@@ -68,11 +69,12 @@ export const Auth = (() => {
 
     // Handle Google redirect result (fires after returning from Google OAuth)
     getRedirectResult(auth).then(result => {
-      if (result?.user) {
-        // onAuthStateChanged handles the rest
-      }
+      // onAuthStateChanged handles the session when result.user exists
     }).catch(err => {
-      if (err.code !== 'auth/cancelled-popup-request') customAlert(friendlyError(err));
+      console.error('Google redirect result error:', err.code, err);
+      if (err.code && err.code !== 'auth/cancelled-popup-request') {
+        customAlert(friendlyError(err));
+      }
     });
 
     switchBtns.forEach(btn => btn.addEventListener('click', changeForm));
@@ -203,15 +205,27 @@ export const Auth = (() => {
       await signInWithEmailAndPassword(auth, email, password);
       signinForm.reset();
     } catch (err) {
+      console.error('Sign-in error:', err.code, err);
       customAlert(friendlyError(err));
     }
   }
 
   async function handleGoogleSignIn() {
     try {
-      await signInWithRedirect(auth, googleProvider);
+      await signInWithPopup(auth, googleProvider);
     } catch (err) {
-      customAlert(friendlyError(err));
+      console.error('Google sign-in error:', err.code, err);
+      if (err.code === 'auth/popup-blocked') {
+        // Popup blocked — fall back to redirect
+        try {
+          await signInWithRedirect(auth, googleProvider);
+        } catch (redirectErr) {
+          console.error('Google redirect error:', redirectErr.code, redirectErr);
+          customAlert(friendlyError(redirectErr));
+        }
+      } else if (err.code !== 'auth/popup-closed-by-user') {
+        customAlert(friendlyError(err));
+      }
     }
   }
 
@@ -297,6 +311,7 @@ export const Auth = (() => {
       });
       signupForm.reset();
     } catch (err) {
+      console.error('Sign-up error:', err.code, err);
       customAlert(friendlyError(err));
     }
   }
