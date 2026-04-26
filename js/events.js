@@ -34,6 +34,10 @@ import {
   applyWordCase, clearSpellingHighlights, ensureLanguageDictionary, getSpellingContextAtOffset,
   hasLanguageDictionary, highlightSpellingIssue, getSpellingSuggestions
 } from './spelling.js';
+import {
+  isLocalSaveSupported, chooseLocalSaveFile, restoreLocalSaveFile, clearLocalSaveFile,
+  startLocalSaveTimer, stopLocalSaveTimer, writeLocalSaveFile
+} from './localSave.js';
 
 export function bindEvents() {
   // Navigation
@@ -86,6 +90,26 @@ export function bindEvents() {
       persistProjects(false);
       closeMenus();
     });
+  });
+
+  refs.saveModeButtons.forEach((button) => {
+    button.addEventListener("click", () => setSaveMode(button.dataset.saveMode));
+  });
+  refs.localSaveInterval?.addEventListener("change", () => {
+    const value = parseInt(refs.localSaveInterval.value, 10);
+    state.localSaveIntervalMinutes = [5, 10, 60].includes(value) ? value : 5;
+    persistProjects(false);
+    if (state.saveMode === "local" && state.localSaveFileHandle) {
+      startLocalSaveTimer();
+    }
+  });
+  refs.chooseLocalSaveFileBtn?.addEventListener("click", async () => {
+    const result = await chooseLocalSaveFile();
+    if (result.ok) {
+      startLocalSaveTimer();
+    } else if (result.reason === "unsupported") {
+      customAlert("Local save requires a Chromium-based browser (Chrome, Edge, Opera).");
+    }
   });
 
   document.querySelectorAll("[data-menu-action]").forEach((button) => {
@@ -1158,6 +1182,49 @@ function applyWritingLanguageButtons() {
   });
 }
 
+async function setSaveMode(mode) {
+  const next = mode === "local" ? "local" : "cloud";
+  state.saveMode = next;
+  applySaveModeButtons();
+  persistProjects(false);
+
+  if (next === "local") {
+    if (!isLocalSaveSupported()) {
+      customAlert("Local save requires a Chromium-based browser (Chrome, Edge, Opera). Staying on cloud mode.");
+      state.saveMode = "cloud";
+      applySaveModeButtons();
+      persistProjects(false);
+      return;
+    }
+    if (refs.localSaveControls) refs.localSaveControls.hidden = false;
+    if (!state.localSaveFileHandle) {
+      const result = await chooseLocalSaveFile();
+      if (!result.ok) return;
+    }
+    startLocalSaveTimer();
+  } else {
+    if (refs.localSaveControls) refs.localSaveControls.hidden = true;
+    stopLocalSaveTimer();
+  }
+}
+
+export function applySaveModeButtons() {
+  refs.saveModeButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.saveMode === state.saveMode);
+  });
+  if (refs.localSaveControls) {
+    refs.localSaveControls.hidden = state.saveMode !== "local";
+  }
+  if (refs.localSaveInterval) {
+    refs.localSaveInterval.value = String(state.localSaveIntervalMinutes);
+  }
+  if (refs.localSaveFileLabel) {
+    refs.localSaveFileLabel.textContent = state.localSaveFileHandle
+      ? `Saving to: ${state.localSaveFileHandle.name}`
+      : "No file selected";
+  }
+}
+
 function primeSpellingDictionary() {
   if (!state.grammarCheck) {
     return;
@@ -1527,13 +1594,22 @@ function clearScriptFilter() {
 function exportTxt() {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
+
   const preparedLines = buildPreparedExportLines(project);
-  const cover = [project.title, project.author, project.contact, project.company, project.details, project.logline].filter(Boolean).join("\n");
-  const pages = paginateScriptLines(preparedLines)
-    .map((pageLines) => pageLines.map((line) => line.displayText).join("\n\n"))
-    .filter(Boolean);
-  const content = [cover, ...pages].filter(Boolean).join("\n\f\n");
-  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain");
+
+  const coverParts = [
+    project.title || "Untitled Script",
+    project.author ? `by ${project.author}` : "",
+    [project.contact, project.company, project.details].filter(Boolean).join("\n"),
+    project.logline || ""
+  ].filter(Boolean);
+  const cover = coverParts.join("\n\n");
+
+  const pageBreak = "\n\n" + "-".repeat(60) + "\n\n";
+  const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
+
+  const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
+  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
 }
 
 function exportJson() {

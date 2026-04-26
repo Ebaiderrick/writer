@@ -107,8 +107,9 @@ export function buildPrintableDocument(project, autoPrint = false) {
       ? `<div class="print-footer">${escapeHtml(buildPageNumberLabel(pageNum, previewData.scriptPages.length))}</div>`
       : "";
 
+    const firstScriptPageClass = index === 0 ? " script-page-first" : "";
     return `
-    <section class="print-page">
+    <section class="print-page script-page${firstScriptPageClass}">
       <div class="print-body">
         ${pageLines.map((line) => `<p class="print-line ${line.type}">${escapeHtml(line.displayText)}</p>`).join("")}
       </div>
@@ -343,6 +344,12 @@ function getPrintableStyles() {
       align-items: center;
       justify-content: center;
       padding-left: 1.0in; /* Center for cover */
+      page-break-after: always !important;
+      break-after: page !important;
+    }
+    .script-page-first {
+      page-break-before: always !important;
+      break-before: page !important;
     }
     .print-cover-text {
       white-space: pre-wrap;

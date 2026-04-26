@@ -355,6 +355,27 @@
                 </div>
               </div>
             </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Save Mode</summary>
+              <div class="menu-group-body">
+                <div class="theme-options save-mode-options">
+                  <button class="theme-option" type="button" data-save-mode="cloud">Cloud</button>
+                  <button class="theme-option" type="button" data-save-mode="local">Local file</button>
+                </div>
+                <div id="localSaveControls" class="local-save-controls" hidden>
+                  <label class="menu-row" for="localSaveInterval">
+                    <span>Save every</span>
+                    <select id="localSaveInterval">
+                      <option value="5">5 minutes</option>
+                      <option value="10">10 minutes</option>
+                      <option value="60">1 hour</option>
+                    </select>
+                  </label>
+                  <button id="chooseLocalSaveFileBtn" class="ghost-button" type="button">Choose file…</button>
+                  <p id="localSaveFileLabel" class="local-save-file-label">No file selected</p>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
 

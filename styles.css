@@ -1386,6 +1386,38 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   pointer-events: none;
 }
 
+/* Local save controls */
+.local-save-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.local-save-controls .menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.local-save-controls select {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+.local-save-file-label {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
 /* Uploaded image preview */
 .image-block-preview {
   display: block;
