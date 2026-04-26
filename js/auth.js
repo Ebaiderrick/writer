@@ -109,6 +109,7 @@ export const Auth = (() => {
     document.getElementById('google-signin')?.addEventListener('click', handleGoogleSignIn);
     document.getElementById('demo-login-btn')?.addEventListener('click', handleDemoLogin);
     document.getElementById('signOutBtn')?.addEventListener('click', handleSignOut);
+    document.getElementById('homeSignOutBtn')?.addEventListener('click', handleSignOut);
 
     onAuthStateChanged(auth, async firebaseUser => {
       if (firebaseUser) {

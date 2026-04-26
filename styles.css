@@ -223,8 +223,35 @@ img {
 }
 
 .home-topbar {
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
   padding-top: 0;
+}
+
+.home-topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+.home-user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.3;
+}
+
+.home-user-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.home-user-email {
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .nav-stack {

@@ -31,6 +31,15 @@ export function showStudio() {
 }
 
 export function renderHome() {
+  // Populate user info in home topbar
+  try {
+    const session = JSON.parse(localStorage.getItem('eyawriter_session') || 'null');
+    if (session?.loggedIn && refs.homeUserName && refs.homeUserEmail) {
+      refs.homeUserName.textContent = session.name || '';
+      refs.homeUserEmail.textContent = session.isDemoSession ? 'Demo mode' : (session.email || '');
+    }
+  } catch { /* ignore */ }
+
   refs.projectGrid.innerHTML = "";
   const template = document.querySelector("#projectCardTemplate");
   const projects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
