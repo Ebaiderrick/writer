@@ -34,7 +34,7 @@ export const refs = {
   get bgAnimationToggle() { return getCached("#bgAnimationToggle"); },
   get typewriterToggle() { return getCached("#typewriterToggle"); },
   get aiAssistToggle() { return getCached("#aiAssistToggle"); },
-  get spellingCheckToggle() { return getCached("#spellingCheckToggle"); },
+  get grammarCheckToggle() { return getCached("#grammarCheckToggle"); },
   get aiPanel() { return getCached("#aiPanel"); },
   get aiSuggestBtn() { return getCached("#aiSuggestBtn"); },
   get saveBtn() { return getCached("#saveBtn"); },
@@ -75,5 +75,6 @@ export const refs = {
   get studioRecentProjects() { return getCached("#studioRecentProjects"); },
   get menuTriggers() { return getCached("[data-menu-trigger]", true); },
   get themeButtons() { return getCached("[data-theme-value]", true); },
-  get languageButtons() { return getCached("[data-language-value]", true); }
+  get languageButtons() { return getCached("[data-language-value]", true); },
+  get writingLanguageButtons() { return getCached("[data-writing-language-value]", true); }
   };

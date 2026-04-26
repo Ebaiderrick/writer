@@ -410,8 +410,8 @@ export function updateMenuStateButtons() {
     button.classList.toggle("is-active", state.aiAssist);
   });
 
-  document.querySelectorAll("[data-menu-action='toggle-spelling-check']").forEach((button) => {
-    button.classList.toggle("is-active", state.spellingCheck);
+  document.querySelectorAll("[data-menu-action='toggle-grammar-check']").forEach((button) => {
+    button.classList.toggle("is-active", state.grammarCheck);
   });
 
   document.querySelectorAll("[data-menu-action='toggle-auto-number']").forEach((button) => {
@@ -448,7 +448,7 @@ export function applyTheme() {
 
 export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
-  document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
+  document.body.classList.toggle("spelling-mode-active", state.grammarCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
   refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
   if (refs.bgAnimationToggle) {

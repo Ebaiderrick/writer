@@ -74,6 +74,14 @@ export function bindEvents() {
       if (!refs.studioView.hidden) {
         renderStudio();
       }
+      persistProjects(false);
+      closeMenus();
+    });
+  });
+
+  refs.writingLanguageButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setWritingLanguage(button.dataset.writingLanguageValue);
       primeSpellingDictionary();
       persistProjects(false);
       closeMenus();
@@ -138,8 +146,8 @@ export function bindEvents() {
     queueSave();
   });
 
-  refs.spellingCheckToggle.addEventListener("change", () => {
-    setSpellingCheck(refs.spellingCheckToggle.checked);
+  refs.grammarCheckToggle.addEventListener("change", () => {
+    setGrammarCheck(refs.grammarCheckToggle.checked);
     queueSave();
   });
 
@@ -424,9 +432,9 @@ export function openProject(projectId) {
   state.activeType = project.lines[0]?.type || "action";
 
   refs.aiAssistToggle.checked = state.aiAssist;
-  refs.spellingCheckToggle.checked = state.spellingCheck;
-  document.body.classList.toggle("spelling-mode-active", state.spellingCheck);
-  document.body.classList.toggle("grammar-mode-active", state.spellingCheck);
+  refs.grammarCheckToggle.checked = state.grammarCheck;
+  document.body.classList.toggle("spelling-mode-active", state.grammarCheck);
+  document.body.classList.toggle("grammar-mode-active", state.grammarCheck);
   refs.autoNumberToggle.checked = state.autoNumberScenes;
   if (refs.bgAnimationToggle) {
     refs.bgAnimationToggle.checked = state.backgroundAnimation;
@@ -534,8 +542,8 @@ function handleBlockInput(id, element) {
   project.updatedAt = new Date().toISOString();
   clearSuggestionContext();
 
-  const shouldRefreshSpelling = state.spellingCheck
-    && hasLanguageDictionary(state.language)
+  const shouldRefreshSpelling = state.grammarCheck
+    && hasLanguageDictionary(state.writingLanguage)
     && Boolean(window.getSelection()?.isCollapsed);
   const caretOffset = shouldRefreshSpelling ? getCaretOffset(element) : 0;
   if (shouldRefreshSpelling) {
@@ -996,8 +1004,8 @@ function handleMenuAction(action) {
       updateMenuStateButtons();
       queueSave();
       break;
-    case "toggle-spelling-check":
-      setSpellingCheck(!state.spellingCheck);
+    case "toggle-grammar-check":
+      setGrammarCheck(!state.grammarCheck);
       break;
     case "toggle-auto-number":
       refs.autoNumberToggle.checked = !refs.autoNumberToggle.checked;
@@ -1013,7 +1021,7 @@ function handleMenuAction(action) {
       break;
   }
   closeMenus();
-  if (action === "toggle-spelling-check") {
+  if (action === "toggle-grammar-check") {
     queueSave();
   }
 }
@@ -1035,9 +1043,9 @@ function saveAndGoHome() {
   renderHome();
 }
 
-function setSpellingCheck(enabled) {
-  state.spellingCheck = enabled;
-  refs.spellingCheckToggle.checked = enabled;
+function setGrammarCheck(enabled) {
+  state.grammarCheck = enabled;
+  refs.grammarCheckToggle.checked = enabled;
   document.body.classList.toggle("spelling-mode-active", enabled);
   document.body.classList.toggle("grammar-mode-active", enabled);
   clearSuggestionContext();
@@ -1046,14 +1054,28 @@ function setSpellingCheck(enabled) {
   primeSpellingDictionary();
 }
 
+function setWritingLanguage(language) {
+  state.writingLanguage = ["en", "fr", "de"].includes(language) ? language : "en";
+  applyWritingLanguageButtons();
+  if (state.grammarCheck && !refs.studioView.hidden) {
+    renderStudio();
+  }
+}
+
+function applyWritingLanguageButtons() {
+  refs.writingLanguageButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.writingLanguageValue === state.writingLanguage);
+  });
+}
+
 function primeSpellingDictionary() {
-  if (!state.spellingCheck) {
+  if (!state.grammarCheck) {
     return;
   }
 
-  ensureLanguageDictionary(state.language)
+  ensureLanguageDictionary(state.writingLanguage)
     .then(() => {
-      if (state.spellingCheck && !refs.studioView.hidden) {
+      if (state.grammarCheck && !refs.studioView.hidden) {
         renderStudio();
       }
     })
@@ -1063,7 +1085,7 @@ function primeSpellingDictionary() {
 }
 
 async function maybeShowSpellingSuggestions(block, target = null, clientX = null, clientY = null) {
-  if (!state.spellingCheck) {
+  if (!state.grammarCheck) {
     return;
   }
 
@@ -1073,9 +1095,9 @@ async function maybeShowSpellingSuggestions(block, target = null, clientX = null
     return;
   }
 
-  if (!hasLanguageDictionary(state.language)) {
+  if (!hasLanguageDictionary(state.writingLanguage)) {
     try {
-      await ensureLanguageDictionary(state.language);
+      await ensureLanguageDictionary(state.writingLanguage);
     } catch (error) {
       console.error("Unable to load spelling suggestions:", error);
       return;
@@ -1091,7 +1113,7 @@ async function maybeShowSpellingSuggestions(block, target = null, clientX = null
 
   const offset = getCaretOffset(block);
   const context = getSpellingContextAtOffset(line.text, offset, {
-    language: state.language,
+    language: state.writingLanguage,
     project,
     lineId: line.id
   });
@@ -1116,7 +1138,7 @@ function resolveClickedSpellingContext(block, line, project, target, clientX, cl
     const end = Number(issue.dataset.spellingEnd);
     const word = issue.dataset.spellingWord || line.text.slice(start, end);
     const suggestions = getSpellingSuggestions(word, {
-      language: state.language,
+      language: state.writingLanguage,
       project
     });
 
@@ -1135,7 +1157,7 @@ function resolveClickedSpellingContext(block, line, project, target, clientX, cl
   const offsetFromPoint = getCaretOffsetFromPoint(block, clientX, clientY);
   if (offsetFromPoint >= 0) {
     return getSpellingContextAtOffset(line.text, offsetFromPoint, {
-      language: state.language,
+      language: state.writingLanguage,
       project,
       lineId: line.id
     });

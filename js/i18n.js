@@ -28,6 +28,8 @@ const TRANSLATIONS = {
     "nav.textSize": "Text Size",
     "nav.editor": "Editor",
     "nav.language": "Language",
+    "nav.systemLanguage": "System Language",
+    "nav.writingLanguage": "Writing Language",
     "nav.toolsGroup": "Tools",
     "nav.revisionGroup": "Revision",
     "nav.customizeActiveBlocks": "Customize Active Blocks",
@@ -73,6 +75,7 @@ const TRANSLATIONS = {
     "menu.fullScreen": "Full Screen",
     "menu.proofread": "Screenplay Proofread",
     "menu.spellingCheck": "Spelling Check",
+    "menu.grammarCheck": "Grammar Check",
     "menu.aiAssistant": "AI Assistant",
     "menu.workTracking": "Work Tracking",
     "menu.metrics": "Metrics",
@@ -105,6 +108,7 @@ const TRANSLATIONS = {
     "option.typewriterFocus": "Typewriter focus",
     "option.aiAssistance": "AI Assistance",
     "option.spellingCheck": "Spelling check",
+    "option.grammarCheck": "Grammar check",
 
     "pane.activeBlock": "Active Block",
     "pane.activeBlockDesc": "Script details, scenes, characters, and metrics",
@@ -260,6 +264,8 @@ const TRANSLATIONS = {
     "nav.textSize": "Taille du texte",
     "nav.editor": "Éditeur",
     "nav.language": "Langue",
+    "nav.systemLanguage": "Langue du système",
+    "nav.writingLanguage": "Langue d'écriture",
     "nav.toolsGroup": "Outils",
     "nav.revisionGroup": "Révision",
     "nav.customizeActiveBlocks": "Personnaliser les blocs actifs",
@@ -305,6 +311,7 @@ const TRANSLATIONS = {
     "menu.fullScreen": "Plein écran",
     "menu.proofread": "Relecture du scénario",
     "menu.spellingCheck": "Vérification orthographique",
+    "menu.grammarCheck": "Vérification grammaticale",
     "menu.aiAssistant": "Assistant IA",
     "menu.workTracking": "Suivi du travail",
     "menu.metrics": "Mesures",
@@ -337,6 +344,7 @@ const TRANSLATIONS = {
     "option.typewriterFocus": "Focus machine à écrire",
     "option.aiAssistance": "Assistance IA",
     "option.spellingCheck": "Vérification orthographique",
+    "option.grammarCheck": "Vérification grammaticale",
 
     "pane.activeBlock": "Bloc actif",
     "pane.activeBlockDesc": "Détails du script, scènes, personnages et mesures",
@@ -492,6 +500,8 @@ const TRANSLATIONS = {
     "nav.textSize": "Textgröße",
     "nav.editor": "Editor",
     "nav.language": "Sprache",
+    "nav.systemLanguage": "Systemsprache",
+    "nav.writingLanguage": "Schreibsprache",
     "nav.toolsGroup": "Werkzeuge",
     "nav.revisionGroup": "Revision",
     "nav.customizeActiveBlocks": "Aktive Blöcke anpassen",
@@ -537,6 +547,7 @@ const TRANSLATIONS = {
     "menu.fullScreen": "Vollbild",
     "menu.proofread": "Drehbuchprüfung",
     "menu.spellingCheck": "Rechtschreibprüfung",
+    "menu.grammarCheck": "Grammatikprüfung",
     "menu.aiAssistant": "KI-Assistent",
     "menu.workTracking": "Arbeitsverfolgung",
     "menu.metrics": "Metriken",
@@ -569,6 +580,7 @@ const TRANSLATIONS = {
     "option.typewriterFocus": "Schreibmaschinenfokus",
     "option.aiAssistance": "KI-Unterstützung",
     "option.spellingCheck": "Rechtschreibprüfung",
+    "option.grammarCheck": "Grammatikprüfung",
 
     "pane.activeBlock": "Aktiver Block",
     "pane.activeBlockDesc": "Skriptdetails, Szenen, Charaktere und Metriken",
@@ -745,7 +757,8 @@ const SELECTOR_BINDINGS = [
   ["#studioToolsMenu > .menu-group:nth-of-type(2) > .menu-group-summary", "nav.revisionGroup"],
   ["#studioToolsMenu > .menu-group:nth-of-type(3) > .menu-group-summary", "nav.customizeActiveBlocks"],
   ["#studioSettingsMenu > .menu-group:nth-of-type(1) > .menu-group-summary", "nav.editor"],
-  ["#studioSettingsMenu > .menu-group:nth-of-type(2) > .menu-group-summary", "nav.language"],
+  ["#studioSettingsMenu > .menu-group:nth-of-type(2) > .menu-group-summary", "nav.systemLanguage"],
+  ["#studioSettingsMenu > .menu-group:nth-of-type(3) > .menu-group-summary", "nav.writingLanguage"],
   ["#goHomeBtn", "menu.saveHome"],
   ["#toolButtons [data-insert='scene'] span:last-child", "tool.scene"],
   ["#toolButtons [data-insert='action'] span:last-child", "tool.action"],
@@ -760,7 +773,7 @@ const SELECTOR_BINDINGS = [
   ["#toolButtons [data-insert='image'] span:last-child", "tool.image"],
   [".studio-options label:nth-of-type(1) span", "option.autoNumber"],
   [".studio-options label:nth-of-type(2) span", "option.aiAssistance"],
-  [".studio-options label:nth-of-type(3) span", "option.spellingCheck"],
+  [".studio-options label:nth-of-type(3) span", "option.grammarCheck"],
   ["#bgAnimationToggleLabel", "option.bgAnnim"],
   [".pane-shell-header h2", "pane.activeBlock"],
   [".pane-shell-header p", "pane.activeBlockDesc"],
@@ -871,7 +884,7 @@ const SELECTOR_BINDINGS = [
   ["#studioFormatMenu [data-format-type='dual']", "tool.dual"],
   ["#studioFormatMenu [data-format-type='image']", "tool.image"],
   ["#studioToolsMenu [data-menu-action='proofread']", "menu.proofread"],
-  ["#studioToolsMenu [data-menu-action='toggle-spelling-check']", "menu.spellingCheck"],
+  ["#studioToolsMenu [data-menu-action='toggle-grammar-check']", "menu.grammarCheck"],
   ["#studioToolsMenu [data-menu-action='toggle-ai-assistant']", "menu.aiAssistant"],
   ["#studioToolsMenu [data-menu-action='show-work-tracking']", "menu.workTracking"],
   ["#studioToolsMenu [data-menu-action='show-metrics']", "menu.metrics"],
@@ -879,6 +892,9 @@ const SELECTOR_BINDINGS = [
   ["#studioSettingsMenu [data-language-value='en']", "language.english"],
   ["#studioSettingsMenu [data-language-value='fr']", "language.french"],
   ["#studioSettingsMenu [data-language-value='de']", "language.german"],
+  ["#studioSettingsMenu [data-writing-language-value='en']", "language.english"],
+  ["#studioSettingsMenu [data-writing-language-value='fr']", "language.french"],
+  ["#studioSettingsMenu [data-writing-language-value='de']", "language.german"],
   ["#saveBadge", "save.saved"]
 ];
 
@@ -919,6 +935,10 @@ export function applyTranslations(root = document) {
 
   root.querySelectorAll("[data-language-value]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.languageValue === state.language);
+  });
+
+  root.querySelectorAll("[data-writing-language-value]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.writingLanguageValue === state.writingLanguage);
   });
 
   const fixedLabel = root.querySelector(".block-customizer-label.is-fixed");

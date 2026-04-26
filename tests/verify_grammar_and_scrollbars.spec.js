@@ -7,9 +7,9 @@ test('grammar check toggle and ai menu integration', async ({ page }) => {
   await page.click('#newProjectBtn');
   await page.waitForSelector('.script-block');
 
-  // Enable AI Assist and spelling check
+  // Enable AI Assist and grammar check
   await page.check('#aiAssistToggle');
-  await page.check('#spellingCheckToggle');
+  await page.check('#grammarCheckToggle');
 
   // Check if body has class
   await expect(page.locator('body')).toHaveClass(/spelling-mode-active/);

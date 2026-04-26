@@ -311,7 +311,7 @@
               <summary class="menu-group-summary">Tools</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
-                <button class="nav-menu-button" type="button" data-menu-action="toggle-spelling-check">Spelling Check</button>
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
               </div>
             </details>
@@ -336,12 +336,22 @@
               </div>
             </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Language</summary>
+              <summary class="menu-group-summary">System Language</summary>
               <div class="menu-group-body">
                 <div class="theme-options language-options">
                   <button class="theme-option" type="button" data-language-value="en">English</button>
                   <button class="theme-option" type="button" data-language-value="fr">French</button>
                   <button class="theme-option" type="button" data-language-value="de">German</button>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Writing Language</summary>
+              <div class="menu-group-body">
+                <div class="theme-options language-options">
+                  <button class="theme-option" type="button" data-writing-language-value="en">English</button>
+                  <button class="theme-option" type="button" data-writing-language-value="fr">French</button>
+                  <button class="theme-option" type="button" data-writing-language-value="de">German</button>
                 </div>
               </div>
             </details>
@@ -444,8 +454,8 @@
                 <span>AI Assistance</span>
               </label>
               <label class="option-check">
-                <input id="spellingCheckToggle" type="checkbox">
-                <span>Spelling check</span>
+                <input id="grammarCheckToggle" type="checkbox">
+                <span>Grammar check</span>
               </label>
             </div>
           </div>

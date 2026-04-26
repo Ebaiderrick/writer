@@ -21,8 +21,8 @@ export function renderEditor() {
   refs.screenplayEditor.innerHTML = "";
   const template = document.querySelector("#blockTemplate");
   const filterSet = buildVisibleFilterSet(project);
-  const spellingLexicon = state.spellingCheck && hasLanguageDictionary(state.language)
-    ? buildProjectLexicon(project, state.language)
+  const spellingLexicon = state.grammarCheck && hasLanguageDictionary(state.writingLanguage)
+    ? buildProjectLexicon(project, state.writingLanguage)
     : null;
   let currentSceneId = "";
   let collapsedSceneId = "";
@@ -59,10 +59,10 @@ export function renderEditor() {
     tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
     block.dataset.id = line.id;
     block.dataset.type = line.type;
-    block.spellcheck = state.spellingCheck;
-    block.setAttribute("spellcheck", state.spellingCheck ? "true" : "false");
-    block.setAttribute("autocorrect", state.spellingCheck ? "on" : "off");
-    block.setAttribute("autocapitalize", state.spellingCheck ? "sentences" : "off");
+    block.spellcheck = state.grammarCheck;
+    block.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
+    block.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");
+    block.setAttribute("autocapitalize", state.grammarCheck ? "sentences" : "off");
     renderBlockContent(block, line, project, spellingLexicon);
 
     const hiddenByScene = !filterSet && Boolean(collapsedSceneId && line.type !== "scene");
@@ -274,22 +274,22 @@ export function refreshEditableBlockDisplay(block, line = getLine(block?.dataset
   if (!block || !line) {
     return;
   }
-  const spellingLexicon = state.spellingCheck && hasLanguageDictionary(state.language)
-    ? buildProjectLexicon(project, state.language)
+  const spellingLexicon = state.grammarCheck && hasLanguageDictionary(state.writingLanguage)
+    ? buildProjectLexicon(project, state.writingLanguage)
     : null;
   renderBlockContent(block, line, project, spellingLexicon);
 }
 
 function renderBlockContent(block, line, project, spellingLexicon = null) {
-  if (!state.spellingCheck || !hasLanguageDictionary(state.language)) {
+  if (!state.grammarCheck || !hasLanguageDictionary(state.writingLanguage)) {
     block.textContent = line.text;
     return;
   }
 
   const issues = buildSpellingIssues(line.text, {
-    language: state.language,
+    language: state.writingLanguage,
     project,
-    lexicon: spellingLexicon || buildProjectLexicon(project, state.language)
+    lexicon: spellingLexicon || buildProjectLexicon(project, state.writingLanguage)
   });
   renderSpellingIssues(block, line.text, issues);
 }

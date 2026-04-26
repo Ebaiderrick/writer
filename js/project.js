@@ -41,6 +41,8 @@ export function loadProjects() {
       state.backgroundAnimation = parsed?.backgroundAnimation !== false;
       state.theme = parsed?.theme === "rose" ? "cedar" : (parsed?.theme || "cedar");
       state.language = ["en", "fr", "de"].includes(parsed?.language) ? parsed.language : "en";
+      state.writingLanguage = ["en", "fr", "de"].includes(parsed?.writingLanguage) ? parsed.writingLanguage : state.language;
+      state.grammarCheck = Boolean(parsed?.grammarCheck);
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
     state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
@@ -51,6 +53,8 @@ export function loadProjects() {
       state.currentProjectId = state.projects[0].id;
       state.backgroundAnimation = true;
       state.language = "en";
+      state.writingLanguage = "en";
+      state.grammarCheck = false;
       state.viewOptions = { ...DEFAULT_VIEW_OPTIONS };
     state.leftPaneBlocks = DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block }));
   }
@@ -139,6 +143,8 @@ export function persistProjects(forceSavedBadge = false) {
       backgroundAnimation: state.backgroundAnimation,
       theme: state.theme,
       language: state.language,
+      writingLanguage: state.writingLanguage,
+      grammarCheck: state.grammarCheck,
       viewOptions: state.viewOptions,
     leftPaneBlocks: state.leftPaneBlocks,
     leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
