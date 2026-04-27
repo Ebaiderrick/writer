@@ -39,6 +39,9 @@ import {
   isLocalSaveSupported, chooseLocalSaveFile, restoreLocalSaveFile, clearLocalSaveFile,
   startLocalSaveTimer, stopLocalSaveTimer, writeLocalSaveFile
 } from './localSave.js';
+import {
+  inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter
+} from './collaborate.js';
 
 export function bindEvents() {
   // Navigation
@@ -440,6 +443,48 @@ export function bindEvents() {
           focusBlock(item.dataset.lineId);
       }
   });
+
+  // Collaboration events
+  const collabInviteBtn = document.getElementById('collabInviteBtn');
+  const collabInviteEmail = document.getElementById('collabInviteEmail');
+  const collabInviteStatus = document.getElementById('collabInviteStatus');
+  if (collabInviteBtn && collabInviteEmail) {
+    collabInviteBtn.addEventListener('click', async () => {
+      const email = collabInviteEmail.value.trim();
+      if (!email) return;
+      collabInviteBtn.disabled = true;
+      const result = await inviteCollaborator(email);
+      collabInviteBtn.disabled = false;
+      if (collabInviteStatus) {
+        collabInviteStatus.textContent = result.ok ? 'Invitation sent!' : result.reason;
+        collabInviteStatus.className = `collab-status-msg${result.ok ? ' collab-status-ok' : ' collab-status-err'}`;
+        setTimeout(() => { collabInviteStatus.textContent = ''; collabInviteStatus.className = 'collab-status-msg'; }, 4000);
+      }
+      if (result.ok) { collabInviteEmail.value = ''; renderCollaboratorList(); }
+    });
+    collabInviteEmail.addEventListener('keydown', e => {
+      if (e.key === 'Enter') collabInviteBtn.click();
+    });
+  }
+
+  const collabAddCommentBtn = document.getElementById('collabAddCommentBtn');
+  const collabCommentText = document.getElementById('collabCommentText');
+  if (collabAddCommentBtn && collabCommentText) {
+    collabAddCommentBtn.addEventListener('click', async () => {
+      const project = getCurrentProject();
+      if (!project?.isShared) {
+        customAlert('Share this project with at least one collaborator to enable comments.', 'Comments');
+        return;
+      }
+      await addComment(project.id, collabCommentText.value);
+      collabCommentText.value = '';
+    });
+  }
+
+  // Re-render studio when a remote collaborator updates the shared project
+  window.addEventListener('sharedProjectUpdated', () => {
+    if (!refs.studioView?.hidden) renderStudio();
+  });
 }
 
 // Action Handlers
@@ -469,6 +514,7 @@ export function openProject(projectId) {
   syncInputsFromProject(project);
   showStudio();
   renderStudio();
+  onStudioEnter(projectId);
   primeSpellingDictionary();
   if (state.activeBlockId) {
     focusBlock(state.activeBlockId);

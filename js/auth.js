@@ -9,7 +9,7 @@ import {
   onAuthStateChanged,
   updateProfile
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { auth, db } from './firebase.js';
 import { showHome, showAuth, renderHome, customAlert, customConfirm } from './ui.js';
 import { state } from './config.js';
@@ -19,6 +19,7 @@ import {
   importLocalProjectsToCloud,
   setProjectsFromCloud
 } from './project.js';
+import { initCollaboration, cleanupCollaboration } from './collaborate.js';
 
 const SESSION_KEY = 'eyawriter_session';
 const EMAILJS_SERVICE = 'service_j18y8zo';
@@ -114,10 +115,13 @@ export const Auth = (() => {
     onAuthStateChanged(auth, async firebaseUser => {
       if (firebaseUser) {
         cacheSession(firebaseUser);
+        await ensureUsersByEmail(firebaseUser);
         await syncProjectsOnLogin(firebaseUser.uid);
         if (refs.authView && !refs.authView.hidden) showHome();
         renderHome();
+        initCollaboration();
       } else {
+        cleanupCollaboration();
         const session = getCachedSession();
         if (!session?.isDemoSession) {
           clearSession();
@@ -130,6 +134,18 @@ export const Auth = (() => {
         }
       }
     });
+  }
+
+  async function ensureUsersByEmail(firebaseUser) {
+    const emailKey = firebaseUser.email.toLowerCase();
+    const ref = doc(db, 'usersByEmail', emailKey);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        uid: firebaseUser.uid,
+        name: firebaseUser.displayName || firebaseUser.email
+      });
+    }
   }
 
   async function syncProjectsOnLogin(uid) {
@@ -309,6 +325,10 @@ export const Auth = (() => {
         name,
         email,
         createdAt: new Date().toISOString()
+      });
+      await setDoc(doc(db, 'usersByEmail', email.toLowerCase()), {
+        uid: credential.user.uid,
+        name
       });
       signupForm.reset();
     } catch (err) {

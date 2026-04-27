@@ -17,11 +17,15 @@ async function syncCurrentProjectToFirestore() {
   if (!userId) return;
   const project = getCurrentProject();
   if (!project) return;
+  const payload = { ...project, syncedAt: new Date().toISOString() };
   try {
-    await setDoc(doc(db, 'users', userId, 'projects', project.id), {
-      ...project,
-      syncedAt: new Date().toISOString()
-    });
+    await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
+    if (project.isShared) {
+      await setDoc(doc(db, 'sharedProjects', project.id), {
+        ...payload,
+        updatedBy: userId
+      }, { merge: true });
+    }
   } catch (err) {
     console.error('Firestore sync failed', err);
   }
@@ -136,6 +140,9 @@ export function sanitizeProject(project) {
     logline: project.logline || "",
     createdAt: project.createdAt || new Date().toISOString(),
     updatedAt: project.updatedAt || new Date().toISOString(),
+    isShared: Boolean(project.isShared),
+    ownerId: project.ownerId || null,
+    collaborators: (project.collaborators && typeof project.collaborators === 'object') ? project.collaborators : {},
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     lines: Array.isArray(project.lines) && project.lines.length
       ? project.lines.map((line) => {

@@ -104,6 +104,7 @@
             <button class="nav-link" type="button" data-home-nav="format">Format</button>
             <button class="nav-link" type="button" data-home-nav="metrics">Metrics</button>
             <button class="nav-link" type="button" data-home-nav="revision">Revision</button>
+            <button class="nav-link" type="button" data-menu-trigger="homeCollabMenu">Collaborate<span class="collab-badge" hidden></span></button>
             <button class="nav-link" type="button" data-home-nav="shortcuts">Shortcuts</button>
           </nav>
           <div id="homeFileMenu" class="nav-menu nav-menu-wide" hidden>
@@ -129,6 +130,16 @@
               <button class="theme-option" type="button" data-theme-value="white">White</button>
               <button class="theme-option" type="button" data-theme-value="navy">Dark Blue</button>
             </div>
+          </div>
+          <div id="homeCollabMenu" class="nav-menu nav-menu-wide" hidden>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Collab Requests <span class="collab-badge" hidden></span></summary>
+              <div class="menu-group-body">
+                <div id="homeCollabRequests" class="collab-requests-list">
+                  <p class="collab-empty">No pending requests.</p>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
         <div class="home-topbar-user">
@@ -173,6 +184,7 @@
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
             <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
             <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tools</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate<span class="collab-badge" hidden></span></button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
 
@@ -333,6 +345,47 @@
             <details class="menu-group" open>
               <summary class="menu-group-summary">Customize Active Blocks</summary>
               <div id="leftPaneBlockControls" class="menu-group-body block-customizer-list"></div>
+            </details>
+          </div>
+
+          <div id="studioCollabMenu" class="nav-menu nav-menu-wide" hidden>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Invite Collaborator</summary>
+              <div class="menu-group-body">
+                <div class="collab-invite-row">
+                  <input id="collabInviteEmail" type="email" class="collab-input" placeholder="collaborator@email.com">
+                  <button id="collabInviteBtn" class="ghost-button" type="button">Send Invite</button>
+                </div>
+                <p id="collabInviteStatus" class="collab-status-msg"></p>
+              </div>
+            </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Collaborators <span id="collabCount"></span></summary>
+              <div class="menu-group-body">
+                <div id="studioCollaboratorList" class="collaborator-list">
+                  <p class="collab-empty">No collaborators yet.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Collab Requests <span class="collab-badge" hidden></span></summary>
+              <div class="menu-group-body">
+                <div id="studioCollabRequests" class="collab-requests-list">
+                  <p class="collab-empty">No pending requests.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Comments</summary>
+              <div class="menu-group-body">
+                <div class="collab-comment-input">
+                  <textarea id="collabCommentText" class="collab-textarea" placeholder="Add a comment…" rows="3"></textarea>
+                  <button id="collabAddCommentBtn" class="ghost-button" type="button">Post</button>
+                </div>
+                <div id="studioCommentList" class="comment-list">
+                  <p class="collab-empty">No comments yet.</p>
+                </div>
+              </div>
             </details>
           </div>
 
