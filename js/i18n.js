@@ -237,7 +237,12 @@ const TRANSLATIONS = {
     "editor.activeBlockTitle": "Active block: {type}",
     "editor.suggestions": "{type} suggestions",
     "editor.spellingSuggestions": "Fix \"{word}\"",
-    "editor.noMatches": "No lines match \"{query}\"."
+    "editor.noMatches": "No lines match \"{query}\".",
+    "tour.step1": "This is your writing space.",
+    "tour.step2": "Use these tools to change block functions.",
+    "tour.step3": "Navigate your scenes and characters here.",
+    "tour.step4": "See a live preview of your formatted script.",
+    "tour.step5": "Toggle AI assistance for rewrites and suggestions."
   },
   fr: {
     "nav.file": "Fichier",
@@ -473,7 +478,12 @@ const TRANSLATIONS = {
     "editor.activeBlockTitle": "Bloc actif : {type}",
     "editor.suggestions": "Suggestions {type}",
     "editor.spellingSuggestions": "Corriger \"{word}\"",
-    "editor.noMatches": "Aucune ligne ne correspond a \"{query}\"."
+    "editor.noMatches": "Aucune ligne ne correspond a \"{query}\".",
+    "tour.step1": "C'est votre espace d'écriture.",
+    "tour.step2": "Utilisez ces outils pour changer les fonctions des blocs.",
+    "tour.step3": "Naviguez dans vos scènes et personnages ici.",
+    "tour.step4": "Consultez un aperçu en direct de votre scénario formaté.",
+    "tour.step5": "Activez l'assistance IA pour les réécritures et les suggestions."
   },
   de: {
     "nav.file": "Datei",
@@ -709,7 +719,12 @@ const TRANSLATIONS = {
     "editor.activeBlockTitle": "Aktiver Block: {type}",
     "editor.suggestions": "{type}-Vorschläge",
     "editor.spellingSuggestions": "\"{word}\" korrigieren",
-    "editor.noMatches": "Keine Zeilen passen zu \"{query}\"."
+    "editor.noMatches": "Keine Zeilen passen zu \"{query}\".",
+    "tour.step1": "Dies ist Ihr Schreibbereich.",
+    "tour.step2": "Nutzen Sie diese Werkzeuge, um Blockfunktionen zu ändern.",
+    "tour.step3": "Navigieren Sie hier durch Ihre Szenen und Charaktere.",
+    "tour.step4": "Sehen Sie eine Live-Vorschau Ihres formatierten Skripts.",
+    "tour.step5": "Schalten Sie die KI-Unterstützung für Überarbeitungen und Vorschläge ein."
   }
 };
 

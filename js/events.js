@@ -21,7 +21,8 @@ import {
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
-  renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock
+  renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
+  isTyping, finishTyping, nextStep, tourSteps, currentStep
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -509,6 +510,14 @@ export function bindEvents() {
   window.addEventListener('focusScriptLine', ({ detail }) => {
     if (detail?.lineId) focusBlock(detail.lineId);
   });
+
+  refs.tourNext.addEventListener("click", () => {
+    if (isTyping) {
+      finishTyping(t(tourSteps[currentStep].text));
+      return;
+    }
+    nextStep();
+  });
 }
 
 // Action Handlers
@@ -542,6 +551,11 @@ export function openProject(projectId) {
   primeSpellingDictionary();
   if (state.activeBlockId) {
     focusBlock(state.activeBlockId);
+  }
+
+  if (!state.tourShown) {
+    state.tourShown = true;
+    showStep(0);
   }
 }
 

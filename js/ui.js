@@ -652,3 +652,175 @@ export async function customConfirm(message, title = t("modal.confirm")) {
 export async function customPrompt(message, defaultValue = "", title = t("modal.prompt")) {
     return showModal({ title, message, showInput: true, defaultValue });
 }
+
+/**
+ * Help Tour & Typewriter Effect
+ */
+let typingInterval;
+export let isTyping = false;
+export let currentStep = 0;
+export const tourSteps = [
+  { text: "tour.step1", target: "#screenplayEditor" },
+  { text: "tour.step2", target: "#toolButtons" },
+  { text: "tour.step3", target: "#leftPane" },
+  { text: "tour.step4", target: "#rightPane" },
+  { text: "tour.step5", target: "#aiPanel" }
+];
+
+export function typeText(content) {
+  const textEl = refs.text;
+  if (!textEl) return;
+
+  clearInterval(typingInterval);
+  isTyping = true;
+
+  textEl.textContent = "";
+  textEl.classList.add("typing");
+
+  let i = 0;
+  typingInterval = setInterval(() => {
+    if (content[i] === "\n") {
+      textEl.appendChild(document.createElement("br"));
+    } else {
+      textEl.appendChild(document.createTextNode(content[i]));
+    }
+    i++;
+
+    if (i >= content.length) {
+      finishTyping(content);
+    }
+  }, 18);
+}
+
+export function finishTyping(content) {
+    const textEl = refs.text;
+    if (!textEl) return;
+
+    clearInterval(typingInterval);
+    textEl.innerHTML = content.replace(/\n/g, "<br>");
+    textEl.classList.remove("typing");
+    isTyping = false;
+}
+
+export function showStep(index) {
+  const step = tourSteps[index];
+  if (!step) {
+    endTour();
+    return;
+  }
+
+  currentStep = index;
+
+  // Prepare UI
+  refs.tourContainer.hidden = false;
+  refs.tourBackdrop.hidden = false;
+  refs.tourArrow.hidden = true;
+  refs.tourContainer.classList.remove("is-visible");
+
+  const targetEl = document.querySelector(step.target);
+  if (targetEl && !targetEl.hidden && targetEl.offsetParent !== null) {
+    positionTour(targetEl);
+    updateSpotlight(targetEl);
+  } else {
+    // Default center position if no target or target hidden
+    refs.tourContainer.style.top = "50%";
+    refs.tourContainer.style.left = "50%";
+    refs.tourContainer.style.marginTop = "-100px";
+    refs.tourContainer.style.marginLeft = "-160px";
+    refs.tourContainer.style.transform = "none";
+    updateSpotlight(null);
+  }
+
+  setTimeout(() => {
+    refs.tourContainer.classList.add("is-visible");
+    typeText(t(step.text));
+    if (targetEl && !targetEl.hidden && targetEl.offsetParent !== null) {
+        drawArrow(targetEl);
+    }
+  }, 200);
+}
+
+function positionTour(targetEl) {
+  const rect = targetEl.getBoundingClientRect();
+  const container = refs.tourContainer;
+  const margin = 20;
+
+  let top = rect.bottom + margin;
+  let left = rect.left + (rect.width / 2) - 160;
+
+  // Collision detection
+  if (top + 200 > window.innerHeight) {
+    top = rect.top - 200 - margin;
+  }
+  if (left < margin) left = margin;
+  if (left + 320 > window.innerWidth - margin) left = window.innerWidth - 320 - margin;
+
+  container.style.top = `${top}px`;
+  container.style.left = `${left}px`;
+  container.style.marginTop = "0";
+  container.style.marginLeft = "0";
+  container.style.transform = "none";
+}
+
+function updateSpotlight(targetEl) {
+  const backdrop = refs.tourBackdrop;
+  if (!targetEl) {
+    backdrop.style.setProperty("--s-x", "0%");
+    backdrop.style.setProperty("--s-y", "0%");
+    backdrop.style.setProperty("--s-x2", "0%");
+    backdrop.style.setProperty("--s-y2", "0%");
+    return;
+  }
+
+  const rect = targetEl.getBoundingClientRect();
+  const padding = 10;
+
+  backdrop.style.setProperty("--s-x", `${(rect.left - padding) / window.innerWidth * 100}%`);
+  backdrop.style.setProperty("--s-y", `${(rect.top - padding) / window.innerHeight * 100}%`);
+  backdrop.style.setProperty("--s-x2", `${(rect.right + padding) / window.innerWidth * 100}%`);
+  backdrop.style.setProperty("--s-y2", `${(rect.bottom + padding) / window.innerHeight * 100}%`);
+}
+
+function drawArrow(targetEl) {
+    const arrow = refs.tourArrow;
+    const path = arrow.querySelector("path");
+    const container = refs.tourContainer;
+
+    const targetRect = targetEl.getBoundingClientRect();
+    const tourRect = container.getBoundingClientRect();
+
+    arrow.hidden = false;
+    arrow.style.opacity = "1";
+
+    const startX = tourRect.left + (tourRect.width / 2);
+    const startY = tourRect.top > targetRect.bottom ? tourRect.top : tourRect.bottom;
+    const endX = targetRect.left + (targetRect.width / 2);
+    const endY = tourRect.top > targetRect.bottom ? targetRect.bottom : targetRect.top;
+
+    const cp1x = startX;
+    const cp1y = (startY + endY) / 2;
+    const cp2x = endX;
+    const cp2y = (startY + endY) / 2;
+
+    path.setAttribute("d", `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`);
+
+    // Restart animation
+    path.style.animation = "none";
+    path.offsetHeight; // trigger reflow
+    path.style.animation = null;
+}
+
+export function nextStep() {
+  currentStep++;
+  if (currentStep < tourSteps.length) {
+    showStep(currentStep);
+  } else {
+    endTour();
+  }
+}
+
+function endTour() {
+    refs.tourContainer.hidden = true;
+    refs.tourBackdrop.hidden = true;
+    refs.tourArrow.hidden = true;
+}

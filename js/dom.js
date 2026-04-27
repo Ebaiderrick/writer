@@ -84,5 +84,10 @@ export const refs = {
   get localSaveControls() { return getCached("#localSaveControls"); },
   get localSaveInterval() { return getCached("#localSaveInterval"); },
   get chooseLocalSaveFileBtn() { return getCached("#chooseLocalSaveFileBtn"); },
-  get localSaveFileLabel() { return getCached("#localSaveFileLabel"); }
+  get localSaveFileLabel() { return getCached("#localSaveFileLabel"); },
+  get tourContainer() { return getCached("#tourContainer"); },
+  get text() { return getCached("#text"); },
+  get tourNext() { return getCached("#tourNext"); },
+  get tourBackdrop() { return getCached("#tourBackdrop"); },
+  get tourArrow() { return getCached("#tourArrow"); }
   };

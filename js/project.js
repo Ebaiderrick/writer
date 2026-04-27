@@ -112,6 +112,7 @@ export function loadProjects() {
       state.grammarCheck = Boolean(parsed?.grammarCheck);
       state.localBackupEnabled = Boolean(parsed?.localBackupEnabled);
       state.localSaveIntervalMinutes = [5, 10, 60].includes(parsed?.localSaveIntervalMinutes) ? parsed.localSaveIntervalMinutes : 5;
+      state.tourShown = Boolean(parsed?.tourShown);
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
     state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
@@ -228,6 +229,7 @@ export function persistProjects(forceSavedBadge = false) {
       localSaveIntervalMinutes: state.localSaveIntervalMinutes,
       viewOptions: state.viewOptions,
     leftPaneBlocks: state.leftPaneBlocks,
+      tourShown: state.tourShown,
     leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
     rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
   }));

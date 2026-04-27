@@ -69,5 +69,6 @@ export const state = {
   leftPaneBlocks: DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block })),
   filterQuery: "",
   history: [],
-  historyIndex: -1
+  historyIndex: -1,
+  tourShown: false
 };
