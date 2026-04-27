@@ -39,10 +39,24 @@ export function renderPreview() {
     body.className = "preview-page-body";
 
     pageLines.forEach((line) => {
-      const node = document.createElement("p");
-      node.className = `preview-line ${line.type}`;
-      node.textContent = line.displayText;
-      body.appendChild(node);
+      if (line.secondary !== undefined) {
+        const node = document.createElement("div");
+        node.className = `preview-line preview-dual-row ${line.type}`;
+        const left = document.createElement("span");
+        left.className = "preview-dual-col";
+        left.textContent = line.displayText;
+        const right = document.createElement("span");
+        right.className = "preview-dual-col";
+        right.textContent = line.secondary;
+        node.appendChild(left);
+        node.appendChild(right);
+        body.appendChild(node);
+      } else {
+        const node = document.createElement("p");
+        node.className = `preview-line ${line.type}`;
+        node.textContent = line.displayText;
+        body.appendChild(node);
+      }
     });
 
     if (!pageLines.length) {
@@ -76,11 +90,15 @@ export function buildPreviewData(project) {
     if (line.type === "scene") {
       sceneNumber += 1;
     }
-    preparedLines.push({
+    const entry = {
       id: line.id,
       type: line.type,
       displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
-    });
+    };
+    if (line.secondary !== undefined) {
+      entry.secondary = formatLineText(line.secondary, line.type);
+    }
+    preparedLines.push(entry);
   });
 
   return {
@@ -111,7 +129,10 @@ export function buildPrintableDocument(project, autoPrint = false) {
     return `
     <section class="print-page script-page${firstScriptPageClass}">
       <div class="print-body">
-        ${pageLines.map((line) => `<p class="print-line ${line.type}">${escapeHtml(line.displayText)}</p>`).join("")}
+        ${pageLines.map((line) => line.secondary !== undefined
+          ? `<div class="print-line print-dual-row ${escapeHtml(line.type)}"><span class="print-dual-col">${escapeHtml(line.displayText)}</span><span class="print-dual-col">${escapeHtml(line.secondary)}</span></div>`
+          : `<p class="print-line ${escapeHtml(line.type)}">${escapeHtml(line.displayText)}</p>`
+        ).join("")}
       </div>
       ${pageFooter}
     </section>
@@ -167,7 +188,13 @@ export function buildWordDocument(project) {
       <div class="${pageClassName}">
         ${pageHeader}
         <div class="word-body">
-          ${pageLines.map((line) => `<p class="word-line ${line.type}" style="${buildWordLineStyle(line.type)}">${escapeHtml(line.displayText)}</p>`).join("")}
+          ${pageLines.map((line) => line.secondary !== undefined
+            ? `<table class="word-dual-row" style="width:100%;border-collapse:collapse;margin-bottom:10pt;"><tr>
+                <td class="word-dual-col" style="${buildWordDualColStyle(line.type)}">${escapeHtml(line.displayText)}</td>
+                <td class="word-dual-col" style="${buildWordDualColStyle(line.type)}">${escapeHtml(line.secondary)}</td>
+               </tr></table>`
+            : `<p class="word-line ${line.type}" style="${buildWordLineStyle(line.type)}">${escapeHtml(line.displayText)}</p>`
+          ).join("")}
         </div>
       </div>
     `;
@@ -282,6 +309,19 @@ export function buildWordDocument(project) {
 </html>`;
 }
 
+function buildWordDualColStyle(type) {
+  const base = "margin:0;padding:0 4pt;white-space:pre-wrap;line-height:1.2;vertical-align:top;width:50%;";
+  switch (type) {
+    case "character":
+    case "dual":
+      return `${base}font-weight:bold;text-align:center;`;
+    case "parenthetical":
+      return `${base}text-align:center;`;
+    default:
+      return base;
+  }
+}
+
 function buildWordLineStyle(type) {
   const base = [
     "margin-top:0",
@@ -388,6 +428,28 @@ function getPrintableStyles() {
       margin-left: auto;
       width: 2.4in;
       text-align: right;
+    }
+    .print-dual-row {
+      display: table;
+      width: 100%;
+      margin: 0 0 12pt;
+      table-layout: fixed;
+    }
+    .print-dual-col {
+      display: table-cell;
+      width: 50%;
+      white-space: pre-wrap;
+      line-height: 1.2;
+      vertical-align: top;
+      padding: 0 6pt;
+    }
+    .print-dual-row.character .print-dual-col,
+    .print-dual-row.dual .print-dual-col {
+      font-weight: bold;
+      text-align: center;
+    }
+    .print-dual-row.parenthetical .print-dual-col {
+      text-align: center;
     }
     .print-footer {
       position: absolute;

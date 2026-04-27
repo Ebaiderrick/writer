@@ -2328,6 +2328,25 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   width: var(--script-character-width);
   font-weight: bold;
 }
+.preview-dual-row {
+  display: flex;
+  width: 100%;
+  margin: 0 0 10px;
+}
+.preview-dual-col {
+  flex: 1;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  padding: 0 6px;
+}
+.preview-dual-row.character .preview-dual-col,
+.preview-dual-row.dual .preview-dual-col {
+  font-weight: bold;
+  text-align: center;
+}
+.preview-dual-row.parenthetical .preview-dual-col {
+  text-align: center;
+}
 
 .preview-line.dialogue {
   margin-left: var(--script-dialogue-offset);
