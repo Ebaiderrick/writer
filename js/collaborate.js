@@ -17,6 +17,26 @@ let unsubInvites = null;
 let unsubComments = null;
 let unsubSharedProject = null;
 
+// ── Comments collection path ──────────────────────────────────
+// Personal projects → users/{uid}/projects/{id}/comments
+// Shared projects   → sharedProjects/{id}/comments
+
+function commentsCol(project) {
+  const user = auth.currentUser;
+  if (project.isShared) {
+    return collection(db, 'sharedProjects', project.id, 'comments');
+  }
+  return collection(db, 'users', user.uid, 'projects', project.id, 'comments');
+}
+
+function commentDocRef(project, commentId) {
+  const user = auth.currentUser;
+  if (project.isShared) {
+    return doc(db, 'sharedProjects', project.id, 'comments', commentId);
+  }
+  return doc(db, 'users', user.uid, 'projects', project.id, 'comments', commentId);
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────
 
 export function initCollaboration() {
@@ -47,13 +67,10 @@ export function onStudioEnter(projectId) {
   renderCollaboratorList();
   if (project.isShared) {
     subscribeToSharedProject(projectId);
-    subscribeToComments(projectId);
   } else {
     if (unsubSharedProject) { unsubSharedProject(); unsubSharedProject = null; }
-    if (unsubComments) { unsubComments(); unsubComments = null; }
-    const list = document.getElementById('studioCommentList');
-    if (list) list.innerHTML = '<p class="collab-empty">Comments are available on shared projects.</p>';
   }
+  subscribeToComments(project);
 }
 
 function updateCollabBadge(count) {
@@ -238,15 +255,16 @@ export function subscribeToSharedProject(projectId) {
   });
 }
 
-export function subscribeToComments(projectId) {
+export function subscribeToComments(projectOrId) {
   if (unsubComments) unsubComments();
-  const q = query(
-    collection(db, 'sharedProjects', projectId, 'comments'),
-    orderBy('createdAt', 'asc')
-  );
+  const project = typeof projectOrId === 'string'
+    ? state.projects.find(p => p.id === projectOrId)
+    : projectOrId;
+  if (!project) return;
+  const q = query(commentsCol(project), orderBy('createdAt', 'asc'));
   unsubComments = onSnapshot(q, snap => {
     allComments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderCommentList(allComments, projectId);
+    renderCommentList(allComments, project.id);
     renderLeftPaneComments();
   });
 }
@@ -259,8 +277,10 @@ export function setCommentFilter(key, value) {
 export async function addComment(projectId, text, { lineId = null, parentId = null } = {}) {
   const user = auth.currentUser;
   if (!user || !text.trim()) return;
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return;
   const commentId = makeId('cmt');
-  await setDoc(doc(db, 'sharedProjects', projectId, 'comments', commentId), {
+  await setDoc(commentDocRef(project, commentId), {
     id: commentId,
     uid: user.uid,
     userName: user.displayName || user.email,
@@ -275,7 +295,9 @@ export async function addComment(projectId, text, { lineId = null, parentId = nu
 export async function resolveComment(projectId, commentId, resolved) {
   const user = auth.currentUser;
   if (!user) return;
-  await updateDoc(doc(db, 'sharedProjects', projectId, 'comments', commentId), {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return;
+  await updateDoc(commentDocRef(project, commentId), {
     resolved,
     resolvedBy: resolved ? (user.displayName || user.email) : null,
     resolvedAt: resolved ? new Date().toISOString() : null
@@ -417,11 +439,7 @@ export function hideCommentCompose() {
 
 export async function submitCommentCompose() {
   const project = getCurrentProject();
-  if (!project?.isShared) {
-    await customAlert('Share this project with at least one collaborator to enable comments.', 'Comments');
-    hideCommentCompose();
-    return;
-  }
+  if (!project) return;
   const textarea = document.getElementById('commentComposeText');
   const text = textarea?.value?.trim();
   if (!text) return;
@@ -526,9 +544,7 @@ export function renderLeftPaneComments() {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const proj = getCurrentProject();
-      if (proj?.isShared) {
-        resolveComment(proj.id, btn.dataset.commentId, btn.dataset.resolved !== 'true');
-      }
+      if (proj) resolveComment(proj.id, btn.dataset.commentId, btn.dataset.resolved !== 'true');
     });
   });
 
@@ -540,7 +556,7 @@ export function renderLeftPaneComments() {
       const text = input?.value?.trim();
       if (!text) return;
       const proj = getCurrentProject();
-      if (proj?.isShared) {
+      if (proj) {
         await addComment(proj.id, text, { parentId });
         input.value = '';
       }

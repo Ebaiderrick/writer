@@ -473,10 +473,7 @@ export function bindEvents() {
   if (collabAddCommentBtn && collabCommentText) {
     collabAddCommentBtn.addEventListener('click', async () => {
       const project = getCurrentProject();
-      if (!project?.isShared) {
-        customAlert('Share this project with at least one collaborator to enable comments.', 'Comments');
-        return;
-      }
+      if (!project) return;
       await addComment(project.id, collabCommentText.value);
       collabCommentText.value = '';
     });
