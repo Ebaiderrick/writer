@@ -2,6 +2,7 @@ import { state } from "./config.js";
 import { AI } from "./ai.js";
 import { duplicateActiveBlock, findInScript, intelligentSplit } from "./events.js";
 import { getActiveEditableBlock } from "./editor.js";
+import { showCommentCompose } from "./collaborate.js";
 
 export const ContextMenu = (() => {
   let menuEl = null;
@@ -118,6 +119,9 @@ export const ContextMenu = (() => {
       case "intelligent-split":
         triggerIntelligentSplit();
         break;
+      case "comment":
+        triggerComment();
+        break;
     }
   }
 
@@ -185,6 +189,13 @@ export const ContextMenu = (() => {
     if (activeBlock) {
         intelligentSplit(activeBlock);
     }
+  }
+
+  function triggerComment() {
+    const row = preservedBlock?.closest?.('.script-block-row');
+    const lineId = row?.dataset?.id || null;
+    const rect = row?.getBoundingClientRect?.() || null;
+    showCommentCompose(lineId, rect);
   }
 
   function preserveSelection(targetBlock = null) {

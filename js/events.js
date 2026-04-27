@@ -40,7 +40,8 @@ import {
   startLocalSaveTimer, stopLocalSaveTimer, writeLocalSaveFile
 } from './localSave.js';
 import {
-  inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter
+  inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
+  hideCommentCompose, submitCommentCompose, setCommentFilter
 } from './collaborate.js';
 
 export function bindEvents() {
@@ -484,6 +485,30 @@ export function bindEvents() {
   // Re-render studio when a remote collaborator updates the shared project
   window.addEventListener('sharedProjectUpdated', () => {
     if (!refs.studioView?.hidden) renderStudio();
+  });
+
+  // Comment compose overlay
+  document.getElementById('commentComposeSubmit')?.addEventListener('click', submitCommentCompose);
+  document.getElementById('commentComposeCancel')?.addEventListener('click', hideCommentCompose);
+  document.getElementById('commentComposeText')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitCommentCompose();
+    if (e.key === 'Escape') hideCommentCompose();
+  });
+
+  // Left pane comment filters
+  document.getElementById('commentFilterUser')?.addEventListener('change', e => {
+    setCommentFilter('user', e.target.value);
+  });
+  document.getElementById('commentFilterSort')?.addEventListener('change', e => {
+    setCommentFilter('sort', e.target.value);
+  });
+  document.getElementById('commentFilterResolved')?.addEventListener('change', e => {
+    setCommentFilter('showResolved', e.target.checked);
+  });
+
+  // Focus a line from a comment click
+  window.addEventListener('focusScriptLine', ({ detail }) => {
+    if (detail?.lineId) focusBlock(detail.lineId);
   });
 }
 

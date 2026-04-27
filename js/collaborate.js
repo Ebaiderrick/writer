@@ -8,6 +8,10 @@ import { getCurrentProject, sanitizeProject, upsertProject, persistProjects } fr
 import { uid as makeId } from './utils.js';
 import { customAlert, customConfirm } from './ui.js';
 
+// Comment filter state
+let commentFilter = { user: 'all', sort: 'line', showResolved: false };
+let allComments = [];
+
 const MAX_COLLABORATORS = 5;
 let unsubInvites = null;
 let unsubComments = null;
@@ -238,14 +242,21 @@ export function subscribeToComments(projectId) {
   if (unsubComments) unsubComments();
   const q = query(
     collection(db, 'sharedProjects', projectId, 'comments'),
-    orderBy('createdAt', 'desc')
+    orderBy('createdAt', 'asc')
   );
   unsubComments = onSnapshot(q, snap => {
-    renderCommentList(snap.docs.map(d => ({ id: d.id, ...d.data() })), projectId);
+    allComments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderCommentList(allComments, projectId);
+    renderLeftPaneComments();
   });
 }
 
-export async function addComment(projectId, text) {
+export function setCommentFilter(key, value) {
+  commentFilter[key] = value;
+  renderLeftPaneComments();
+}
+
+export async function addComment(projectId, text, { lineId = null, parentId = null } = {}) {
   const user = auth.currentUser;
   if (!user || !text.trim()) return;
   const commentId = makeId('cmt');
@@ -254,6 +265,8 @@ export async function addComment(projectId, text) {
     uid: user.uid,
     userName: user.displayName || user.email,
     text: text.trim(),
+    lineId: lineId || null,
+    parentId: parentId || null,
     resolved: false,
     createdAt: new Date().toISOString()
   });
@@ -372,6 +385,186 @@ function renderCommentList(comments, projectId) {
       resolveComment(projectId, btn.dataset.commentId, btn.dataset.resolved !== 'true');
     });
   });
+}
+
+// ── Comment compose overlay ───────────────────────────────────
+
+let composePendingLineId = null;
+
+export function showCommentCompose(lineId, anchorRect = null) {
+  composePendingLineId = lineId || null;
+  const overlay = document.getElementById('commentComposeOverlay');
+  const textarea = document.getElementById('commentComposeText');
+  if (!overlay) return;
+  overlay.hidden = false;
+  if (anchorRect) {
+    const top = Math.min(anchorRect.bottom + 6, window.innerHeight - 160);
+    const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - 320));
+    overlay.style.top = `${top}px`;
+    overlay.style.left = `${left}px`;
+    overlay.style.position = 'fixed';
+  }
+  textarea?.focus();
+}
+
+export function hideCommentCompose() {
+  const overlay = document.getElementById('commentComposeOverlay');
+  if (overlay) overlay.hidden = true;
+  const textarea = document.getElementById('commentComposeText');
+  if (textarea) textarea.value = '';
+  composePendingLineId = null;
+}
+
+export async function submitCommentCompose() {
+  const project = getCurrentProject();
+  if (!project?.isShared) {
+    await customAlert('Share this project with at least one collaborator to enable comments.', 'Comments');
+    hideCommentCompose();
+    return;
+  }
+  const textarea = document.getElementById('commentComposeText');
+  const text = textarea?.value?.trim();
+  if (!text) return;
+  await addComment(project.id, text, { lineId: composePendingLineId });
+  hideCommentCompose();
+}
+
+// ── Left pane comments renderer ───────────────────────────────
+
+export function renderLeftPaneComments() {
+  const list = document.getElementById('leftPaneCommentList');
+  const countEl = document.getElementById('commentCount');
+  if (!list) return;
+
+  const user = auth.currentUser;
+  const project = getCurrentProject();
+  const lineOrder = project?.lines?.map(l => l.id) || [];
+
+  const topLevel = allComments.filter(c => !c.parentId);
+  const replies = allComments.filter(c => c.parentId);
+  const repliesByParent = replies.reduce((acc, r) => {
+    (acc[r.parentId] = acc[r.parentId] || []).push(r);
+    return acc;
+  }, {});
+
+  // Apply filters to top-level comments
+  let filtered = topLevel;
+
+  if (commentFilter.user === 'mine' && user) {
+    filtered = filtered.filter(c => c.uid === user.uid);
+  }
+  if (!commentFilter.showResolved) {
+    filtered = filtered.filter(c => !c.resolved);
+  }
+
+  // Sort
+  if (commentFilter.sort === 'line') {
+    filtered = [...filtered].sort((a, b) => {
+      const ai = lineOrder.indexOf(a.lineId);
+      const bi = lineOrder.indexOf(b.lineId);
+      const av = ai === -1 ? Infinity : ai;
+      const bv = bi === -1 ? Infinity : bi;
+      return av !== bv ? av - bv : new Date(a.createdAt) - new Date(b.createdAt);
+    });
+  } else {
+    filtered = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  if (countEl) countEl.textContent = `${topLevel.length} comment${topLevel.length !== 1 ? 's' : ''}`;
+
+  if (!filtered.length) {
+    list.innerHTML = '<p class="collab-empty">No comments.</p>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(c => {
+    const lineText = c.lineId ? getLinePreview(c.lineId) : '';
+    const threadReplies = repliesByParent[c.id] || [];
+    return `
+      <div class="comment-pane-item${c.resolved ? ' is-resolved' : ''}" data-comment-id="${c.id}" data-line-id="${c.lineId || ''}">
+        ${lineText ? `<div class="comment-pane-line-ref" data-line-id="${c.lineId}">${esc(lineText)}</div>` : ''}
+        <div class="comment-pane-meta">
+          <span class="comment-pane-author">${esc(c.userName)}</span>
+          <span class="comment-pane-time">${fmtTime(c.createdAt)}</span>
+          ${c.resolved ? '<span class="comment-resolved-pill">Resolved</span>' : ''}
+        </div>
+        <p class="comment-pane-text">${esc(c.text)}</p>
+        <div class="comment-pane-actions">
+          <button class="comment-pane-resolve ghost-button" data-comment-id="${c.id}" data-resolved="${c.resolved}">
+            ${c.resolved ? 'Unresolve' : 'Resolve'}
+          </button>
+        </div>
+        ${threadReplies.length ? `
+          <div class="comment-replies">
+            ${threadReplies.map(r => `
+              <div class="comment-reply-item">
+                <span class="comment-reply-author">${esc(r.userName)}</span>
+                <span class="comment-reply-time">${fmtTime(r.createdAt)}</span>
+                <p class="comment-reply-text">${esc(r.text)}</p>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        <div class="comment-reply-compose">
+          <input class="comment-reply-input" data-parent-id="${c.id}" placeholder="Reply…" type="text">
+          <button class="comment-reply-send ghost-button" data-parent-id="${c.id}">↩</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Click on line-ref → focus that line
+  list.querySelectorAll('.comment-pane-line-ref, .comment-pane-item[data-line-id]').forEach(el => {
+    el.addEventListener('click', e => {
+      const lineId = el.dataset.lineId || el.closest('[data-line-id]')?.dataset.lineId;
+      if (lineId) window.dispatchEvent(new CustomEvent('focusScriptLine', { detail: { lineId } }));
+    });
+  });
+
+  // Resolve buttons
+  list.querySelectorAll('.comment-pane-resolve').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const proj = getCurrentProject();
+      if (proj?.isShared) {
+        resolveComment(proj.id, btn.dataset.commentId, btn.dataset.resolved !== 'true');
+      }
+    });
+  });
+
+  // Reply send buttons
+  list.querySelectorAll('.comment-reply-send').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const parentId = btn.dataset.parentId;
+      const input = list.querySelector(`.comment-reply-input[data-parent-id="${parentId}"]`);
+      const text = input?.value?.trim();
+      if (!text) return;
+      const proj = getCurrentProject();
+      if (proj?.isShared) {
+        await addComment(proj.id, text, { parentId });
+        input.value = '';
+      }
+    });
+  });
+
+  // Reply on Enter
+  list.querySelectorAll('.comment-reply-input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const btn = list.querySelector(`.comment-reply-send[data-parent-id="${input.dataset.parentId}"]`);
+        btn?.click();
+      }
+    });
+  });
+}
+
+function getLinePreview(lineId) {
+  const project = getCurrentProject();
+  const line = project?.lines?.find(l => l.id === lineId);
+  if (!line?.text) return '';
+  const t = line.text.trim();
+  return t.length > 50 ? t.slice(0, 50) + '…' : t;
 }
 
 function fmtTime(iso) {

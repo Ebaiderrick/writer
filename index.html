@@ -104,7 +104,7 @@
             <button class="nav-link" type="button" data-home-nav="format">Format</button>
             <button class="nav-link" type="button" data-home-nav="metrics">Metrics</button>
             <button class="nav-link" type="button" data-home-nav="revision">Revision</button>
-            <button class="nav-link" type="button" data-menu-trigger="homeCollabMenu">Collaborate<span class="collab-badge" hidden></span></button>
+            <button class="nav-link" type="button" data-menu-trigger="homeCollabMenu">Collaborate</button>
             <button class="nav-link" type="button" data-home-nav="shortcuts">Shortcuts</button>
           </nav>
           <div id="homeFileMenu" class="nav-menu nav-menu-wide" hidden>
@@ -184,7 +184,7 @@
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
             <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
             <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tools</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate<span class="collab-badge" hidden></span></button>
+            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate</button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
 
@@ -663,6 +663,32 @@
                 </div>
               </section>
 
+              <section class="panel list-panel section-comments" data-left-pane-block="comments" data-left-pane-label="Comments">
+                <div class="panel-head">
+                  <div>
+                    <h3>Comments</h3>
+                    <p id="commentCount">0 comments</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="comments" aria-label="Collapse Comments">▼</button>
+                </div>
+                <div class="panel-section-body">
+                  <div class="comment-pane-filters">
+                    <select id="commentFilterUser" class="comment-filter-select" title="Filter by user">
+                      <option value="all">All users</option>
+                      <option value="mine">Mine</option>
+                    </select>
+                    <select id="commentFilterSort" class="comment-filter-select" title="Sort order">
+                      <option value="line">By line order</option>
+                      <option value="date">By date</option>
+                    </select>
+                    <label class="comment-filter-resolved-label" title="Show resolved">
+                      <input type="checkbox" id="commentFilterResolved"> Resolved
+                    </label>
+                  </div>
+                  <div id="leftPaneCommentList" class="comment-pane-list"></div>
+                </div>
+              </section>
+
               <section class="panel metrics-panel section-metrics" data-left-pane-block="metrics" data-left-pane-label="Metrics">
                 <div class="panel-head">
                   <div>
@@ -795,6 +821,19 @@
     <div class="menu-divider"></div>
     <div class="menu-item" data-action="ai-grammar">AI Grammar Check <span class="menu-shortcut">Alt+G</span></div>
     <div class="menu-item" data-action="intelligent-split">Intelligent Split <span class="menu-shortcut">`+Enter</span></div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" data-action="comment">Comment on line</div>
+  </div>
+
+  <div id="commentComposeOverlay" class="comment-compose-overlay" hidden>
+    <div class="comment-compose-header">
+      <span class="comment-compose-label">Add comment</span>
+      <button id="commentComposeCancel" class="comment-compose-close" type="button" aria-label="Cancel">✕</button>
+    </div>
+    <textarea id="commentComposeText" class="comment-compose-textarea" placeholder="Write a comment…" rows="3"></textarea>
+    <div class="comment-compose-footer">
+      <button id="commentComposeSubmit" class="ghost-button comment-compose-submit" type="button">Post</button>
+    </div>
   </div>
 
   <dialog id="customModal" class="custom-modal">

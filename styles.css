@@ -1416,6 +1416,239 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   pointer-events: none;
 }
 
+/* Comment compose overlay */
+.comment-compose-overlay {
+  position: fixed;
+  z-index: 2000;
+  width: 300px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comment-compose-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.comment-compose-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.comment-compose-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.comment-compose-close:hover { color: var(--ink); }
+
+.comment-compose-textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.83rem;
+  resize: none;
+  box-sizing: border-box;
+}
+
+.comment-compose-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.comment-compose-submit {
+  font-size: 0.82rem;
+}
+
+/* Left pane comment list */
+.comment-pane-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+
+.comment-filter-select {
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.comment-filter-resolved-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.comment-pane-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 400px;
+}
+
+.comment-pane-item {
+  border-radius: 7px;
+  background: var(--surface, rgba(0,0,0,0.04));
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-left: 3px solid transparent;
+}
+
+.comment-pane-item:hover {
+  background: var(--hover, rgba(0,0,0,0.07));
+}
+
+.comment-pane-item.is-resolved {
+  opacity: 0.5;
+  border-left-color: #2f855a;
+}
+
+.comment-pane-line-ref {
+  font-size: 0.72rem;
+  color: var(--accent);
+  font-style: italic;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.comment-pane-line-ref:hover { text-decoration: underline; }
+
+.comment-pane-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 3px;
+}
+
+.comment-pane-author {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.comment-pane-time {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.comment-resolved-pill {
+  font-size: 0.68rem;
+  background: rgba(47,133,90,0.15);
+  color: #2f855a;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.comment-pane-text {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-pane-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.comment-pane-resolve {
+  font-size: 0.72rem;
+  padding: 1px 8px;
+}
+
+.comment-replies {
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+  margin: 4px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.comment-reply-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.comment-reply-author {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.comment-reply-time {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.comment-reply-text {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.comment-reply-compose {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.comment-reply-input {
+  flex: 1;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.comment-reply-send {
+  padding: 3px 8px;
+  font-size: 0.82rem;
+}
+
 /* Collaboration UI */
 .collab-badge {
   display: inline-flex;

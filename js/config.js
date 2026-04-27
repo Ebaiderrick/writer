@@ -34,6 +34,7 @@ export const LEFT_PANE_BLOCK_DEFS = [
   { key: "current", label: "Current Script" },
   { key: "characters", label: "Characters" },
   { key: "scenes", label: "Scenes" },
+  { key: "comments", label: "Comments" },
   { key: "metrics", label: "Metrics" },
   { key: "tools", label: "Project Tools" }
 ];
