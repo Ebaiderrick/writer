@@ -544,8 +544,12 @@ function populateCommentListDialog() {
     item.className = 'cld-item' + (c.resolved ? ' is-resolved' : '');
     item.dataset.commentId = c.id;
     item.innerHTML = `
-      ${sceneText ? `<div class="cld-scene">${esc(sceneText)}</div>` : ''}
-      ${linePreview ? `<button class="cld-line-btn" data-line-id="${esc(c.lineId)}">"${esc(linePreview)}"</button>` : ''}
+      <div class="cld-location">
+        ${sceneText ? `<span class="cld-scene">${esc(sceneText)}</span>` : '<span class="cld-scene cld-scene-none">No scene</span>'}
+        ${linePreview
+          ? `<button class="cld-line-btn" data-line-id="${esc(c.lineId)}"><span class="cld-line-arrow">↳</span> ${esc(linePreview)}</button>`
+          : `<span class="cld-no-line">General comment — no line reference</span>`}
+      </div>
       <div class="cld-meta">
         <span class="cld-author">${esc(c.userName)}</span>
         <span class="cld-time">${fmtTime(c.createdAt)}</span>

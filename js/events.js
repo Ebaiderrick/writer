@@ -474,7 +474,8 @@ export function bindEvents() {
     collabAddCommentBtn.addEventListener('click', async () => {
       const project = getCurrentProject();
       if (!project) return;
-      await addComment(project.id, collabCommentText.value);
+      const lineId = state.activeBlockId || null;
+      await addComment(project.id, collabCommentText.value, { lineId });
       collabCommentText.value = '';
     });
   }
