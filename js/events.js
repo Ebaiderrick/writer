@@ -474,8 +474,14 @@ export function bindEvents() {
     collabAddCommentBtn.addEventListener('click', async () => {
       const project = getCurrentProject();
       if (!project) return;
-      const lineId = state.activeBlockId || null;
-      await addComment(project.id, collabCommentText.value, { lineId });
+      const text = collabCommentText.value?.trim();
+      if (!text) return;
+      const lineId = state.activeBlockId;
+      if (!lineId) {
+        await customAlert('Click on a line in the script first — comments must be attached to a specific line.', 'No line selected');
+        return;
+      }
+      await addComment(project.id, text, { lineId });
       collabCommentText.value = '';
     });
   }

@@ -455,9 +455,15 @@ export async function submitCommentCompose() {
   const textarea = document.getElementById('commentComposeText');
   const text = textarea?.value?.trim();
   if (!text) return;
+  const lineId = composePendingLineId || state.activeBlockId;
+  if (!lineId) {
+    hideCommentCompose();
+    await customAlert('Click on a line first — comments must be attached to a specific line.', 'No line selected');
+    return;
+  }
   hideCommentCompose();
   try {
-    await addComment(project.id, text, { lineId: composePendingLineId });
+    await addComment(project.id, text, { lineId });
   } catch (err) {
     console.error('[comment submit]', err);
   }
@@ -532,23 +538,35 @@ function populateCommentListDialog() {
 
   list.innerHTML = '';
   filtered.forEach(c => {
+    const line = c.lineId ? project.lines.find(l => l.id === c.lineId) : null;
     const scene = c.lineId ? getSceneForLine(c.lineId, project) : null;
     const sceneNum = scene ? getSceneNumber(scene.id, project) : 0;
-    const sceneText = scene ? `Scene ${sceneNum}: ${(scene.text || '').trim()}` : '';
-    const linePreview = c.lineId ? getLinePreview(c.lineId) : '';
+    const sceneText = scene
+      ? `Scene ${sceneNum}: ${(scene.text || '').trim() || '(untitled)'}`
+      : (line ? 'Before first scene' : 'Line removed');
+    const lineRaw = (line?.text || '').trim();
+    const lineDisplay = line
+      ? (lineRaw ? (lineRaw.length > 60 ? lineRaw.slice(0, 60) + '…' : lineRaw) : '(empty line)')
+      : '(this line was deleted)';
+    const lineType = line?.type ? line.type.toUpperCase() : '';
     const threadReplies = repliesByParent[c.id] || [];
     const isOwner = !project.ownerId || project.ownerId === user?.uid;
     const isAuthor = c.uid === user?.uid;
+    const canNavigate = !!line;
 
     const item = document.createElement('div');
     item.className = 'cld-item' + (c.resolved ? ' is-resolved' : '');
     item.dataset.commentId = c.id;
     item.innerHTML = `
       <div class="cld-location">
-        ${sceneText ? `<span class="cld-scene">${esc(sceneText)}</span>` : '<span class="cld-scene cld-scene-none">No scene</span>'}
-        ${linePreview
-          ? `<button class="cld-line-btn" data-line-id="${esc(c.lineId)}"><span class="cld-line-arrow">↳</span> ${esc(linePreview)}</button>`
-          : `<span class="cld-no-line">General comment — no line reference</span>`}
+        <span class="cld-scene">${esc(sceneText)}</span>
+        ${canNavigate
+          ? `<button class="cld-line-btn" data-line-id="${esc(c.lineId)}" title="Go to this line">
+               ${lineType ? `<span class="cld-line-type">${esc(lineType)}</span>` : ''}
+               <span class="cld-line-arrow">↳</span>
+               <span class="cld-line-text">${esc(lineDisplay)}</span>
+             </button>`
+          : `<span class="cld-no-line">${esc(lineDisplay)}</span>`}
       </div>
       <div class="cld-meta">
         <span class="cld-author">${esc(c.userName)}</span>
