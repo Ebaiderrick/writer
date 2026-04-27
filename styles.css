@@ -1416,6 +1416,125 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   pointer-events: none;
 }
 
+/* ── Comment line indicators ─────────────────────────────── */
+.script-block-row {
+  position: relative;
+}
+.comment-indicator {
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50% 50% 50% 0;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.comment-indicator:hover {
+  transform: translateY(-50%) scale(1.25);
+}
+.comment-indicator.is-unresolved {
+  border: 1.5px solid var(--accent, #a07850);
+  background: transparent;
+}
+.comment-indicator.is-resolved {
+  background: var(--accent, #a07850);
+  border: 1.5px solid var(--accent, #a07850);
+  opacity: 0.55;
+}
+
+/* ── Comment detail dialog ───────────────────────────────── */
+.comment-detail-dialog {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0;
+  min-width: 300px;
+  max-width: 420px;
+  width: 90vw;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.22);
+}
+.comment-detail-dialog::backdrop {
+  background: rgba(0,0,0,0.35);
+}
+.cd-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cd-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cd-author {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.cd-time {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.cd-text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.cd-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-left: 2px solid var(--line);
+  padding-left: 10px;
+}
+.cd-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cd-reply-author {
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+.cd-reply-time {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.cd-reply-text {
+  margin: 0;
+  font-size: 0.82rem;
+}
+.cd-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+.cd-delete-btn {
+  color: #c0392b;
+  margin-right: auto;
+}
+.cd-delete-btn:hover {
+  background: rgba(192,57,43,0.08);
+}
+
+/* Comment pane reply count */
+.comment-pane-reply-count {
+  font-size: 0.72rem;
+  color: var(--accent, #a07850);
+  margin-top: 2px;
+}
+
 /* Comment compose overlay */
 .comment-compose-overlay {
   position: fixed;

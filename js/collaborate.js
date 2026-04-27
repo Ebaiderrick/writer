@@ -23,17 +23,15 @@ let unsubSharedProject = null;
 
 function commentsCol(project) {
   const user = auth.currentUser;
-  if (project.isShared) {
-    return collection(db, 'sharedProjects', project.id, 'comments');
-  }
+  if (project.isShared) return collection(db, 'sharedProjects', project.id, 'comments');
+  if (!user) return null;
   return collection(db, 'users', user.uid, 'projects', project.id, 'comments');
 }
 
 function commentDocRef(project, commentId) {
   const user = auth.currentUser;
-  if (project.isShared) {
-    return doc(db, 'sharedProjects', project.id, 'comments', commentId);
-  }
+  if (project.isShared) return doc(db, 'sharedProjects', project.id, 'comments', commentId);
+  if (!user) return null;
   return doc(db, 'users', user.uid, 'projects', project.id, 'comments', commentId);
 }
 
@@ -261,12 +259,15 @@ export function subscribeToComments(projectOrId) {
     ? state.projects.find(p => p.id === projectOrId)
     : projectOrId;
   if (!project) return;
-  const q = query(commentsCol(project), orderBy('createdAt', 'asc'));
+  const col = commentsCol(project);
+  if (!col) return;
+  const q = query(col, orderBy('createdAt', 'asc'));
   unsubComments = onSnapshot(q, snap => {
     allComments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderCommentList(allComments, project.id);
     renderLeftPaneComments();
-  });
+    updateCommentIcons(allComments);
+  }, err => console.error('[comments]', err));
 }
 
 export function setCommentFilter(key, value) {
@@ -279,8 +280,10 @@ export async function addComment(projectId, text, { lineId = null, parentId = nu
   if (!user || !text.trim()) return;
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
-  const commentId = makeId('cmt');
-  await setDoc(commentDocRef(project, commentId), {
+  const ref = commentDocRef(project, makeId('cmt'));
+  if (!ref) return;
+  const commentId = ref.id;
+  await setDoc(ref, {
     id: commentId,
     uid: user.uid,
     userName: user.displayName || user.email,
@@ -292,12 +295,22 @@ export async function addComment(projectId, text, { lineId = null, parentId = nu
   });
 }
 
+export async function deleteComment(projectId, commentId) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return;
+  const ref = commentDocRef(project, commentId);
+  if (!ref) return;
+  await deleteDoc(ref);
+}
+
 export async function resolveComment(projectId, commentId, resolved) {
   const user = auth.currentUser;
   if (!user) return;
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
-  await updateDoc(commentDocRef(project, commentId), {
+  const ref = commentDocRef(project, commentId);
+  if (!ref) return;
+  await updateDoc(ref, {
     resolved,
     resolvedBy: resolved ? (user.displayName || user.email) : null,
     resolvedAt: resolved ? new Date().toISOString() : null
@@ -443,8 +456,12 @@ export async function submitCommentCompose() {
   const textarea = document.getElementById('commentComposeText');
   const text = textarea?.value?.trim();
   if (!text) return;
-  await addComment(project.id, text, { lineId: composePendingLineId });
   hideCommentCompose();
+  try {
+    await addComment(project.id, text, { lineId: composePendingLineId });
+  } catch (err) {
+    console.error('[comment submit]', err);
+  }
 }
 
 // ── Left pane comments renderer ───────────────────────────────
@@ -497,7 +514,7 @@ export function renderLeftPaneComments() {
 
   list.innerHTML = filtered.map(c => {
     const lineText = c.lineId ? getLinePreview(c.lineId) : '';
-    const threadReplies = repliesByParent[c.id] || [];
+    const replyCount = (repliesByParent[c.id] || []).length;
     return `
       <div class="comment-pane-item${c.resolved ? ' is-resolved' : ''}" data-comment-id="${c.id}" data-line-id="${c.lineId || ''}">
         ${lineText ? `<div class="comment-pane-line-ref" data-line-id="${c.lineId}">${esc(lineText)}</div>` : ''}
@@ -507,73 +524,135 @@ export function renderLeftPaneComments() {
           ${c.resolved ? '<span class="comment-resolved-pill">Resolved</span>' : ''}
         </div>
         <p class="comment-pane-text">${esc(c.text)}</p>
-        <div class="comment-pane-actions">
-          <button class="comment-pane-resolve ghost-button" data-comment-id="${c.id}" data-resolved="${c.resolved}">
-            ${c.resolved ? 'Unresolve' : 'Resolve'}
-          </button>
-        </div>
-        ${threadReplies.length ? `
-          <div class="comment-replies">
-            ${threadReplies.map(r => `
-              <div class="comment-reply-item">
-                <span class="comment-reply-author">${esc(r.userName)}</span>
-                <span class="comment-reply-time">${fmtTime(r.createdAt)}</span>
-                <p class="comment-reply-text">${esc(r.text)}</p>
-              </div>
-            `).join('')}
-          </div>
-        ` : ''}
-        <div class="comment-reply-compose">
-          <input class="comment-reply-input" data-parent-id="${c.id}" placeholder="Reply…" type="text">
-          <button class="comment-reply-send ghost-button" data-parent-id="${c.id}">↩</button>
-        </div>
+        ${replyCount ? `<div class="comment-pane-reply-count">${replyCount} repl${replyCount === 1 ? 'y' : 'ies'}</div>` : ''}
       </div>
     `;
   }).join('');
 
-  // Click on line-ref → focus that line
-  list.querySelectorAll('.comment-pane-line-ref, .comment-pane-item[data-line-id]').forEach(el => {
+  // Click item → open detail popup
+  list.querySelectorAll('.comment-pane-item').forEach(el => {
     el.addEventListener('click', e => {
-      const lineId = el.dataset.lineId || el.closest('[data-line-id]')?.dataset.lineId;
+      if (e.target.closest('.comment-pane-line-ref')) return;
+      showCommentDetail(el.dataset.commentId);
+    });
+  });
+
+  // Click line-ref → focus that line (stop propagation so it doesn't open detail)
+  list.querySelectorAll('.comment-pane-line-ref').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      const lineId = el.dataset.lineId;
       if (lineId) window.dispatchEvent(new CustomEvent('focusScriptLine', { detail: { lineId } }));
     });
   });
 
-  // Resolve buttons
-  list.querySelectorAll('.comment-pane-resolve').forEach(btn => {
+}
+
+
+// ── Comment icons on script lines ────────────────────────────
+
+export function updateCommentIcons(comments) {
+  // Remove existing indicators
+  document.querySelectorAll('.comment-indicator').forEach(el => el.remove());
+
+  const topLevel = (comments || allComments).filter(c => !c.parentId);
+  const byLine = topLevel.reduce((acc, c) => {
+    if (c.lineId) (acc[c.lineId] = acc[c.lineId] || []).push(c);
+    return acc;
+  }, {});
+
+  Object.entries(byLine).forEach(([lineId, lineComments]) => {
+    const row = document.querySelector(`.script-block-row[data-id="${lineId}"]`);
+    if (!row) return;
+    const allResolved = lineComments.every(c => c.resolved);
+    const btn = document.createElement('button');
+    btn.className = 'comment-indicator' + (allResolved ? ' is-resolved' : ' is-unresolved');
+    btn.title = allResolved ? 'All comments resolved' : `${lineComments.length} comment${lineComments.length > 1 ? 's' : ''}`;
+    btn.setAttribute('aria-label', btn.title);
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      const proj = getCurrentProject();
-      if (proj) resolveComment(proj.id, btn.dataset.commentId, btn.dataset.resolved !== 'true');
+      showCommentDetail(lineComments[0].id);
     });
-  });
-
-  // Reply send buttons
-  list.querySelectorAll('.comment-reply-send').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const parentId = btn.dataset.parentId;
-      const input = list.querySelector(`.comment-reply-input[data-parent-id="${parentId}"]`);
-      const text = input?.value?.trim();
-      if (!text) return;
-      const proj = getCurrentProject();
-      if (proj) {
-        await addComment(proj.id, text, { parentId });
-        input.value = '';
-      }
-    });
-  });
-
-  // Reply on Enter
-  list.querySelectorAll('.comment-reply-input').forEach(input => {
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        const btn = list.querySelector(`.comment-reply-send[data-parent-id="${input.dataset.parentId}"]`);
-        btn?.click();
-      }
-    });
+    row.appendChild(btn);
   });
 }
+
+// ── Comment detail popup ──────────────────────────────────────
+
+let detailCommentId = null;
+
+export function showCommentDetail(commentId) {
+  const comment = allComments.find(c => c.id === commentId);
+  if (!comment) return;
+  detailCommentId = commentId;
+
+  const project = getCurrentProject();
+  const user = auth.currentUser;
+  const isOwner = !project?.ownerId || project?.ownerId === user?.uid;
+  const isAuthor = comment.uid === user?.uid;
+
+  const replies = allComments.filter(c => c.parentId === commentId);
+
+  const dialog = document.getElementById('commentDetailDialog');
+  if (!dialog) return;
+
+  dialog.querySelector('#cdAuthor').textContent = comment.userName;
+  dialog.querySelector('#cdTime').textContent = fmtTime(comment.createdAt);
+  dialog.querySelector('#cdText').textContent = comment.text;
+
+  const resolvedPill = dialog.querySelector('#cdResolvedPill');
+  resolvedPill.hidden = !comment.resolved;
+  resolvedPill.textContent = comment.resolved ? `Resolved by ${comment.resolvedBy || ''}` : '';
+
+  const repliesEl = dialog.querySelector('#cdReplies');
+  repliesEl.innerHTML = replies.length ? replies.map(r => `
+    <div class="cd-reply">
+      <span class="cd-reply-author">${esc(r.userName)}</span>
+      <span class="cd-reply-time">${fmtTime(r.createdAt)}</span>
+      <p class="cd-reply-text">${esc(r.text)}</p>
+    </div>
+  `).join('') : '';
+
+  const resolveBtn = dialog.querySelector('#cdResolveBtn');
+  resolveBtn.textContent = comment.resolved ? 'Unresolve' : 'Mark as Solved';
+  resolveBtn.dataset.commentId = commentId;
+  resolveBtn.dataset.resolved = String(comment.resolved);
+
+  const deleteBtn = dialog.querySelector('#cdDeleteBtn');
+  deleteBtn.hidden = !(isAuthor || isOwner);
+  deleteBtn.dataset.commentId = commentId;
+
+  dialog.showModal();
+}
+
+function initCommentDetailDialog() {
+  const dialog = document.getElementById('commentDetailDialog');
+  if (!dialog) return;
+
+  dialog.querySelector('#cdResolveBtn').addEventListener('click', async () => {
+    const project = getCurrentProject();
+    if (!project) return;
+    const btn = dialog.querySelector('#cdResolveBtn');
+    await resolveComment(project.id, btn.dataset.commentId, btn.dataset.resolved !== 'true');
+    dialog.close();
+  });
+
+  dialog.querySelector('#cdDeleteBtn').addEventListener('click', async () => {
+    const project = getCurrentProject();
+    if (!project) return;
+    const confirmed = await customConfirm('Delete this comment?', 'Delete Comment');
+    if (!confirmed) return;
+    const btn = dialog.querySelector('#cdDeleteBtn');
+    await deleteComment(project.id, btn.dataset.commentId);
+    dialog.close();
+  });
+
+  dialog.querySelector('#cdCloseBtn').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
+}
+
+// Init dialog on first module load
+document.addEventListener('DOMContentLoaded', initCommentDetailDialog);
 
 function getLinePreview(lineId) {
   const project = getCurrentProject();

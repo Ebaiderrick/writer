@@ -41,7 +41,7 @@ import {
 } from './localSave.js';
 import {
   inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
-  hideCommentCompose, submitCommentCompose, setCommentFilter
+  hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons
 } from './collaborate.js';
 
 export function bindEvents() {
@@ -563,6 +563,7 @@ export function renderStudio() {
   setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   applyTranslations();
   updateSuggestions();
+  updateCommentIcons();
 }
 
 export function duplicateActiveBlock() {

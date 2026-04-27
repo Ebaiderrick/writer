@@ -836,6 +836,23 @@
     </div>
   </div>
 
+  <dialog id="commentDetailDialog" class="comment-detail-dialog">
+    <div class="cd-body">
+      <div class="cd-meta">
+        <span id="cdAuthor" class="cd-author"></span>
+        <span id="cdTime" class="cd-time"></span>
+        <span id="cdResolvedPill" class="comment-resolved-pill" hidden></span>
+      </div>
+      <p id="cdText" class="cd-text"></p>
+      <div id="cdReplies" class="cd-replies"></div>
+      <div class="cd-actions">
+        <button id="cdResolveBtn" class="ghost-button cd-resolve-btn"></button>
+        <button id="cdDeleteBtn" class="ghost-button cd-delete-btn">Delete</button>
+        <button id="cdCloseBtn" class="ghost-button">Close</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="customModal" class="custom-modal">
     <div class="modal-content">
       <h3 id="modalTitle" class="modal-title"></h3>
