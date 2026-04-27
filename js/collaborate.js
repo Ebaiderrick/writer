@@ -529,20 +529,12 @@ export function renderLeftPaneComments() {
     `;
   }).join('');
 
-  // Click item → open detail popup
+  // Click item → navigate to line and open detail popup
   list.querySelectorAll('.comment-pane-item').forEach(el => {
-    el.addEventListener('click', e => {
-      if (e.target.closest('.comment-pane-line-ref')) return;
-      showCommentDetail(el.dataset.commentId);
-    });
-  });
-
-  // Click line-ref → focus that line (stop propagation so it doesn't open detail)
-  list.querySelectorAll('.comment-pane-line-ref').forEach(el => {
-    el.addEventListener('click', e => {
-      e.stopPropagation();
+    el.addEventListener('click', () => {
       const lineId = el.dataset.lineId;
       if (lineId) window.dispatchEvent(new CustomEvent('focusScriptLine', { detail: { lineId } }));
+      showCommentDetail(el.dataset.commentId);
     });
   });
 
