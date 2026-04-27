@@ -73,8 +73,9 @@ export function normalizeLineText(text, type) {
   }
 
   if (type === "image") {
-    const inner = stripWrapperChars(compact);
-    return inner.toUpperCase().startsWith("IMAGE:") ? inner : `IMAGE: ${inner}`;
+    const noWrapper = compact.replace(/^\s*\[/, "").replace(/\]\s*$/, "");
+    const content = noWrapper.replace(/^\s*IMAGE:\s*/i, "").trim();
+    return content ? `[IMAGE: ${content}]` : "[IMAGE: ]";
   }
 
   return compact;
@@ -204,7 +205,7 @@ export function inferTypeFromText(line, prevLine, nextLine) {
   if (/^\(.*\)$/.test(line)) return "parenthetical";
   if (/^\[.*\]$/.test(line)) return "note";
   if (/^(CLOSE ON|WIDE SHOT|INSERT|POV|OVERHEAD SHOT)/i.test(line)) return "shot";
-  if (/^IMAGE:/i.test(line)) return "image";
+  if (/^\[?\s*IMAGE:/i.test(line)) return "image";
   if (looksLikeCharacter(line, prevLine, nextLine)) return "character";
   if (prevLine && looksLikeCharacter(prevLine, "", line)) return "dialogue";
   return "action";

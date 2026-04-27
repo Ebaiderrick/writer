@@ -21,7 +21,7 @@ export const DEFAULT_SUGGESTIONS = {
   shot: ["CLOSE ON", "WIDE SHOT", "INSERT", "POV", "OVERHEAD SHOT"],
   parenthetical: ["beat", "quietly", "whispering", "under breath", "into phone"],
   note: ["NOTE: "],
-  image: ["IMAGE: ", "INSERT IMAGE: "]
+  image: ["[IMAGE: Rainy street at night]", "[IMAGE: Old photograph on a desk]"]
 };
 export const DEFAULT_VIEW_OPTIONS = {
   ruler: false,

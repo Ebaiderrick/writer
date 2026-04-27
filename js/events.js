@@ -817,13 +817,6 @@ function handleBlockKeydown(event, id) {
     return;
   }
 
-  // Image block: '=' opens file picker
-  if (event.key === "=" && line.type === "image") {
-    event.preventDefault();
-    openImageFilePicker(line, id, project);
-    return;
-  }
-
   // Smart Navigation
   if (event.key === "ArrowUp") {
     const offset = getCaretOffset(event.target);
@@ -876,30 +869,6 @@ function inferNextType(index) {
   if (current === "transition") return "scene";
   if (current === "dual") return "dialogue";
   return "action";
-}
-
-function openImageFilePicker(line, blockId, project) {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = "image/jpeg,image/png";
-  input.addEventListener("change", () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      customAlert("Image must be under 2 MB. Please choose a smaller file.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.addEventListener("load", () => {
-      line.text = `IMAGE: ${reader.result}`;
-      project.updatedAt = new Date().toISOString();
-      renderStudio();
-      focusBlock(blockId);
-      queueSave();
-    });
-    reader.readAsDataURL(file);
-  });
-  input.click();
 }
 
 export function addBlock(type, text = "", index) {

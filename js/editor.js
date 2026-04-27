@@ -312,15 +312,6 @@ export function refreshEditableBlockDisplay(block, line = getLine(block?.dataset
 }
 
 function renderBlockContent(block, line, project, spellingLexicon = null) {
-  if (line.type === "image" && line.text.startsWith("IMAGE: data:")) {
-    block.replaceChildren();
-    const img = document.createElement("img");
-    img.src = line.text.slice("IMAGE: ".length);
-    img.className = "image-block-preview";
-    block.appendChild(img);
-    return;
-  }
-
   if (!state.grammarCheck || !hasLanguageDictionary(state.writingLanguage)) {
     block.textContent = line.text;
     return;

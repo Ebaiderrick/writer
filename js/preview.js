@@ -314,9 +314,9 @@ function buildWordDualColStyle(type) {
   switch (type) {
     case "character":
     case "dual":
-      return `${base}font-weight:bold;text-align:center;`;
+      return `${base}font-weight:bold;padding-left:0.5in;`;
     case "parenthetical":
-      return `${base}text-align:center;`;
+      return `${base}padding-left:0.3in;`;
     default:
       return base;
   }
@@ -446,10 +446,10 @@ function getPrintableStyles() {
     .print-dual-row.character .print-dual-col,
     .print-dual-row.dual .print-dual-col {
       font-weight: bold;
-      text-align: center;
+      padding-left: 0.5in;
     }
     .print-dual-row.parenthetical .print-dual-col {
-      text-align: center;
+      padding-left: 0.3in;
     }
     .print-footer {
       position: absolute;

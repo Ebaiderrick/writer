@@ -2222,14 +2222,6 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 /* Uploaded image preview */
-.image-block-preview {
-  display: block;
-  max-width: 400px;
-  max-height: 400px;
-  border-radius: 4px;
-  object-fit: contain;
-}
-
 .typewriter-mode .center-pane {
   background:
     linear-gradient(transparent 0, transparent calc(50% - 1px), rgba(0, 0, 0, 0.08) calc(50% - 1px), rgba(0, 0, 0, 0.08) calc(50% + 1px), transparent calc(50% + 1px)),
@@ -2342,10 +2334,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .preview-dual-row.character .preview-dual-col,
 .preview-dual-row.dual .preview-dual-col {
   font-weight: bold;
-  text-align: center;
+  padding-left: 2.5em;
 }
 .preview-dual-row.parenthetical .preview-dual-col {
-  text-align: center;
+  padding-left: 1.5em;
 }
 
 .preview-line.dialogue {
