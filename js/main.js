@@ -1,7 +1,7 @@
 import { state } from './config.js';
 import { loadProjects } from './project.js';
 import { bindEvents, renderStudio, applySaveModeButtons } from './events.js';
-import { showAuth, showHome, renderHome, applyToolbarState, applyTheme, applyViewState, showStep } from './ui.js';
+import { showAuth, showHome, renderHome, applyToolbarState, applyTheme, applyViewState } from './ui.js';
 import { initBackground } from './background.js';
 import { AI } from './ai.js';
 import { ContextMenu } from './contextMenu.js';

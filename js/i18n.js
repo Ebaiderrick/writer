@@ -81,6 +81,7 @@ const TRANSLATIONS = {
     "menu.metrics": "Metrics",
     "menu.autoNumberScenes": "Auto Number Scenes",
     "menu.typewriterFocus": "Typewriter Focus",
+    "menu.helpTour": "Help Tour",
 
     "theme.cedar": "Cedar",
     "theme.dark": "Dark",
@@ -322,6 +323,7 @@ const TRANSLATIONS = {
     "menu.metrics": "Mesures",
     "menu.autoNumberScenes": "Numéroter automatiquement les scènes",
     "menu.typewriterFocus": "Focus machine à écrire",
+    "menu.helpTour": "Visite guidée",
 
     "theme.cedar": "Cèdre",
     "theme.dark": "Sombre",
@@ -563,6 +565,7 @@ const TRANSLATIONS = {
     "menu.metrics": "Metriken",
     "menu.autoNumberScenes": "Szenen automatisch nummerieren",
     "menu.typewriterFocus": "Schreibmaschinenfokus",
+    "menu.helpTour": "Hilfe-Tour",
 
     "theme.cedar": "Zeder",
     "theme.dark": "Dunkel",
@@ -901,6 +904,7 @@ const SELECTOR_BINDINGS = [
   ["#studioToolsMenu [data-menu-action='proofread']", "menu.proofread"],
   ["#studioToolsMenu [data-menu-action='toggle-grammar-check']", "menu.grammarCheck"],
   ["#studioToolsMenu [data-menu-action='toggle-ai-assistant']", "menu.aiAssistant"],
+  ["#studioToolsMenu [data-menu-action='start-tour']", "menu.helpTour"],
   ["#studioToolsMenu [data-menu-action='show-work-tracking']", "menu.workTracking"],
   ["#studioToolsMenu [data-menu-action='show-metrics']", "menu.metrics"],
   ["#studioSettingsMenu [data-menu-action='toggle-auto-number']", "menu.autoNumberScenes"],

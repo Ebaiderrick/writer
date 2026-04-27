@@ -823,4 +823,6 @@ function endTour() {
     refs.tourContainer.hidden = true;
     refs.tourBackdrop.hidden = true;
     refs.tourArrow.hidden = true;
+    state.tourShown = true;
+    persistProjects();
 }

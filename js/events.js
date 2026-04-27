@@ -22,7 +22,7 @@ import {
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
-  isTyping, finishTyping, nextStep, tourSteps, currentStep
+  isTyping, finishTyping, nextStep, tourSteps, currentStep, showStep
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -554,7 +554,6 @@ export function openProject(projectId) {
   }
 
   if (!state.tourShown) {
-    state.tourShown = true;
     showStep(0);
   }
 }
@@ -1089,6 +1088,10 @@ function handleMenuAction(action) {
       persistProjects(true);
       showHome();
       renderHome();
+      break;
+    case "start-tour":
+      showStep(0);
+      closeMenus();
       break;
     case "undo":
       undo();
