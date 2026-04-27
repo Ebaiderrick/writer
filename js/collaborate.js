@@ -9,7 +9,7 @@ import { uid as makeId } from './utils.js';
 import { customAlert, customConfirm } from './ui.js';
 
 // Comment filter state
-let commentFilter = { user: 'all', sort: 'line', showResolved: false };
+let commentFilter = { user: 'all', sort: 'line', status: 'all' };
 let allComments = [];
 
 const MAX_COLLABORATORS = 5;
@@ -272,7 +272,6 @@ export function subscribeToComments(projectOrId) {
 
 export function setCommentFilter(key, value) {
   commentFilter[key] = value;
-  renderLeftPaneComments();
 }
 
 export async function addComment(projectId, text, { lineId = null, parentId = null } = {}) {
@@ -466,78 +465,158 @@ export async function submitCommentCompose() {
 
 // ── Left pane comments renderer ───────────────────────────────
 
+function getSceneForLine(lineId, project) {
+  const lineIdx = project.lines.findIndex(l => l.id === lineId);
+  if (lineIdx < 0) return null;
+  for (let i = lineIdx; i >= 0; i--) {
+    if (project.lines[i].type === 'scene') return project.lines[i];
+  }
+  return null;
+}
+
+function getSceneNumber(sceneId, project) {
+  let num = 0;
+  for (const line of project.lines) {
+    if (line.type === 'scene') num++;
+    if (line.id === sceneId) return num;
+  }
+  return num;
+}
+
 export function renderLeftPaneComments() {
-  const list = document.getElementById('leftPaneCommentList');
   const countEl = document.getElementById('commentCount');
+  const topLevel = allComments.filter(c => !c.parentId);
+  if (countEl) countEl.textContent = `${topLevel.length} comment${topLevel.length !== 1 ? 's' : ''}`;
+  // If the list dialog is open, refresh it in place
+  const dialog = document.getElementById('commentListDialog');
+  if (dialog?.open) populateCommentListDialog();
+}
+
+function populateCommentListDialog() {
+  const list = document.getElementById('cldList');
+  const titleEl = document.getElementById('cldTitle');
   if (!list) return;
 
   const user = auth.currentUser;
   const project = getCurrentProject();
-  const lineOrder = project?.lines?.map(l => l.id) || [];
+  if (!project) { list.innerHTML = '<p class="collab-empty">No project open.</p>'; return; }
 
+  const lineOrder = project.lines.map(l => l.id);
   const topLevel = allComments.filter(c => !c.parentId);
-  const replies = allComments.filter(c => c.parentId);
-  const repliesByParent = replies.reduce((acc, r) => {
+  const repliesByParent = allComments.filter(c => c.parentId).reduce((acc, r) => {
     (acc[r.parentId] = acc[r.parentId] || []).push(r);
     return acc;
   }, {});
 
-  // Apply filters to top-level comments
-  let filtered = topLevel;
+  let filtered = [...topLevel];
+  if (commentFilter.user === 'mine' && user) filtered = filtered.filter(c => c.uid === user.uid);
+  if (commentFilter.status === 'resolved')   filtered = filtered.filter(c => c.resolved);
+  if (commentFilter.status === 'unresolved') filtered = filtered.filter(c => !c.resolved);
 
-  if (commentFilter.user === 'mine' && user) {
-    filtered = filtered.filter(c => c.uid === user.uid);
-  }
-  if (!commentFilter.showResolved) {
-    filtered = filtered.filter(c => !c.resolved);
-  }
-
-  // Sort
   if (commentFilter.sort === 'line') {
-    filtered = [...filtered].sort((a, b) => {
-      const ai = lineOrder.indexOf(a.lineId);
-      const bi = lineOrder.indexOf(b.lineId);
-      const av = ai === -1 ? Infinity : ai;
-      const bv = bi === -1 ? Infinity : bi;
+    filtered.sort((a, b) => {
+      const ai = lineOrder.indexOf(a.lineId), bi = lineOrder.indexOf(b.lineId);
+      const av = ai === -1 ? Infinity : ai, bv = bi === -1 ? Infinity : bi;
       return av !== bv ? av - bv : new Date(a.createdAt) - new Date(b.createdAt);
     });
   } else {
-    filtered = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 
-  if (countEl) countEl.textContent = `${topLevel.length} comment${topLevel.length !== 1 ? 's' : ''}`;
+  if (titleEl) titleEl.textContent = `Comments (${filtered.length})`;
 
   if (!filtered.length) {
-    list.innerHTML = '<p class="collab-empty">No comments.</p>';
+    list.innerHTML = '<p class="collab-empty">No comments match the current filters.</p>';
     return;
   }
 
-  list.innerHTML = filtered.map(c => {
-    const lineText = c.lineId ? getLinePreview(c.lineId) : '';
-    const replyCount = (repliesByParent[c.id] || []).length;
-    return `
-      <div class="comment-pane-item${c.resolved ? ' is-resolved' : ''}" data-comment-id="${c.id}" data-line-id="${c.lineId || ''}">
-        ${lineText ? `<div class="comment-pane-line-ref" data-line-id="${c.lineId}">${esc(lineText)}</div>` : ''}
-        <div class="comment-pane-meta">
-          <span class="comment-pane-author">${esc(c.userName)}</span>
-          <span class="comment-pane-time">${fmtTime(c.createdAt)}</span>
-          ${c.resolved ? '<span class="comment-resolved-pill">Resolved</span>' : ''}
-        </div>
-        <p class="comment-pane-text">${esc(c.text)}</p>
-        ${replyCount ? `<div class="comment-pane-reply-count">${replyCount} repl${replyCount === 1 ? 'y' : 'ies'}</div>` : ''}
+  list.innerHTML = '';
+  filtered.forEach(c => {
+    const scene = c.lineId ? getSceneForLine(c.lineId, project) : null;
+    const sceneNum = scene ? getSceneNumber(scene.id, project) : 0;
+    const sceneText = scene ? `Scene ${sceneNum}: ${(scene.text || '').trim()}` : '';
+    const linePreview = c.lineId ? getLinePreview(c.lineId) : '';
+    const threadReplies = repliesByParent[c.id] || [];
+    const isOwner = !project.ownerId || project.ownerId === user?.uid;
+    const isAuthor = c.uid === user?.uid;
+
+    const item = document.createElement('div');
+    item.className = 'cld-item' + (c.resolved ? ' is-resolved' : '');
+    item.dataset.commentId = c.id;
+    item.innerHTML = `
+      ${sceneText ? `<div class="cld-scene">${esc(sceneText)}</div>` : ''}
+      ${linePreview ? `<button class="cld-line-btn" data-line-id="${esc(c.lineId)}">"${esc(linePreview)}"</button>` : ''}
+      <div class="cld-meta">
+        <span class="cld-author">${esc(c.userName)}</span>
+        <span class="cld-time">${fmtTime(c.createdAt)}</span>
+        ${c.resolved ? `<span class="comment-resolved-pill">Resolved by ${esc(c.resolvedBy || '')}</span>` : ''}
+      </div>
+      <p class="cld-text">${esc(c.text)}</p>
+      ${threadReplies.length ? `<div class="cld-replies">${threadReplies.map(r => `
+        <div class="cld-reply"><span class="cld-reply-author">${esc(r.userName)}</span> <span class="cld-reply-time">${fmtTime(r.createdAt)}</span>
+        <p class="cld-reply-text">${esc(r.text)}</p></div>`).join('')}
+      </div>` : ''}
+      <div class="cld-reply-compose" hidden>
+        <textarea class="cld-reply-input" rows="2" placeholder="Write a reply…"></textarea>
+        <button class="cld-reply-send ghost-button">Send</button>
+      </div>
+      <div class="cld-actions">
+        <button class="cld-btn-reply ghost-button">Reply</button>
+        <button class="cld-btn-resolve ghost-button">${c.resolved ? 'Unresolve' : 'Resolve'}</button>
+        ${(isAuthor || isOwner) ? `<button class="cld-btn-delete ghost-button">Delete</button>` : ''}
       </div>
     `;
-  }).join('');
 
-  // Click item → navigate to line and open detail popup
-  list.querySelectorAll('.comment-pane-item').forEach(el => {
-    el.addEventListener('click', () => {
-      const lineId = el.dataset.lineId;
+    // Navigate to line
+    item.querySelector('.cld-line-btn')?.addEventListener('click', e => {
+      e.stopPropagation();
+      const lineId = e.currentTarget.dataset.lineId;
       if (lineId) window.dispatchEvent(new CustomEvent('focusScriptLine', { detail: { lineId } }));
-      showCommentDetail(el.dataset.commentId);
+      document.getElementById('commentListDialog')?.close();
     });
-  });
 
+    // Toggle reply compose
+    item.querySelector('.cld-btn-reply')?.addEventListener('click', () => {
+      const rc = item.querySelector('.cld-reply-compose');
+      rc.hidden = !rc.hidden;
+      if (!rc.hidden) rc.querySelector('.cld-reply-input')?.focus();
+    });
+
+    // Send reply
+    const sendReply = async () => {
+      const input = item.querySelector('.cld-reply-input');
+      const text = input?.value?.trim();
+      if (!text) return;
+      await addComment(project.id, text, { lineId: c.lineId, parentId: c.id });
+      populateCommentListDialog();
+    };
+    item.querySelector('.cld-reply-send')?.addEventListener('click', sendReply);
+    item.querySelector('.cld-reply-input')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+    });
+
+    // Resolve
+    item.querySelector('.cld-btn-resolve')?.addEventListener('click', async () => {
+      await resolveComment(project.id, c.id, !c.resolved);
+      populateCommentListDialog();
+    });
+
+    // Delete
+    item.querySelector('.cld-btn-delete')?.addEventListener('click', async () => {
+      const confirmed = await customConfirm('Delete this comment?', 'Delete Comment');
+      if (!confirmed) return;
+      await deleteComment(project.id, c.id);
+      populateCommentListDialog();
+    });
+
+    list.appendChild(item);
+  });
+}
+
+export function showCommentPanel() {
+  populateCommentListDialog();
+  const dialog = document.getElementById('commentListDialog');
+  if (dialog && !dialog.open) dialog.showModal();
 }
 
 
@@ -643,8 +722,18 @@ function initCommentDetailDialog() {
   dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
 }
 
-// Init dialog on first module load
-document.addEventListener('DOMContentLoaded', initCommentDetailDialog);
+function initCommentListDialog() {
+  const dialog = document.getElementById('commentListDialog');
+  if (!dialog) return;
+  document.getElementById('cldCloseBtn')?.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
+}
+
+// Init dialogs on first module load
+document.addEventListener('DOMContentLoaded', () => {
+  initCommentDetailDialog();
+  initCommentListDialog();
+});
 
 function getLinePreview(lineId) {
   const project = getCurrentProject();

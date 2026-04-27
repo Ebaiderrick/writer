@@ -663,7 +663,7 @@
                 </div>
               </section>
 
-              <section class="panel list-panel section-comments" data-left-pane-block="comments" data-left-pane-label="Comments">
+              <section class="panel section-comments" data-left-pane-block="comments" data-left-pane-label="Comments">
                 <div class="panel-head">
                   <div>
                     <h3>Comments</h3>
@@ -673,19 +673,21 @@
                 </div>
                 <div class="panel-section-body">
                   <div class="comment-pane-filters">
-                    <select id="commentFilterUser" class="comment-filter-select" title="Filter by user">
+                    <select id="commentFilterUser" class="comment-filter-select">
                       <option value="all">All users</option>
                       <option value="mine">Mine</option>
                     </select>
-                    <select id="commentFilterSort" class="comment-filter-select" title="Sort order">
-                      <option value="line">By line order</option>
+                    <select id="commentFilterStatus" class="comment-filter-select">
+                      <option value="all">All</option>
+                      <option value="unresolved">Unresolved</option>
+                      <option value="resolved">Resolved</option>
+                    </select>
+                    <select id="commentFilterSort" class="comment-filter-select">
+                      <option value="line">By line</option>
                       <option value="date">By date</option>
                     </select>
-                    <label class="comment-filter-resolved-label" title="Show resolved">
-                      <input type="checkbox" id="commentFilterResolved"> Resolved
-                    </label>
                   </div>
-                  <div id="leftPaneCommentList" class="comment-pane-list"></div>
+                  <button id="viewCommentsBtn" class="ghost-button comment-view-btn">View Comments</button>
                 </div>
               </section>
 
@@ -835,6 +837,16 @@
       <button id="commentComposeSubmit" class="ghost-button comment-compose-submit" type="button">Post</button>
     </div>
   </div>
+
+  <dialog id="commentListDialog" class="comment-list-dialog">
+    <div class="cld-inner">
+      <div class="cld-header">
+        <h3 id="cldTitle">Comments</h3>
+        <button id="cldCloseBtn" class="ghost-button cld-close" aria-label="Close">✕</button>
+      </div>
+      <div id="cldList" class="cld-list"></div>
+    </div>
+  </dialog>
 
   <dialog id="commentDetailDialog" class="comment-detail-dialog">
     <div class="cd-body">

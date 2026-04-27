@@ -41,7 +41,7 @@ import {
 } from './localSave.js';
 import {
   inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
-  hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons
+  hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel
 } from './collaborate.js';
 
 export function bindEvents() {
@@ -493,15 +493,10 @@ export function bindEvents() {
   });
 
   // Left pane comment filters
-  document.getElementById('commentFilterUser')?.addEventListener('change', e => {
-    setCommentFilter('user', e.target.value);
-  });
-  document.getElementById('commentFilterSort')?.addEventListener('change', e => {
-    setCommentFilter('sort', e.target.value);
-  });
-  document.getElementById('commentFilterResolved')?.addEventListener('change', e => {
-    setCommentFilter('showResolved', e.target.checked);
-  });
+  document.getElementById('commentFilterUser')?.addEventListener('change', e => setCommentFilter('user', e.target.value));
+  document.getElementById('commentFilterStatus')?.addEventListener('change', e => setCommentFilter('status', e.target.value));
+  document.getElementById('commentFilterSort')?.addEventListener('change', e => setCommentFilter('sort', e.target.value));
+  document.getElementById('viewCommentsBtn')?.addEventListener('click', showCommentPanel);
 
   // Focus a line from a comment click
   window.addEventListener('focusScriptLine', ({ detail }) => {

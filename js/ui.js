@@ -585,7 +585,7 @@ const modalRefs = {
     get confirmBtn() { return document.querySelector("#modalConfirmBtn"); }
 };
 
-function showModal({
+export function showModal({
     title,
     message,
     showInput = false,
