@@ -15,82 +15,118 @@
   <div class="app-shell">
     <!-- Auth View -->
     <section id="authView" class="auth-view">
-      <div class="auth-main">
-        <!-- Sign Up Panel -->
-        <div class="auth-container a-container" id="a-container">
-          <form class="auth-form" id="signup-form">
-            <img src="logo.png" alt="EyaWriter Logo" class="auth-logo">
-            <h2 class="auth-title">Create Account</h2>
-            <div class="auth-social">
-              <button class="google-btn" id="google-signup" type="button">
-                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.58-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
-                Continue with Google
-              </button>
-            </div>
-            <span class="auth-span">or use email</span>
-            <input class="auth-input" type="text" placeholder="Name" id="signup-name">
-            <input class="auth-input" type="email" placeholder="Email" id="signup-email">
-            <input class="auth-input" type="password" placeholder="Password" id="signup-pass">
-            <input class="auth-input" type="password" placeholder="Repeat Password" id="signup-pass2">
-            <button class="auth-button button submit" id="signup-btn" type="submit">SIGN UP</button>
-          </form>
-        </div>
+      <!-- Theme toggle -->
+      <div class="theme-toggle">
+        <button class="theme-btn active" data-theme="rose">🌹</button>
+        <button class="theme-btn" data-theme="dark">🌙</button>
+        <button class="theme-btn" data-theme="white">☀️</button>
+        <button class="theme-btn" data-theme="navy">🌊</button>
+      </div>
 
-        <!-- Sign In Panel -->
-        <div class="auth-container b-container" id="b-container">
-          <form class="auth-form" id="signin-form">
-            <img src="logo.png" alt="EyaWriter Logo" class="auth-logo">
-            <h2 class="auth-title">Sign In</h2>
-            <div class="auth-social">
-              <button class="google-btn" id="google-signin" type="button">
-                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.58-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
-                Continue with Google
-              </button>
-            </div>
-            <span class="auth-span">or use your email account</span>
-            <input class="auth-input" type="email" placeholder="Email" id="signin-email">
-            <input class="auth-input" type="password" placeholder="Password" id="signin-pass">
-            <div class="auth-footer-links">
-              <a class="auth-link" href="#">Forgot your password?</a>
-              <a class="auth-link demo-link" href="#" id="demo-login-btn">Try Demo Account</a>
-            </div>
-            <button class="auth-button button submit" id="signin-btn" type="submit">SIGN IN</button>
-          </form>
-        </div>
+      <!-- Auth Container -->
+      <div class="auth-wrapper">
+        <div class="auth-card">
+          <!-- Logo/Header -->
+          <div class="auth-header">
+            <h1>Eya<span>Writer</span></h1>
+            <p class="tagline">Where stories take flight.</p>
+          </div>
 
-        <!-- Slide Panel -->
-        <div class="auth-switch" id="switch-cnt">
-          <div class="switch__circle"></div>
-          <div class="switch__circle switch__circle--t"></div>
-          <div class="switch__container" id="switch-c1">
-            <h2 class="switch__title">Welcome Back!</h2>
-            <p class="switch__description">To keep connected with us please login with your personal info</p>
-            <button class="switch__button button switch-btn" type="button">SIGN IN</button>
+          <!-- Toggle Tabs -->
+          <div class="auth-tabs">
+            <button class="tab-btn active" data-tab="login">Sign In</button>
+            <button class="tab-btn" data-tab="signup">Sign Up</button>
           </div>
-          <div class="switch__container is-hidden" id="switch-c2">
-            <h2 class="switch__title">Welcome to EyaWriter</h2>
-            <p class="switch__description">Enter your personal details and start journey with us</p>
-            <button class="switch__button button switch-btn" type="button">SIGN UP</button>
-          </div>
+
+          <!-- Login Form -->
+          <form id="login-form" class="auth-form active">
+            <div class="input-group">
+              <label for="login-email">Email</label>
+              <input type="email" id="login-email" placeholder="you@example.com" required>
+            </div>
+            <div class="input-group">
+              <label for="login-pass">Password</label>
+              <input type="password" id="login-pass" placeholder="••••••••" required>
+            </div>
+            <a href="#" class="forgot-link" id="forgot-password-link">Forgot password?</a>
+            <button type="submit" class="btn-primary">Continue</button>
+            <button type="button" class="btn-google" id="google-signin">
+              <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              Continue with Google
+            </button>
+            <button type="button" class="btn-google" id="demo-login-btn">
+              Try Demo Account
+            </button>
+          </form>
+
+          <!-- Signup Form -->
+          <form id="signup-form" class="auth-form">
+            <div class="input-group">
+              <label for="signup-name">Full Name</label>
+              <input type="text" id="signup-name" placeholder="Jane Doe" required>
+            </div>
+            <div class="input-group">
+              <label for="signup-email">Email</label>
+              <input type="email" id="signup-email" placeholder="you@example.com" required>
+            </div>
+            <div class="input-group">
+              <label for="signup-pass">Password</label>
+              <input type="password" id="signup-pass" placeholder="••••••••" minlength="8" required>
+            </div>
+            <div class="input-group">
+              <label for="signup-pass2">Confirm Password</label>
+              <input type="password" id="signup-pass2" placeholder="••••••••" required>
+            </div>
+            <label class="checkbox-group">
+              <input type="checkbox" required>
+              <span>I agree to the <a href="#">Terms</a> and <a href="#">Privacy Policy</a></span>
+            </label>
+            <button type="submit" class="btn-primary">Create Account</button>
+            <button type="button" class="btn-google" id="google-signup">
+              <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              Continue with Google
+            </button>
+          </form>
         </div>
       </div>
 
-      <!-- OTP Modal -->
-      <div class="otp-overlay" id="otp-overlay">
-        <div class="otp-modal">
-          <h3 class="otp-title">Verify your email</h3>
-          <p class="otp-sub">Enter the 6-digit code sent to <span id="otp-email-display"></span></p>
-          <div class="otp-inputs">
-            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
-            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
-            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
-            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
-            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
-            <input class="otp-box" type="text" maxlength="1" inputmode="numeric">
+      <!-- OTP Verification Modal -->
+      <div id="otp-modal-overlay" class="auth-overlay">
+        <div class="auth-card modal-card">
+          <div class="auth-header">
+            <h1>Verify <span>Email</span></h1>
+            <p class="tagline">Enter the 6-digit code sent to <br><strong id="otp-email-display"></strong></p>
           </div>
-          <p class="otp-error" id="otp-error"></p>
-          <button class="auth-button otp-submit" id="otp-submit" type="button">VERIFY</button>
-          <button class="otp-resend" id="otp-resend" type="button">Resend code</button>
+          <div class="otp-inputs">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+          </div>
+          <p id="otp-error" class="error-msg"></p>
+          <button type="button" id="otp-submit-btn" class="btn-primary">Verify Code</button>
+          <button type="button" id="otp-resend-btn" class="resend-link">Didn't get a code? Resend</button>
+          <button type="button" id="otp-cancel-btn" class="resend-link">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Forgot Password Modal -->
+      <div id="forgot-password-overlay" class="auth-overlay">
+        <div class="auth-card modal-card">
+          <div class="auth-header">
+            <h1>Reset <span>Password</span></h1>
+            <p class="tagline">Enter your email to receive a reset link.</p>
+          </div>
+          <form id="forgot-password-form">
+            <div class="input-group">
+              <label for="forgot-email">Email Address</label>
+              <input type="email" id="forgot-email" placeholder="you@example.com" required>
+            </div>
+            <button type="submit" class="btn-primary">Send Reset Link</button>
+            <button type="button" id="forgot-cancel-btn" class="resend-link">Back to Sign In</button>
+          </form>
         </div>
       </div>
     </section>

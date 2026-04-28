@@ -4,6 +4,7 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  sendPasswordResetEmail,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
@@ -11,7 +12,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { auth, db } from './firebase.js';
-import { showHome, showAuth, renderHome, customAlert, customConfirm } from './ui.js';
+import { showHome, showAuth, renderHome, setTheme, customAlert, customConfirm } from './ui.js';
 import { state } from './config.js';
 import { refs } from './dom.js';
 import {
@@ -29,61 +30,104 @@ const EMAILJS_PUBLIC_KEY = 'VI5qc4g4cH9d0vpvr';
 const googleProvider = new GoogleAuthProvider();
 
 export const Auth = (() => {
-  let switchCtn, switchC1, switchC2, switchCircle, switchBtns, aContainer, bContainer;
-  let otpOverlay, otpBoxes, otpSubmit, otpResend, otpError, otpDisplay;
-  let signupForm, signinForm;
+  let tabBtns, forms, themeBtns, html;
+  let otpOverlay, otpBoxes, otpSubmit, otpResend, otpError, otpDisplay, otpCancel;
+  let forgotOverlay, forgotForm, forgotEmailInput, forgotCancel, forgotLink;
+  let signupForm, loginForm;
   let signupNameInput, signupEmailInput, signupPassInput, signupPass2Input;
-  let signinEmailInput, signinPassInput;
+  let loginEmailInput, loginPassInput;
 
   let generatedOTP = '';
   let pendingSignup = null;
 
   function init() {
-    switchCtn = document.querySelector('#switch-cnt');
-    switchC1 = document.querySelector('#switch-c1');
-    switchC2 = document.querySelector('#switch-c2');
-    switchCircle = document.querySelectorAll('.switch__circle');
-    switchBtns = document.querySelectorAll('.switch-btn');
-    aContainer = document.querySelector('#a-container');
-    bContainer = document.querySelector('#b-container');
+    tabBtns = document.querySelectorAll('.tab-btn');
+    forms = document.querySelectorAll('.auth-form');
+    themeBtns = document.querySelectorAll('.theme-btn');
+    html = document.documentElement;
 
-    otpOverlay = document.getElementById('otp-overlay');
-    otpBoxes = document.querySelectorAll('.otp-box');
-    otpSubmit = document.getElementById('otp-submit');
-    otpResend = document.getElementById('otp-resend');
+    otpOverlay = document.getElementById('otp-modal-overlay');
+    otpBoxes = document.querySelectorAll('.otp-field');
+    otpSubmit = document.getElementById('otp-submit-btn');
+    otpResend = document.getElementById('otp-resend-btn');
     otpError = document.getElementById('otp-error');
     otpDisplay = document.getElementById('otp-email-display');
+    otpCancel = document.getElementById('otp-cancel-btn');
+
+    forgotOverlay = document.getElementById('forgot-password-overlay');
+    forgotForm = document.getElementById('forgot-password-form');
+    forgotEmailInput = document.getElementById('forgot-email');
+    forgotCancel = document.getElementById('forgot-cancel-btn');
+    forgotLink = document.getElementById('forgot-password-link');
 
     signupForm = document.getElementById('signup-form');
-    signinForm = document.getElementById('signin-form');
+    loginForm = document.getElementById('login-form');
     signupNameInput = document.getElementById('signup-name');
     signupEmailInput = document.getElementById('signup-email');
     signupPassInput = document.getElementById('signup-pass');
     signupPass2Input = document.getElementById('signup-pass2');
-    signinEmailInput = document.getElementById('signin-email');
-    signinPassInput = document.getElementById('signin-pass');
+    loginEmailInput = document.getElementById('login-email');
+    loginPassInput = document.getElementById('login-pass');
 
-    if (!signupForm || !signinForm) return;
+    if (!signupForm || !loginForm) return;
+
+    // Password match validation
+    signupPass2Input?.addEventListener('input', () => {
+      if (signupPassInput.value && signupPass2Input.value && signupPassInput.value !== signupPass2Input.value) {
+        signupPass2Input.setCustomValidity("Passwords don't match");
+      } else {
+        signupPass2Input.setCustomValidity('');
+      }
+    });
 
     // Init EmailJS with public key
     if (window.emailjs) window.emailjs.init(EMAILJS_PUBLIC_KEY);
 
-    // Handle Google redirect result (fires after returning from Google OAuth)
-    getRedirectResult(auth).then(result => {
-      // onAuthStateChanged handles the session when result.user exists
-    }).catch(err => {
+    // Handle Google redirect result
+    getRedirectResult(auth).catch(err => {
       console.error('Google redirect result error:', err.code, err);
       if (err.code && err.code !== 'auth/cancelled-popup-request') {
         customAlert(friendlyError(err));
       }
     });
 
-    switchBtns.forEach(btn => btn.addEventListener('click', changeForm));
+    // Tab switching logic
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        tabBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        forms.forEach(form => {
+          form.classList.remove('active');
+          if (form.id === `${tab}-form`) form.classList.add('active');
+        });
+      });
+    });
 
+    // Theme switching logic
+    themeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const theme = btn.dataset.theme;
+        themeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        setTheme(theme);
+        // Reflect theme on authView for scoped CSS
+        const av = document.getElementById('authView');
+        if (av) av.setAttribute('data-theme', theme);
+      });
+    });
+
+    // Load and reflect saved theme in Auth UI
+    const savedTheme = localStorage.getItem('eyawriter-theme') || state.theme;
+    const initialTheme = savedTheme === 'cedar' ? 'rose' : savedTheme;
+    document.querySelector(`.theme-btn[data-theme="${initialTheme}"]`)?.classList.add('active');
+    const av = document.getElementById('authView');
+    if (av) av.setAttribute('data-theme', initialTheme);
+
+    // OTP box focus management
     otpBoxes.forEach((box, i) => {
       box.addEventListener('input', () => {
         box.value = box.value.replace(/\D/g, '').slice(-1);
-        box.classList.toggle('filled', box.value !== '');
         if (box.value && i < otpBoxes.length - 1) otpBoxes[i + 1].focus();
       });
       box.addEventListener('keydown', e => {
@@ -95,7 +139,6 @@ export const Auth = (() => {
           .getData('text').replace(/\D/g, '').slice(0, otpBoxes.length);
         otpBoxes.forEach((b, idx) => {
           b.value = pasted[idx] || '';
-          b.classList.toggle('filled', Boolean(b.value));
         });
         otpBoxes[Math.min(pasted.length, otpBoxes.length - 1)].focus();
       });
@@ -103,8 +146,17 @@ export const Auth = (() => {
 
     otpSubmit.addEventListener('click', verifyOTP);
     otpResend.addEventListener('click', resendOTP);
+    otpCancel.addEventListener('click', () => otpOverlay.classList.remove('active'));
+
+    forgotLink.addEventListener('click', e => {
+      e.preventDefault();
+      forgotOverlay.classList.add('active');
+    });
+    forgotCancel.addEventListener('click', () => forgotOverlay.classList.remove('active'));
+    forgotForm.addEventListener('submit', handleForgotPassword);
+
     signupForm.addEventListener('submit', handleSignUp);
-    signinForm.addEventListener('submit', handleSignIn);
+    loginForm.addEventListener('submit', handleSignIn);
 
     document.getElementById('google-signup')?.addEventListener('click', handleGoogleSignIn);
     document.getElementById('google-signin')?.addEventListener('click', handleGoogleSignIn);
@@ -179,18 +231,20 @@ export const Auth = (() => {
     }
   }
 
-  function changeForm() {
-    switchCtn.classList.add('is-gx');
-    setTimeout(() => switchCtn.classList.remove('is-gx'), 1500);
-    switchCtn.classList.toggle('is-txr');
-    switchCircle[0].classList.toggle('is-txr');
-    switchCircle[1].classList.toggle('is-txr');
-    switchC1.classList.toggle('is-hidden');
-    switchC2.classList.toggle('is-hidden');
-    aContainer.classList.toggle('is-txl');
-    bContainer.classList.toggle('is-txl');
-    bContainer.classList.toggle('is-z200');
-    aContainer.classList.toggle('is-hidden-form');
+  async function handleForgotPassword(e) {
+    e.preventDefault();
+    const email = normalizeEmail(forgotEmailInput.value);
+    if (!isValidEmail(email)) return customAlert('Please enter a valid email.');
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      customAlert(`Password reset link sent to ${email}. Check your inbox!`, 'Reset Password');
+      forgotOverlay.classList.remove('active');
+      forgotForm.reset();
+    } catch (err) {
+      console.error('Forgot password error:', err.code, err);
+      customAlert(friendlyError(err));
+    }
   }
 
   async function handleSignUp(e) {
@@ -212,15 +266,15 @@ export const Auth = (() => {
 
   async function handleSignIn(e) {
     if (e?.preventDefault) e.preventDefault();
-    const email = normalizeEmail(signinEmailInput.value);
-    const password = signinPassInput.value;
+    const email = normalizeEmail(loginEmailInput.value);
+    const password = loginPassInput.value;
 
     if (!isValidEmail(email)) return customAlert('Please enter a valid email.');
     if (!password) return customAlert('Please enter your password.');
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      signinForm.reset();
+      loginForm.reset();
     } catch (err) {
       console.error('Sign-in error:', err.code, err);
       customAlert(friendlyError(err));
@@ -287,7 +341,7 @@ export const Auth = (() => {
 
   function showOTPOverlay(email) {
     otpDisplay.textContent = email;
-    otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+    otpBoxes.forEach(b => { b.value = ''; });
     otpError.textContent = '';
     otpOverlay.classList.add('active');
     otpBoxes[0].focus();
@@ -307,7 +361,7 @@ export const Auth = (() => {
     }
     if (entered !== generatedOTP) {
       otpError.textContent = 'Incorrect code. Try again.';
-      otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+      otpBoxes.forEach(b => { b.value = ''; });
       otpBoxes[0].focus();
       return;
     }
@@ -343,7 +397,7 @@ export const Auth = (() => {
       return;
     }
     await sendOTP(pendingSignup.email, pendingSignup.name);
-    otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+    otpBoxes.forEach(b => { b.value = ''; });
     otpError.textContent = 'New code sent!';
     otpBoxes[0].focus();
     setTimeout(() => { otpError.textContent = ''; }, 2500);
