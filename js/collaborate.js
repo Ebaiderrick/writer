@@ -14,7 +14,7 @@ let allComments = [];
 
 const MAX_COLLABORATORS = 5;
 const EMAILJS_SERVICE = 'service_j18y8zo';
-const EMAILJS_TEMPLATE_INVITE = 'template_invite'; // Adjust if template ID differs
+const EMAILJS_TEMPLATE = 'template_6qr97mn';
 const EMAILJS_PUBLIC_KEY = 'VI5qc4g4cH9d0vpvr';
 
 let unsubInvites = null;
@@ -45,6 +45,8 @@ function commentDocRef(project, commentId) {
 export function initCollaboration() {
   const user = auth.currentUser;
   if (!user) return;
+
+  if (window.emailjs) window.emailjs.init(EMAILJS_PUBLIC_KEY);
 
   // Received Invites
   const qRec = query(
@@ -155,7 +157,7 @@ export async function inviteCollaborator(email) {
   // Send Email Notification
   if (window.emailjs) {
     try {
-      await window.emailjs.send(EMAILJS_SERVICE, 'template_6qr97mn', {
+      await window.emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
         to_email: normalizedEmail,
         from_name: inviteData.fromName,
         project_title: inviteData.projectTitle,

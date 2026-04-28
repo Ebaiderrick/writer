@@ -519,19 +519,24 @@ export const Auth = (() => {
   }
 
   async function loadUserProfile(firebaseUser) {
-    profileName.textContent = firebaseUser.displayName || 'User';
-    profileEmail.textContent = firebaseUser.email;
+    // Priority to auth.currentUser data
+    const user = auth.currentUser || firebaseUser;
+    profileName.textContent = user.displayName || 'User';
+    profileEmail.textContent = user.email;
 
     try {
-      const snap = await getDoc(doc(db, 'users', firebaseUser.uid, 'profile'));
+      const snap = await getDoc(doc(db, 'users', user.uid, 'profile'));
       const profileData = snap.exists() ? snap.data() : {};
 
-      const photo = firebaseUser.photoURL || profileData.photoURL;
+      const photo = user.photoURL || profileData.photoURL;
       if (photo) {
         profileImg.src = photo;
       } else {
         // Random avatar based on UID
-        const hash = [...firebaseUser.uid].reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
+        const hash = [...user.uid].reduce((a, b) => {
+          a = ((a << 5) - a) + b.charCodeAt(0);
+          return a & a;
+        }, 0);
         profileImg.src = RANDOM_AVATARS[Math.abs(hash) % RANDOM_AVATARS.length];
       }
 
@@ -543,6 +548,11 @@ export const Auth = (() => {
       updateBioWordCount();
     } catch (err) {
       console.error('Profile load failed', err);
+      // Fallback for image even if doc fetch fails
+      if (!profileImg.src || profileImg.src.includes('broken')) {
+        const hash = [...user.uid].reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
+        profileImg.src = RANDOM_AVATARS[Math.abs(hash) % RANDOM_AVATARS.length];
+      }
     }
   }
 
