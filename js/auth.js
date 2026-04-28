@@ -181,7 +181,7 @@ export const Auth = (() => {
 
   function changeForm() {
     switchCtn.classList.add('is-gx');
-    setTimeout(() => switchCtn.classList.remove('is-gx'), 1500);
+    setTimeout(() => switchCtn.classList.remove('is-gx'), 800);
     switchCtn.classList.toggle('is-txr');
     switchCircle[0].classList.toggle('is-txr');
     switchCircle[1].classList.toggle('is-txr');
