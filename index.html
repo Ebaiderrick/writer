@@ -176,6 +176,14 @@
                 </div>
               </div>
             </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Sent Invites</summary>
+              <div class="menu-group-body">
+                <div id="studioSentInvites" class="collab-requests-list">
+                  <p class="collab-empty">No invites sent.</p>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
         <div class="home-topbar-user">
@@ -966,12 +974,13 @@
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="avatar-wrapper">
-          <img src="https://i.pravatar.cc/150?img=32" alt="Profile" class="avatar" id="profile-img">
+          <img src="" alt="Profile" class="avatar" id="profile-img">
           <button class="avatar-edit" id="change-photo-btn" aria-label="Change photo">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
             </svg>
           </button>
+          <input type="file" id="profile-upload" accept="image/*" hidden>
         </div>
         <h2 class="profile-name" id="profile-name">Jane Doe</h2>
         <p class="profile-email" id="profile-email">jane@example.com</p>

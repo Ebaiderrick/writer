@@ -13,7 +13,12 @@ let commentFilter = { user: 'all', sort: 'line', status: 'all' };
 let allComments = [];
 
 const MAX_COLLABORATORS = 5;
+const EMAILJS_SERVICE = 'service_j18y8zo';
+const EMAILJS_TEMPLATE_INVITE = 'template_invite'; // Adjust if template ID differs
+const EMAILJS_PUBLIC_KEY = 'VI5qc4g4cH9d0vpvr';
+
 let unsubInvites = null;
+let unsubSentInvites = null;
 let unsubComments = null;
 let unsubSharedProject = null;
 
@@ -41,22 +46,34 @@ export function initCollaboration() {
   const user = auth.currentUser;
   if (!user) return;
 
-  const q = query(
+  // Received Invites
+  const qRec = query(
     collection(db, 'invitations'),
     where('toEmail', '==', user.email.toLowerCase()),
     where('status', '==', 'pending')
   );
 
-  unsubInvites = onSnapshot(q, snap => {
+  unsubInvites = onSnapshot(qRec, snap => {
     const invitations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     updateCollabBadge(invitations.length);
     renderCollabRequests(invitations);
   });
+
+  // Sent Invites
+  const qSent = query(
+    collection(db, 'invitations'),
+    where('fromUid', '==', user.uid)
+  );
+
+  unsubSentInvites = onSnapshot(qSent, snap => {
+    const invitations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderSentInvites(invitations);
+  });
 }
 
 export function cleanupCollaboration() {
-  [unsubInvites, unsubComments, unsubSharedProject].forEach(fn => fn?.());
-  unsubInvites = unsubComments = unsubSharedProject = null;
+  [unsubInvites, unsubSentInvites, unsubComments, unsubSharedProject].forEach(fn => fn?.());
+  unsubInvites = unsubSentInvites = unsubComments = unsubSharedProject = null;
 }
 
 export function onStudioEnter(projectId) {
@@ -121,7 +138,7 @@ export async function inviteCollaborator(email) {
   await ensureSharedProject(project, user);
 
   const inviteId = makeId('inv');
-  await setDoc(doc(db, 'invitations', inviteId), {
+  const inviteData = {
     id: inviteId,
     fromUid: user.uid,
     fromName: user.displayName || user.email,
@@ -131,7 +148,23 @@ export async function inviteCollaborator(email) {
     projectTitle: project.title,
     status: 'pending',
     createdAt: new Date().toISOString()
-  });
+  };
+
+  await setDoc(doc(db, 'invitations', inviteId), inviteData);
+
+  // Send Email Notification
+  if (window.emailjs) {
+    try {
+      await window.emailjs.send(EMAILJS_SERVICE, 'template_6qr97mn', {
+        to_email: normalizedEmail,
+        from_name: inviteData.fromName,
+        project_title: inviteData.projectTitle,
+        type: 'collaboration invite'
+      });
+    } catch (err) {
+      console.error('Invite email failed', err);
+    }
+  }
 
   return { ok: true };
 }
@@ -357,6 +390,36 @@ export function renderCollaboratorList() {
       if (confirmed) kickCollaborator(project.id, btn.dataset.uid);
     });
   });
+}
+
+function renderSentInvites(invitations) {
+  const list = document.getElementById('studioSentInvites');
+  if (!list) return;
+
+  if (!invitations.length) {
+    list.innerHTML = '<p class="collab-empty">No invites sent.</p>';
+    return;
+  }
+
+  // Sort by date desc
+  invitations.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  list.innerHTML = invitations.map(inv => {
+    let statusLabel = inv.status.toUpperCase();
+    if (inv.status === 'accepted') statusLabel = 'VALIDATED';
+
+    return `
+      <div class="collab-request-item">
+        <div class="collab-request-info">
+          <span class="collab-request-from">${esc(inv.toEmail)}</span>
+          <span class="collab-request-project">Project: <strong>${esc(inv.projectTitle)}</strong></span>
+          <div class="bio-meta" style="text-align: left; margin-top: 4px;">
+             Status: <span class="status-pill ${inv.status}">${statusLabel}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderCollabRequests(invitations) {

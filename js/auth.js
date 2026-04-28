@@ -41,7 +41,15 @@ export const Auth = (() => {
   let profilePopup, profileClose, profileTriggerBtns;
   let profileImg, profileName, profileEmail, profileBio, profileWordCount;
   let profileEditBtn, profileSaveBtn, profileSignOutBtn;
+  let profileUpload, profileUploadBtn;
   let originalBio = '';
+  let pendingImageBase64 = null;
+
+  const RANDOM_AVATARS = [
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Aria',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Leo'
+  ];
 
   let generatedOTP = '';
   let pendingSignup = null;
@@ -87,6 +95,8 @@ export const Auth = (() => {
     profileEditBtn = document.getElementById('edit-profile');
     profileSaveBtn = document.getElementById('save-profile');
     profileSignOutBtn = document.getElementById('profile-signout-btn');
+    profileUpload = document.getElementById('profile-upload');
+    profileUploadBtn = document.getElementById('change-photo-btn');
 
     if (!signupForm || !loginForm) return;
 
@@ -188,6 +198,8 @@ export const Auth = (() => {
     profileEditBtn?.addEventListener('click', handleBioEdit);
     profileSaveBtn?.addEventListener('click', handleBioSave);
     profileSignOutBtn?.addEventListener('click', handleSignOut);
+    profileUploadBtn?.addEventListener('click', () => profileUpload.click());
+    profileUpload?.addEventListener('change', handleImageUpload);
     profileBio?.addEventListener('input', updateBioWordCount);
     profileBio?.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
 
@@ -355,9 +367,20 @@ export const Auth = (() => {
     showAuth();
   }
 
-  function openProfilePopup() {
-    profilePopup?.classList.add('active');
-    document.body.style.overflow = 'hidden';
+  function openProfilePopup(e) {
+    const trigger = e.currentTarget;
+    const rect = trigger.getBoundingClientRect();
+    const card = profilePopup.querySelector('.popup-card');
+
+    profilePopup.classList.add('active');
+
+    // Position card under trigger
+    const cardWidth = 336;
+    let left = rect.right - cardWidth;
+    if (left < 10) left = 10;
+
+    card.style.top = `${rect.bottom + 8}px`;
+    card.style.left = `${left}px`;
   }
 
   function closeProfilePopup() {
@@ -406,9 +429,53 @@ export const Auth = (() => {
     }
   }
 
+  async function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Max dimensions 400x400
+        if (width > height) {
+          if (width > 400) { height *= 400 / width; width = 400; }
+        } else {
+          if (height > 400) { width *= 400 / height; height = 400; }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Compress to JPEG and check size
+        let quality = 0.9;
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+        // Target < 154KB
+        while (dataUrl.length > 154 * 1024 * 1.33 && quality > 0.1) {
+          quality -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+
+        pendingImageBase64 = dataUrl;
+        profileImg.src = dataUrl;
+        profileEditBtn.hidden = true;
+        profileSaveBtn.hidden = false;
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function handleBioSave() {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
+    const user = auth.currentUser;
+    if (!user) return;
 
     const text = profileBio.textContent || '';
     if (countWords(text) > 100) {
@@ -422,15 +489,27 @@ export const Auth = (() => {
 
     try {
       const bio = profileBio.textContent;
-      await setDoc(doc(db, 'users', uid, 'profile'), { bio }, { merge: true });
+      const data = { bio };
+
+      if (pendingImageBase64) {
+        data.photoURL = pendingImageBase64;
+        await updateProfile(user, { photoURL: pendingImageBase64 });
+      }
+
+      await setDoc(doc(db, 'users', user.uid, 'profile'), data, { merge: true });
+
+      pendingImageBase64 = null;
       profileSaveBtn.classList.remove('saving');
       profileSaveBtn.textContent = '💾 Saved!';
+
       setTimeout(() => {
         profileSaveBtn.textContent = '💾 Save Changes';
         profileEditBtn.hidden = false;
         profileSaveBtn.hidden = true;
       }, 2000);
+
       updateBioWordCount();
+      updateTriggerUI(user);
     } catch (err) {
       console.error('Bio save failed', err);
       profileSaveBtn.classList.remove('saving');
@@ -442,12 +521,22 @@ export const Auth = (() => {
   async function loadUserProfile(firebaseUser) {
     profileName.textContent = firebaseUser.displayName || 'User';
     profileEmail.textContent = firebaseUser.email;
-    profileImg.src = firebaseUser.photoURL || 'https://i.pravatar.cc/150?u=' + firebaseUser.uid;
 
     try {
       const snap = await getDoc(doc(db, 'users', firebaseUser.uid, 'profile'));
-      if (snap.exists() && snap.data().bio) {
-        profileBio.textContent = snap.data().bio;
+      const profileData = snap.exists() ? snap.data() : {};
+
+      const photo = firebaseUser.photoURL || profileData.photoURL;
+      if (photo) {
+        profileImg.src = photo;
+      } else {
+        // Random avatar based on UID
+        const hash = [...firebaseUser.uid].reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
+        profileImg.src = RANDOM_AVATARS[Math.abs(hash) % RANDOM_AVATARS.length];
+      }
+
+      if (profileData.bio) {
+        profileBio.textContent = profileData.bio;
       } else {
         profileBio.textContent = 'Tell us about yourself...';
       }
