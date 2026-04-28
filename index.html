@@ -179,11 +179,13 @@
           </div>
         </div>
         <div class="home-topbar-user">
-          <div id="homeUserInfo" class="home-user-info">
-            <span id="homeUserName" class="home-user-name"></span>
-            <span id="homeUserEmail" class="home-user-email"></span>
-          </div>
-          <button id="homeSignOutBtn" class="ghost-button" type="button">Sign Out</button>
+          <button class="user-trigger open-profile-btn" aria-label="Open profile">
+            <div class="user-avatar-circle">
+              <img src="" alt="" class="user-avatar-img" hidden>
+            </div>
+            <span class="user-name" id="homeUserNameDisplay">User</span>
+            <span class="user-arrow">▾</span>
+          </button>
         </div>
       </header>
 
@@ -479,7 +481,12 @@
         <div class="topbar-actions">
           <span id="saveBadge" class="save-badge">Saved</span>
           <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
-          <button id="signOutBtn" class="ghost-button" type="button">Sign Out</button>
+          <button class="user-trigger open-profile-btn" aria-label="Open profile">
+            <div class="user-avatar-circle">
+              <img src="" alt="" class="user-avatar-img" hidden>
+            </div>
+            <span class="user-arrow">▾</span>
+          </button>
         </div>
       </header>
 
@@ -945,6 +952,48 @@
       </div>
     </form>
   </dialog>
+
+  <!-- Profile Popup Overlay -->
+  <div class="popup-overlay" id="profile-popup">
+    <div class="popup-card">
+      <!-- Close Button -->
+      <button class="popup-close" id="close-profile" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+
+      <!-- Profile Header -->
+      <div class="profile-header">
+        <div class="avatar-wrapper">
+          <img src="https://i.pravatar.cc/150?img=32" alt="Profile" class="avatar" id="profile-img">
+          <button class="avatar-edit" id="change-photo-btn" aria-label="Change photo">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+          </button>
+        </div>
+        <h2 class="profile-name" id="profile-name">Jane Doe</h2>
+        <p class="profile-email" id="profile-email">jane@example.com</p>
+      </div>
+
+      <!-- Profile Writeup -->
+      <div class="profile-bio-container">
+        <label class="bio-label">About</label>
+        <p class="bio-text" id="profile-bio">Tell us about yourself...</p>
+        <div class="bio-meta">
+          <span id="word-count">0</span>/100 words
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="profile-actions">
+        <button class="btn-outline" id="edit-profile">✏️ Edit Profile</button>
+        <button class="btn-primary" id="save-profile" hidden>💾 Save Changes</button>
+        <button class="btn-outline danger-text" id="profile-signout-btn">Logout</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="js/main.js"></script>
 </body>

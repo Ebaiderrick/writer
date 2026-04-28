@@ -37,6 +37,12 @@ export const Auth = (() => {
   let signupNameInput, signupEmailInput, signupPassInput, signupPass2Input;
   let loginEmailInput, loginPassInput;
 
+  // Profile Popup Elements
+  let profilePopup, profileClose, profileTriggerBtns;
+  let profileImg, profileName, profileEmail, profileBio, profileWordCount;
+  let profileEditBtn, profileSaveBtn, profileSignOutBtn;
+  let originalBio = '';
+
   let generatedOTP = '';
   let pendingSignup = null;
 
@@ -68,6 +74,19 @@ export const Auth = (() => {
     signupPass2Input = document.getElementById('signup-pass2');
     loginEmailInput = document.getElementById('login-email');
     loginPassInput = document.getElementById('login-pass');
+
+    // Profile Elements
+    profilePopup = document.getElementById('profile-popup');
+    profileClose = document.getElementById('close-profile');
+    profileTriggerBtns = document.querySelectorAll('.open-profile-btn');
+    profileImg = document.getElementById('profile-img');
+    profileName = document.getElementById('profile-name');
+    profileEmail = document.getElementById('profile-email');
+    profileBio = document.getElementById('profile-bio');
+    profileWordCount = document.getElementById('word-count');
+    profileEditBtn = document.getElementById('edit-profile');
+    profileSaveBtn = document.getElementById('save-profile');
+    profileSignOutBtn = document.getElementById('profile-signout-btn');
 
     if (!signupForm || !loginForm) return;
 
@@ -161,16 +180,30 @@ export const Auth = (() => {
     document.getElementById('google-signup')?.addEventListener('click', handleGoogleSignIn);
     document.getElementById('google-signin')?.addEventListener('click', handleGoogleSignIn);
     document.getElementById('demo-login-btn')?.addEventListener('click', handleDemoLogin);
-    document.getElementById('signOutBtn')?.addEventListener('click', handleSignOut);
-    document.getElementById('homeSignOutBtn')?.addEventListener('click', handleSignOut);
+
+    // Profile Listeners
+    profileTriggerBtns.forEach(btn => btn.addEventListener('click', openProfilePopup));
+    profileClose?.addEventListener('click', closeProfilePopup);
+    profilePopup?.addEventListener('click', e => { if (e.target === profilePopup) closeProfilePopup(); });
+    profileEditBtn?.addEventListener('click', handleBioEdit);
+    profileSaveBtn?.addEventListener('click', handleBioSave);
+    profileSignOutBtn?.addEventListener('click', handleSignOut);
+    profileBio?.addEventListener('input', updateBioWordCount);
+    profileBio?.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && profilePopup?.classList.contains('active')) closeProfilePopup();
+    });
 
     onAuthStateChanged(auth, async firebaseUser => {
       if (firebaseUser) {
         cacheSession(firebaseUser);
         await ensureUsersByEmail(firebaseUser);
         await syncProjectsOnLogin(firebaseUser.uid);
+        await loadUserProfile(firebaseUser);
         if (refs.authView && !refs.authView.hidden) showHome();
         renderHome();
+        updateTriggerUI(firebaseUser);
         initCollaboration();
       } else {
         cleanupCollaboration();
@@ -316,9 +349,129 @@ export const Auth = (() => {
   async function handleSignOut() {
     const confirmed = await customConfirm('Sign out of your account?', 'Sign Out');
     if (!confirmed) return;
+    closeProfilePopup();
     clearSession();
     try { await firebaseSignOut(auth); } catch { /* ignore */ }
     showAuth();
+  }
+
+  function openProfilePopup() {
+    profilePopup?.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeProfilePopup() {
+    profilePopup?.classList.remove('active');
+    document.body.style.overflow = '';
+    cancelBioEdit();
+  }
+
+  function countWords(text) {
+    return text.trim().split(/\s+/).filter(w => w.length > 0).length;
+  }
+
+  function updateBioWordCount() {
+    const text = profileBio.textContent || '';
+    const words = countWords(text);
+    profileWordCount.textContent = words;
+    if (words > 100) {
+      profileWordCount.classList.add('profile-word-limit');
+    } else {
+      profileWordCount.classList.remove('profile-word-limit');
+    }
+  }
+
+  function handleBioEdit() {
+    originalBio = profileBio.textContent;
+    profileBio.contentEditable = 'true';
+    profileBio.focus();
+    profileEditBtn.hidden = true;
+    profileSaveBtn.hidden = false;
+
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(profileBio);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function cancelBioEdit() {
+    if (profileBio.contentEditable === 'true') {
+      profileBio.contentEditable = 'false';
+      profileBio.textContent = originalBio;
+      profileEditBtn.hidden = false;
+      profileSaveBtn.hidden = true;
+      updateBioWordCount();
+    }
+  }
+
+  async function handleBioSave() {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const text = profileBio.textContent || '';
+    if (countWords(text) > 100) {
+      customAlert('Bio cannot exceed 100 words.');
+      return;
+    }
+
+    profileBio.contentEditable = 'false';
+    profileSaveBtn.classList.add('saving');
+    profileSaveBtn.textContent = 'Saving...';
+
+    try {
+      const bio = profileBio.textContent;
+      await setDoc(doc(db, 'users', uid, 'profile'), { bio }, { merge: true });
+      profileSaveBtn.classList.remove('saving');
+      profileSaveBtn.textContent = '💾 Saved!';
+      setTimeout(() => {
+        profileSaveBtn.textContent = '💾 Save Changes';
+        profileEditBtn.hidden = false;
+        profileSaveBtn.hidden = true;
+      }, 2000);
+      updateBioWordCount();
+    } catch (err) {
+      console.error('Bio save failed', err);
+      profileSaveBtn.classList.remove('saving');
+      profileSaveBtn.textContent = 'Error';
+      profileBio.contentEditable = 'true';
+    }
+  }
+
+  async function loadUserProfile(firebaseUser) {
+    profileName.textContent = firebaseUser.displayName || 'User';
+    profileEmail.textContent = firebaseUser.email;
+    profileImg.src = firebaseUser.photoURL || 'https://i.pravatar.cc/150?u=' + firebaseUser.uid;
+
+    try {
+      const snap = await getDoc(doc(db, 'users', firebaseUser.uid, 'profile'));
+      if (snap.exists() && snap.data().bio) {
+        profileBio.textContent = snap.data().bio;
+      } else {
+        profileBio.textContent = 'Tell us about yourself...';
+      }
+      updateBioWordCount();
+    } catch (err) {
+      console.error('Profile load failed', err);
+    }
+  }
+
+  function updateTriggerUI(firebaseUser) {
+    const photo = firebaseUser.photoURL;
+    const name = firebaseUser.displayName || 'User';
+
+    document.querySelectorAll('.user-avatar-img').forEach(img => {
+      if (photo) {
+        img.src = photo;
+        img.hidden = false;
+      } else {
+        img.hidden = true;
+      }
+    });
+
+    const homeName = document.getElementById('homeUserNameDisplay');
+    if (homeName) homeName.textContent = name;
   }
 
   async function sendOTP(email, name) {
