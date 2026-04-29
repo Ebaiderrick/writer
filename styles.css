@@ -73,10 +73,10 @@ html[data-theme="dark"] {
 html[data-theme="white"] {
   --bg: #ffffff;
   --bg-gradient: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-  --panel: rgba(255, 255, 255, 0.95);
-  --ink: #1a1a1a;
-  --ink-muted: #666;
-  --muted: #666;
+  --panel: rgba(255, 255, 255, 0.98);
+  --ink: #111111;
+  --ink-muted: #222222;
+  --muted: #333333;
   --accent: #1f7a6b;
   --accent-strong: #12584c;
   --accent-soft: #e4f0ed;
@@ -124,8 +124,7 @@ html[data-theme="navy"] {
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   margin: 0;
   min-height: 100%;
   background-color: var(--bg);
@@ -137,6 +136,10 @@ body {
 }
 
 body {
+  margin: 0;
+  min-height: 100%;
+  background-color: transparent;
+  color: var(--ink);
   overflow: hidden;
 }
 
@@ -162,6 +165,14 @@ img {
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.5s ease;
+}
+
+html[data-theme="white"] .mesh-background,
+html:not([data-theme]) .mesh-background,
+html[data-theme="rose"] .mesh-background {
+  opacity: 0.9;
 }
 
 .gradient-container {
@@ -3272,23 +3283,31 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  background: transparent;
+  padding: 6px 14px;
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 24px;
   color: var(--ink);
   font-family: inherit;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme="white"] .user-trigger {
+  background: #ffffff;
+  border-color: #dddddd;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .user-trigger:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent-strong);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .user-avatar-circle {
