@@ -187,6 +187,9 @@ export async function inviteCollaborator(email) {
 }
 
 async function ensureSharedProject(project, user) {
+  // Skip Firestore read when local state already marks the project as shared.
+  if (project.isShared) return;
+
   const ref = doc(db, 'sharedProjects', project.id);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
@@ -200,11 +203,11 @@ async function ensureSharedProject(project, user) {
       updatedBy: user.uid,
       syncedAt: new Date().toISOString()
     });
-    project.isShared = true;
-    project.ownerId = user.uid;
-    project.collaborators = {};
-    persistProjects(false);
   }
+  project.isShared = true;
+  project.ownerId = user.uid;
+  project.collaborators = project.collaborators || {};
+  persistProjects(false);
 }
 
 // ── Accept / Decline ──────────────────────────────────────────
