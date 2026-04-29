@@ -1,6 +1,115 @@
-import { STORAGE_KEY, state, TYPE_LABELS, DEFAULT_VIEW_OPTIONS } from './config.js';
+import { STORAGE_KEY, state, TYPE_LABELS, DEFAULT_VIEW_OPTIONS, DEFAULT_LEFT_PANE_BLOCKS } from './config.js';
 import { uid, normalizeLineText, stripWrapperChars, clamp } from './utils.js';
 import { refs } from './dom.js';
+import { t } from './i18n.js';
+import { auth, db } from './firebase.js';
+import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+let firestoreSyncTimer = null;
+const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function generateScriptId() {
+  const bytes = new Uint8Array(6);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, byte => SCRIPT_ID_CHARS[byte % SCRIPT_ID_CHARS.length]).join("");
+}
+
+function normalizeScriptId(scriptId) {
+  const value = String(scriptId || "").trim().toUpperCase();
+  return /^[A-Z0-9]{6}$/.test(value) ? value : generateScriptId();
+}
+
+function queueFirestoreSync() {
+  clearTimeout(firestoreSyncTimer);
+  firestoreSyncTimer = setTimeout(syncCurrentProjectToFirestore, 1500);
+}
+
+async function syncCurrentProjectToFirestore() {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const project = getCurrentProject();
+  if (!project) return;
+
+  // Ensure script identity exists for traceability
+  if (!project.scriptId) {
+    project.scriptId = generateScriptId();
+  }
+
+  const payload = { ...project, syncedAt: new Date().toISOString() };
+  try {
+    await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
+    if (project.isShared) {
+      // Only sync content fields — never overwrite ownership/membership on the shared doc.
+      const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
+        'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId'];
+      const contentPayload = Object.fromEntries(
+        CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
+      );
+      await setDoc(doc(db, 'sharedProjects', project.id), {
+        ...contentPayload,
+        syncedAt: new Date().toISOString(),
+        updatedBy: userId
+      }, { merge: true });
+    }
+
+    // Update local storage with the new scriptId and notify UI
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      parsed.projects = state.projects;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+    window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
+
+  } catch (err) {
+    console.error('Firestore sync failed', err);
+  }
+}
+
+export async function fetchCloudProjects(userId) {
+  const snapshot = await getDocs(collection(db, 'users', userId, 'projects'));
+  return snapshot.docs.map(d => sanitizeProject(d.data()));
+}
+
+export async function importLocalProjectsToCloud(userId, projects) {
+  for (const p of projects) {
+    await setDoc(doc(db, 'users', userId, 'projects', p.id), {
+      ...p,
+      syncedAt: new Date().toISOString()
+    });
+  }
+}
+
+export async function deleteProjectFromCloud(projectId) {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'projects', projectId));
+  } catch (err) {
+    console.error('Firestore delete failed', err);
+  }
+}
+
+export function setProjectsFromCloud(cloudProjects) {
+  state.projects = cloudProjects.length > 0 ? cloudProjects : [cloneProject(sampleProject, true)];
+  state.currentProjectId = state.projects[0].id;
+  try {
+    const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...existing,
+      currentProjectId: state.currentProjectId,
+      projects: state.projects
+    }));
+  } catch (err) {
+    console.error('Failed to cache cloud projects locally', err);
+  }
+}
 
 export const sampleProject = {
   id: "sample-project",
@@ -35,23 +144,36 @@ export function loadProjects() {
       : [cloneProject(sampleProject, true)];
     state.currentProjectId = parsed?.currentProjectId || state.projects[0].id;
     state.aiAssist = Boolean(parsed?.aiAssist);
-    state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
-    state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
-    state.theme = parsed?.theme || "rose";
-    state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
+      state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
+      state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
+      state.backgroundAnimation = parsed?.backgroundAnimation !== false;
+      state.theme = parsed?.theme === "rose" ? "cedar" : (parsed?.theme || "cedar");
+      state.language = ["en", "fr", "de"].includes(parsed?.language) ? parsed.language : "en";
+      state.writingLanguage = ["en", "fr", "de"].includes(parsed?.writingLanguage) ? parsed.writingLanguage : state.language;
+      state.grammarCheck = Boolean(parsed?.grammarCheck);
+      state.localBackupEnabled = Boolean(parsed?.localBackupEnabled);
+      state.localSaveIntervalMinutes = [5, 10, 60].includes(parsed?.localSaveIntervalMinutes) ? parsed.localSaveIntervalMinutes : 5;
+      state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
+    state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
     document.documentElement.style.setProperty("--right-pane-width", `${clamp(parsed?.rightWidth || 324, 260, 520)}px`);
   } catch (error) {
     console.error("Unable to load projects", error);
-    state.projects = [cloneProject(sampleProject, true)];
-    state.currentProjectId = state.projects[0].id;
-    state.viewOptions = { ...DEFAULT_VIEW_OPTIONS };
+      state.projects = [cloneProject(sampleProject, true)];
+      state.currentProjectId = state.projects[0].id;
+      state.backgroundAnimation = true;
+      state.language = "en";
+      state.writingLanguage = "en";
+      state.grammarCheck = false;
+      state.viewOptions = { ...DEFAULT_VIEW_OPTIONS };
+    state.leftPaneBlocks = DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block }));
   }
 }
 
 export function sanitizeProject(project) {
   return {
     id: project.id || uid("project"),
+    scriptId: normalizeScriptId(project.scriptId),
     title: project.title || "Untitled Script",
     author: project.author || "",
     contact: project.contact || "",
@@ -60,13 +182,25 @@ export function sanitizeProject(project) {
     logline: project.logline || "",
     createdAt: project.createdAt || new Date().toISOString(),
     updatedAt: project.updatedAt || new Date().toISOString(),
+    isShared: Boolean(project.isShared),
+    ownerId: project.ownerId || null,
+    ownerName: project.ownerName || "",
+    ownerEmail: project.ownerEmail || "",
+    collaborators: (project.collaborators && typeof project.collaborators === 'object') ? project.collaborators : {},
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     lines: Array.isArray(project.lines) && project.lines.length
-      ? project.lines.map((line) => ({
-          id: line.id || uid(),
-          type: TYPE_LABELS[line.type] ? line.type : "action",
-          text: normalizeLineText(line.text || "", TYPE_LABELS[line.type] ? line.type : "action")
-        }))
+      ? project.lines.map((line) => {
+          const type = TYPE_LABELS[line.type] ? line.type : "action";
+          const sanitized = {
+            id: line.id || uid(),
+            type,
+            text: normalizeLineText(line.text || "", type)
+          };
+          if (typeof line.secondary === "string") {
+            sanitized.secondary = normalizeLineText(line.secondary, type);
+          }
+          return sanitized;
+        })
       : [{ id: uid(), type: "action", text: "" }]
   };
 }
@@ -76,14 +210,15 @@ export function cloneProject(project, withNewId) {
   return sanitizeProject({
     ...project,
     id: withNewId ? uid("project") : project.id,
+    scriptId: withNewId ? generateScriptId() : project.scriptId,
     createdAt: withNewId ? now : project.createdAt,
     updatedAt: now,
     collapsedSceneIds: [...(project.collapsedSceneIds || [])],
-    lines: project.lines.map((line) => ({
-      id: uid(),
-      type: line.type,
-      text: line.text
-    }))
+    lines: project.lines.map((line) => {
+      const cloned = { id: uid(), type: line.type, text: line.text };
+      if (typeof line.secondary === "string") cloned.secondary = line.secondary;
+      return cloned;
+    })
   });
 }
 
@@ -121,30 +256,95 @@ export function upsertProject(project) {
   }
 }
 
-export function persistProjects(forceSavedBadge = false) {
-  syncProjectFromInputs();
+export function persistProjects(forceSavedBadge = false, { syncInputs = true } = {}) {
+  if (syncInputs) syncProjectFromInputs();
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     currentProjectId: state.currentProjectId,
     projects: state.projects,
     aiAssist: state.aiAssist,
     toolStripCollapsed: state.toolStripCollapsed,
-    autoNumberScenes: state.autoNumberScenes,
-    theme: state.theme,
-    viewOptions: state.viewOptions,
+      autoNumberScenes: state.autoNumberScenes,
+      backgroundAnimation: state.backgroundAnimation,
+      theme: state.theme,
+      language: state.language,
+      writingLanguage: state.writingLanguage,
+      grammarCheck: state.grammarCheck,
+      localBackupEnabled: state.localBackupEnabled,
+      localSaveIntervalMinutes: state.localSaveIntervalMinutes,
+      viewOptions: state.viewOptions,
+    leftPaneBlocks: state.leftPaneBlocks,
     leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
     rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
   }));
   if (refs.saveBadge) {
-      refs.saveBadge.textContent = forceSavedBadge ? "Saved locally" : "Saved";
+      refs.saveBadge.textContent = forceSavedBadge ? t("save.savedLocal") : t("save.saved");
   }
+  queueFirestoreSync();
 }
 
 export function queueSave() {
   if (refs.saveBadge) {
-      refs.saveBadge.textContent = "Saving...";
+      refs.saveBadge.textContent = t("save.saving");
   }
   clearTimeout(state.saveTimer);
-  state.saveTimer = window.setTimeout(() => persistProjects(false), 200);
+  state.saveTimer = window.setTimeout(() => {
+    persistProjects(false);
+    pushHistory();
+  }, 200);
+}
+
+export function pushHistory() {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  // Clone the current state
+  const snapshot = project.lines.map(l => ({ ...l }));
+
+  // If we're pushing a new state that is identical to the current history state, skip
+  if (state.historyIndex >= 0) {
+    const last = state.history[state.historyIndex];
+    if (JSON.stringify(last) === JSON.stringify(snapshot)) return;
+  }
+
+  // Truncate any "redo" history if we're in the middle of the stack
+  if (state.historyIndex < state.history.length - 1) {
+    state.history = state.history.slice(0, state.historyIndex + 1);
+  }
+
+  state.history.push(snapshot);
+
+  // Limit to 30 undos (31 items total: current + 30 previous)
+  if (state.history.length > 31) {
+    state.history.shift();
+  } else {
+    state.historyIndex++;
+  }
+}
+
+export function undo() {
+  if (state.historyIndex <= 0) return;
+  state.historyIndex--;
+  restoreFromHistory();
+}
+
+export function redo() {
+  if (state.historyIndex >= state.history.length - 1) return;
+  state.historyIndex++;
+  restoreFromHistory();
+}
+
+function restoreFromHistory() {
+  const project = getCurrentProject();
+  const snapshot = state.history[state.historyIndex];
+  if (!project || !snapshot) return;
+
+  project.lines = snapshot.map(l => ({ ...l }));
+  project.updatedAt = new Date().toISOString();
+
+  // We need to import renderStudio here or pass it in.
+  // Since project.js is a low-level module, we'll rely on the caller to re-render.
+  // But wait, many functions in project.js are called and then renderStudio is called in events.js.
+  // Let's just update the state and let the event handler handle the render.
 }
 
 export function syncProjectFromInputs() {
@@ -164,12 +364,45 @@ export function syncProjectFromInputs() {
 
 export function sanitizeViewOptions(options) {
   return {
-    ruler: Boolean(options?.ruler),
+    ruler: false,
     pageNumbers: options?.pageNumbers === undefined ? true : Boolean(options.pageNumbers),
-    pageCount: options?.pageCount === undefined ? true : Boolean(options.pageCount),
-    showOutline: options?.showOutline === undefined ? true : Boolean(options.showOutline),
+    pageCount: false,
+    showOutline: true,
     textSize: clamp(options?.textSize ?? DEFAULT_VIEW_OPTIONS.textSize, 11, 14)
   };
+}
+
+export function sanitizeLeftPaneBlocks(blocks) {
+  const defaults = new Map(DEFAULT_LEFT_PANE_BLOCKS.map((block) => [block.key, block]));
+  const seen = new Set();
+  const sanitized = [];
+
+  if (Array.isArray(blocks)) {
+    blocks.forEach((block) => {
+      const key = block?.key;
+      if (!defaults.has(key) || seen.has(key)) {
+        return;
+      }
+        seen.add(key);
+        sanitized.push({
+          key,
+          visible: key === "current" ? true : (block.visible === undefined ? defaults.get(key).visible : Boolean(block.visible)),
+          collapsed: Boolean(block.collapsed)
+        });
+      });
+  }
+
+  DEFAULT_LEFT_PANE_BLOCKS.forEach((block) => {
+    if (seen.has(block.key)) {
+      return;
+    }
+    sanitized.push({
+      ...block,
+      visible: block.key === "current" ? true : block.visible
+    });
+  });
+
+  return sanitized;
 }
 
 export function serializeScript(project) {
@@ -188,10 +421,16 @@ export function getSuggestedNextSpeaker(contextIndex) {
   if (!project) return "";
   const recent = [];
 
-  for (let index = 0; index <= contextIndex; index += 1) {
+  for (let index = 0; index < contextIndex; index += 1) {
     const line = project.lines[index];
-    if (line?.type === "character" && line.text.trim()) {
-      const value = normalizeLineText(line.text, "character");
+    if ((line?.type === "character" || line?.type === "dual") && line.text.trim()) {
+      const value = normalizeLineText(line.text, line.type);
+      if (recent[recent.length - 1] !== value) {
+        recent.push(value);
+      }
+    }
+    if (line?.type === "dual" && line.secondary?.trim()) {
+      const value = normalizeLineText(line.secondary, "dual");
       if (recent[recent.length - 1] !== value) {
         recent.push(value);
       }

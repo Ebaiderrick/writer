@@ -1,28 +1,49 @@
 import { state, TYPE_SEQUENCE, TYPE_LABELS } from './config.js';
 import { refs } from './dom.js';
+import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
-  syncProjectFromInputs, serializeScript, replaceWithSample as restoreSample,
-  getDefaultText
+  syncProjectFromInputs, replaceWithSample as restoreSample,
+  getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
+  deleteProjectFromCloud
 } from './project.js';
 import {
-  renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
-  getOwningSceneId, getPreviousSceneHeading, getCharacterAutocomplete, updateSuggestions
+  renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
+  getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
+  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
 } from './editor.js';
-import { renderPreview, renderCoverPreview, buildPrintableDocument, exportScript } from './preview.js';
+import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
+import { paginateScriptLines } from './pagination.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
-  updateMenuStateButtons, customAlert, customConfirm, customPrompt
+  updateMenuStateButtons, customAlert, customConfirm, customPrompt,
+  renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
+  renderCurrentScriptId
 } from './ui.js';
+import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
-  placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText
+  placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
+  formatLineText
 } from './utils.js';
+import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
+import {
+  applyWordCase, clearSpellingHighlights, ensureLanguageDictionary, getSpellingContextAtOffset,
+  hasLanguageDictionary, highlightSpellingIssue, getSpellingSuggestions
+} from './spelling.js';
+import {
+  isLocalSaveSupported, chooseLocalSaveFile, restoreLocalSaveFile, clearLocalSaveFile,
+  startLocalSaveTimer, stopLocalSaveTimer, writeLocalSaveFile
+} from './localSave.js';
+import {
+  inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
+  hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel
+} from './collaborate.js';
 
 export function bindEvents() {
   // Navigation
@@ -32,9 +53,7 @@ export function bindEvents() {
   });
 
   refs.goHomeBtn.addEventListener("click", () => {
-    persistProjects(true);
-    showHome();
-    renderHome();
+    saveAndGoHome();
   });
 
   // Meta Inputs
@@ -56,6 +75,47 @@ export function bindEvents() {
 
   refs.themeButtons.forEach((button) => {
     button.addEventListener("click", () => setTheme(button.dataset.themeValue));
+  });
+
+  refs.languageButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setLanguage(button.dataset.languageValue);
+      renderHome();
+      if (!refs.studioView.hidden) {
+        renderStudio();
+      }
+      persistProjects(false);
+      closeMenus();
+    });
+  });
+
+  refs.writingLanguageButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setWritingLanguage(button.dataset.writingLanguageValue);
+      primeSpellingDictionary();
+      persistProjects(false);
+      closeMenus();
+    });
+  });
+
+  refs.localBackupToggle?.addEventListener("change", () => {
+    toggleLocalBackup(refs.localBackupToggle.checked);
+  });
+  refs.localSaveInterval?.addEventListener("change", () => {
+    const value = parseInt(refs.localSaveInterval.value, 10);
+    state.localSaveIntervalMinutes = [5, 10, 60].includes(value) ? value : 5;
+    persistProjects(false);
+    if (state.localBackupEnabled && state.localSaveFileHandle) {
+      startLocalSaveTimer();
+    }
+  });
+  refs.chooseLocalSaveFileBtn?.addEventListener("click", async () => {
+    const result = await chooseLocalSaveFile();
+    if (result.ok) {
+      startLocalSaveTimer();
+    } else if (result.reason === "unsupported") {
+      customAlert("Local save requires a Chromium-based browser (Chrome, Edge, Opera).");
+    }
   });
 
   document.querySelectorAll("[data-menu-action]").forEach((button) => {
@@ -97,25 +157,16 @@ export function bindEvents() {
   refs.exportPdfBtn.addEventListener("click", exportPdf);
   refs.fileInput.addEventListener("change", importFile);
 
-  refs.autoCapsToggle.addEventListener("change", () => {
-    const project = getCurrentProject();
-    if (!project) return;
-    project.lines = project.lines.map((line) => ({
-      ...line,
-      text: normalizeLineText(stripWrapperChars(line.text), line.type)
-    }));
-    renderStudio();
-    queueSave();
-  });
-
   refs.autoNumberToggle.addEventListener("change", () => {
     state.autoNumberScenes = refs.autoNumberToggle.checked;
     renderStudio();
     queueSave();
   });
 
-  refs.typewriterToggle.addEventListener("change", () => {
-    document.body.classList.toggle("typewriter-mode", refs.typewriterToggle.checked);
+  refs.bgAnimationToggle?.addEventListener("change", () => {
+    state.backgroundAnimation = refs.bgAnimationToggle.checked;
+    applyToolbarState();
+    persistProjects(false);
   });
 
   refs.aiAssistToggle.addEventListener("change", () => {
@@ -125,36 +176,70 @@ export function bindEvents() {
     queueSave();
   });
 
+  refs.grammarCheckToggle.addEventListener("change", () => {
+    setGrammarCheck(refs.grammarCheckToggle.checked);
+    queueSave();
+  });
+
   refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);
 
   // Layout Toggles
-  refs.leftRailToggle.addEventListener("click", () => togglePane("left"));
-  refs.rightRailToggle.addEventListener("click", () => togglePane("right"));
+  refs.leftRailToggle.addEventListener("click", () => {
+    togglePane("left");
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
+  });
+  refs.rightRailToggle.addEventListener("click", () => {
+    togglePane("right");
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+  });
   refs.toolStripToggle.addEventListener("click", () => {
-      state.toolStripCollapsed = !state.toolStripCollapsed;
-      applyToolbarState();
-      persistProjects(false);
+        state.toolStripCollapsed = !state.toolStripCollapsed;
+        applyToolbarState();
+        setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "&#9660;" : "&#9650;");
+        persistProjects(false);
+    });
+
+  refs.leftPaneSectionToggle.addEventListener("click", () => {
+    togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle);
+    setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  });
+  refs.rightPaneSectionToggle.addEventListener("click", () => {
+    togglePaneSection(refs.rightPaneBody, refs.rightPaneSectionToggle);
+    setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   });
 
-  refs.leftPaneSectionToggle.addEventListener("click", () => togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle));
-  refs.rightPaneSectionToggle.addEventListener("click", () => togglePaneSection(refs.rightPaneBody, refs.rightPaneSectionToggle));
+  refs.leftPaneBody.addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-left-pane-section-toggle]");
+    if (toggle) {
+      toggleLeftPaneSection(toggle.dataset.leftPaneSectionToggle);
+    }
+  });
+
+  refs.leftPaneBlockControls?.addEventListener("click", (event) => {
+    const moveBtn = event.target.closest("[data-left-pane-move]");
+    if (moveBtn) {
+      moveLeftPaneBlock(moveBtn.dataset.leftPaneKey, moveBtn.dataset.leftPaneMove);
+    }
+  });
+
+  refs.leftPaneBlockControls?.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("[data-left-pane-visibility]");
+    if (checkbox) {
+      setLeftPaneBlockVisibility(checkbox.dataset.leftPaneVisibility, checkbox.checked);
+    }
+  });
 
   refs.duplicateProjectBtn.addEventListener("click", duplicateProject);
   refs.loadSampleBtn.addEventListener("click", replaceWithSample);
   refs.deleteProjectBtn.addEventListener("click", deleteProject);
 
-  refs.helpBtn.addEventListener("click", () => {
-    refs.helpDialog.showModal();
-  });
-
-  document.querySelectorAll("[data-home-nav='shortcuts']").forEach(btn => {
-    btn.addEventListener("click", () => {
-      refs.helpDialog.showModal();
-    });
-  });
-
   initResizeHandle(refs.leftResize, "left");
   initResizeHandle(refs.rightResize, "right");
+
+  refs.helpBtn.addEventListener("click", () => refs.helpDialog.showModal());
+  document.querySelectorAll('[data-home-nav="shortcuts"]').forEach(btn => {
+      btn.addEventListener("click", () => refs.helpDialog.showModal());
+  });
 
   // Global Keys & Clicks
   document.addEventListener("keydown", handleGlobalKeydown);
@@ -162,80 +247,149 @@ export function bindEvents() {
       if (!event.target.closest(".nav-stack")) {
         closeMenus();
       }
+      if (!event.target.closest("#suggestionTray") && !event.target.closest(".script-block")) {
+        hideSuggestionTray(true);
+        clearSuggestionContext();
+      }
   });
 
   // Delegated Editor Events
   refs.screenplayEditor.addEventListener("focusin", (e) => {
-      if (e.target.classList.contains("line")) {
+      if (e.target.classList.contains("script-block")) {
           setActiveBlock(e.target.dataset.id);
       }
   });
 
-  refs.screenplayEditor.addEventListener("click", (e) => {
-    if (e.target.closest(".line")) {
-        setActiveBlock(e.target.closest(".line").dataset.id);
+  refs.screenplayEditor.addEventListener("click", async (e) => {
+    const block = e.target.closest(".script-block");
+    if (block) {
+        setActiveBlock(block.dataset.id);
+        await maybeShowSpellingSuggestions(block, e.target, e.clientX, e.clientY);
+    }
+    if (e.target.closest(".scene-toggle")) {
+        const row = e.target.closest(".script-block-row");
+        toggleSceneCollapse(row.dataset.id);
     }
   });
 
   refs.screenplayEditor.addEventListener("input", (e) => {
-      if (e.target.classList.contains("line")) {
+      if (e.target.classList.contains("script-block")) {
           handleBlockInput(e.target.dataset.id, e.target);
       }
   });
 
   refs.screenplayEditor.addEventListener("keydown", (e) => {
-      if (e.target.classList.contains("line")) {
+      if (e.target.classList.contains("script-block")) {
           handleBlockKeydown(e, e.target.dataset.id);
       }
+  });
+
+  refs.screenplayEditor.addEventListener("contextmenu", (e) => {
+    const target = e.target.nodeType === Node.TEXT_NODE ? e.target.parentElement : e.target;
+    const block = target?.closest?.(".script-block");
+    if (block?.dataset?.id) {
+      setActiveBlock(block.dataset.id);
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    ContextMenu.show(e.clientX, e.clientY, block || getActiveEditableBlock());
   });
 
   refs.screenplayEditor.addEventListener("copy", (e) => {
       const selection = window.getSelection();
       if (selection.isCollapsed) return;
 
-      const range = selection.getRangeAt(0);
-      const fragment = range.cloneContents();
-      const lines = [];
+      const project = getCurrentProject();
+      if (!project) return;
 
-      fragment.querySelectorAll(".line").forEach(line => {
-          lines.push({
-              type: line.dataset.type,
-              text: line.innerText
-          });
+      const selectedLines = [];
+      const range = selection.getRangeAt(0);
+      const blocks = refs.screenplayEditor.querySelectorAll(".script-block");
+
+      blocks.forEach(block => {
+          if (selection.containsNode(block, true)) {
+              const line = getLine(block.dataset.id);
+              if (line) selectedLines.push(line.text);
+          }
       });
 
-      if (lines.length > 0) {
-          e.clipboardData.setData("application/json", JSON.stringify(lines));
-          e.clipboardData.setData("text/plain", selection.toString());
+      if (selectedLines.length > 0) {
+          e.clipboardData.setData("text/plain", selectedLines.join("\n"));
           e.preventDefault();
       }
   });
 
   refs.screenplayEditor.addEventListener("paste", (e) => {
+      if (!e.target.classList.contains("script-block")) return;
+
       e.preventDefault();
-      const json = e.clipboardData.getData("application/json");
+      const text = e.clipboardData.getData("text/plain");
+      if (!text) return;
+
+      const pastedLines = text.split(/\r?\n/);
       const project = getCurrentProject();
-      if (!project) return;
-
       const activeId = state.activeBlockId;
-      const index = getLineIndex(activeId);
+      if (!project || !activeId) return;
 
-      if (json) {
-          const lines = JSON.parse(json);
-          lines.forEach((line, i) => {
-              addBlock(line.type, line.text, index + 1 + i);
-          });
+      const index = getLineIndex(activeId);
+      const currentLine = project.lines[index];
+      const offset = getCaretOffset(e.target);
+
+      const textBefore = currentLine.text.substring(0, offset);
+      const textAfter = currentLine.text.substring(offset);
+
+      if (pastedLines.length === 1) {
+          // Simple single line paste
+          currentLine.text = textBefore + pastedLines[0] + textAfter;
+          renderStudio();
+          focusBlock(activeId);
+          setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${activeId}"]`), offset + pastedLines[0].length);
       } else {
-          const text = e.clipboardData.getData("text/plain");
-          const pastedLines = text.split(/\r?\n/).filter(l => l.trim());
-          pastedLines.forEach((lineText, i) => {
-              const type = inferTypeFromText(lineText, "", "");
-              addBlock(type, lineText, index + 1 + i);
-          });
+          // Multi-line natural paste
+          // 1. Update current block with text before cursor + first pasted line
+          currentLine.text = textBefore + pastedLines[0];
+
+          // 2. Create new blocks for middle lines
+          const middleLines = pastedLines.slice(1, -1);
+          const newBlocks = middleLines.map(content => ({
+              id: uid(),
+              type: inferTypeFromText(content, "", ""),
+              text: content
+          }));
+
+          // 3. Create final block with last pasted line + text after cursor
+          const lastContent = pastedLines[pastedLines.length - 1];
+          const finalBlock = {
+              id: uid(),
+              type: inferTypeFromText(lastContent, "", ""),
+              text: lastContent + textAfter
+          };
+
+          project.lines.splice(index + 1, 0, ...newBlocks, finalBlock);
+
+          project.updatedAt = new Date().toISOString();
+          renderStudio();
+          focusBlock(finalBlock.id);
+          setCaretOffset(refs.screenplayEditor.querySelector(`.script-block[data-id="${finalBlock.id}"]`), lastContent.length);
       }
 
-      renderStudio();
       queueSave();
+  });
+
+  refs.screenplayEditor.addEventListener("focusout", (e) => {
+    if (e.target.classList.contains("script-block")) {
+        const id = e.target.dataset.id;
+        if (id === state.activeBlockId) return;
+        const line = getLine(id);
+        const project = getCurrentProject();
+        if (line && line.secondary === undefined && !line.text.trim() && project && project.lines.length > 1) {
+            const index = getLineIndex(id);
+            project.lines.splice(index, 1);
+            project.updatedAt = new Date().toISOString();
+            renderStudio();
+            queueSave();
+        }
+    }
   });
 
   // Project Grid (Delegated)
@@ -291,6 +445,76 @@ export function bindEvents() {
           focusBlock(item.dataset.lineId);
       }
   });
+
+  // Collaboration events
+  const collabInviteBtn = document.getElementById('collabInviteBtn');
+  const collabInviteEmail = document.getElementById('collabInviteEmail');
+  const collabInviteStatus = document.getElementById('collabInviteStatus');
+  if (collabInviteBtn && collabInviteEmail) {
+    collabInviteBtn.addEventListener('click', async () => {
+      const email = collabInviteEmail.value.trim();
+      if (!email) return;
+      collabInviteBtn.disabled = true;
+      let result;
+      try {
+        result = await inviteCollaborator(email);
+      } catch (err) {
+        result = { ok: false, reason: err.message || 'An error occurred.' };
+      }
+      collabInviteBtn.disabled = false;
+      if (collabInviteStatus) {
+        collabInviteStatus.textContent = result.ok ? 'Invitation sent!' : result.reason;
+        collabInviteStatus.className = `collab-status-msg${result.ok ? ' collab-status-ok' : ' collab-status-err'}`;
+        setTimeout(() => { collabInviteStatus.textContent = ''; collabInviteStatus.className = 'collab-status-msg'; }, 5000);
+      }
+      if (result.ok) { collabInviteEmail.value = ''; renderCollaboratorList(); }
+    });
+    collabInviteEmail.addEventListener('keydown', e => {
+      if (e.key === 'Enter') collabInviteBtn.click();
+    });
+  }
+
+  const collabAddCommentBtn = document.getElementById('collabAddCommentBtn');
+  const collabCommentText = document.getElementById('collabCommentText');
+  if (collabAddCommentBtn && collabCommentText) {
+    collabAddCommentBtn.addEventListener('click', async () => {
+      const project = getCurrentProject();
+      if (!project) return;
+      const text = collabCommentText.value?.trim();
+      if (!text) return;
+      const lineId = state.activeBlockId;
+      if (!lineId) {
+        await customAlert('Click on a line in the script first — comments must be attached to a specific line.', 'No line selected');
+        return;
+      }
+      await addComment(project.id, text, { lineId });
+      collabCommentText.value = '';
+    });
+  }
+
+  // Re-render studio when a remote collaborator updates the shared project
+  window.addEventListener('sharedProjectUpdated', () => {
+    if (!refs.studioView?.hidden) renderStudio();
+  });
+
+  // Comment compose overlay
+  document.getElementById('commentComposeSubmit')?.addEventListener('click', submitCommentCompose);
+  document.getElementById('commentComposeCancel')?.addEventListener('click', hideCommentCompose);
+  document.getElementById('commentComposeText')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitCommentCompose();
+    if (e.key === 'Escape') hideCommentCompose();
+  });
+
+  // Left pane comment filters
+  document.getElementById('commentFilterUser')?.addEventListener('change', e => setCommentFilter('user', e.target.value));
+  document.getElementById('commentFilterStatus')?.addEventListener('change', e => setCommentFilter('status', e.target.value));
+  document.getElementById('commentFilterSort')?.addEventListener('change', e => setCommentFilter('sort', e.target.value));
+  document.getElementById('viewCommentsBtn')?.addEventListener('click', showCommentPanel);
+
+  // Focus a line from a comment click
+  window.addEventListener('focusScriptLine', ({ detail }) => {
+    if (detail?.lineId) focusBlock(detail.lineId);
+  });
 }
 
 // Action Handlers
@@ -298,16 +522,30 @@ export function openProject(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
   state.currentProjectId = project.id;
+
+  // Reset history for the new project
+  state.history = [];
+  state.historyIndex = -1;
+  pushHistory();
+
   state.activeBlockId = project.lines[0]?.id || null;
   state.activeType = project.lines[0]?.type || "action";
 
   refs.aiAssistToggle.checked = state.aiAssist;
+  refs.grammarCheckToggle.checked = state.grammarCheck;
+  document.body.classList.toggle("spelling-mode-active", state.grammarCheck);
+  document.body.classList.toggle("grammar-mode-active", state.grammarCheck);
   refs.autoNumberToggle.checked = state.autoNumberScenes;
+  if (refs.bgAnimationToggle) {
+    refs.bgAnimationToggle.checked = state.backgroundAnimation;
+  }
   refs.aiPanel.hidden = !state.aiAssist;
 
   syncInputsFromProject(project);
   showStudio();
   renderStudio();
+  onStudioEnter(projectId);
+  primeSpellingDictionary();
   if (state.activeBlockId) {
     focusBlock(state.activeBlockId);
   }
@@ -323,8 +561,32 @@ export function renderStudio() {
   renderSceneList();
   renderCharacterList();
   renderMetrics();
+  renderCurrentScriptId();
   renderRecentProjectMenus();
+  renderLeftPaneLayout();
   applyViewState();
+  applyToolbarState();
+  setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
+  setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+  setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  applyTranslations();
+  updateSuggestions();
+  updateCommentIcons();
+}
+
+export function duplicateActiveBlock() {
+  const project = getCurrentProject();
+  const index = getLineIndex(state.activeBlockId);
+  if (!project || index < 0) {
+    return;
+  }
+
+  const line = project.lines[index];
+  const newId = addBlock(line.type, line.text, index + 1);
+  renderStudio();
+  focusBlock(newId, true);
+  queueSave();
 }
 
 function handleMetaInput() {
@@ -337,13 +599,26 @@ function handleMetaInput() {
 
 function togglePaneSection(body, button) {
   body.classList.toggle("is-collapsed");
-  button.textContent = body.classList.contains("is-collapsed") ? "v" : "^";
+  button.innerHTML = body.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;";
 }
 
 function handleBlockInput(id, element) {
   const line = getLine(id);
   const project = getCurrentProject();
   if (!line || !project) return;
+
+  // Secondary (right) field of a dual row: update line.secondary only
+  if (element.dataset.secondary === "true") {
+    const normalized = normalizeLineText(element.textContent || "", "dual");
+    line.secondary = normalized;
+    project.updatedAt = new Date().toISOString();
+    setActiveBlock(id);
+    renderPreview();
+    renderCharacterList();
+    updateSuggestions();
+    queueSave();
+    return;
+  }
 
   const offset = getCaretOffset(element);
   const beforeText = element.textContent || "";
@@ -361,31 +636,72 @@ function handleBlockInput(id, element) {
   }
 
   if (!autoCompleted && normalized !== beforeText) {
-    // Stage 3: Auto-CONT'D logic
-    if (line.type === "scene" && normalized.endsWith(" -")) {
-        const currentLoc = normalized.split(" -")[0].trim().toUpperCase();
-        const prevHeading = getPreviousSceneHeading(getLineIndex(id));
-        if (prevHeading) {
-            const prevLoc = prevHeading.split(" -")[0].trim().toUpperCase();
-            if (currentLoc && currentLoc === prevLoc) {
-                normalized += " CONT'D";
-            }
-        }
+    let newOffset = offset;
+    // If we added a '(' at the beginning, shift offset
+    if (line.type === "parenthetical" && !beforeText.startsWith("(") && normalized.startsWith("(")) {
+        newOffset++;
+    }
+    if (line.type === "note" && !beforeText.startsWith("[") && normalized.startsWith("[")) {
+        newOffset++;
     }
 
-    element.textContent = normalized;
-    setCaretOffset(element, offset);
+    const activeLine = getLine(state.activeBlockId);
+    if (activeLine && (activeLine.type === "parenthetical" || activeLine.type === "note") && (normalized === "" || normalized === "()" || normalized === "[]")) {
+        // Don't force set if it breaks typing feel for empty wrappers
+    } else {
+        element.textContent = normalized;
+        setCaretOffset(element, newOffset);
+    }
   }
 
   line.text = normalized;
   project.updatedAt = new Date().toISOString();
+  clearSuggestionContext();
+
+  const shouldRefreshSpelling = state.grammarCheck
+    && hasLanguageDictionary(state.writingLanguage)
+    && Boolean(window.getSelection()?.isCollapsed);
+  const caretOffset = shouldRefreshSpelling ? getCaretOffset(element) : 0;
+  if (shouldRefreshSpelling) {
+    refreshEditableBlockDisplay(element, line, project);
+    setCaretOffset(element, Math.min(caretOffset, element.textContent.length));
+  }
+
   setActiveBlock(id);
   renderPreview();
   renderSceneList();
   renderCharacterList();
   renderMetrics();
   renderHome();
-  updateSuggestions();
+  if (line.type === "scene") {
+    hideSuggestionTray(true);
+  } else {
+    updateSuggestions();
+  }
+  queueSave();
+}
+
+let lastKeyDownCode = "";
+
+export function intelligentSplit(element) {
+  const id = element.dataset.id;
+  const project = getCurrentProject();
+  const index = getLineIndex(id);
+  const line = project?.lines[index];
+  if (!line) return;
+
+  const offset = getCaretOffset(element);
+  const textBefore = line.text.substring(0, offset);
+  const textAfter = line.text.substring(offset);
+
+  line.text = textBefore;
+  // Get the next type in sequence
+  const currentTypeIdx = TYPE_SEQUENCE.indexOf(line.type);
+  const nextType = TYPE_SEQUENCE[(currentTypeIdx + 1) % TYPE_SEQUENCE.length];
+  const newId = addBlock(nextType, textAfter, index + 1);
+
+  renderStudio();
+  focusBlock(newId, !textAfter);
   queueSave();
 }
 
@@ -394,6 +710,38 @@ function handleBlockKeydown(event, id) {
   const index = getLineIndex(id);
   const line = project?.lines[index];
   if (!line) return;
+
+  const code = event.code;
+  const isSecondary = event.target.dataset.secondary === "true";
+
+  // --- Dual secondary field: Enter / Tab advance to next dual row ---
+  if (isSecondary && (event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
+    event.preventDefault();
+    line.secondary = normalizeLineText(event.target.textContent || "", line.type);
+    project.updatedAt = new Date().toISOString();
+    if (line.type === "character") {
+      const newId = addBlock("dialogue", "", index + 1);
+      const newLine = getLine(newId);
+      if (newLine) newLine.secondary = "";
+      renderStudio();
+      focusBlock(newId);
+    } else {
+      const newId = addBlock("action", "", index + 1);
+      renderStudio();
+      focusBlock(newId);
+    }
+    queueSave();
+    return;
+  }
+
+  // Handle Break function (Backtick + Enter)
+  if (event.key === "Enter" && lastKeyDownCode === "Backquote") {
+    event.preventDefault();
+    intelligentSplit(event.target);
+    return;
+  }
+
+  lastKeyDownCode = code;
 
   if (event.key === "Delete") {
     event.preventDefault();
@@ -416,6 +764,11 @@ function handleBlockKeydown(event, id) {
 
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
+    // Primary field of a dual row: move focus to secondary
+    if (line.secondary !== undefined && !isSecondary) {
+      focusSecondaryBlock(id);
+      return;
+    }
     const offset = getCaretOffset(event.target);
     const textBefore = line.text.substring(0, offset);
     const textAfter = line.text.substring(offset);
@@ -441,7 +794,7 @@ function handleBlockKeydown(event, id) {
       state.activeBlockId = prevLine.id;
       project.updatedAt = new Date().toISOString();
       renderStudio();
-      const prevElement = refs.screenplayEditor.querySelector(`.line[data-id="${prevLine.id}"]`);
+      const prevElement = refs.screenplayEditor.querySelector(`.script-block[data-id="${prevLine.id}"]:not([data-secondary])`);
       focusBlock(prevLine.id);
       setCaretOffset(prevElement, prevTextLength);
       queueSave();
@@ -456,7 +809,7 @@ function handleBlockKeydown(event, id) {
       project.updatedAt = new Date().toISOString();
       renderStudio();
       focusBlock(targetId);
-      placeCaretAtEnd(refs.screenplayEditor.querySelector(`.line[data-id="${targetId}"]`));
+      placeCaretAtEnd(refs.screenplayEditor.querySelector(`.script-block[data-id="${targetId}"]:not([data-secondary])`));
       queueSave();
       return;
     }
@@ -464,6 +817,11 @@ function handleBlockKeydown(event, id) {
 
   if (event.key === "Tab") {
     event.preventDefault();
+    // Primary field of a dual row: move focus to secondary
+    if (line.secondary !== undefined && !isSecondary) {
+      focusSecondaryBlock(id);
+      return;
+    }
     cycleBlockType(id);
     return;
   }
@@ -545,17 +903,8 @@ function changeBlockType(id, nextType) {
   const project = getCurrentProject();
   if (!line || !project) return;
 
-  const oldType = line.type;
   line.type = nextType;
-
-  let text = line.text;
-  if (nextType === "scene") {
-    if (!text || text === "Untitled Scene" || oldType === "character") {
-      text = "";
-    }
-  }
-
-  line.text = normalizeConvertedText(text, nextType);
+  line.text = normalizeConvertedText(line.text, nextType);
   project.updatedAt = new Date().toISOString();
   state.activeType = nextType;
   renderStudio();
@@ -571,7 +920,7 @@ function normalizeConvertedText(text, type) {
   return normalizeLineText(stripped, type);
 }
 
-export function toggleSceneCollapse(sceneId) {
+function toggleSceneCollapse(sceneId) {
   const project = getCurrentProject();
   if (!project) return;
   const collapsed = new Set(project.collapsedSceneIds);
@@ -596,14 +945,24 @@ function applySuggestion(value) {
   const project = getCurrentProject();
   if (!line || !project) return;
 
-  if (line.type === "scene" && line.text.includes(" -")) {
-    const parts = line.text.split(" -");
-    parts[parts.length - 1] = " " + value;
-    line.text = normalizeLineText(parts.join(" -"), line.type);
-  } else {
-    line.text = normalizeLineText(value, line.type);
+  if (state.suggestionContext?.mode === "spelling" && state.suggestionContext.lineId === line.id) {
+    const { start, end, word } = state.suggestionContext;
+    const replacement = applyWordCase(value, word);
+    line.text = normalizeLineText(`${line.text.slice(0, start)}${replacement}${line.text.slice(end)}`, line.type);
+    clearSuggestionContext();
+    project.updatedAt = new Date().toISOString();
+    renderStudio();
+    focusBlock(line.id);
+    const activeBlock = refs.screenplayEditor.querySelector(`.script-block[data-id="${line.id}"]`);
+    if (activeBlock) {
+      setCaretOffset(activeBlock, Math.min(start + replacement.length, activeBlock.textContent.length));
+    }
+    queueSave();
+    return;
   }
 
+  clearSuggestionContext();
+  line.text = normalizeLineText(value, line.type);
   project.updatedAt = new Date().toISOString();
   renderStudio();
   focusBlock(line.id);
@@ -611,6 +970,19 @@ function applySuggestion(value) {
 }
 
 function handleToolSelection(type) {
+  if (type === "dual") {
+    const active = getLine(state.activeBlockId);
+    if (active?.type === "character" && active.secondary === undefined) {
+      active.secondary = "";
+      const project = getCurrentProject();
+      if (project) project.updatedAt = new Date().toISOString();
+      renderStudio();
+      focusSecondaryBlock(active.id);
+      queueSave();
+      return;
+    }
+  }
+
   const active = getLine(state.activeBlockId);
   if (!active) {
     const newId = addBlock(type, "");
@@ -630,7 +1002,7 @@ function togglePane(side) {
   const collapsed = pane.classList.toggle("is-hidden");
   if (handle) handle.classList.toggle("is-hidden", collapsed);
   refs.studioLayout.classList.toggle(isLeft ? "left-pane-hidden" : "right-pane-hidden", collapsed);
-  button.textContent = collapsed ? (isLeft ? ">" : "<") : (isLeft ? "<" : ">");
+  button.innerHTML = collapsed ? (isLeft ? "&#9654;" : "&#9664;") : (isLeft ? "&#9664;" : "&#9654;");
 }
 
 function initResizeHandle(handle, side) {
@@ -663,14 +1035,6 @@ function initResizeHandle(handle, side) {
 }
 
 function handleMenuAction(action) {
-  const project = getCurrentProject();
-  const meta = project ? {
-      title: project.title,
-      author: project.author,
-      email: project.contact,
-      phone: project.company
-  } : {};
-
   switch (action) {
     case "new-project":
       openProject(createProject().id);
@@ -682,6 +1046,9 @@ function handleMenuAction(action) {
       break;
     case "save-project":
       persistProjects(true);
+      break;
+    case "save-home":
+      saveAndGoHome();
       break;
     case "rename-project":
       renameCurrentProject();
@@ -695,6 +1062,9 @@ function handleMenuAction(action) {
     case "import-file":
       refs.fileInput.click();
       break;
+    case "export-txt":
+      exportTxt();
+      break;
     case "export-json":
       exportJson();
       break;
@@ -705,10 +1075,10 @@ function handleMenuAction(action) {
       exportPdf();
       break;
     case "preview-new-tab":
-      if (project) exportScript(project.lines, meta);
+      openPreviewWindow(false);
       break;
     case "print-project":
-      if (project) exportScript(project.lines, meta);
+      printWithHiddenFrame();
       break;
     case "exit-studio":
       persistProjects(true);
@@ -716,10 +1086,12 @@ function handleMenuAction(action) {
       renderHome();
       break;
     case "undo":
-      execEditorCommand("undo");
+      undo();
+      renderStudio();
       break;
     case "redo":
-      execEditorCommand("redo");
+      redo();
+      renderStudio();
       break;
     case "insert-page-break":
       insertMenuBlock("text", "--- PAGE BREAK ---");
@@ -735,6 +1107,40 @@ function handleMenuAction(action) {
         if (target) { target.focus(); selectElementText(target); }
         break;
     }
+    case "text-copy":
+      ContextMenu.performAction("copy", getActiveEditableBlock());
+      break;
+    case "text-cut":
+      ContextMenu.performAction("cut", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-paste":
+      ContextMenu.performAction("paste", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-duplicate":
+      ContextMenu.performAction("duplicate", getActiveEditableBlock());
+      break;
+    case "text-caps-all":
+      ContextMenu.performAction("caps-all", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-caps-sentence":
+      ContextMenu.performAction("caps-sentence", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-caps-each":
+      ContextMenu.performAction("caps-each", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-caps-low":
+      ContextMenu.performAction("caps-low", getActiveEditableBlock());
+      queueSave();
+      break;
+    case "text-caps-random":
+      ContextMenu.performAction("caps-random", getActiveEditableBlock());
+      queueSave();
+      break;
     case "find":
       findInScript();
       break;
@@ -762,6 +1168,15 @@ function handleMenuAction(action) {
       updateMenuStateButtons();
       queueSave();
       break;
+    case "toggle-grammar-check":
+      setGrammarCheck(!state.grammarCheck);
+      break;
+    case "toggle-auto-number":
+      refs.autoNumberToggle.checked = !refs.autoNumberToggle.checked;
+      state.autoNumberScenes = refs.autoNumberToggle.checked;
+      renderStudio();
+      queueSave();
+      break;
     case "show-work-tracking":
       showWorkTracking();
       break;
@@ -770,6 +1185,9 @@ function handleMenuAction(action) {
       break;
   }
   closeMenus();
+  if (action === "toggle-grammar-check") {
+    queueSave();
+  }
 }
 
 function execEditorCommand(command) {
@@ -780,6 +1198,243 @@ function execEditorCommand(command) {
   target.focus();
   if (typeof document.execCommand === "function") {
     document.execCommand(command);
+  }
+}
+
+function saveAndGoHome() {
+  persistProjects(true);
+  showHome();
+  renderHome();
+}
+
+function setGrammarCheck(enabled) {
+  state.grammarCheck = enabled;
+  refs.grammarCheckToggle.checked = enabled;
+  document.body.classList.toggle("spelling-mode-active", enabled);
+  document.body.classList.toggle("grammar-mode-active", enabled);
+  clearSuggestionContext();
+  clearSpellingHighlights(refs.screenplayEditor);
+  renderStudio();
+  primeSpellingDictionary();
+}
+
+function setWritingLanguage(language) {
+  state.writingLanguage = ["en", "fr", "de"].includes(language) ? language : "en";
+  applyWritingLanguageButtons();
+  if (state.grammarCheck && !refs.studioView.hidden) {
+    renderStudio();
+  }
+}
+
+function applyWritingLanguageButtons() {
+  refs.writingLanguageButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.writingLanguageValue === state.writingLanguage);
+  });
+}
+
+async function toggleLocalBackup(enable) {
+  if (enable) {
+    if (!isLocalSaveSupported()) {
+      customAlert("Local backup requires a Chromium-based browser (Chrome, Edge, Opera).");
+      if (refs.localBackupToggle) refs.localBackupToggle.checked = false;
+      return;
+    }
+    state.localBackupEnabled = true;
+    applyLocalBackupUI();
+    persistProjects(false);
+    if (!state.localSaveFileHandle) {
+      const result = await chooseLocalSaveFile();
+      if (!result.ok) {
+        state.localBackupEnabled = false;
+        applyLocalBackupUI();
+        persistProjects(false);
+        return;
+      }
+    }
+    startLocalSaveTimer();
+  } else {
+    state.localBackupEnabled = false;
+    applyLocalBackupUI();
+    persistProjects(false);
+    stopLocalSaveTimer();
+  }
+}
+
+export function applySaveModeButtons() {
+  applyLocalBackupUI();
+}
+
+function applyLocalBackupUI() {
+  if (refs.localBackupToggle) {
+    refs.localBackupToggle.checked = state.localBackupEnabled;
+  }
+  if (refs.localSaveControls) {
+    refs.localSaveControls.hidden = !state.localBackupEnabled;
+  }
+  if (refs.localSaveInterval) {
+    refs.localSaveInterval.value = String(state.localSaveIntervalMinutes);
+  }
+  if (refs.localSaveFileLabel) {
+    refs.localSaveFileLabel.textContent = state.localSaveFileHandle
+      ? `Backup file: ${state.localSaveFileHandle.name}`
+      : "No file selected";
+  }
+}
+
+function primeSpellingDictionary() {
+  if (!state.grammarCheck) {
+    return;
+  }
+
+  ensureLanguageDictionary(state.writingLanguage)
+    .then(() => {
+      if (state.grammarCheck && !refs.studioView.hidden) {
+        renderStudio();
+      }
+    })
+    .catch((error) => {
+      console.error("Unable to load spelling dictionary:", error);
+    });
+}
+
+async function maybeShowSpellingSuggestions(block, target = null, clientX = null, clientY = null) {
+  if (!state.grammarCheck) {
+    return;
+  }
+
+  const line = getLine(block.dataset.id);
+  const project = getCurrentProject();
+  if (!line || !project) {
+    return;
+  }
+
+  if (!hasLanguageDictionary(state.writingLanguage)) {
+    try {
+      await ensureLanguageDictionary(state.writingLanguage);
+    } catch (error) {
+      console.error("Unable to load spelling suggestions:", error);
+      return;
+    }
+  }
+
+  const clickedContext = resolveClickedSpellingContext(block, line, project, target, clientX, clientY);
+  if (clickedContext) {
+    showSpellingSuggestions(clickedContext, { x: clientX, y: clientY });
+    highlightSpellingIssue(block, clickedContext);
+    return;
+  }
+
+  const offset = getCaretOffset(block);
+  const context = getSpellingContextAtOffset(line.text, offset, {
+    language: state.writingLanguage,
+    project,
+    lineId: line.id
+  });
+
+  if (!context) {
+    clearSpellingHighlights(refs.screenplayEditor);
+    updateSuggestions();
+    return;
+  }
+
+  showSpellingSuggestions(context, { rect: block.getBoundingClientRect() });
+  highlightSpellingIssue(block, context);
+}
+
+function resolveClickedSpellingContext(block, line, project, target, clientX, clientY) {
+  const directIssue = target?.closest?.(".spelling-error");
+  const pointIssue = getSpellingIssueFromPoint(block, clientX, clientY);
+  const issue = directIssue || pointIssue;
+
+  if (issue) {
+    const start = Number(issue.dataset.spellingStart);
+    const end = Number(issue.dataset.spellingEnd);
+    const word = issue.dataset.spellingWord || line.text.slice(start, end);
+
+    if (issue.dataset.grammarSuggestions) {
+      const suggestions = JSON.parse(issue.dataset.grammarSuggestions);
+      if (suggestions.length) {
+        return { mode: "spelling", lineId: line.id, start, end, word, suggestions };
+      }
+    }
+
+    const suggestions = getSpellingSuggestions(word, {
+      language: state.writingLanguage,
+      project
+    });
+
+    if (suggestions.length) {
+      return {
+        mode: "spelling",
+        lineId: line.id,
+        start,
+        end,
+        word,
+        suggestions
+      };
+    }
+  }
+
+  const offsetFromPoint = getCaretOffsetFromPoint(block, clientX, clientY);
+  if (offsetFromPoint >= 0) {
+    return getSpellingContextAtOffset(line.text, offsetFromPoint, {
+      language: state.writingLanguage,
+      project,
+      lineId: line.id
+    });
+  }
+
+  return null;
+}
+
+function getSpellingIssueFromPoint(block, clientX, clientY) {
+  return getPointContext(block, clientX, clientY)?.element?.closest?.(".spelling-error") || null;
+}
+
+function getCaretOffsetFromPoint(block, clientX, clientY) {
+  return getPointContext(block, clientX, clientY)?.offset ?? -1;
+}
+
+function getPointContext(block, clientX, clientY) {
+  if (!block || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+
+  let container = null;
+  let offset = 0;
+
+  if (typeof document.caretPositionFromPoint === "function") {
+    const position = document.caretPositionFromPoint(clientX, clientY);
+    container = position?.offsetNode || null;
+    offset = position?.offset || 0;
+  } else if (typeof document.caretRangeFromPoint === "function") {
+    const range = document.caretRangeFromPoint(clientX, clientY);
+    container = range?.startContainer || null;
+    offset = range?.startOffset || 0;
+  }
+
+  if (!container) {
+    return null;
+  }
+
+  const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : container;
+  if (!element || !block.contains(element)) {
+    return null;
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(block);
+  range.setEnd(container, offset);
+
+  return {
+    element,
+    offset: range.toString().length
+  };
+}
+
+function setButtonGlyph(button, entity) {
+  if (button) {
+    button.innerHTML = entity;
   }
 }
 
@@ -835,12 +1490,14 @@ async function removeProject(id) {
   }
   state.currentProjectId = state.projects[0].id;
   persistProjects(true);
+  deleteProjectFromCloud(id);
   showHome();
   renderHome();
 }
 
 function handleGlobalKeydown(event) {
   const key = event.key.toLowerCase();
+  const code = event.code;
 
   // Ctrl/Cmd + S to Save
   if ((event.ctrlKey || event.metaKey) && key === "s") {
@@ -853,31 +1510,25 @@ function handleGlobalKeydown(event) {
   if ((event.ctrlKey || event.metaKey) && key === "z") {
     event.preventDefault();
     if (event.shiftKey) {
-        execEditorCommand("redo");
+        redo();
     } else {
-        execEditorCommand("undo");
+        undo();
     }
+    renderStudio();
     return;
   }
 
   if ((event.ctrlKey || event.metaKey) && key === "y") {
     event.preventDefault();
-    execEditorCommand("redo");
+    redo();
+    renderStudio();
     return;
   }
 
   // Duplicate Block
   if ((event.ctrlKey || event.metaKey) && key === "d") {
     event.preventDefault();
-    const project = getCurrentProject();
-    const index = getLineIndex(state.activeBlockId);
-    if (index >= 0) {
-        const line = project.lines[index];
-        const newId = addBlock(line.type, line.text, index + 1);
-        renderStudio();
-        focusBlock(newId, true);
-        queueSave();
-    }
+    duplicateActiveBlock();
     return;
   }
 
@@ -893,23 +1544,37 @@ function handleGlobalKeydown(event) {
 
   // Alt + Key for block types
   if (event.altKey && !event.ctrlKey && !event.metaKey) {
-    const code = event.code;
+    const charCode = code?.startsWith('Key') ? code.substring(3).toLowerCase() : key;
     const map = {
-      KeyS: "scene",
-      KeyA: "action",
-      KeyC: "character",
-      KeyD: "dialogue",
-      KeyT: "transition",
-      KeyP: "parenthetical",
-      KeyO: "shot",
-      KeyX: "text",
-      KeyN: "note",
-      KeyU: "dual",
-      KeyI: "image"
+      s: "shot",
+      a: "action",
+      c: "character",
+      d: "dialogue",
+      t: "transition",
+      p: "parenthetical",
+      o: "shot",
+      x: "text",
+      n: "note",
+      u: "dual",
+      i: "image",
+      e: "scene"
     };
-    if (map[code]) {
+
+    const blockType = map[charCode] || map[key];
+
+    if (blockType) {
       event.preventDefault();
-      handleToolSelection(map[code]);
+      handleToolSelection(blockType);
+    }
+
+    // Alt + G for AI Grammar
+    if ((charCode === 'g' || key === 'g') && state.aiAssist) {
+      event.preventDefault();
+      const activeEl = getActiveEditableBlock();
+      if (activeEl) {
+        const row = activeEl.closest('.script-block-row');
+        if (row) AI.triggerAction(row, "Grammar");
+      }
     }
   }
 
@@ -948,7 +1613,7 @@ async function insertHyperlink() {
   insertMenuBlock("text", text);
 }
 
-async function findInScript() {
+export async function findInScript() {
   const project = getCurrentProject();
   if (!project) return;
   const query = await customPrompt("Find text in this script:", state.filterQuery, "Find");
@@ -958,9 +1623,9 @@ async function findInScript() {
     clearScriptFilter();
     return;
   }
-  const match = project.lines.find((line) => `${TYPE_LABELS[line.type]} ${line.text}`.toLowerCase().includes(cleaned));
+  const match = project.lines.find((line) => `${TYPE_LABELS[line.type]} ${getTypeLabel(line.type)} ${line.text}`.toLowerCase().includes(cleaned));
   if (!match) {
-    await customAlert(`No matches found for "${query}".`, "No Matches");
+    await customAlert(t("editor.noMatches", { query }), "No Matches");
     return;
   }
   state.filterQuery = "";
@@ -985,8 +1650,23 @@ function clearScriptFilter() {
 
 function exportTxt() {
   const project = syncProjectFromInputs() || getCurrentProject();
-  const content = [project.title, project.author, "", serializeScript(project)].join("\n");
-  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain");
+  if (!project) return;
+
+  const preparedLines = buildPreparedExportLines(project);
+
+  const coverParts = [
+    project.title || "Untitled Script",
+    project.author ? `by ${project.author}` : "",
+    [project.contact, project.company, project.details].filter(Boolean).join("\n"),
+    project.logline || ""
+  ].filter(Boolean);
+  const cover = coverParts.join("\n\n");
+
+  const pageBreak = "\n\n" + "-".repeat(60) + "\n\n";
+  const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
+
+  const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
+  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
 }
 
 function exportJson() {
@@ -996,21 +1676,93 @@ function exportJson() {
 
 function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
-    const content = buildPrintableDocument(project);
-    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword");
+    if (!project) return;
+    const content = `\uFEFF${buildWordDocument(project)}`;
+    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword;charset=utf-8");
 }
 
-function exportPdf() {
+function exportPdf() { printWithHiddenFrame(); }
+
+function openPreviewWindow(autoPrint) {
   const project = syncProjectFromInputs() || getCurrentProject();
-  if (project) {
-      const meta = {
-          title: project.title,
-          author: project.author,
-          email: project.contact,
-          phone: project.company
-      };
-      exportScript(project.lines, meta);
+  if (!project) return;
+  const previewWindow = window.open("", "_blank", "noopener,noreferrer");
+  if (!previewWindow) {
+    customAlert("Allow pop-ups for this site so EyaWriter can open the print window for PDF export.", "PDF Export");
+    return;
   }
+  previewWindow.document.open();
+  previewWindow.document.write(buildPrintableDocument(project, autoPrint));
+  previewWindow.document.close();
+  previewWindow.focus();
+}
+
+function printWithHiddenFrame() {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project) return;
+
+  const existingFrame = document.querySelector("#printExportFrame");
+  if (existingFrame) {
+    existingFrame.remove();
+  }
+
+  const frame = document.createElement("iframe");
+  frame.id = "printExportFrame";
+  frame.style.position = "fixed";
+  frame.style.right = "0";
+  frame.style.bottom = "0";
+  frame.style.width = "0";
+  frame.style.height = "0";
+  frame.style.border = "0";
+  frame.setAttribute("aria-hidden", "true");
+  document.body.appendChild(frame);
+
+  const cleanup = () => window.setTimeout(() => frame.remove(), 1500);
+  frame.onload = () => {
+    const frameWindow = frame.contentWindow;
+    if (!frameWindow) {
+      cleanup();
+      customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+      return;
+    }
+
+    frameWindow.focus();
+    window.setTimeout(() => {
+      try {
+        frameWindow.print();
+      } catch (error) {
+        console.error("Unable to start PDF print flow", error);
+        customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+      } finally {
+        cleanup();
+      }
+    }, 350);
+  };
+
+  frame.srcdoc = buildPrintableDocument(project, false);
+}
+
+function buildPreparedExportLines(project) {
+  let sceneNumber = 0;
+
+  return project.lines.reduce((accumulator, line) => {
+    const normalized = formatLineText(line.text, line.type);
+    if (!normalized) {
+      return accumulator;
+    }
+
+    if (line.type === "scene") {
+      sceneNumber += 1;
+    }
+
+    accumulator.push({
+      id: line.id,
+      type: line.type,
+      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
+    });
+
+    return accumulator;
+  }, []);
 }
 
 function importFile(event) {

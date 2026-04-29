@@ -21,15 +21,28 @@ export const DEFAULT_SUGGESTIONS = {
   shot: ["CLOSE ON", "WIDE SHOT", "INSERT", "POV", "OVERHEAD SHOT"],
   parenthetical: ["beat", "quietly", "whispering", "under breath", "into phone"],
   note: ["NOTE: "],
-  image: ["IMAGE: ", "INSERT IMAGE: "]
+  image: ["[IMAGE: Rainy street at night]", "[IMAGE: Old photograph on a desk]"]
 };
 export const DEFAULT_VIEW_OPTIONS = {
   ruler: false,
   pageNumbers: true,
-  pageCount: true,
+  pageCount: false,
   showOutline: true,
   textSize: 12
 };
+export const LEFT_PANE_BLOCK_DEFS = [
+  { key: "current", label: "Current Script" },
+  { key: "characters", label: "Characters" },
+  { key: "scenes", label: "Scenes" },
+  { key: "comments", label: "Comments" },
+  { key: "metrics", label: "Metrics" },
+  { key: "tools", label: "Project Tools" }
+];
+export const DEFAULT_LEFT_PANE_BLOCKS = LEFT_PANE_BLOCK_DEFS.map(({ key }) => ({
+  key,
+  visible: true,
+  collapsed: false
+}));
 export const PAGE_UNIT_CAPACITY = 54;
 
 export const state = {
@@ -38,11 +51,23 @@ export const state = {
   activeBlockId: null,
   activeType: "action",
   visibleSuggestions: [],
+  suggestionContext: null,
   saveTimer: null,
   aiAssist: false,
+  grammarCheck: false,
   toolStripCollapsed: false,
   autoNumberScenes: false,
-  theme: "rose",
+  backgroundAnimation: true,
+  theme: "cedar",
+  language: "en",
+  writingLanguage: "en",
+  localBackupEnabled: false,
+  localSaveIntervalMinutes: 5,
+  localSaveTimer: null,
+  localSaveFileHandle: null,
   viewOptions: { ...DEFAULT_VIEW_OPTIONS },
-  filterQuery: ""
+  leftPaneBlocks: DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block })),
+  filterQuery: "",
+  history: [],
+  historyIndex: -1
 };

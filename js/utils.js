@@ -1,5 +1,6 @@
-import { AUTO_UPPERCASE_TYPES, SCENE_TIMES, TYPE_SEQUENCE } from './config.js';
-import { refs } from './dom.js';
+import { SCENE_TIMES, TYPE_SEQUENCE, state } from './config.js';
+
+const FORCED_DISPLAY_UPPERCASE_TYPES = new Set(["scene", "shot", "dual"]);
 
 export function uid(prefix = "line") {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -27,7 +28,9 @@ export function formatDateTime(value) {
   if (Number.isNaN(date.getTime())) {
     return "Recently";
   }
-  return date.toLocaleString(undefined, {
+  const locale = ({ en: "en-US", fr: "fr-FR", de: "de-DE" })[state.language] || undefined;
+  return date.toLocaleString(locale, {
+    localeMatcher: "best fit",
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -36,8 +39,10 @@ export function formatDateTime(value) {
   });
 }
 
-export function stripWrapperChars(value) {
-  return value.replace(/^\[(.*)\]$/s, "$1").replace(/^\((.*)\)$/s, "$1").trim();
+export function stripWrapperChars(value, trim = true) {
+  if (!value) return "";
+  const stripped = value.replace(/[\(\)\[\]]/g, "");
+  return trim ? stripped.trim() : stripped;
 }
 
 export function normalizeLineText(text, type) {
@@ -58,23 +63,31 @@ export function normalizeLineText(text, type) {
   }
 
   if (type === "note") {
-    return `[${stripWrapperChars(compact)}]`;
+    const stripped = stripWrapperChars(compact, false);
+    return stripped ? `[${stripped}]` : "";
   }
 
   if (type === "parenthetical") {
-    return `(${stripWrapperChars(compact)})`;
+    const stripped = stripWrapperChars(compact, false);
+    return stripped ? `(${stripped})` : "";
   }
 
   if (type === "image") {
-    const inner = stripWrapperChars(compact);
-    return inner.toUpperCase().startsWith("IMAGE:") ? inner : `IMAGE: ${inner}`;
-  }
-
-  if (AUTO_UPPERCASE_TYPES.has(type) && refs.autoCapsToggle.checked) {
-    return compact.toUpperCase();
+    const noWrapper = compact.replace(/^\s*\[/, "").replace(/\]\s*$/, "");
+    const content = noWrapper.replace(/^\s*IMAGE:\s*/i, "").trim();
+    return content ? `[IMAGE: ${content}]` : "[IMAGE: ]";
   }
 
   return compact;
+}
+
+export function shouldDisplayUppercase(type) {
+  return FORCED_DISPLAY_UPPERCASE_TYPES.has(type);
+}
+
+export function formatLineText(text, type) {
+  const normalized = normalizeLineText(text, type);
+  return shouldDisplayUppercase(type) ? normalized.toUpperCase() : normalized;
 }
 
 export function getCaretOffset(element) {
@@ -192,7 +205,7 @@ export function inferTypeFromText(line, prevLine, nextLine) {
   if (/^\(.*\)$/.test(line)) return "parenthetical";
   if (/^\[.*\]$/.test(line)) return "note";
   if (/^(CLOSE ON|WIDE SHOT|INSERT|POV|OVERHEAD SHOT)/i.test(line)) return "shot";
-  if (/^IMAGE:/i.test(line)) return "image";
+  if (/^\[?\s*IMAGE:/i.test(line)) return "image";
   if (looksLikeCharacter(line, prevLine, nextLine)) return "character";
   if (prevLine && looksLikeCharacter(prevLine, "", line)) return "dialogue";
   return "action";

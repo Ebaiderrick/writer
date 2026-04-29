@@ -6,23 +6,132 @@
   <title>EyaWriter</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
 <body>
-  <div class="mesh-background" aria-hidden="true">
-    <div class="gradient-container">
-      <div class="gradient-canvas" id="color-base">
-        <div class="blobs-container">
-          <div class="blob" id="color-0"></div>
-          <div class="blob" id="color-1"></div>
-          <div class="blob" id="color-2"></div>
-          <div class="blob" id="color-3"></div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div id="liquid-bg-container" style="position: fixed; inset: 0; z-index: 0; pointer-events: none;"></div>
 
   <div class="app-shell">
-    <section id="homeView" class="home-view">
+    <!-- Auth View -->
+    <section id="authView" class="auth-view">
+      <!-- Theme toggle -->
+      <div class="theme-toggle">
+        <button class="theme-btn active" data-theme="rose">🌹</button>
+        <button class="theme-btn" data-theme="dark">🌙</button>
+        <button class="theme-btn" data-theme="white">☀️</button>
+        <button class="theme-btn" data-theme="navy">🌊</button>
+      </div>
+
+      <!-- Auth Container -->
+      <div class="auth-wrapper">
+        <div class="auth-card">
+          <!-- Logo/Header -->
+          <div class="auth-header">
+            <h1>Eya<span>Writer</span></h1>
+            <p class="tagline">Where stories take flight.</p>
+          </div>
+
+          <!-- Toggle Tabs -->
+          <div class="auth-tabs">
+            <button class="tab-btn active" data-tab="login">Sign In</button>
+            <button class="tab-btn" data-tab="signup">Sign Up</button>
+          </div>
+
+          <!-- Login Form -->
+          <form id="login-form" class="auth-form active">
+            <div class="input-group">
+              <label for="login-email">Email</label>
+              <input type="email" id="login-email" placeholder="you@example.com" required>
+            </div>
+            <div class="input-group">
+              <label for="login-pass">Password</label>
+              <input type="password" id="login-pass" placeholder="••••••••" required>
+            </div>
+            <a href="#" class="forgot-link" id="forgot-password-link">Forgot password?</a>
+            <button type="submit" class="btn-primary">Continue</button>
+            <button type="button" class="btn-google" id="google-signin">
+              <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              Continue with Google
+            </button>
+            <button type="button" class="btn-google" id="demo-login-btn">
+              Try Demo Account
+            </button>
+          </form>
+
+          <!-- Signup Form -->
+          <form id="signup-form" class="auth-form">
+            <div class="input-group">
+              <label for="signup-name">Full Name</label>
+              <input type="text" id="signup-name" placeholder="Jane Doe" required>
+            </div>
+            <div class="input-group">
+              <label for="signup-email">Email</label>
+              <input type="email" id="signup-email" placeholder="you@example.com" required>
+            </div>
+            <div class="input-group">
+              <label for="signup-pass">Password</label>
+              <input type="password" id="signup-pass" placeholder="••••••••" minlength="8" required>
+            </div>
+            <div class="input-group">
+              <label for="signup-pass2">Confirm Password</label>
+              <input type="password" id="signup-pass2" placeholder="••••••••" required>
+            </div>
+            <label class="checkbox-group">
+              <input type="checkbox" required>
+              <span>I agree to the <a href="#">Terms</a> and <a href="#">Privacy Policy</a></span>
+            </label>
+            <button type="submit" class="btn-primary">Create Account</button>
+            <button type="button" class="btn-google" id="google-signup">
+              <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              Continue with Google
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- OTP Verification Modal -->
+      <div id="otp-modal-overlay" class="auth-overlay">
+        <div class="auth-card modal-card">
+          <div class="auth-header">
+            <h1>Verify <span>Email</span></h1>
+            <p class="tagline">Enter the 6-digit code sent to <br><strong id="otp-email-display"></strong></p>
+          </div>
+          <div class="otp-inputs">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+          </div>
+          <p id="otp-error" class="error-msg"></p>
+          <button type="button" id="otp-submit-btn" class="btn-primary">Verify Code</button>
+          <button type="button" id="otp-resend-btn" class="resend-link">Didn't get a code? Resend</button>
+          <button type="button" id="otp-cancel-btn" class="resend-link">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Forgot Password Modal -->
+      <div id="forgot-password-overlay" class="auth-overlay">
+        <div class="auth-card modal-card">
+          <div class="auth-header">
+            <h1>Reset <span>Password</span></h1>
+            <p class="tagline">Enter your email to receive a reset link.</p>
+          </div>
+          <form id="forgot-password-form">
+            <div class="input-group">
+              <label for="forgot-email">Email Address</label>
+              <input type="email" id="forgot-email" placeholder="you@example.com" required>
+            </div>
+            <button type="submit" class="btn-primary">Send Reset Link</button>
+            <button type="button" id="forgot-cancel-btn" class="resend-link">Back to Sign In</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section id="homeView" class="home-view" hidden>
       <header class="home-topbar">
         <div class="nav-stack">
           <nav class="home-nav" aria-label="Primary navigation">
@@ -31,6 +140,7 @@
             <button class="nav-link" type="button" data-home-nav="format">Format</button>
             <button class="nav-link" type="button" data-home-nav="metrics">Metrics</button>
             <button class="nav-link" type="button" data-home-nav="revision">Revision</button>
+            <button class="nav-link" type="button" data-menu-trigger="homeCollabMenu">Collaborate</button>
             <button class="nav-link" type="button" data-home-nav="shortcuts">Shortcuts</button>
           </nav>
           <div id="homeFileMenu" class="nav-menu nav-menu-wide" hidden>
@@ -40,19 +150,50 @@
               <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
             </div>
             <div class="nav-menu-section">
-              <span class="nav-menu-label">Recent Projects</span>
-              <div id="homeRecentProjects" class="recent-project-list"></div>
+              <details id="homeRecentProjectsToggle" class="recent-projects-group" open>
+                <summary class="recent-projects-summary">
+                  <span class="recent-projects-label">Recent Projects</span>
+                </summary>
+                <div id="homeRecentProjects" class="recent-project-list"></div>
+              </details>
             </div>
           </div>
           <div id="homeThemeMenu" class="nav-menu" hidden>
             <span class="nav-menu-label">Theme</span>
             <div class="theme-options">
-              <button class="theme-option" type="button" data-theme-value="rose">Rose</button>
+              <button class="theme-option" type="button" data-theme-value="cedar">Cedar</button>
               <button class="theme-option" type="button" data-theme-value="dark">Dark</button>
               <button class="theme-option" type="button" data-theme-value="white">White</button>
               <button class="theme-option" type="button" data-theme-value="navy">Dark Blue</button>
             </div>
           </div>
+          <div id="homeCollabMenu" class="nav-menu nav-menu-wide" hidden>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Collab Requests <span class="collab-badge" hidden></span></summary>
+              <div class="menu-group-body">
+                <div id="homeCollabRequests" class="collab-requests-list">
+                  <p class="collab-empty">No pending requests.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Sent Invites</summary>
+              <div class="menu-group-body">
+                <div id="studioSentInvites" class="collab-requests-list">
+                  <p class="collab-empty">No invites sent.</p>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+        <div class="home-topbar-user">
+          <button class="user-trigger open-profile-btn" aria-label="Open profile">
+            <div class="user-avatar-circle">
+              <img src="" alt="" class="user-avatar-img" hidden>
+            </div>
+            <span class="user-name" id="homeUserNameDisplay">User</span>
+            <span class="user-arrow">▾</span>
+          </button>
         </div>
       </header>
 
@@ -87,8 +228,9 @@
             <button class="nav-link" type="button" data-menu-trigger="studioEditMenu">Edit</button>
             <button class="nav-link" type="button" data-menu-trigger="studioFormatMenu">Format</button>
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
             <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tools</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioRevisionMenu">Revision</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate</button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
 
@@ -99,29 +241,33 @@
                 <button class="nav-menu-button" type="button" data-menu-action="new-project">New Project</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
                 <button class="nav-menu-button" type="button" data-menu-action="import-file">Import</button>
-                <div class="menu-group-inline">
-                  <span class="nav-menu-label">Recent Projects</span>
+                <details id="studioRecentProjectsToggle" class="recent-projects-group menu-group-inline" open>
+                  <summary class="recent-projects-summary">
+                    <span class="recent-projects-label">Recent Projects</span>
+                  </summary>
                   <div id="studioRecentProjects" class="recent-project-list"></div>
+                </details>
+              </div>
+            </details>
+              <details class="menu-group">
+                <summary class="menu-group-summary">Manage</summary>
+                <div class="menu-group-body">
+                  <button class="nav-menu-button" type="button" data-menu-action="save-project">Save Project</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="save-home">Save &amp; Home</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="rename-project">Rename</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="duplicate-project">Duplicate</button>
+                  <button class="nav-menu-button nav-menu-button-danger" type="button" data-menu-action="delete-project">Delete</button>
                 </div>
-              </div>
-            </details>
-            <details class="menu-group">
-              <summary class="menu-group-summary">Manage</summary>
-              <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="save-project">Save Project</button>
-                <button class="nav-menu-button" type="button" data-menu-action="rename-project">Rename</button>
-                <button class="nav-menu-button" type="button" data-menu-action="duplicate-project">Duplicate</button>
-                <button class="nav-menu-button nav-menu-button-danger" type="button" data-menu-action="delete-project">Delete</button>
-              </div>
-            </details>
-            <details class="menu-group">
-              <summary class="menu-group-summary">Export</summary>
-              <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="export-word">Export as Word</button>
-                <button class="nav-menu-button" type="button" data-menu-action="export-pdf">Export as PDF</button>
-                <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
-              </div>
-            </details>
+              </details>
+              <details class="menu-group">
+                <summary class="menu-group-summary">Export</summary>
+                <div class="menu-group-body">
+                  <button class="nav-menu-button" type="button" data-menu-action="export-txt">Export as TXT</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="export-word">Export as Word</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="export-pdf">Export as PDF</button>
+                  <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
+                </div>
+              </details>
             <details class="menu-group">
               <summary class="menu-group-summary">Output</summary>
               <div class="menu-group-body">
@@ -132,13 +278,32 @@
             </details>
           </div>
 
-          <div id="studioEditMenu" class="nav-menu" hidden>
+          <div id="studioEditMenu" class="nav-menu nav-menu-wide" hidden>
             <details class="menu-group" open>
               <summary class="menu-group-summary">History</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="undo">Undo</button>
                 <button class="nav-menu-button" type="button" data-menu-action="redo">Redo</button>
                 <button class="nav-menu-button" type="button" data-menu-action="select-all">Select All</button>
+              </div>
+            </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Text</summary>
+              <div class="menu-group-body">
+                <details class="menu-group">
+                  <summary class="menu-group-summary">Capitalization</summary>
+                  <div class="menu-group-body">
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-sentence">Sentence Case</button>
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-each">Title Case</button>
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-all">UPPERCASE</button>
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-low">lowercase</button>
+                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-random">Random Case</button>
+                  </div>
+                </details>
+                <button class="nav-menu-button" type="button" data-menu-action="text-copy">Copy</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-cut">Cut</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-paste">Paste</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-duplicate">Duplicate</button>
               </div>
             </details>
             <details class="menu-group">
@@ -183,7 +348,7 @@
               <summary class="menu-group-summary">Theme</summary>
               <div class="menu-group-body">
                 <div class="theme-options">
-                  <button class="theme-option" type="button" data-theme-value="rose">Rose</button>
+                  <button class="theme-option" type="button" data-theme-value="cedar">Cedar</button>
                   <button class="theme-option" type="button" data-theme-value="dark">Dark</button>
                   <button class="theme-option" type="button" data-theme-value="white">White</button>
                   <button class="theme-option" type="button" data-theme-value="navy">Dark Blue</button>
@@ -191,10 +356,7 @@
               </div>
             </details>
             <div class="nav-menu-section">
-              <button class="nav-menu-button" type="button" data-view-toggle="ruler">Ruler</button>
-              <button class="nav-menu-button" type="button" data-view-toggle="pageNumbers">Page Number</button>
-              <button class="nav-menu-button" type="button" data-view-toggle="pageCount">Page Count</button>
-              <button class="nav-menu-button" type="button" data-view-toggle="showOutline">Show Outline</button>
+              <button class="nav-menu-button" type="button" data-view-toggle="pageNumbers">Page numbering</button>
               <button class="nav-menu-button" type="button" data-menu-action="fullscreen">Full Screen</button>
             </div>
             <details class="menu-group">
@@ -210,32 +372,152 @@
             </details>
           </div>
 
-          <div id="studioToolsMenu" class="nav-menu" hidden>
-            <div class="nav-menu-section">
-              <span class="nav-menu-label">Tools</span>
-              <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
-              <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
-            </div>
+          <div id="studioToolsMenu" class="nav-menu nav-menu-wide" hidden>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Tools</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Revision</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
+                <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
+              </div>
+            </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Customize Active Blocks</summary>
+              <div id="leftPaneBlockControls" class="menu-group-body block-customizer-list"></div>
+            </details>
           </div>
 
-          <div id="studioRevisionMenu" class="nav-menu" hidden>
-            <div class="nav-menu-section">
-              <span class="nav-menu-label">Revision</span>
-              <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
-              <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
-            </div>
+          <div id="studioCollabMenu" class="nav-menu nav-menu-wide" hidden>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Invite Collaborator</summary>
+              <div class="menu-group-body">
+                <div class="collab-invite-row">
+                  <input id="collabInviteEmail" type="email" class="collab-input" placeholder="collaborator@email.com">
+                  <button id="collabInviteBtn" class="ghost-button" type="button">Send Invite</button>
+                </div>
+                <p id="collabInviteStatus" class="collab-status-msg"></p>
+              </div>
+            </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Collaborators <span id="collabCount"></span></summary>
+              <div class="menu-group-body">
+                <div id="studioCollaboratorList" class="collaborator-list">
+                  <p class="collab-empty">No collaborators yet.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Collab Requests <span class="collab-badge" hidden></span></summary>
+              <div class="menu-group-body">
+                <div id="studioCollabRequests" class="collab-requests-list">
+                  <p class="collab-empty">No pending requests.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Sent Invites</summary>
+              <div class="menu-group-body">
+                <div id="studioSentInvitesList" class="collab-requests-list">
+                  <p class="collab-empty">No invites sent.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Comments</summary>
+              <div class="menu-group-body">
+                <div class="collab-comment-input">
+                  <textarea id="collabCommentText" class="collab-textarea" placeholder="Add a comment…" rows="3"></textarea>
+                  <button id="collabAddCommentBtn" class="ghost-button" type="button">Post</button>
+                </div>
+                <div id="studioCommentList" class="comment-list">
+                  <p class="collab-empty">No comments yet.</p>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div id="studioSettingsMenu" class="nav-menu" hidden>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Editor</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-auto-number">Auto Number Scenes</button>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">System Language</summary>
+              <div class="menu-group-body">
+                <div class="theme-options language-options">
+                  <button class="theme-option" type="button" data-language-value="en">English</button>
+                  <button class="theme-option" type="button" data-language-value="fr">French</button>
+                  <button class="theme-option" type="button" data-language-value="de">German</button>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Writing Language</summary>
+              <div class="menu-group-body">
+                <div class="theme-options language-options">
+                  <button class="theme-option" type="button" data-writing-language-value="en">English</button>
+                  <button class="theme-option" type="button" data-writing-language-value="fr">French</button>
+                  <button class="theme-option" type="button" data-writing-language-value="de">German</button>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Local Backup</summary>
+              <div class="menu-group-body">
+                <label class="menu-row toggle-row">
+                  <span>Enable local backup</span>
+                  <input type="checkbox" id="localBackupToggle">
+                </label>
+                <div id="localSaveControls" class="local-save-controls" hidden>
+                  <label class="menu-row" for="localSaveInterval">
+                    <span>Backup every</span>
+                    <select id="localSaveInterval">
+                      <option value="5">5 minutes</option>
+                      <option value="10">10 minutes</option>
+                      <option value="60">1 hour</option>
+                    </select>
+                  </label>
+                  <button id="chooseLocalSaveFileBtn" class="ghost-button" type="button">Choose file…</button>
+                  <p id="localSaveFileLabel" class="local-save-file-label">No file selected</p>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
 
         <div class="topbar-actions">
           <span id="saveBadge" class="save-badge">Saved</span>
-          <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
+          <div class="save-home-stack">
+            <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
+            <span id="currentScriptIdFlag" class="script-id-flag" hidden></span>
+          </div>
+          <button class="user-trigger open-profile-btn" aria-label="Open profile">
+            <div class="user-avatar-circle">
+              <img src="" alt="" class="user-avatar-img" hidden>
+            </div>
+            <span class="user-arrow">▾</span>
+          </button>
         </div>
       </header>
 
       <section id="toolStrip" class="tool-strip">
         <div class="tool-strip-row">
-          <button id="leftRailToggle" class="collapse-arrow" type="button" aria-label="Collapse left pane">&lt;</button>
+          <div class="strip-start-controls">
+            <button id="leftRailToggle" class="collapse-arrow" type="button" aria-label="Collapse left pane">◀</button>
+            <label class="mini-radio-option" for="bgAnimationToggle">
+              <input id="bgAnimationToggle" type="checkbox" checked>
+              <span id="bgAnimationToggleLabel">Bg Annim</span>
+            </label>
+          </div>
 
           <div class="tool-groups">
             <div class="tool-buttons" id="toolButtons">
@@ -309,38 +591,35 @@
 
             <div class="studio-options">
               <label class="option-check">
-                <input id="autoCapsToggle" type="checkbox" checked>
-                <span>Auto capitals</span>
-              </label>
-              <label class="option-check">
                 <input id="autoNumberToggle" type="checkbox">
                 <span>Auto number</span>
-              </label>
-              <label class="option-check">
-                <input id="typewriterToggle" type="checkbox">
-                <span>Typewriter focus</span>
               </label>
               <label class="option-check">
                 <input id="aiAssistToggle" type="checkbox">
                 <span>AI Assistance</span>
               </label>
+              <label class="option-check">
+                <input id="grammarCheckToggle" type="checkbox">
+                <span>Grammar check</span>
+              </label>
             </div>
           </div>
 
           <div class="strip-end-controls">
-            <button id="toolStripToggle" class="collapse-arrow" type="button" aria-label="Collapse function bar upward">^</button>
-            <button id="rightRailToggle" class="collapse-arrow" type="button" aria-label="Collapse right pane">&gt;</button>
+            <button id="toolStripToggle" class="collapse-arrow" type="button" aria-label="Collapse function bar upward">▲</button>
+            <button id="rightRailToggle" class="collapse-arrow" type="button" aria-label="Collapse right pane">▶</button>
           </div>
         </div>
 
         <div class="tool-strip-foot">
-          <span id="activeModeLabel" class="active-pill" title="Active block">&gt;</span>
-          <div id="suggestionTray" class="suggestion-tray" hidden>
-            <span id="suggestionTitle" class="suggestion-title">Suggestions</span>
-            <div id="suggestionList" class="suggestion-list"></div>
-          </div>
+          <span id="activeModeLabel" class="active-pill" title="Active block"></span>
         </div>
       </section>
+
+      <div id="suggestionTray" class="suggestion-tray context-menu" hidden>
+        <span id="suggestionTitle" class="suggestion-title">Suggestions</span>
+        <div id="suggestionList" class="suggestion-list"></div>
+      </div>
 
       <section id="studioLayout" class="studio-layout">
         <aside id="leftPane" class="left-pane">
@@ -350,17 +629,19 @@
                 <h2>Active Block</h2>
                 <p>Script details, scenes, characters, and metrics</p>
               </div>
-              <button id="leftPaneSectionToggle" class="pane-collapse" type="button" aria-label="Collapse active block">^</button>
+              <button id="leftPaneSectionToggle" class="pane-collapse" type="button" aria-label="Collapse active block">▲</button>
             </div>
 
             <div id="leftPaneBody" class="pane-shell-body">
-              <section class="panel cover-panel section-current">
+              <section class="panel cover-panel section-current" data-left-pane-block="current" data-left-pane-label="Current Script">
                 <div class="panel-head">
                   <div>
                     <h3>Current Script</h3>
                     <p>Simple overview like your reference</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="current" aria-label="Collapse Current Script">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div class="field-grid">
                   <label class="field field-wide">
                     <span>Title</span>
@@ -387,19 +668,22 @@
                     <textarea id="loglineInput"></textarea>
                   </label>
                 </div>
+                </div>
               </section>
 
-              <section class="panel list-panel section-tools">
+              <section class="panel list-panel section-tools" data-left-pane-block="tools" data-left-pane-label="Project Tools">
                 <div class="panel-head">
                   <div>
                     <h3>Project Tools</h3>
                     <p>Keep every control close by</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="tools" aria-label="Collapse Project Tools">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div class="project-tools-actions">
                   <button id="loadSampleBtn" class="ghost-button project-tool-button" type="button">Load sample</button>
                   <label class="ghost-button import-button project-tool-button">
-                    Import
+                    <span class="import-button-label">Import</span>
                     <input id="fileInput" type="file" accept=".txt,.fountain,.md,.json">
                   </label>
                   <button id="saveBtn" class="ghost-button project-tool-button" type="button">Save</button>
@@ -412,42 +696,81 @@
                   <button id="duplicateProjectBtn" class="ghost-button" type="button">Duplicate</button>
                   <button id="deleteProjectBtn" class="ghost-button danger-button" type="button">Delete</button>
                 </div>
+                </div>
               </section>
 
-              <section class="panel list-panel section-scenes">
+              <section class="panel list-panel section-scenes" data-left-pane-block="scenes" data-left-pane-label="Scenes">
                 <div class="panel-head">
                   <div>
                     <h3>Scenes</h3>
                     <p id="sceneCount">0 scenes</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="scenes" aria-label="Collapse Scenes">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div id="sceneList" class="list-stack"></div>
+                </div>
               </section>
 
-              <section class="panel list-panel section-characters">
+              <section class="panel list-panel section-characters" data-left-pane-block="characters" data-left-pane-label="Characters">
                 <div class="panel-head">
                   <div>
                     <h3>Characters</h3>
                     <p>Suggested again when needed</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="characters" aria-label="Collapse Characters">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div id="characterList" class="list-stack"></div>
+                </div>
               </section>
 
-              <section class="panel metrics-panel section-metrics">
+              <section class="panel section-comments" data-left-pane-block="comments" data-left-pane-label="Comments">
+                <div class="panel-head">
+                  <div>
+                    <h3>Comments</h3>
+                    <p id="commentCount">0 comments</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="comments" aria-label="Collapse Comments">▼</button>
+                </div>
+                <div class="panel-section-body">
+                  <div class="comment-pane-filters">
+                    <select id="commentFilterUser" class="comment-filter-select">
+                      <option value="all">All users</option>
+                      <option value="mine">Mine</option>
+                    </select>
+                    <select id="commentFilterStatus" class="comment-filter-select">
+                      <option value="all">All</option>
+                      <option value="unresolved">Unresolved</option>
+                      <option value="resolved">Resolved</option>
+                    </select>
+                    <select id="commentFilterSort" class="comment-filter-select">
+                      <option value="line">By line</option>
+                      <option value="date">By date</option>
+                    </select>
+                  </div>
+                  <button id="viewCommentsBtn" class="ghost-button comment-view-btn">View Comments</button>
+                </div>
+              </section>
+
+              <section class="panel metrics-panel section-metrics" data-left-pane-block="metrics" data-left-pane-label="Metrics">
                 <div class="panel-head">
                   <div>
                     <h3>Metrics</h3>
                     <p>Live writing totals</p>
                   </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="metrics" aria-label="Collapse Metrics">▼</button>
                 </div>
+                <div class="panel-section-body">
                 <div class="metric-grid">
                   <div><span>Words</span><strong id="wordCount">0</strong></div>
                   <div><span>Pages est.</span><strong id="pageCount">0</strong></div>
                   <div><span>Characters</span><strong id="characterCount">0</strong></div>
                   <div><span>Notes</span><strong id="noteCount">0</strong></div>
                 </div>
+                </div>
               </section>
+              <p id="leftPaneEmptyState" class="pane-empty-state" hidden>No active blocks selected. Use Tools to customize this pane.</p>
             </div>
           </div>
         </aside>
@@ -471,10 +794,8 @@
             </section>
 
             <section class="page-wrap">
-              <div id="screenplay">
-                <div id="coverPreview" class="cover-preview"></div>
-                <div id="screenplayEditor" class="screenplay-editor" contenteditable="true" aria-label="Screenplay editor"></div>
-              </div>
+              <div id="coverPreview" class="cover-preview"></div>
+              <div id="screenplayEditor" class="screenplay-editor" aria-label="Screenplay editor"></div>
             </section>
           </div>
         </main>
@@ -488,7 +809,7 @@
                 <h2>Preview</h2>
                 <p>Print-style page</p>
               </div>
-              <button id="rightPaneSectionToggle" class="pane-collapse" type="button" aria-label="Collapse preview">^</button>
+              <button id="rightPaneSectionToggle" class="pane-collapse" type="button" aria-label="Collapse preview">▲</button>
             </div>
             <div id="rightPaneBody" class="pane-shell-body">
               <section class="panel preview-panel">
@@ -504,7 +825,10 @@
   <template id="projectCardTemplate">
     <article class="project-card">
       <div class="project-card-top">
-        <h3 class="project-card-title"></h3>
+        <div class="project-card-heading">
+          <h3 class="project-card-title"></h3>
+          <span class="project-script-id script-id-flag"></span>
+        </div>
         <button class="project-delete" type="button" aria-label="Delete script">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6m4-6v6"/></svg>
         </button>
@@ -528,8 +852,83 @@
   </template>
 
   <template id="blockTemplate">
-    <div class="line" contenteditable="true" spellcheck="true"></div>
+    <div class="script-block-row">
+      <button class="scene-toggle" type="button" hidden aria-label="Collapse scene">▼</button>
+      <span class="block-tag"></span>
+      <div class="script-block" contenteditable="true" spellcheck="true"></div>
+    </div>
   </template>
+
+  <div id="contextMenu" class="context-menu" hidden>
+    <div class="menu-item" data-action="cut">Cut <span class="menu-shortcut">Ctrl+X</span></div>
+    <div class="menu-item" data-action="copy">Copy <span class="menu-shortcut">Ctrl+C</span></div>
+    <div class="menu-item" data-action="paste">Paste <span class="menu-shortcut">Ctrl+V</span></div>
+    <div class="menu-item" data-action="duplicate">Duplicate <span class="menu-shortcut">Ctrl+D</span></div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" data-action="search">Search <span class="menu-shortcut">Ctrl+F</span></div>
+    <div class="menu-divider"></div>
+    <div class="menu-item has-submenu">
+      Text Formatting
+      <div class="submenu">
+        <div class="menu-item" data-action="bold">Bold <span class="menu-shortcut">Ctrl+B</span></div>
+        <div class="menu-item" data-action="italic">Italic <span class="menu-shortcut">Ctrl+I</span></div>
+        <div class="menu-item" data-action="underline">Underline <span class="menu-shortcut">Ctrl+U</span></div>
+      </div>
+    </div>
+    <div class="menu-item has-submenu">
+      Capitalization
+      <div class="submenu">
+        <div class="menu-item" data-action="caps-sentence">Sentence case</div>
+        <div class="menu-item" data-action="caps-all">CAPITALIZE ALL</div>
+        <div class="menu-item" data-action="caps-each">Capitalize Each Word</div>
+        <div class="menu-item" data-action="caps-low">low key</div>
+        <div class="menu-item" data-action="caps-random">rAnDoM cApS</div>
+      </div>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" data-action="ai-grammar">AI Grammar Check <span class="menu-shortcut">Alt+G</span></div>
+    <div class="menu-item" data-action="intelligent-split">Intelligent Split <span class="menu-shortcut">`+Enter</span></div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" data-action="comment">Comment on line</div>
+  </div>
+
+  <div id="commentComposeOverlay" class="comment-compose-overlay" hidden>
+    <div class="comment-compose-header">
+      <span class="comment-compose-label">Add comment</span>
+      <button id="commentComposeCancel" class="comment-compose-close" type="button" aria-label="Cancel">✕</button>
+    </div>
+    <textarea id="commentComposeText" class="comment-compose-textarea" placeholder="Write a comment…" rows="3"></textarea>
+    <div class="comment-compose-footer">
+      <button id="commentComposeSubmit" class="ghost-button comment-compose-submit" type="button">Post</button>
+    </div>
+  </div>
+
+  <dialog id="commentListDialog" class="comment-list-dialog">
+    <div class="cld-inner">
+      <div class="cld-header">
+        <h3 id="cldTitle">Comments</h3>
+        <button id="cldCloseBtn" class="ghost-button cld-close" aria-label="Close">✕</button>
+      </div>
+      <div id="cldList" class="cld-list"></div>
+    </div>
+  </dialog>
+
+  <dialog id="commentDetailDialog" class="comment-detail-dialog">
+    <div class="cd-body">
+      <div class="cd-meta">
+        <span id="cdAuthor" class="cd-author"></span>
+        <span id="cdTime" class="cd-time"></span>
+        <span id="cdResolvedPill" class="comment-resolved-pill" hidden></span>
+      </div>
+      <p id="cdText" class="cd-text"></p>
+      <div id="cdReplies" class="cd-replies"></div>
+      <div class="cd-actions">
+        <button id="cdResolveBtn" class="ghost-button cd-resolve-btn"></button>
+        <button id="cdDeleteBtn" class="ghost-button cd-delete-btn">Delete</button>
+        <button id="cdCloseBtn" class="ghost-button">Close</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="customModal" class="custom-modal">
     <div class="modal-content">
@@ -556,24 +955,80 @@
         <p><kbd>Ctrl/Cmd + Z</kbd><span>Undo</span></p>
         <p><kbd>Ctrl/Cmd + Y</kbd><span>Redo</span></p>
         <p><kbd>Ctrl/Cmd + D</kbd><span>Duplicate Block</span></p>
-        <p><kbd>Alt + S</kbd><span>Scene (KeyS)</span></p>
-        <p><kbd>Alt + A</kbd><span>Action (KeyA)</span></p>
-        <p><kbd>Alt + C</kbd><span>Character (KeyC)</span></p>
-        <p><kbd>Alt + D</kbd><span>Dialogue (KeyD)</span></p>
-        <p><kbd>Alt + T</kbd><span>Transition (KeyT)</span></p>
-        <p><kbd>Alt + P</kbd><span>Parenthetical (KeyP)</span></p>
-        <p><kbd>Alt + O</kbd><span>Shot (KeyO)</span></p>
-        <p><kbd>Alt + X</kbd><span>Text (KeyX)</span></p>
-        <p><kbd>Alt + N</kbd><span>Note (KeyN)</span></p>
-        <p><kbd>Alt + U</kbd><span>Dual (KeyU)</span></p>
-        <p><kbd>Alt + I</kbd><span>Image (KeyI)</span></p>
+        <p><kbd>Alt + E</kbd><span>Scene</span></p>
+        <p><kbd>Alt + A</kbd><span>Action</span></p>
+        <p><kbd>Alt + C</kbd><span>Character</span></p>
+        <p><kbd>Alt + D</kbd><span>Dialogue</span></p>
+        <p><kbd>Alt + T</kbd><span>Transition</span></p>
+        <p><kbd>Alt + P</kbd><span>Parenthetical</span></p>
+        <p><kbd>Alt + S</kbd><span>Shot</span></p>
+        <p><kbd>Alt + X</kbd><span>Text</span></p>
+        <p><kbd>Alt + N</kbd><span>Note</span></p>
+        <p><kbd>Alt + U</kbd><span>Dual</span></p>
+        <p><kbd>Alt + I</kbd><span>Image</span></p>
+        <p><kbd>Alt + G</kbd><span>AI Grammar Check</span></p>
         <p><kbd>Tab</kbd><span>Cycle block type</span></p>
-        <p><kbd>↑ / ↓</kbd><span>Previous / Next Block</span></p>
-        <p><kbd>Ctrl + ↑ / ↓</kbd><span>Previous / Next Scene</span></p>
+        <p><kbd>▲ / ▼</kbd><span>Previous / Next Block</span></p>
+        <p><kbd>Ctrl + ▲ / ▼</kbd><span>Previous / Next Scene</span></p>
         <p><kbd>1-9</kbd><span>Choose suggestion</span></p>
       </div>
     </form>
   </dialog>
+
+  <!-- Profile Popup Overlay -->
+  <div class="popup-overlay" id="profile-popup">
+    <div class="popup-card">
+      <!-- Close Button -->
+      <button class="popup-close" id="close-profile" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+
+      <!-- Profile Header -->
+      <div class="profile-header">
+        <div class="avatar-wrapper">
+          <img src="" alt="Profile" class="avatar" id="profile-img">
+          <button class="avatar-edit" id="change-photo-btn" aria-label="Change photo">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+          </button>
+          <input type="file" id="profile-upload" accept="image/*" hidden>
+        </div>
+        <h2 class="profile-name" id="profile-name">Jane Doe</h2>
+        <p class="profile-email" id="profile-email">jane@example.com</p>
+      </div>
+
+      <!-- Profile Writeup -->
+      <div class="profile-bio-container">
+        <label class="bio-label">About</label>
+        <p class="bio-text" id="profile-bio">Tell us about yourself...</p>
+        <div class="bio-meta">
+          <span id="word-count">0</span>/100 words
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="profile-actions">
+        <button class="profile-action-btn" id="edit-profile">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          <span>Edit</span>
+        </button>
+        <button class="profile-action-btn profile-action-logout" id="profile-signout-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span>Logout</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="js/main.js"></script>
 </body>

@@ -18,38 +18,49 @@ export const AI = (() => {
   }
 
   function getActions(type) {
+    const actions = [];
     switch (type) {
       case "scene":
-        return ["Predict", "Expand", "Fix", "Add Conflict", "Cinematic"];
+        actions.push("Predict", "Expand", "Fix", "Add Conflict", "Cinematic");
+        break;
       case "dialogue":
-        return ["Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext"];
+        actions.push("Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext");
+        break;
       case "action":
-        return ["Continue", "Visualize", "Add Tension", "Describe"];
+        actions.push("Continue", "Visualize", "Add Tension", "Describe");
+        break;
       case "shot":
-        return ["Camera Angle", "Improve Shot", "Add Movement"];
+        actions.push("Camera Angle", "Improve Shot", "Add Movement");
+        break;
       default:
-        return ["Expand"];
+        actions.push("Expand");
     }
+
+    if (state.grammarCheck) {
+      actions.unshift("Grammar");
+    }
+
+    return actions;
   }
 
   function handleHover(event) {
-    const line = event.target.closest(".line");
-    if (!line) {
+    const row = event.target.closest(".script-block-row");
+    if (!row) {
       return;
     }
-    addAIButton(line);
+    addAIButton(row);
   }
 
   function handleFocus(event) {
-    const line = event.target.closest(".line");
-    if (!line) {
+    const row = event.target.closest(".script-block-row");
+    if (!row) {
       return;
     }
-    addAIButton(line);
+    addAIButton(row);
   }
 
-  function addAIButton(line) {
-    if (!state.aiAssist || line.querySelector(".ai-btn")) {
+  function addAIButton(blockRow) {
+    if (!state.aiAssist || blockRow.querySelector(".ai-btn")) {
       return;
     }
 
@@ -62,7 +73,7 @@ export const AI = (() => {
 
     button.style.position = "absolute";
     button.style.right = "8px";
-    button.style.top = "2px";
+    button.style.top = "6px";
     button.style.border = "none";
     button.style.background = "transparent";
     button.style.cursor = "pointer";
@@ -71,19 +82,19 @@ export const AI = (() => {
 
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      activeBlock = line;
-      openMenu(line);
+      activeBlock = blockRow.querySelector(".script-block");
+      openMenu(blockRow);
     });
 
-    line.style.position = "relative";
-    line.appendChild(button);
+    blockRow.style.position = "relative";
+    blockRow.appendChild(button);
   }
 
-  function openMenu(line) {
+  function openMenu(blockRow) {
     closeMenu();
 
     if (!activeBlock) {
-      activeBlock = line;
+      activeBlock = blockRow.querySelector(".script-block");
     }
 
     const type = activeBlock?.dataset.type || "action";
@@ -107,6 +118,7 @@ export const AI = (() => {
       const item = document.createElement("div");
       item.className = "ai-menu-item";
       item.innerText = action;
+      if (action === "Grammar") item.classList.add("is-grammar");
       item.style.padding = "6px 10px";
       item.style.cursor = "pointer";
 
@@ -114,14 +126,16 @@ export const AI = (() => {
         item.style.background = "var(--soft)";
       };
       item.onmouseleave = () => {
-        item.style.background = "transparent";
+        if (!item.classList.contains("is-selected")) {
+          item.style.background = "transparent";
+        }
       };
       item.onclick = () => showInput(action);
 
       menuEl.appendChild(item);
     });
 
-    line.appendChild(menuEl);
+    blockRow.appendChild(menuEl);
   }
 
   function closeMenu() {
@@ -156,15 +170,30 @@ export const AI = (() => {
       inputWrapperEl.remove();
     }
 
+    // Highlight selected action
+    menuEl.querySelectorAll(".ai-menu-item").forEach(item => {
+      const isSelected = item.innerText === action;
+      item.classList.toggle("is-selected", isSelected);
+      item.style.background = isSelected ? "var(--accent-soft)" : "transparent";
+      item.style.color = isSelected ? "var(--accent-strong)" : "var(--ink)";
+    });
+
     inputWrapperEl = document.createElement("div");
     inputWrapperEl.className = "ai-input-wrapper";
     inputWrapperEl.style.display = "flex";
-    inputWrapperEl.style.gap = "4px";
-    inputWrapperEl.style.marginTop = "8px";
+    inputWrapperEl.style.flexDirection = "column";
+    inputWrapperEl.style.gap = "8px";
+    inputWrapperEl.style.marginTop = "12px";
+    inputWrapperEl.style.paddingTop = "10px";
+    inputWrapperEl.style.borderTop = "1px solid var(--line)";
+
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "4px";
 
     const input = document.createElement("input");
     input.className = "ai-input";
-    input.placeholder = `Optional instruction for "${action}"`;
+    input.placeholder = `Extra details for "${action}" (optional)...`;
     input.style.flex = "1";
     input.style.padding = "6px 10px";
     input.style.borderRadius = "6px";
@@ -176,7 +205,7 @@ export const AI = (() => {
     const submitButton = document.createElement("button");
     submitButton.className = "ai-submit-btn";
     submitButton.type = "button";
-    submitButton.innerText = "Go";
+    submitButton.innerText = "▶";
     submitButton.style.padding = "0 10px";
     submitButton.style.borderRadius = "6px";
     submitButton.style.border = "none";
@@ -198,7 +227,8 @@ export const AI = (() => {
 
     submitButton.onclick = trigger;
 
-    inputWrapperEl.append(input, submitButton);
+    row.append(input, submitButton);
+    inputWrapperEl.appendChild(row);
     menuEl.appendChild(inputWrapperEl);
     input.focus();
   }
@@ -214,7 +244,7 @@ export const AI = (() => {
     const request = {
       type: activeBlock.dataset.type,
       action,
-      current,
+      current: current || "",
       instruction,
       context: formatScenesForAI(scenes)
     };
@@ -234,7 +264,13 @@ export const AI = (() => {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.error || "The AI assistant request failed.");
+        let msg = data.error || `AI assistant failed (Status ${response.status})`;
+        if (response.status === 401) msg = "Invalid API Key. Please check your OpenRouter configuration.";
+        if (response.status === 402) msg = "Insufficient credits in your OpenRouter account.";
+        if (response.status === 403) msg = "Access forbidden. Your OpenRouter key may be restricted.";
+        if (response.status === 429) msg = "Rate limit exceeded. Please wait a moment.";
+        if (response.status === 502) msg = "The AI model is temporarily unavailable. Please try again later.";
+        throw new Error(msg);
       }
 
       const output = normalizeAiOutput(data);
@@ -385,14 +421,14 @@ export const AI = (() => {
   function setLoadingState(submitButton, input, isLoading) {
     if (submitButton) {
       submitButton.disabled = isLoading;
-      submitButton.innerText = isLoading ? "..." : "Go";
+      submitButton.innerText = isLoading ? "..." : "▶";
     }
 
     if (input) {
       input.disabled = isLoading;
     }
 
-    const triggerButton = activeBlock?.querySelector(".ai-btn");
+    const triggerButton = activeBlock?.closest(".script-block-row")?.querySelector(".ai-btn");
     if (triggerButton) {
       triggerButton.classList.toggle("is-busy", Boolean(isLoading));
       triggerButton.setAttribute("aria-busy", isLoading ? "true" : "false");
@@ -489,5 +525,22 @@ export const AI = (() => {
     return button;
   }
 
-  return { init };
+  function triggerAction(blockRow, action) {
+    activeBlock = blockRow.querySelector(".script-block");
+    if (!activeBlock) return;
+
+    if (action === "Grammar") {
+      const text = activeBlock.innerText.trim();
+      if (text) {
+        openMenu(blockRow);
+        runAI(action, "", null, null);
+      } else {
+        openMenu(blockRow);
+      }
+    } else {
+      openMenu(blockRow);
+    }
+  }
+
+  return { init, triggerAction };
 })();
