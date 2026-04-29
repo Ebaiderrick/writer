@@ -3519,3 +3519,73 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 .status-pill.pending { background: #fef3c7; color: #92400e; }
 .status-pill.accepted { background: #d1fae5; color: #065f46; }
 .status-pill.declined { background: #fee2e2; color: #991b1b; }
+
+/* ===== CONTEXT MENU ===== */
+.context-menu {
+  position: fixed;
+  min-width: 176px;
+  padding: 6px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  box-shadow: 0 18px 48px rgba(16, 24, 40, 0.22);
+  z-index: 2000;
+  color: var(--ink);
+}
+
+.menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  color: color-mix(in srgb, var(--ink) 90%, var(--muted));
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.menu-item:hover {
+  background: var(--control-bg);
+}
+
+.menu-item.has-submenu::after {
+  content: ">";
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.menu-shortcut {
+  color: color-mix(in srgb, var(--ink) 42%, var(--muted));
+  font-size: 0.72rem;
+}
+
+.menu-divider {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--line);
+}
+
+.submenu {
+  position: absolute;
+  top: 0;
+  left: calc(100% - 6px);
+  min-width: 176px;
+  padding: 6px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  box-shadow: 0 18px 48px rgba(16, 24, 40, 0.22);
+  display: none;
+  z-index: 2001;
+}
+
+.menu-item.has-submenu:hover > .submenu {
+  display: block;
+}
+
+.context-menu.overflow-right .submenu {
+  left: auto;
+  right: calc(100% - 6px);
+}
