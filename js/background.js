@@ -354,43 +354,43 @@ class LiquidApp {
 
     this.palettes = {
       cedar: {
-        background: 0xf4efe7,
-        base: hexToVector3(0xf8f2e8),
+        background: 0xffffff,
+        base: hexToVector3(0xffffff),
         colors: [
-          hexToVector3(0xffafbd),
-          hexToVector3(0xffc3a0),
-          hexToVector3(0xff9a9e),
-          hexToVector3(0xfecfef),
-          hexToVector3(0xa18cd1),
-          hexToVector3(0xfad0c4)
+          hexToVector3(0xffff8d),
+          hexToVector3(0xfff176),
+          hexToVector3(0xffffff),
+          hexToVector3(0xfff59d),
+          hexToVector3(0xffffff),
+          hexToVector3(0xffe082)
         ],
         settings: {
-          speed: 0.4,
-          intensity: 1.3,
-          grainIntensity: 0.02,
-          gradientSize: 0.8,
+          speed: 0.3,
+          intensity: 1.15,
+          grainIntensity: 0.01,
+          gradientSize: 0.9,
           gradientCount: 6.0,
           color1Weight: 1.0,
           color2Weight: 1.0,
-          touchStrength: 0.3
+          touchStrength: 0.2
         }
       },
       white: {
-        background: 0xf0f4fa,
-        base: hexToVector3(0xf5f8ff),
+        background: 0xffffff,
+        base: hexToVector3(0xffffff),
         colors: [
-          hexToVector3(0x84fab0),
-          hexToVector3(0x8fd3f4),
-          hexToVector3(0xa1c4fd),
-          hexToVector3(0xc2e9fb),
-          hexToVector3(0xcfd9df),
-          hexToVector3(0xe2ebf0)
+          hexToVector3(0x80d8ff),
+          hexToVector3(0x82fef7),
+          hexToVector3(0xb2ff59),
+          hexToVector3(0xe1f5fe),
+          hexToVector3(0xf0fff0),
+          hexToVector3(0xccff90)
         ],
         settings: {
-          speed: 0.4,
-          intensity: 1.3,
-          grainIntensity: 0.015,
-          gradientSize: 0.8,
+          speed: 0.3,
+          intensity: 1.15,
+          grainIntensity: 0.01,
+          gradientSize: 0.9,
           gradientCount: 6.0,
           color1Weight: 1.0,
           color2Weight: 1.0,
