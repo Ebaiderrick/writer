@@ -357,44 +357,44 @@ class LiquidApp {
         background: 0xf4efe7,
         base: hexToVector3(0xf8f2e8),
         colors: [
-          hexToVector3(0xFF6C50),
-          hexToVector3(0xE0DA3E),
-          hexToVector3(0xFA2A00),
-          hexToVector3(0x830707),
-          hexToVector3(0xEF25DE),
-          hexToVector3(0xFA0057)
+          hexToVector3(0xffafbd),
+          hexToVector3(0xffc3a0),
+          hexToVector3(0xff9a9e),
+          hexToVector3(0xfecfef),
+          hexToVector3(0xa18cd1),
+          hexToVector3(0xfad0c4)
         ],
         settings: {
-          speed: 0.8,
-          intensity: 1.4,
+          speed: 0.4,
+          intensity: 1.3,
           grainIntensity: 0.02,
-          gradientSize: 0.65,
-          gradientCount: 10.0,
-          color1Weight: 0.86,
-          color2Weight: 0.9,
-          touchStrength: 0.5
+          gradientSize: 0.8,
+          gradientCount: 6.0,
+          color1Weight: 1.0,
+          color2Weight: 1.0,
+          touchStrength: 0.3
         }
       },
       white: {
         background: 0xf0f4fa,
         base: hexToVector3(0xf5f8ff),
         colors: [
-          hexToVector3(0x010809),
-          hexToVector3(0x40E0D0),
-          hexToVector3(0x16DF2D),
-          hexToVector3(0x40E0D0),
-          hexToVector3(0x5BE69E),
-          hexToVector3(0x063A7F)
+          hexToVector3(0x84fab0),
+          hexToVector3(0x8fd3f4),
+          hexToVector3(0xa1c4fd),
+          hexToVector3(0xc2e9fb),
+          hexToVector3(0xcfd9df),
+          hexToVector3(0xe2ebf0)
         ],
         settings: {
-          speed: 0.7,
+          speed: 0.4,
           intensity: 1.3,
           grainIntensity: 0.015,
-          gradientSize: 0.75,
-          gradientCount: 8.0,
-          color1Weight: 0.88,
-          color2Weight: 0.78,
-          touchStrength: 0.4
+          gradientSize: 0.8,
+          gradientCount: 6.0,
+          color1Weight: 1.0,
+          color2Weight: 1.0,
+          touchStrength: 0.2
         }
       },
       dark: {
