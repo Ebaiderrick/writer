@@ -168,8 +168,11 @@ export function updateActiveTool() {
 
 export function updateSuggestions() {
   const line = getLine(state.activeBlockId);
-  const type = line?.type || state.activeType;
-  const suggestions = buildSuggestions(type, line?.text || "");
+  if (!line) return;
+  const activeBlock = getActiveEditableBlock();
+  const text = activeBlock?.textContent || "";
+  const type = line.type;
+  const suggestions = buildSuggestions(type, text);
   renderSuggestionTray(t("editor.suggestions", { type: getTypeLabel(type) }), suggestions, getActiveBlockSuggestionAnchor());
 }
 
@@ -180,16 +183,23 @@ export function buildSuggestions(type, currentText) {
     return [];
   }
 
-  if (type === "character") {
-    const all = [...new Set(project.lines
-      .filter((line) => line.type === "character" && line.text.trim())
-      .map((line) => normalizeLineText(line.text, "character")))];
+  if (type === "character" || type === "dual") {
+    const names = [];
+    project.lines.forEach(l => {
+      if ((l.type === "character" || l.type === "dual") && l.text.trim()) {
+        names.push(normalizeLineText(l.text, l.type));
+      }
+      if (l.type === "dual" && l.secondary?.trim()) {
+        names.push(normalizeLineText(l.secondary, "dual"));
+      }
+    });
+    const all = [...new Set(names)];
     const lead = getSuggestedNextSpeaker(getLineIndex(state.activeBlockId));
     return [lead, ...all]
       .filter(Boolean)
       .filter((value, index, list) => list.indexOf(value) === index)
-      .filter((value) => !trimmed || value.toUpperCase().includes(trimmed))
-      .map((value) => ({ label: formatLineText(value, "character"), value }));
+      .filter((value) => !trimmed || value.toUpperCase().startsWith(trimmed))
+      .map((value) => ({ label: formatLineText(value, type), value }));
   }
 
   if (type === "scene") {
@@ -199,19 +209,19 @@ export function buildSuggestions(type, currentText) {
     const previousScene = getPreviousSceneHeading(getLineIndex(state.activeBlockId));
     const carryOvers = previousScene ? buildContinuedSceneSuggestions(previousScene) : [];
     return [...new Set([...DEFAULT_SUGGESTIONS.scene, ...carryOvers, ...sceneHeadings])]
-      .filter((value) => !trimmed || value.toUpperCase().includes(trimmed))
+      .filter((value) => !trimmed || value.toUpperCase().startsWith(trimmed))
       .map((value) => ({ label: formatLineText(value, "scene"), value }));
   }
 
   if (type === "transition") {
     return [...new Set(DEFAULT_SUGGESTIONS.transition)]
-      .filter((value) => !trimmed || value.includes(trimmed))
+      .filter((value) => !trimmed || value.startsWith(trimmed))
       .map((value) => ({ label: formatLineText(value, "transition"), value }));
   }
 
   if (type === "shot" || type === "parenthetical" || type === "note" || type === "image") {
     return (DEFAULT_SUGGESTIONS[type] || [])
-      .filter((value) => !trimmed || value.toUpperCase().includes(trimmed))
+      .filter((value) => !trimmed || value.toUpperCase().startsWith(trimmed))
       .map((value) => ({
         label: type === "parenthetical" ? `(${value})` : (type === "note" ? `[${value}]` : formatLineText(value, type)),
         value
@@ -277,6 +287,15 @@ export function focusBlock(id, selectAll = false) {
 }
 
 export function getActiveEditableBlock() {
+  const selection = window.getSelection();
+  if (selection?.rangeCount) {
+    const node = selection.getRangeAt(0).startContainer;
+    const block = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    const closest = block.closest(".script-block");
+    if (closest && closest.dataset.id === state.activeBlockId) {
+      return closest;
+    }
+  }
   return refs.screenplayEditor.querySelector(`.script-block[data-id="${state.activeBlockId}"]:not([data-secondary])`);
 }
 
@@ -312,18 +331,19 @@ export function refreshEditableBlockDisplay(block, line = getLine(block?.dataset
 }
 
 function renderBlockContent(block, line, project, spellingLexicon = null) {
+  const text = block.dataset.secondary === "true" ? line.secondary : line.text;
   if (!state.grammarCheck || !hasLanguageDictionary(state.writingLanguage)) {
-    block.textContent = line.text;
+    block.textContent = text;
     return;
   }
 
   const lexicon = spellingLexicon || buildProjectLexicon(project, state.writingLanguage);
-  const spelling = buildSpellingIssues(line.text, {
+  const spelling = buildSpellingIssues(text, {
     language: state.writingLanguage,
     project,
     lexicon
   });
-  const grammar = buildGrammarIssues(line.text, { language: state.writingLanguage });
+  const grammar = buildGrammarIssues(text, { language: state.writingLanguage });
 
   // Merge and sort; grammar takes priority over spelling for the same range
   const spellFiltered = spelling.filter(
@@ -331,7 +351,7 @@ function renderBlockContent(block, line, project, spellingLexicon = null) {
   );
   const issues = [...spellFiltered, ...grammar].sort((a, b) => a.start - b.start);
 
-  renderSpellingIssues(block, line.text, issues);
+  renderSpellingIssues(block, text, issues);
 }
 
 export function hideSuggestionTray(clearSuggestions = false) {

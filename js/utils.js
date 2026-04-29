@@ -1,6 +1,6 @@
 import { SCENE_TIMES, TYPE_SEQUENCE, state } from './config.js';
 
-const FORCED_DISPLAY_UPPERCASE_TYPES = new Set(["scene", "shot"]);
+const FORCED_DISPLAY_UPPERCASE_TYPES = new Set(["scene", "shot", "dual"]);
 
 export function uid(prefix = "line") {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;

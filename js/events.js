@@ -609,11 +609,13 @@ function handleBlockInput(id, element) {
 
   // Secondary (right) field of a dual row: update line.secondary only
   if (element.dataset.secondary === "true") {
-    const normalized = normalizeLineText(element.textContent || "", line.type);
+    const normalized = normalizeLineText(element.textContent || "", "dual");
     line.secondary = normalized;
     project.updatedAt = new Date().toISOString();
     setActiveBlock(id);
     renderPreview();
+    renderCharacterList();
+    updateSuggestions();
     queueSave();
     return;
   }

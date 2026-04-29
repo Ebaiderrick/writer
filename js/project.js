@@ -421,10 +421,16 @@ export function getSuggestedNextSpeaker(contextIndex) {
   if (!project) return "";
   const recent = [];
 
-  for (let index = 0; index <= contextIndex; index += 1) {
+  for (let index = 0; index < contextIndex; index += 1) {
     const line = project.lines[index];
-    if (line?.type === "character" && line.text.trim()) {
-      const value = normalizeLineText(line.text, "character");
+    if ((line?.type === "character" || line?.type === "dual") && line.text.trim()) {
+      const value = normalizeLineText(line.text, line.type);
+      if (recent[recent.length - 1] !== value) {
+        recent.push(value);
+      }
+    }
+    if (line?.type === "dual" && line.secondary?.trim()) {
+      const value = normalizeLineText(line.secondary, "dual");
       if (recent[recent.length - 1] !== value) {
         recent.push(value);
       }

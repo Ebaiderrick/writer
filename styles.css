@@ -1388,7 +1388,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .script-block[data-type="scene"],
-.script-block[data-type="shot"] {
+.script-block[data-type="shot"],
+.script-block[data-type="dual"] {
   text-transform: uppercase;
 }
 
@@ -1402,6 +1403,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   margin-left: var(--script-character-offset);
   width: var(--script-character-width);
   font-weight: bold;
+  text-transform: uppercase;
 }
 
 .script-block[data-type="action"],
