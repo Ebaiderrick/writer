@@ -358,21 +358,21 @@ class LiquidApp {
         base: hexToVector3(0xf8f2e8),
         colors: [
           hexToVector3(0xf6eee1),
-          hexToVector3(0xaebfb6),
-          hexToVector3(0xe1c5af),
-          hexToVector3(0xd7dfd2),
-          hexToVector3(0xcfa890),
+          hexToVector3(0x8da397),
+          hexToVector3(0xd4a381),
+          hexToVector3(0xb8c5b0),
+          hexToVector3(0xb58266),
           hexToVector3(0xf5eadb)
         ],
         settings: {
-          speed: 0.38,
-          intensity: 0.92,
+          speed: 0.8,
+          intensity: 1.4,
           grainIntensity: 0.02,
-          gradientSize: 0.95,
-          gradientCount: 6.0,
+          gradientSize: 0.65,
+          gradientCount: 10.0,
           color1Weight: 0.86,
           color2Weight: 0.9,
-          touchStrength: 0.22
+          touchStrength: 0.5
         }
       },
       white: {
@@ -380,21 +380,21 @@ class LiquidApp {
         base: hexToVector3(0xf5f8ff),
         colors: [
           hexToVector3(0xeef4ff),
-          hexToVector3(0xd5e3fb),
-          hexToVector3(0xdcecf8),
-          hexToVector3(0xe7eefc),
+          hexToVector3(0xa3c2f7),
+          hexToVector3(0x8bb8db),
+          hexToVector3(0xbccdf0),
           hexToVector3(0xffffff),
-          hexToVector3(0xdde8ff)
+          hexToVector3(0xb8d0ff)
         ],
         settings: {
-          speed: 0.32,
-          intensity: 0.82,
+          speed: 0.7,
+          intensity: 1.3,
           grainIntensity: 0.015,
-          gradientSize: 1.05,
-          gradientCount: 5.0,
+          gradientSize: 0.75,
+          gradientCount: 8.0,
           color1Weight: 0.88,
           color2Weight: 0.78,
-          touchStrength: 0.16
+          touchStrength: 0.4
         }
       },
       dark: {
