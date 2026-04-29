@@ -379,22 +379,22 @@ class LiquidApp {
         background: 0xffffff,
         base: hexToVector3(0xffffff),
         colors: [
-          hexToVector3(0xFF6C50),
-          hexToVector3(0xE0DA3E),
-          hexToVector3(0xFA2A00),
-          hexToVector3(0x830707),
-          hexToVector3(0xEF25DE),
-          hexToVector3(0xFA0057)
+          hexToVector3(0x3b82f6), // blue-500
+          hexToVector3(0xa5b4fc), // indigo-300
+          hexToVector3(0x93c5fd), // blue-300
+          hexToVector3(0xddd6fe), // violet-200
+          hexToVector3(0x60a5fa), // blue-400
+          hexToVector3(0x5eead4)  // teal-300
         ],
         settings: {
-          speed: 0.8,
-          intensity: 1.6,
-          grainIntensity: 0.04,
-          gradientSize: 0.6,
-          gradientCount: 10.0,
-          color1Weight: 0.8,
-          color2Weight: 1.4,
-          touchStrength: 0.4
+          speed: 0.5,
+          intensity: 1.4,
+          grainIntensity: 0.02,
+          gradientSize: 0.8,
+          gradientCount: 12.0,
+          color1Weight: 0.6,
+          color2Weight: 0.6,
+          touchStrength: 0.3
         }
       },
       dark: {
