@@ -6,7 +6,7 @@ import {
 import { state } from './config.js';
 import { getCurrentProject, sanitizeProject, upsertProject, persistProjects } from './project.js';
 import { uid as makeId } from './utils.js';
-import { customAlert, customConfirm } from './ui.js';
+import { customAlert, customConfirm, showHome } from './ui.js';
 
 // Comment filter state
 let commentFilter = { user: 'all', sort: 'line', status: 'all' };
@@ -223,13 +223,15 @@ export async function acceptInvitation(inviteId) {
   const sharedRef = doc(db, 'sharedProjects', inv.projectId);
 
   // Step 1: Add self to collaborators using dot-notation.
-  // The security rule allows this even before being a member (self-add branch).
+  // Set updatedBy to the collaborator's uid so the owner's onSnapshot listener
+  // does NOT skip this update (it skips when updatedBy === own uid).
   await updateDoc(sharedRef, {
     [`collaborators.${user.uid}`]: {
       name: user.displayName || user.email,
       email: user.email,
       addedAt: new Date().toISOString()
-    }
+    },
+    updatedBy: user.uid
   });
 
   // Step 2: Mark invitation accepted (recipient can always update their own invite).
@@ -262,26 +264,25 @@ export async function kickCollaborator(projectId, collaboratorUid) {
   const user = auth.currentUser;
   if (!user) return;
 
-  const projSnap = await getDoc(doc(db, 'sharedProjects', projectId));
-  if (!projSnap.exists()) return;
-  const proj = projSnap.data();
+  const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
+  if (!project) return;
 
-  if (proj.ownerId !== user.uid) {
+  if (project.ownerId && project.ownerId !== user.uid) {
     await customAlert('Only the project owner can remove collaborators.', 'Not Authorized');
     return;
   }
 
-  const newCollaborators = { ...proj.collaborators };
+  const newCollaborators = { ...(project.collaborators || {}) };
   delete newCollaborators[collaboratorUid];
 
-  await updateDoc(doc(db, 'sharedProjects', projectId), { collaborators: newCollaborators });
+  // updatedBy set to owner so the kicked user's listener fires and shows the change.
+  await updateDoc(doc(db, 'sharedProjects', projectId), {
+    collaborators: newCollaborators,
+    updatedBy: user.uid
+  });
 
-  const project = getCurrentProject();
-  if (project?.id === projectId) {
-    project.collaborators = newCollaborators;
-    persistProjects(false);
-  }
-
+  project.collaborators = newCollaborators;
+  persistProjects(false);
   renderCollaboratorList();
 }
 
@@ -289,17 +290,27 @@ export async function kickCollaborator(projectId, collaboratorUid) {
 
 export function subscribeToSharedProject(projectId) {
   if (unsubSharedProject) unsubSharedProject();
-  unsubSharedProject = onSnapshot(doc(db, 'sharedProjects', projectId), snap => {
-    if (!snap.exists()) return;
-    if (snap.data().updatedBy === auth.currentUser?.uid) return;
-    const updated = sanitizeProject(snap.data());
-    upsertProject(updated);
-    persistProjects(false);
-    renderCollaboratorList();
-    if (state.currentProjectId === projectId) {
-      window.dispatchEvent(new CustomEvent('sharedProjectUpdated', { detail: { projectId } }));
+  unsubSharedProject = onSnapshot(
+    doc(db, 'sharedProjects', projectId),
+    snap => {
+      if (!snap.exists()) return;
+      if (snap.data().updatedBy === auth.currentUser?.uid) return;
+      const updated = sanitizeProject(snap.data());
+      upsertProject(updated);
+      persistProjects(false);
+      renderCollaboratorList();
+      if (state.currentProjectId === projectId) {
+        window.dispatchEvent(new CustomEvent('sharedProjectUpdated', { detail: { projectId } }));
+      }
+    },
+    err => {
+      if (err.code === 'permission-denied') {
+        // User was removed from the project — send them back to the home screen.
+        cleanupCollaboration();
+        showHome();
+      }
     }
-  });
+  );
 }
 
 export function subscribeToComments(projectOrId) {
@@ -374,26 +385,39 @@ export function renderCollaboratorList() {
 
   const user = auth.currentUser;
   const isOwner = !project.ownerId || project.ownerId === user?.uid;
-  const entries = Object.entries(project.collaborators || {});
+  const collaboratorEntries = Object.entries(project.collaborators || {});
 
   const countEl = document.getElementById('collabCount');
   if (countEl) {
-    countEl.textContent = entries.length ? `(${entries.length}/${MAX_COLLABORATORS})` : '';
+    const total = collaboratorEntries.length;
+    countEl.textContent = total ? `(${total}/${MAX_COLLABORATORS})` : '';
   }
 
-  if (!entries.length) {
-    list.innerHTML = '<p class="collab-empty">No collaborators yet.</p>';
+  const ownerRow = project.ownerId || project.ownerName || project.ownerEmail
+    ? `<div class="collaborator-item">
+        <div class="collaborator-avatar">${(project.ownerName || project.ownerEmail || 'O')[0].toUpperCase()}</div>
+        <div class="collaborator-info">
+          <span class="collaborator-name">${esc(project.ownerName || project.ownerEmail || 'Owner')} <span class="owner-badge">Owner</span></span>
+          <span class="collaborator-email">${esc(project.ownerEmail || '')}</span>
+        </div>
+      </div>`
+    : '';
+
+  if (!collaboratorEntries.length) {
+    list.innerHTML = ownerRow || '<p class="collab-empty">No collaborators yet.</p>';
     return;
   }
 
-  list.innerHTML = entries.map(([uid, c]) => `
+  list.innerHTML = ownerRow + collaboratorEntries.map(([uid, c]) => `
     <div class="collaborator-item">
       <div class="collaborator-avatar">${esc(c.name || c.email)[0].toUpperCase()}</div>
       <div class="collaborator-info">
         <span class="collaborator-name">${esc(c.name || c.email)}</span>
         <span class="collaborator-email">${esc(c.email)}</span>
       </div>
-      ${isOwner ? `<button class="kick-btn" data-uid="${uid}" title="Remove collaborator">✕</button>` : ''}
+      ${isOwner ? `<button class="kick-btn" data-uid="${uid}" title="Remove collaborator">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>` : ''}
     </div>
   `).join('');
 

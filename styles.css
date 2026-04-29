@@ -2099,6 +2099,18 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .kick-btn:hover { color: #c53030; background: rgba(197,48,48,0.08); }
 
+.owner-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  vertical-align: middle;
+  margin-left: 4px;
+  letter-spacing: 0.3px;
+}
+
 .collab-request-item {
   display: flex;
   flex-direction: column;

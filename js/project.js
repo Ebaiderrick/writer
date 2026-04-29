@@ -21,8 +21,15 @@ async function syncCurrentProjectToFirestore() {
   try {
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
+      // Only sync content fields — never overwrite ownership/membership on the shared doc.
+      const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
+        'lines', 'collapsedSceneIds', 'updatedAt'];
+      const contentPayload = Object.fromEntries(
+        CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
+      );
       await setDoc(doc(db, 'sharedProjects', project.id), {
-        ...payload,
+        ...contentPayload,
+        syncedAt: new Date().toISOString(),
         updatedBy: userId
       }, { merge: true });
     }
