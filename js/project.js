@@ -149,6 +149,8 @@ export function sanitizeProject(project) {
     updatedAt: project.updatedAt || new Date().toISOString(),
     isShared: Boolean(project.isShared),
     ownerId: project.ownerId || null,
+    ownerName: project.ownerName || "",
+    ownerEmail: project.ownerEmail || "",
     collaborators: (project.collaborators && typeof project.collaborators === 'object') ? project.collaborators : {},
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     lines: Array.isArray(project.lines) && project.lines.length

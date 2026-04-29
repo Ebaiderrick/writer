@@ -519,10 +519,13 @@ export const Auth = (() => {
       await setDoc(doc(db, 'users', user.uid, 'profile'), data, { merge: true });
 
       pendingImageBase64 = null;
+      originalBio = bio;
       isEditMode = false;
       isModified = false;
       profileEditBtn.disabled = false;
       setEditBtnMode('edit');
+      profileBio.textContent = bio || 'Tell us about yourself...';
+      if (data.photoURL) profileImg.src = data.photoURL;
 
       updateBioWordCount();
       updateTriggerUI(user);

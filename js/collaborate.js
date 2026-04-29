@@ -4,9 +4,9 @@ import {
   collection, query, where, onSnapshot, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { state } from './config.js';
-import { getCurrentProject, sanitizeProject, upsertProject, persistProjects } from './project.js';
+import { getCurrentProject, sanitizeProject, upsertProject, persistProjects, deleteProjectFromCloud } from './project.js';
 import { uid as makeId } from './utils.js';
-import { customAlert, customConfirm, showHome } from './ui.js';
+import { customAlert, customConfirm, showHome, renderHome } from './ui.js';
 
 // Comment filter state
 let commentFilter = { user: 'all', sort: 'line', status: 'all' };
@@ -21,6 +21,7 @@ let unsubInvites = null;
 let unsubSentInvites = null;
 let unsubComments = null;
 let unsubSharedProject = null;
+let sharedProjectWatchers = new Map();
 
 // ── Comments collection path ──────────────────────────────────
 // Personal projects → users/{uid}/projects/{id}/comments
@@ -71,11 +72,15 @@ export function initCollaboration() {
     const invitations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderSentInvites(invitations);
   });
+
+  syncSharedProjectWatchers();
 }
 
 export function cleanupCollaboration() {
   [unsubInvites, unsubSentInvites, unsubComments, unsubSharedProject].forEach(fn => fn?.());
   unsubInvites = unsubSentInvites = unsubComments = unsubSharedProject = null;
+  sharedProjectWatchers.forEach(fn => fn?.());
+  sharedProjectWatchers.clear();
 }
 
 export function onStudioEnter(projectId) {
@@ -87,6 +92,7 @@ export function onStudioEnter(projectId) {
   } else {
     if (unsubSharedProject) { unsubSharedProject(); unsubSharedProject = null; }
   }
+  syncSharedProjectWatchers();
   subscribeToComments(project);
 }
 
@@ -206,8 +212,11 @@ async function ensureSharedProject(project, user) {
   }
   project.isShared = true;
   project.ownerId = user.uid;
+  project.ownerName = user.displayName || user.email;
+  project.ownerEmail = user.email;
   project.collaborators = project.collaborators || {};
   persistProjects(false);
+  syncSharedProjectWatchers();
 }
 
 // ── Accept / Decline ──────────────────────────────────────────
@@ -251,6 +260,8 @@ export async function acceptInvitation(inviteId) {
 
   upsertProject(projectForUser);
   persistProjects(false);
+  renderHome();
+  syncSharedProjectWatchers();
   subscribeToSharedProject(inv.projectId);
 }
 
@@ -284,6 +295,8 @@ export async function kickCollaborator(projectId, collaboratorUid) {
   project.collaborators = newCollaborators;
   persistProjects(false);
   renderCollaboratorList();
+  renderHome();
+  syncSharedProjectWatchers();
 }
 
 // ── Real-time listeners ───────────────────────────────────────
@@ -299,18 +312,88 @@ export function subscribeToSharedProject(projectId) {
       upsertProject(updated);
       persistProjects(false);
       renderCollaboratorList();
+      renderHome();
+      syncSharedProjectWatchers();
       if (state.currentProjectId === projectId) {
         window.dispatchEvent(new CustomEvent('sharedProjectUpdated', { detail: { projectId } }));
       }
     },
     err => {
       if (err.code === 'permission-denied') {
-        // User was removed from the project — send them back to the home screen.
-        cleanupCollaboration();
-        showHome();
+        handleSharedProjectRemoved(projectId);
       }
     }
   );
+}
+
+function syncSharedProjectWatchers() {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const sharedIds = new Set(
+    state.projects
+      .filter(project => project.isShared && project.ownerId !== user.uid)
+      .map(project => project.id)
+  );
+
+  sharedProjectWatchers.forEach((unsubscribe, projectId) => {
+    if (!sharedIds.has(projectId)) {
+      unsubscribe?.();
+      sharedProjectWatchers.delete(projectId);
+    }
+  });
+
+  sharedIds.forEach(projectId => {
+    if (sharedProjectWatchers.has(projectId)) return;
+    const unsubscribe = onSnapshot(
+      doc(db, 'sharedProjects', projectId),
+      snap => {
+        if (!snap.exists()) {
+          handleSharedProjectRemoved(projectId);
+          return;
+        }
+
+        const sharedProject = sanitizeProject(snap.data());
+        if (!sharedProject.collaborators?.[user.uid]) {
+          handleSharedProjectRemoved(projectId);
+          return;
+        }
+
+        if (snap.data().updatedBy === user.uid) return;
+        upsertProject(sharedProject);
+        persistProjects(false);
+        renderHome();
+        if (state.currentProjectId === projectId) {
+          renderCollaboratorList();
+          window.dispatchEvent(new CustomEvent('sharedProjectUpdated', { detail: { projectId } }));
+        }
+      },
+      err => {
+        if (err.code === 'permission-denied') handleSharedProjectRemoved(projectId);
+      }
+    );
+    sharedProjectWatchers.set(projectId, unsubscribe);
+  });
+}
+
+function handleSharedProjectRemoved(projectId) {
+  const watcher = sharedProjectWatchers.get(projectId);
+  watcher?.();
+  sharedProjectWatchers.delete(projectId);
+  if (unsubSharedProject) {
+    unsubSharedProject();
+    unsubSharedProject = null;
+  }
+
+  state.projects = state.projects.filter(project => project.id !== projectId);
+  if (state.currentProjectId === projectId) {
+    state.currentProjectId = state.projects[0]?.id || null;
+    showHome();
+  }
+  persistProjects(false);
+  deleteProjectFromCloud(projectId);
+  renderHome();
+  syncSharedProjectWatchers();
 }
 
 export function subscribeToComments(projectOrId) {
