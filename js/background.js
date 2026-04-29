@@ -357,12 +357,12 @@ class LiquidApp {
         background: 0xf4efe7,
         base: hexToVector3(0xf8f2e8),
         colors: [
-          hexToVector3(0xf6eee1),
-          hexToVector3(0x8da397),
-          hexToVector3(0xd4a381),
-          hexToVector3(0xb8c5b0),
-          hexToVector3(0xb58266),
-          hexToVector3(0xf5eadb)
+          hexToVector3(0xFF6C50),
+          hexToVector3(0xE0DA3E),
+          hexToVector3(0xFA2A00),
+          hexToVector3(0x830707),
+          hexToVector3(0xEF25DE),
+          hexToVector3(0xFA0057)
         ],
         settings: {
           speed: 0.8,
@@ -379,12 +379,12 @@ class LiquidApp {
         background: 0xf0f4fa,
         base: hexToVector3(0xf5f8ff),
         colors: [
-          hexToVector3(0xeef4ff),
-          hexToVector3(0xa3c2f7),
-          hexToVector3(0x8bb8db),
-          hexToVector3(0xbccdf0),
-          hexToVector3(0xffffff),
-          hexToVector3(0xb8d0ff)
+          hexToVector3(0x010809),
+          hexToVector3(0x40E0D0),
+          hexToVector3(0x16DF2D),
+          hexToVector3(0x40E0D0),
+          hexToVector3(0x5BE69E),
+          hexToVector3(0x063A7F)
         ],
         settings: {
           speed: 0.7,
