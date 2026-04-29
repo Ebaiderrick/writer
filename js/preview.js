@@ -2,7 +2,7 @@ import { state } from './config.js';
 import { refs } from './dom.js';
 import { getCurrentProject, syncProjectFromInputs } from './project.js';
 import { paginateScriptLines } from './pagination.js';
-import { escapeHtml, createTextNode, formatLineText } from './utils.js';
+import { escapeHtml, createTextNode, formatLineText, getExportFilename } from './utils.js';
 import { t } from './i18n.js';
 
 export function renderCoverPreview() {
@@ -155,158 +155,263 @@ export function buildPrintableDocument(project, autoPrint = false) {
 </html>`;
 }
 
-export function buildWordDocument(project) {
-  const previewData = buildPreviewData(project);
-  const coverMarkup = `
-    <div class="word-page cover-page">
-      <table class="word-cover-table" role="presentation">
-        <tr>
-          <td class="word-cover-cell" align="center" valign="middle">
-            <div class="word-cover-stack">
-              <p class="word-cover-title">${escapeHtml(project.title)}</p>
-              <p class="word-cover-byline">${escapeHtml(t("cover.by"))}</p>
-              <p class="word-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
-              <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
-              <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
-              <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
-              <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
-            </div>
-          </td>
-        </tr>
-      </table>
-    </div>
-  `;
+export async function buildAdvancedWordBlob(project) {
+  if (typeof docx === 'undefined') {
+    throw new Error('docx library not loaded');
+  }
 
-  const scriptPagesMarkup = previewData.scriptPages.map((pageLines, index) => {
-    const pageNum = index + 1;
-    const pageHeader = state.viewOptions.pageNumbers
-      ? `<div class="word-page-number">${escapeHtml(buildPageNumberLabel(pageNum, previewData.scriptPages.length))}</div>`
-      : `<div class="word-page-number word-page-number-placeholder"></div>`;
-    const pageClassName = index === 0 ? "word-page word-script-page word-script-page-first" : "word-page word-script-page";
+  const {
+    Document, Paragraph, TextRun, AlignmentType, HeadingLevel,
+    Footer, PageNumber, Packer
+  } = docx;
 
-    return `
-      <div class="${pageClassName}">
-        ${pageHeader}
-        <div class="word-body">
-          ${pageLines.map((line) => line.secondary !== undefined
-            ? `<table class="word-dual-row" style="width:100%;border-collapse:collapse;margin-bottom:10pt;"><tr>
-                <td class="word-dual-col" style="${buildWordDualColStyle(line.type)}">${escapeHtml(line.displayText)}</td>
-                <td class="word-dual-col" style="${buildWordDualColStyle(line.type)}">${escapeHtml(line.secondary)}</td>
-               </tr></table>`
-            : `<p class="word-line ${line.type}" style="${buildWordLineStyle(line.type)}">${escapeHtml(line.displayText)}</p>`
-          ).join("")}
-        </div>
-      </div>
-    `;
+  const children = [];
+
+  // Title page info if screenplay
+  if (project.title || project.author) {
+    children.push(new Paragraph({
+      text: project.title || "Untitled Script",
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 2400, after: 400 },
+    }));
+
+    if (project.author) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `by ${project.author}`, italics: true })],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 800 },
+      }));
+    }
+
+    // Push details/contact if available
+    [project.company, project.contact, project.details].filter(Boolean).forEach(detail => {
+      children.push(new Paragraph({
+        text: detail,
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 120 },
+      }));
+    });
+
+    children.push(new Paragraph({ text: "", spacing: { after: 400 }, pageBreakBefore: true }));
+  }
+
+  let sceneNumber = 0;
+  project.lines.forEach((line) => {
+    const text = formatLineText(line.text, line.type);
+    if (!text && line.secondary === undefined) return;
+
+    if (line.type === "scene") sceneNumber++;
+
+    const paraOptions = {
+      spacing: { before: 120, after: 120, line: 360 }, // 1.5 line spacing (240 is 1.0)
+      children: [],
+    };
+
+    const textRunOptions = {
+      text: line.type === "scene" && state.autoNumberScenes ? `${sceneNumber}. ${text}` : text,
+      font: "Times New Roman",
+      size: 24, // 12pt
+    };
+
+    switch (line.type) {
+      case "scene":
+        textRunOptions.allCaps = true;
+        textRunOptions.bold = true;
+        break;
+      case "character":
+      case "dual":
+        textRunOptions.allCaps = true;
+        textRunOptions.bold = true;
+        paraOptions.indent = { left: 3600 }; // 2.5in from margin (3.5in from edge)
+        break;
+      case "dialogue":
+        paraOptions.indent = { left: 2160, right: 2160 }; // ~1.5in indents (~3in width)
+        break;
+      case "parenthetical":
+        textRunOptions.italics = true;
+        paraOptions.indent = { left: 2880, right: 2880 }; // ~2in indents (~2in width)
+        break;
+      case "transition":
+        textRunOptions.allCaps = true;
+        textRunOptions.bold = true;
+        paraOptions.alignment = AlignmentType.RIGHT;
+        break;
+      case "text":
+        paraOptions.alignment = AlignmentType.BOTH;
+        break;
+      case "note":
+        textRunOptions.color = "666666";
+        textRunOptions.italics = true;
+        break;
+    }
+
+    paraOptions.children.push(new TextRun(textRunOptions));
+
+    if (line.secondary !== undefined) {
+      paraOptions.children.push(new TextRun({ text: "  |  ", color: "999999" }));
+      paraOptions.children.push(new TextRun({
+        ...textRunOptions,
+        text: formatLineText(line.secondary, line.type)
+      }));
+    }
+
+    children.push(new Paragraph(paraOptions));
   });
-  const scriptMarkup = scriptPagesMarkup.join("");
 
-  return `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-  <meta charset="UTF-8">
-  <meta name="ProgId" content="Word.Document">
-  <meta name="Generator" content="EyaWriter">
-  <title>${escapeHtml(project.title)}</title>
-  <style>
-    @page WordSection {
-      size: 8.5in 11in;
-      margin: 1.0in 1.0in 1.0in 1.5in;
-    }
-    body {
-      margin: 0;
-      background: #ffffff;
-      color: #111111;
-      font-family: "Courier New", Courier, monospace;
+  const doc = new Document({
+    sections: [{
+      properties: {
+        page: {
+          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }, // 1 inch
+        },
+      },
+      footers: {
+        default: new Footer({
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              children: [
+                new TextRun("Page "),
+                new TextRun({ children: [PageNumber.CURRENT] }),
+              ],
+            }),
+          ],
+        }),
+      },
+      children: children,
+    }],
+  });
+
+  return await Packer.toBlob(doc);
+}
+
+export async function exportPdfProfessional(project) {
+  if (typeof html2pdf === 'undefined') {
+    throw new Error('html2pdf library not loaded');
+  }
+
+  const previewData = buildPreviewData(project);
+  const element = document.createElement("div");
+  element.className = "pdf-export-content";
+
+  const style = document.createElement("style");
+  style.textContent = `
+    .pdf-export-content {
+      font-family: 'Times New Roman', Times, serif;
       font-size: 12pt;
+      line-height: 1.5;
+      color: #000;
+      background: #fff;
     }
-    .word-shell {
-      width: 100%;
-    }
-    .word-page {
-      page: WordSection;
+    .pdf-page {
       position: relative;
-      width: 100%;
-      min-height: 9in;
-    }
-    .cover-page {
-      min-height: 9in;
-      page-break-after: always;
-      break-after: page;
-      mso-break-type: page;
-    }
-    .word-script-page {
-      page-break-before: always;
-      break-before: page;
-      mso-break-type: page;
-    }
-    .word-script-page-first {
-      page-break-before: always;
-      break-before: page;
-      mso-break-type: page;
-    }
-    .word-cover-table {
-      width: 100%;
-      height: 9in;
-      border-collapse: collapse;
-    }
-    .word-cover-cell {
-      vertical-align: middle;
-      text-align: center;
+      width: 6.27in; /* A4 width 8.27 - 2in (1in each side) */
+      min-height: 9.69in; /* A4 height 11.69 - 2in (1in each side) */
       padding: 0;
+      margin: 0;
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
     }
-    .word-cover-stack {
-      width: 100%;
+    .pdf-cover-page {
+      height: 9.69in;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
       text-align: center;
     }
-    .word-cover-title,
-    .word-cover-byline,
-    .word-cover-author,
-    .word-cover-meta,
-    .word-cover-logline {
-      margin: 0;
-    }
-    .word-cover-title {
-      font-weight: bold;
-      text-transform: uppercase;
-      margin-bottom: 28pt;
-    }
-    .word-cover-byline {
-      margin-bottom: 18pt;
-    }
-    .word-cover-author {
-      margin-bottom: 28pt;
-    }
-    .word-cover-meta {
-      margin-bottom: 8pt;
-    }
-    .word-cover-logline {
-      margin-top: 24pt;
+    .pdf-title { font-size: 24pt; font-weight: bold; margin-bottom: 20pt; text-transform: uppercase; }
+    .pdf-author { font-size: 14pt; font-style: italic; margin-bottom: 40pt; }
+    .pdf-details { font-size: 12pt; margin-bottom: 10pt; }
+
+    .pdf-body { flex: 1; }
+    .pdf-line {
+      margin: 0 0 10pt 0;
       white-space: pre-wrap;
+      word-wrap: break-word;
     }
-    .word-page-number {
-      position: absolute;
-      bottom: 0.2in;
-      right: 0;
+    .pdf-line.scene { font-weight: bold; text-transform: uppercase; }
+    .pdf-line.character, .pdf-line.dual { font-weight: bold; text-transform: uppercase; margin-left: 2.5in; }
+    .pdf-line.dialogue { margin-left: 1.5in; margin-right: 1.5in; }
+    .pdf-line.parenthetical { font-style: italic; margin-left: 2.0in; margin-right: 2.0in; }
+    .pdf-line.transition { font-weight: bold; text-transform: uppercase; text-align: right; }
+    .pdf-line.text { text-align: justify; }
+    .pdf-line.note { color: #666; font-style: italic; border-left: 3px solid #ccc; padding-left: 10px; }
+
+    .pdf-dual-row { display: flex; gap: 0.5in; }
+    .pdf-dual-col { flex: 1; }
+
+    .pdf-footer {
+      height: 0.5in;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
       font-size: 10pt;
+      color: #333;
     }
-    .word-body {
-      width: 100%;
+  `;
+  element.appendChild(style);
+
+  // Cover Page
+  const coverPage = document.createElement("div");
+  coverPage.className = "pdf-page";
+  const coverInner = document.createElement("div");
+  coverInner.className = "pdf-cover-page";
+  coverInner.innerHTML = `
+    <div class="pdf-title">${escapeHtml(project.title || "Untitled Document")}</div>
+    ${project.author ? `<div class="pdf-author">by ${escapeHtml(project.author)}</div>` : ''}
+    ${[project.company, project.contact, project.details].filter(Boolean).map(d => `<div class="pdf-details">${escapeHtml(d)}</div>`).join('')}
+  `;
+  coverPage.appendChild(coverInner);
+  element.appendChild(coverPage);
+
+  // Script Pages
+  previewData.scriptPages.forEach((pageLines, index) => {
+    const page = document.createElement("div");
+    page.className = "pdf-page";
+
+    const body = document.createElement("div");
+    body.className = "pdf-body";
+
+    pageLines.forEach(line => {
+      const div = document.createElement("div");
+      div.className = `pdf-line ${line.type}`;
+
+      if (line.secondary !== undefined) {
+        div.className += " pdf-dual-row";
+        div.innerHTML = `
+          <div class="pdf-dual-col">${escapeHtml(line.displayText)}</div>
+          <div class="pdf-dual-col">${escapeHtml(line.secondary)}</div>
+        `;
+      } else {
+        div.textContent = line.displayText;
+      }
+      body.appendChild(div);
+    });
+
+    page.appendChild(body);
+
+    if (state.viewOptions.pageNumbers) {
+      const footer = document.createElement("div");
+      footer.className = "pdf-footer";
+      footer.textContent = buildPageNumberLabel(index + 1, previewData.scriptPages.length);
+      page.appendChild(footer);
     }
-    .word-line {
-      margin: 0 0 12pt;
-      white-space: pre-wrap;
-      line-height: 1.2;
-    }
-  </style>
-</head>
-<body>
-  <main class="word-shell">
-    ${coverMarkup}
-    ${scriptMarkup}
-  </main>
-</body>
-</html>`;
+
+    element.appendChild(page);
+  });
+
+  const opt = {
+    margin: 1,
+    filename: getExportFilename(project.title, "pdf"),
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+  };
+
+  return html2pdf().set(opt).from(element).save();
 }
 
 function buildWordDualColStyle(type) {

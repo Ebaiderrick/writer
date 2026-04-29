@@ -13,7 +13,10 @@ import {
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
   showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
 } from './editor.js';
-import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
+import {
+  renderPreview, renderCoverPreview, buildPrintableDocument,
+  buildAdvancedWordBlob, exportPdfProfessional
+} from './preview.js';
 import { paginateScriptLines } from './pagination.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
@@ -1648,9 +1651,17 @@ function clearScriptFilter() {
   renderStudio();
 }
 
-function exportTxt() {
+function checkEmptyProject(project) {
+  if (!project.lines || project.lines.every(l => !l.text.trim())) {
+    customAlert("Your script is empty. Write something before exporting!", "Empty Export");
+    return true;
+  }
+  return false;
+}
+
+async function exportTxt() {
   const project = syncProjectFromInputs() || getCurrentProject();
-  if (!project) return;
+  if (!project || checkEmptyProject(project)) return;
 
   const preparedLines = buildPreparedExportLines(project);
 
@@ -1666,22 +1677,49 @@ function exportTxt() {
   const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
 
   const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
-  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+  downloadFile(getExportFilename(project.title, "txt"), content, "text/plain;charset=utf-8");
 }
 
 function exportJson() {
   const project = syncProjectFromInputs() || getCurrentProject();
-  downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+  if (!project) return;
+  downloadFile(getExportFilename(project.title, "json"), JSON.stringify(project, null, 2), "application/json");
 }
 
-function exportWord() {
+async function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
-    if (!project) return;
-    const content = `\uFEFF${buildWordDocument(project)}`;
-    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword;charset=utf-8");
+    if (!project || checkEmptyProject(project)) return;
+
+    const originalText = refs.saveBadge.textContent;
+    refs.saveBadge.textContent = "Preparing Word export...";
+
+    try {
+      const blob = await buildAdvancedWordBlob(project);
+      downloadFile(getExportFilename(project.title, "docx"), blob, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    } catch (err) {
+      console.error(err);
+      customAlert("Failed to generate Word document. Please try again.", "Export Error");
+    } finally {
+      refs.saveBadge.textContent = originalText;
+    }
 }
 
-function exportPdf() { printWithHiddenFrame(); }
+async function exportPdf() {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project || checkEmptyProject(project)) return;
+
+  const originalText = refs.saveBadge.textContent;
+  refs.saveBadge.textContent = "Preparing PDF export...";
+
+  try {
+    await exportPdfProfessional(project);
+  } catch (err) {
+    console.error(err);
+    customAlert("Failed to generate PDF. Please try again.", "Export Error");
+  } finally {
+    refs.saveBadge.textContent = originalText;
+  }
+}
 
 function openPreviewWindow(autoPrint) {
   const project = syncProjectFromInputs() || getCurrentProject();

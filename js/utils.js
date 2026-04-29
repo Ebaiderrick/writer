@@ -179,7 +179,7 @@ export function buildContinuedSceneSuggestions(previousScene) {
 }
 
 export function downloadFile(filename, content, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -188,6 +188,12 @@ export function downloadFile(filename, content, mimeType) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+export function getExportFilename(title, extension) {
+  const safeTitle = (title || "Untitled_Document").replace(/[^a-z0-9]/gi, "_");
+  const date = new Date().toISOString().split("T")[0];
+  return `Wraita_${safeTitle}_${date}.${extension}`;
 }
 
 export function parseTextToLines(text) {
