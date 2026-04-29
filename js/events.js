@@ -454,12 +454,17 @@ export function bindEvents() {
       const email = collabInviteEmail.value.trim();
       if (!email) return;
       collabInviteBtn.disabled = true;
-      const result = await inviteCollaborator(email);
+      let result;
+      try {
+        result = await inviteCollaborator(email);
+      } catch (err) {
+        result = { ok: false, reason: err.message || 'An error occurred.' };
+      }
       collabInviteBtn.disabled = false;
       if (collabInviteStatus) {
         collabInviteStatus.textContent = result.ok ? 'Invitation sent!' : result.reason;
         collabInviteStatus.className = `collab-status-msg${result.ok ? ' collab-status-ok' : ' collab-status-err'}`;
-        setTimeout(() => { collabInviteStatus.textContent = ''; collabInviteStatus.className = 'collab-status-msg'; }, 4000);
+        setTimeout(() => { collabInviteStatus.textContent = ''; collabInviteStatus.className = 'collab-status-msg'; }, 5000);
       }
       if (result.ok) { collabInviteEmail.value = ''; renderCollaboratorList(); }
     });

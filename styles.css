@@ -3437,39 +3437,51 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   margin-top: 10px;
 }
 
-.profile-actions button {
+.profile-action-btn {
   flex: 1;
-  min-height: 36px;
-  padding: 4px 10px;
-  border: none;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--control-bg) 90%, black 5%);
-  color: var(--ink);
-  font-size: 0.8rem;
-  font-weight: 600;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  transition: all 0.18s ease;
 }
 
-.profile-actions button:hover {
-  background: var(--accent-soft);
+.profile-action-btn:hover {
+  border-color: var(--accent);
   color: var(--accent-strong);
-  transform: translateY(-1px);
-}
-
-.profile-actions .btn-primary {
   background: var(--accent-soft);
-  color: var(--accent-strong);
 }
 
-.profile-actions .btn-primary:hover {
+.profile-action-btn.profile-action-save {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.profile-action-btn.profile-action-save:hover {
   background: var(--accent);
   color: white;
+}
+
+.profile-action-btn.profile-action-logout {
+  color: #e53e3e;
+  border-color: transparent;
+}
+
+.profile-action-btn.profile-action-logout:hover {
+  border-color: #feb2b2;
+  background: #fff5f5;
+  color: #c53030;
 }
 
 .profile-word-limit {

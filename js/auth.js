@@ -40,16 +40,12 @@ export const Auth = (() => {
   // Profile Popup Elements
   let profilePopup, profileClose, profileTriggerBtns;
   let profileImg, profileName, profileEmail, profileBio, profileWordCount;
-  let profileEditBtn, profileSaveBtn, profileSignOutBtn;
+  let profileEditBtn, profileSignOutBtn;
   let profileUpload, profileUploadBtn;
   let originalBio = '';
   let pendingImageBase64 = null;
-
-  const RANDOM_AVATARS = [
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Aria',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Leo'
-  ];
+  let isEditMode = false;
+  let isModified = false;
 
   let generatedOTP = '';
   let pendingSignup = null;
@@ -93,7 +89,6 @@ export const Auth = (() => {
     profileBio = document.getElementById('profile-bio');
     profileWordCount = document.getElementById('word-count');
     profileEditBtn = document.getElementById('edit-profile');
-    profileSaveBtn = document.getElementById('save-profile');
     profileSignOutBtn = document.getElementById('profile-signout-btn');
     profileUpload = document.getElementById('profile-upload');
     profileUploadBtn = document.getElementById('change-photo-btn');
@@ -195,12 +190,17 @@ export const Auth = (() => {
     profileTriggerBtns.forEach(btn => btn.addEventListener('click', openProfilePopup));
     profileClose?.addEventListener('click', closeProfilePopup);
     profilePopup?.addEventListener('click', e => { if (e.target === profilePopup) closeProfilePopup(); });
-    profileEditBtn?.addEventListener('click', handleBioEdit);
-    profileSaveBtn?.addEventListener('click', handleBioSave);
+    profileEditBtn?.addEventListener('click', handleEditToggle);
     profileSignOutBtn?.addEventListener('click', handleSignOut);
     profileUploadBtn?.addEventListener('click', () => profileUpload.click());
     profileUpload?.addEventListener('change', handleImageUpload);
-    profileBio?.addEventListener('input', updateBioWordCount);
+    profileBio?.addEventListener('input', () => {
+      updateBioWordCount();
+      if (isEditMode && !isModified) {
+        isModified = true;
+        setEditBtnMode('save');
+      }
+    });
     profileBio?.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
 
     document.addEventListener('keydown', e => {
@@ -386,7 +386,7 @@ export const Auth = (() => {
   function closeProfilePopup() {
     profilePopup?.classList.remove('active');
     document.body.style.overflow = '';
-    cancelBioEdit();
+    if (isEditMode) cancelBioEdit();
   }
 
   function countWords(text) {
@@ -404,29 +404,45 @@ export const Auth = (() => {
     }
   }
 
-  function handleBioEdit() {
-    originalBio = profileBio.textContent;
-    profileBio.contentEditable = 'true';
-    profileBio.focus();
-    profileEditBtn.hidden = true;
-    profileSaveBtn.hidden = false;
+  function setEditBtnMode(mode) {
+    if (!profileEditBtn) return;
+    if (mode === 'save') {
+      profileEditBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Save</span>`;
+      profileEditBtn.classList.add('profile-action-save');
+    } else {
+      profileEditBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span>Edit</span>`;
+      profileEditBtn.classList.remove('profile-action-save');
+    }
+  }
 
-    const range = document.createRange();
-    const sel = window.getSelection();
-    range.selectNodeContents(profileBio);
-    range.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(range);
+  function handleEditToggle() {
+    if (!isEditMode) {
+      isEditMode = true;
+      isModified = false;
+      originalBio = profileBio.textContent;
+      profileBio.contentEditable = 'true';
+      profileBio.focus();
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(profileBio);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else if (isModified) {
+      handleBioSave();
+    } else {
+      cancelBioEdit();
+    }
   }
 
   function cancelBioEdit() {
-    if (profileBio.contentEditable === 'true') {
-      profileBio.contentEditable = 'false';
-      profileBio.textContent = originalBio;
-      profileEditBtn.hidden = false;
-      profileSaveBtn.hidden = true;
-      updateBioWordCount();
-    }
+    isEditMode = false;
+    isModified = false;
+    pendingImageBase64 = null;
+    profileBio.contentEditable = 'false';
+    profileBio.textContent = originalBio;
+    setEditBtnMode('edit');
+    updateBioWordCount();
   }
 
   async function handleImageUpload(e) {
@@ -465,8 +481,12 @@ export const Auth = (() => {
 
         pendingImageBase64 = dataUrl;
         profileImg.src = dataUrl;
-        profileEditBtn.hidden = true;
-        profileSaveBtn.hidden = false;
+        if (!isEditMode) {
+          isEditMode = true;
+          originalBio = profileBio.textContent;
+        }
+        isModified = true;
+        setEditBtnMode('save');
       };
       img.src = event.target.result;
     };
@@ -484,8 +504,8 @@ export const Auth = (() => {
     }
 
     profileBio.contentEditable = 'false';
-    profileSaveBtn.classList.add('saving');
-    profileSaveBtn.textContent = 'Saving...';
+    profileEditBtn.disabled = true;
+    profileEditBtn.querySelector('span').textContent = 'Saving…';
 
     try {
       const bio = profileBio.textContent;
@@ -499,73 +519,71 @@ export const Auth = (() => {
       await setDoc(doc(db, 'users', user.uid, 'profile'), data, { merge: true });
 
       pendingImageBase64 = null;
-      profileSaveBtn.classList.remove('saving');
-      profileSaveBtn.textContent = '💾 Saved!';
-
-      setTimeout(() => {
-        profileSaveBtn.textContent = '💾 Save Changes';
-        profileEditBtn.hidden = false;
-        profileSaveBtn.hidden = true;
-      }, 2000);
+      isEditMode = false;
+      isModified = false;
+      profileEditBtn.disabled = false;
+      setEditBtnMode('edit');
 
       updateBioWordCount();
       updateTriggerUI(user);
     } catch (err) {
       console.error('Bio save failed', err);
-      profileSaveBtn.classList.remove('saving');
-      profileSaveBtn.textContent = 'Error';
+      profileEditBtn.disabled = false;
+      setEditBtnMode('save');
       profileBio.contentEditable = 'true';
     }
   }
 
+  function generateInitialsAvatar(name) {
+    const parts = (name || 'U').trim().split(/\s+/);
+    const initials = (parts.length >= 2
+      ? parts[0][0] + parts[parts.length - 1][0]
+      : (parts[0] || 'U').slice(0, 2)
+    ).toUpperCase();
+    const palette = ['#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f59e0b', '#3b82f6'];
+    const color = palette[(name || '').charCodeAt(0) % palette.length];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><circle cx="48" cy="48" r="48" fill="${color}"/><text x="48" y="56" text-anchor="middle" font-family="system-ui,sans-serif" font-size="32" font-weight="600" fill="white">${initials}</text></svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
   async function loadUserProfile(firebaseUser) {
-    // Priority to auth.currentUser data
     const user = auth.currentUser || firebaseUser;
-    profileName.textContent = user.displayName || 'User';
+    const displayName = user.displayName || 'User';
+    profileName.textContent = displayName;
     profileEmail.textContent = user.email;
+
+    const fallbackAvatar = generateInitialsAvatar(displayName);
 
     try {
       const snap = await getDoc(doc(db, 'users', user.uid, 'profile'));
       const profileData = snap.exists() ? snap.data() : {};
 
-      const photo = user.photoURL || profileData.photoURL;
+      const photo = profileData.photoURL || user.photoURL;
       if (photo) {
         profileImg.src = photo;
+        profileImg.onerror = () => { profileImg.src = fallbackAvatar; profileImg.onerror = null; };
       } else {
-        // Random avatar based on UID
-        const hash = [...user.uid].reduce((a, b) => {
-          a = ((a << 5) - a) + b.charCodeAt(0);
-          return a & a;
-        }, 0);
-        profileImg.src = RANDOM_AVATARS[Math.abs(hash) % RANDOM_AVATARS.length];
+        profileImg.src = fallbackAvatar;
       }
 
-      if (profileData.bio) {
-        profileBio.textContent = profileData.bio;
-      } else {
-        profileBio.textContent = 'Tell us about yourself...';
-      }
+      profileBio.textContent = profileData.bio || 'Tell us about yourself...';
       updateBioWordCount();
     } catch (err) {
       console.error('Profile load failed', err);
-      // Fallback for image even if doc fetch fails
-      if (!profileImg.src || profileImg.src.includes('broken')) {
-        const hash = [...user.uid].reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
-        profileImg.src = RANDOM_AVATARS[Math.abs(hash) % RANDOM_AVATARS.length];
-      }
+      profileImg.src = fallbackAvatar;
     }
   }
 
   function updateTriggerUI(firebaseUser) {
     const photo = firebaseUser.photoURL;
     const name = firebaseUser.displayName || 'User';
+    const fallback = generateInitialsAvatar(name);
 
     document.querySelectorAll('.user-avatar-img').forEach(img => {
+      img.src = photo || fallback;
+      img.hidden = false;
       if (photo) {
-        img.src = photo;
-        img.hidden = false;
-      } else {
-        img.hidden = true;
+        img.onerror = () => { img.src = fallback; img.onerror = null; };
       }
     });
 

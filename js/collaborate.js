@@ -100,75 +100,90 @@ function updateCollabBadge(count) {
 // ── Invite ────────────────────────────────────────────────────
 
 export async function inviteCollaborator(email) {
-  const user = auth.currentUser;
-  if (!user) return { ok: false, reason: 'Not signed in.' };
+  try {
+    const user = auth.currentUser;
+    if (!user) return { ok: false, reason: 'Not signed in.' };
 
-  const project = getCurrentProject();
-  if (!project) return { ok: false, reason: 'No project open.' };
+    const project = getCurrentProject();
+    if (!project) return { ok: false, reason: 'No project open. Open a project first.' };
 
-  const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return { ok: false, reason: 'Please enter an email address.' };
 
-  if (normalizedEmail === user.email.toLowerCase()) {
-    return { ok: false, reason: 'You cannot invite yourself.' };
-  }
-
-  const collaborators = project.collaborators || {};
-  if (Object.keys(collaborators).length >= MAX_COLLABORATORS) {
-    return { ok: false, reason: `Maximum ${MAX_COLLABORATORS} collaborators reached.` };
-  }
-
-  const alreadyIn = Object.values(collaborators).some(
-    c => c.email.toLowerCase() === normalizedEmail
-  );
-  if (alreadyIn) return { ok: false, reason: 'This person is already a collaborator.' };
-
-  const userSnap = await getDoc(doc(db, 'usersByEmail', normalizedEmail));
-  if (!userSnap.exists()) {
-    return { ok: false, reason: 'No EyaWriter account found for this email. They need to sign up first.' };
-  }
-
-  const existingQ = query(
-    collection(db, 'invitations'),
-    where('fromUid', '==', user.uid),
-    where('toEmail', '==', normalizedEmail),
-    where('projectId', '==', project.id),
-    where('status', '==', 'pending')
-  );
-  const existing = await getDocs(existingQ);
-  if (!existing.empty) return { ok: false, reason: 'Invitation already pending for this person.' };
-
-  await ensureSharedProject(project, user);
-
-  const inviteId = makeId('inv');
-  const inviteData = {
-    id: inviteId,
-    fromUid: user.uid,
-    fromName: user.displayName || user.email,
-    fromEmail: user.email,
-    toEmail: normalizedEmail,
-    projectId: project.id,
-    projectTitle: project.title,
-    status: 'pending',
-    createdAt: new Date().toISOString()
-  };
-
-  await setDoc(doc(db, 'invitations', inviteId), inviteData);
-
-  // Send Email Notification
-  if (window.emailjs) {
-    try {
-      await window.emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
-        to_email: normalizedEmail,
-        from_name: inviteData.fromName,
-        project_title: inviteData.projectTitle,
-        type: 'collaboration invite'
-      });
-    } catch (err) {
-      console.error('Invite email failed', err);
+    if (normalizedEmail === user.email.toLowerCase()) {
+      return { ok: false, reason: 'You cannot invite yourself.' };
     }
-  }
 
-  return { ok: true };
+    const collaborators = project.collaborators || {};
+    if (Object.keys(collaborators).length >= MAX_COLLABORATORS) {
+      return { ok: false, reason: `Maximum ${MAX_COLLABORATORS} collaborators reached.` };
+    }
+
+    const alreadyIn = Object.values(collaborators).some(
+      c => c.email.toLowerCase() === normalizedEmail
+    );
+    if (alreadyIn) return { ok: false, reason: 'This person is already a collaborator.' };
+
+    const userSnap = await getDoc(doc(db, 'usersByEmail', normalizedEmail));
+    if (!userSnap.exists()) {
+      return { ok: false, reason: 'No account found for this email. The user must sign up first.' };
+    }
+
+    // Check for existing pending invite (simple single-field query to avoid composite index issues)
+    const existingQ = query(
+      collection(db, 'invitations'),
+      where('fromUid', '==', user.uid),
+      where('toEmail', '==', normalizedEmail),
+      where('projectId', '==', project.id)
+    );
+    let existing;
+    try {
+      existing = await getDocs(existingQ);
+    } catch {
+      existing = { empty: true };
+    }
+    if (!existing.empty) {
+      const hasPending = existing.docs.some(d => d.data().status === 'pending');
+      if (hasPending) return { ok: false, reason: 'Invitation already pending for this person.' };
+    }
+
+    await ensureSharedProject(project, user);
+
+    const inviteId = makeId('inv');
+    const inviteData = {
+      id: inviteId,
+      fromUid: user.uid,
+      fromName: user.displayName || user.email,
+      fromEmail: user.email,
+      toEmail: normalizedEmail,
+      projectId: project.id,
+      projectTitle: project.title,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+
+    await setDoc(doc(db, 'invitations', inviteId), inviteData);
+
+    // Send email notification (best-effort)
+    if (window.emailjs) {
+      try {
+        await window.emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+          to_email: normalizedEmail,
+          from_name: inviteData.fromName,
+          project_title: inviteData.projectTitle,
+          to_name: userSnap.data().name || normalizedEmail,
+          type: 'invite'
+        });
+      } catch (err) {
+        console.warn('Invite email notification failed (invite was saved):', err);
+      }
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('inviteCollaborator error:', err);
+    return { ok: false, reason: err.message || 'An error occurred. Please try again.' };
+  }
 }
 
 async function ensureSharedProject(project, user) {
@@ -395,33 +410,29 @@ export function renderCollaboratorList() {
 }
 
 function renderSentInvites(invitations) {
-  const list = document.getElementById('studioSentInvites');
-  if (!list) return;
+  const containers = ['studioSentInvites', 'studioSentInvitesList']
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+  if (!containers.length) return;
 
-  if (!invitations.length) {
-    list.innerHTML = '<p class="collab-empty">No invites sent.</p>';
-    return;
-  }
+  const sorted = [...invitations].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-  // Sort by date desc
-  invitations.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  list.innerHTML = invitations.map(inv => {
-    let statusLabel = inv.status.toUpperCase();
-    if (inv.status === 'accepted') statusLabel = 'VALIDATED';
-
-    return `
-      <div class="collab-request-item">
-        <div class="collab-request-info">
-          <span class="collab-request-from">${esc(inv.toEmail)}</span>
-          <span class="collab-request-project">Project: <strong>${esc(inv.projectTitle)}</strong></span>
-          <div class="bio-meta" style="text-align: left; margin-top: 4px;">
-             Status: <span class="status-pill ${inv.status}">${statusLabel}</span>
+  const html = !sorted.length
+    ? '<p class="collab-empty">No invites sent.</p>'
+    : sorted.map(inv => {
+        const statusLabel = inv.status === 'accepted' ? 'Validated' : inv.status === 'declined' ? 'Declined' : 'Pending';
+        return `
+          <div class="collab-request-item">
+            <div class="collab-request-info">
+              <span class="collab-request-from">${esc(inv.toEmail)}</span>
+              <span class="collab-request-project">${esc(inv.projectTitle)}</span>
+            </div>
+            <span class="status-pill ${inv.status}">${statusLabel}</span>
           </div>
-        </div>
-      </div>
-    `;
-  }).join('');
+        `;
+      }).join('');
+
+  containers.forEach(list => { list.innerHTML = html; });
 }
 
 function renderCollabRequests(invitations) {
