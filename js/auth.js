@@ -495,7 +495,10 @@ export const Auth = (() => {
 
   async function handleBioSave() {
     const user = auth.currentUser;
-    if (!user) return;
+    const session = getCachedSession();
+    const isDemo = session?.isDemoSession;
+
+    if (!user && !isDemo) return;
 
     const text = profileBio.textContent || '';
     if (countWords(text) > 100) {
@@ -505,18 +508,28 @@ export const Auth = (() => {
 
     profileBio.contentEditable = 'false';
     profileEditBtn.disabled = true;
-    profileEditBtn.querySelector('span').textContent = 'Saving…';
+    const btnSpan = profileEditBtn.querySelector('span');
+    const originalBtnText = btnSpan ? btnSpan.textContent : 'Save';
+    if (btnSpan) btnSpan.textContent = 'Saving…';
 
     try {
       const bio = profileBio.textContent;
       const data = { bio };
 
-      if (pendingImageBase64) {
-        data.photoURL = pendingImageBase64;
-        await updateProfile(user, { photoURL: pendingImageBase64 });
+      if (isDemo) {
+        // Handle Demo session locally
+        session.bio = bio;
+        if (pendingImageBase64) session.photoURL = pendingImageBase64;
+        localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        // Mock a short delay for realism
+        await new Promise(r => setTimeout(r, 500));
+      } else {
+        if (pendingImageBase64) {
+          data.photoURL = pendingImageBase64;
+          await updateProfile(user, { photoURL: pendingImageBase64 });
+        }
+        await setDoc(doc(db, 'users', user.uid, 'profile'), data, { merge: true });
       }
-
-      await setDoc(doc(db, 'users', user.uid, 'profile'), data, { merge: true });
 
       pendingImageBase64 = null;
       originalBio = bio;
@@ -525,13 +538,17 @@ export const Auth = (() => {
       profileEditBtn.disabled = false;
       setEditBtnMode('edit');
       profileBio.textContent = bio || 'Tell us about yourself...';
-      if (data.photoURL) profileImg.src = data.photoURL;
+      if (isDemo && session.photoURL) profileImg.src = session.photoURL;
+      else if (!isDemo && data.photoURL) profileImg.src = data.photoURL;
 
       updateBioWordCount();
-      updateTriggerUI(user);
+      if (user) updateTriggerUI(user);
+      else if (isDemo) updateTriggerUI({ photoURL: session.photoURL, displayName: session.name });
+
     } catch (err) {
       console.error('Bio save failed', err);
       profileEditBtn.disabled = false;
+      if (btnSpan) btnSpan.textContent = originalBtnText;
       setEditBtnMode('save');
       profileBio.contentEditable = 'true';
     }

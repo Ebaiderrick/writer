@@ -661,3 +661,9 @@ export async function customConfirm(message, title = t("modal.confirm")) {
 export async function customPrompt(message, defaultValue = "", title = t("modal.prompt")) {
     return showModal({ title, message, showInput: true, defaultValue });
 }
+
+// Global script identity update listener
+window.addEventListener('scriptIdUpdated', () => {
+    renderCurrentScriptId();
+    renderHome();
+});

@@ -35,13 +35,17 @@ async function syncCurrentProjectToFirestore() {
   if (!userId) return;
   const project = getCurrentProject();
   if (!project) return;
+
+  // Update script identity for traceability as it changes
+  project.scriptId = generateScriptId();
+
   const payload = { ...project, syncedAt: new Date().toISOString() };
   try {
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
-        'lines', 'collapsedSceneIds', 'updatedAt'];
+        'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
       );
@@ -51,6 +55,16 @@ async function syncCurrentProjectToFirestore() {
         updatedBy: userId
       }, { merge: true });
     }
+
+    // Update local storage with the new scriptId and notify UI
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      parsed.projects = state.projects;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+    window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
+
   } catch (err) {
     console.error('Firestore sync failed', err);
   }
