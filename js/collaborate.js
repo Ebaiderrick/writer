@@ -220,32 +220,28 @@ export async function acceptInvitation(inviteId) {
   if (!invSnap.exists()) return;
   const inv = invSnap.data();
 
-  const projSnap = await getDoc(doc(db, 'sharedProjects', inv.projectId));
-  if (!projSnap.exists()) {
-    await customAlert('This project no longer exists.', 'Invitation Error');
-    return;
-  }
+  const sharedRef = doc(db, 'sharedProjects', inv.projectId);
 
-  const sharedProject = projSnap.data();
-  const collabCount = Object.keys(sharedProject.collaborators || {}).length;
-  if (collabCount >= MAX_COLLABORATORS) {
-    await customAlert(`This project already has ${MAX_COLLABORATORS} collaborators.`, 'No Room');
-    return;
-  }
-
-  const newCollaborators = {
-    ...sharedProject.collaborators,
-    [user.uid]: {
+  // Step 1: Add self to collaborators using dot-notation.
+  // The security rule allows this even before being a member (self-add branch).
+  await updateDoc(sharedRef, {
+    [`collaborators.${user.uid}`]: {
       name: user.displayName || user.email,
       email: user.email,
       addedAt: new Date().toISOString()
     }
-  };
+  });
 
-  await updateDoc(doc(db, 'sharedProjects', inv.projectId), { collaborators: newCollaborators });
+  // Step 2: Mark invitation accepted (recipient can always update their own invite).
   await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
 
-  const projectForUser = sanitizeProject({ ...sharedProject, collaborators: newCollaborators });
+  // Step 3: Now read the shared project — user is a collaborator so read is allowed.
+  const projSnap = await getDoc(sharedRef);
+  if (!projSnap.exists()) return;
+  const sharedProject = projSnap.data();
+
+  // Step 4: Copy project into the recipient's personal projects.
+  const projectForUser = sanitizeProject(sharedProject);
   await setDoc(doc(db, 'users', user.uid, 'projects', inv.projectId), {
     ...projectForUser,
     syncedAt: new Date().toISOString()
