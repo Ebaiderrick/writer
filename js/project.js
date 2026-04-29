@@ -36,8 +36,10 @@ async function syncCurrentProjectToFirestore() {
   const project = getCurrentProject();
   if (!project) return;
 
-  // Update script identity for traceability as it changes
-  project.scriptId = generateScriptId();
+  // Ensure script identity exists for traceability
+  if (!project.scriptId) {
+    project.scriptId = generateScriptId();
+  }
 
   const payload = { ...project, syncedAt: new Date().toISOString() };
   try {

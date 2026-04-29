@@ -228,6 +228,11 @@ export const Auth = (() => {
           ) {
             showAuth();
           }
+        } else {
+          await loadUserProfile();
+          updateTriggerUI({ photoURL: session.photoURL, displayName: session.name });
+          if (refs.authView && !refs.authView.hidden) showHome();
+          renderHome();
         }
       }
     });
@@ -397,7 +402,7 @@ export const Auth = (() => {
     const text = profileBio.textContent || '';
     const words = countWords(text);
     profileWordCount.textContent = words;
-    if (words > 100) {
+    if (words > 35) {
       profileWordCount.classList.add('profile-word-limit');
     } else {
       profileWordCount.classList.remove('profile-word-limit');
@@ -501,8 +506,8 @@ export const Auth = (() => {
     if (!user && !isDemo) return;
 
     const text = profileBio.textContent || '';
-    if (countWords(text) > 100) {
-      customAlert('Bio cannot exceed 100 words.');
+    if (countWords(text) > 35) {
+      customAlert('Bio cannot exceed 35 words.');
       return;
     }
 
@@ -567,18 +572,28 @@ export const Auth = (() => {
   }
 
   async function loadUserProfile(firebaseUser) {
+    const session = getCachedSession();
+    const isDemo = session?.isDemoSession;
     const user = auth.currentUser || firebaseUser;
-    const displayName = user.displayName || 'User';
+
+    if (!user && !isDemo) return;
+
+    const displayName = isDemo ? session.name : (user.displayName || 'User');
     profileName.textContent = displayName;
-    profileEmail.textContent = user.email;
+    profileEmail.textContent = isDemo ? session.email : user.email;
 
     const fallbackAvatar = generateInitialsAvatar(displayName);
 
     try {
-      const snap = await getDoc(doc(db, 'users', user.uid, 'profile'));
-      const profileData = snap.exists() ? snap.data() : {};
+      let profileData = {};
+      if (isDemo) {
+        profileData = { bio: session.bio, photoURL: session.photoURL };
+      } else {
+        const snap = await getDoc(doc(db, 'users', user.uid, 'profile'));
+        profileData = snap.exists() ? snap.data() : {};
+      }
 
-      const photo = profileData.photoURL || user.photoURL;
+      const photo = profileData.photoURL || (!isDemo ? user.photoURL : null);
       if (photo) {
         profileImg.src = photo;
         profileImg.onerror = () => { profileImg.src = fallbackAvatar; profileImg.onerror = null; };
