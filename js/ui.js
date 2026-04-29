@@ -52,6 +52,7 @@ export function renderHome() {
     const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
 
     node.querySelector(".project-card-title").textContent = project.title;
+    node.querySelector(".project-script-id").textContent = project.scriptId;
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
     node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
@@ -478,6 +479,14 @@ export function renderMetrics() {
   refs.pageCount.textContent = Math.max(1, Math.round((words.length / 180) * 10) / 10).toFixed(1);
   refs.characterCount.textContent = characters.size.toString();
   refs.noteCount.textContent = notes.toString();
+}
+
+export function renderCurrentScriptId() {
+  const flag = document.getElementById("currentScriptIdFlag");
+  if (!flag) return;
+  const project = getCurrentProject();
+  flag.textContent = project?.scriptId || "";
+  flag.hidden = !project?.scriptId;
 }
 
 export function closeMenus() {

@@ -21,7 +21,8 @@ import {
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
-  renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock
+  renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
+  renderCurrentScriptId
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -560,6 +561,7 @@ export function renderStudio() {
   renderSceneList();
   renderCharacterList();
   renderMetrics();
+  renderCurrentScriptId();
   renderRecentProjectMenus();
   renderLeftPaneLayout();
   applyViewState();

@@ -6,6 +6,24 @@ import { auth, db } from './firebase.js';
 import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 let firestoreSyncTimer = null;
+const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function generateScriptId() {
+  const bytes = new Uint8Array(6);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, byte => SCRIPT_ID_CHARS[byte % SCRIPT_ID_CHARS.length]).join("");
+}
+
+function normalizeScriptId(scriptId) {
+  const value = String(scriptId || "").trim().toUpperCase();
+  return /^[A-Z0-9]{6}$/.test(value) ? value : generateScriptId();
+}
 
 function queueFirestoreSync() {
   clearTimeout(firestoreSyncTimer);
@@ -139,6 +157,7 @@ export function loadProjects() {
 export function sanitizeProject(project) {
   return {
     id: project.id || uid("project"),
+    scriptId: normalizeScriptId(project.scriptId),
     title: project.title || "Untitled Script",
     author: project.author || "",
     contact: project.contact || "",
@@ -175,6 +194,7 @@ export function cloneProject(project, withNewId) {
   return sanitizeProject({
     ...project,
     id: withNewId ? uid("project") : project.id,
+    scriptId: withNewId ? generateScriptId() : project.scriptId,
     createdAt: withNewId ? now : project.createdAt,
     updatedAt: now,
     collapsedSceneIds: [...(project.collapsedSceneIds || [])],
@@ -220,8 +240,8 @@ export function upsertProject(project) {
   }
 }
 
-export function persistProjects(forceSavedBadge = false) {
-  syncProjectFromInputs();
+export function persistProjects(forceSavedBadge = false, { syncInputs = true } = {}) {
+  if (syncInputs) syncProjectFromInputs();
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     currentProjectId: state.currentProjectId,
     projects: state.projects,

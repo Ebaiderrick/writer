@@ -496,7 +496,10 @@
 
         <div class="topbar-actions">
           <span id="saveBadge" class="save-badge">Saved</span>
-          <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
+          <div class="save-home-stack">
+            <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
+            <span id="currentScriptIdFlag" class="script-id-flag" hidden></span>
+          </div>
           <button class="user-trigger open-profile-btn" aria-label="Open profile">
             <div class="user-avatar-circle">
               <img src="" alt="" class="user-avatar-img" hidden>
@@ -822,7 +825,10 @@
   <template id="projectCardTemplate">
     <article class="project-card">
       <div class="project-card-top">
-        <h3 class="project-card-title"></h3>
+        <div class="project-card-heading">
+          <h3 class="project-card-title"></h3>
+          <span class="project-script-id script-id-flag"></span>
+        </div>
         <button class="project-delete" type="button" aria-label="Delete script">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6m4-6v6"/></svg>
         </button>

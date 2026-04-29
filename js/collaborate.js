@@ -390,7 +390,7 @@ function handleSharedProjectRemoved(projectId) {
     state.currentProjectId = state.projects[0]?.id || null;
     showHome();
   }
-  persistProjects(false);
+  persistProjects(false, { syncInputs: false });
   deleteProjectFromCloud(projectId);
   renderHome();
   syncSharedProjectWatchers();
