@@ -160,7 +160,13 @@ export async function buildWordDocumentBlob(project) {
     Packer,
     Paragraph,
     TextRun,
-    AlignmentType
+    AlignmentType,
+    Table,
+    TableRow,
+    TableCell,
+    WidthType,
+    BorderStyle,
+    VerticalAlign
   } = docx;
 
   const cmToTwip = (cm) => Math.round(cm * 567);
@@ -200,6 +206,12 @@ export async function buildWordDocumentBlob(project) {
     Paragraph,
     TextRun,
     AlignmentType,
+    Table,
+    TableRow,
+    TableCell,
+    WidthType,
+    BorderStyle,
+    VerticalAlign,
     cmToTwip,
     ptToHalfPoint,
     lineTwip,
@@ -278,7 +290,7 @@ function spacerParagraph(lines = 1) {
 
 function buildWordParagraphsForLine(line, index, ctx) {
   if (line.secondary !== undefined) {
-    return [buildWordParagraph(line.displayText, line.type, index, ctx)];
+    return [buildWordDualBlock(line, index, ctx)];
   }
   return [buildWordParagraph(line.displayText, line.type, index, ctx)];
 }
@@ -298,6 +310,123 @@ function buildWordParagraph(text, type, index, ctx) {
     indent: {
       left: cmToTwip(config.leftCm),
       right: cmToTwip(config.rightCm)
+    },
+    children: [
+      new TextRun({
+        text: config.uppercase ? text.toUpperCase() : text,
+        bold: Boolean(config.bold ?? layout.bold),
+        italics: Boolean(config.italic ?? layout.italic),
+        font,
+        size: ptToHalfPoint(EXPORT_TYPOGRAPHY.fontSizePt)
+      })
+    ]
+  });
+}
+
+function buildWordDualBlock(line, index, ctx) {
+  const {
+    Table,
+    TableRow,
+    TableCell,
+    WidthType,
+    BorderStyle,
+    VerticalAlign,
+    cmToTwip
+  } = ctx;
+
+  const config = getWordTypeConfig(line.type);
+  const dualParagraphs = buildDualCellParagraphs(line, index, ctx);
+  const totalWritingWidthCm = 21.59 - 2.5 - 2.5;
+  const gapCm = 0.8;
+  const columnWidthCm = (totalWritingWidthCm - gapCm) / 2;
+  const beforeTwip = (index === 0 ? 0 : config.beforePt) * 20;
+
+  return new Table({
+    width: {
+      size: 100,
+      type: WidthType.PERCENTAGE
+    },
+    borders: {
+      top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
+    },
+    columnWidths: [cmToTwip(columnWidthCm), cmToTwip(columnWidthCm)],
+    rows: [
+      new TableRow({
+        cantSplit: true,
+        children: [
+          new TableCell({
+            width: { size: cmToTwip(columnWidthCm), type: WidthType.DXA },
+            verticalAlign: VerticalAlign.TOP,
+            margins: {
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: cmToTwip(gapCm / 2)
+            },
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
+            },
+            children: dualParagraphs.left
+          }),
+          new TableCell({
+            width: { size: cmToTwip(columnWidthCm), type: WidthType.DXA },
+            verticalAlign: VerticalAlign.TOP,
+            margins: {
+              top: 0,
+              bottom: 0,
+              left: cmToTwip(gapCm / 2),
+              right: 0
+            },
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
+            },
+            children: dualParagraphs.right
+          })
+        ]
+      })
+    ],
+    margins: {
+      top: beforeTwip,
+      bottom: config.afterPt * 20,
+      left: 0,
+      right: 0
+    }
+  });
+}
+
+function buildDualCellParagraphs(line, index, ctx) {
+  return {
+    left: [buildWordCellParagraph(line.displayText, line.type, index, ctx)],
+    right: [buildWordCellParagraph(line.secondary, line.type, index, ctx)]
+  };
+}
+
+function buildWordCellParagraph(text, type, index, ctx) {
+  const { Paragraph, TextRun, AlignmentType, ptToHalfPoint, lineTwip, font } = ctx;
+  const layout = getExportLayout(type);
+  const config = getWordTypeConfig(type);
+
+  return new Paragraph({
+    alignment: config.align === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT,
+    spacing: {
+      before: 0,
+      after: 0,
+      line: lineTwip
+    },
+    indent: {
+      left: 0,
+      right: 0
     },
     children: [
       new TextRun({
