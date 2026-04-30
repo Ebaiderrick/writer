@@ -102,7 +102,13 @@ export function buildPrintableDocument(project, autoPrint = false) {
   const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\n${escapeHtml(t("cover.by"))}\n\n${escapeHtml(project.author || t("cover.authorFallback"))}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
   const coverMarkup = `
     <section class="print-page cover-page">
-      <pre class="print-cover-text">${coverText}</pre>
+      <div class="print-frame cover-frame">
+        <div class="print-header"></div>
+        <div class="print-body print-cover-body">
+          <pre class="print-cover-text">${coverText}</pre>
+        </div>
+        <div class="print-footer-slot"></div>
+      </div>
     </section>
   `;
 
@@ -112,13 +118,17 @@ export function buildPrintableDocument(project, autoPrint = false) {
       ? `<div class="print-footer">${escapeHtml(buildPageNumberLabel(pageNum, previewData.scriptPages.length))}</div>`
       : "";
 
-    const firstScriptPageClass = index === 0 ? " script-page-first" : "";
     return `
-    <section class="print-page script-page${firstScriptPageClass}">
-      <div class="print-body">
-        ${pageLines.map((line) => renderHtmlExportLine(line, 'print')).join('')}
+    <section class="print-page script-page">
+      <div class="print-frame">
+        <div class="print-header"></div>
+        <div class="print-body">
+          ${pageLines.map((line) => renderHtmlExportLine(line, 'print')).join('')}
+        </div>
+        <div class="print-footer-slot">
+          ${pageFooter}
+        </div>
       </div>
-      ${pageFooter}
     </section>
   `;
   }).join("");
@@ -144,32 +154,41 @@ export function buildWordDocument(project) {
   const previewData = buildPreviewData(project);
   const coverMarkup = `
     <div class="word-page cover-page">
-      <div class="word-cover-shell">
-        <div class="word-cover-stack">
-          <p class="word-cover-title">${escapeHtml(project.title)}</p>
-          <p class="word-cover-byline">${escapeHtml(t("cover.by"))}</p>
-          <p class="word-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
-          <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
-          <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
-          <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
-          <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
+      <div class="word-frame cover-frame">
+        <div class="word-header"></div>
+        <div class="word-body word-cover-shell">
+          <div class="word-cover-stack">
+            <p class="word-cover-title">${escapeHtml(project.title)}</p>
+            <p class="word-cover-byline">${escapeHtml(t("cover.by"))}</p>
+            <p class="word-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
+            <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
+            <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
+            <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
+            <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
+          </div>
         </div>
+        <div class="word-footer-slot"></div>
       </div>
     </div>
   `;
 
   const scriptPagesMarkup = previewData.scriptPages.map((pageLines, index) => {
     const pageNum = index + 1;
-    const pageHeader = state.viewOptions.pageNumbers
+    const pageFooter = state.viewOptions.pageNumbers
       ? `<div class="word-page-number">${escapeHtml(buildPageNumberLabel(pageNum, previewData.scriptPages.length))}</div>`
       : `<div class="word-page-number word-page-number-placeholder"></div>`;
-    const pageClassName = index === 0 ? 'word-page word-script-page word-script-page-first' : 'word-page word-script-page';
+    const pageClassName = 'word-page word-script-page';
 
     return `
       <div class="${pageClassName}">
-        ${pageHeader}
-        <div class="word-body">
-          ${pageLines.map((line) => renderHtmlExportLine(line, 'word')).join('')}
+        <div class="word-frame">
+          <div class="word-header"></div>
+          <div class="word-body">
+            ${pageLines.map((line) => renderHtmlExportLine(line, 'word')).join('')}
+          </div>
+          <div class="word-footer-slot">
+            ${pageFooter}
+          </div>
         </div>
       </div>
     `;
@@ -187,6 +206,7 @@ export function buildWordDocument(project) {
 <body>
   <main class="word-shell">
     ${coverMarkup}
+    <div class="word-explicit-page-break"></div>
     ${scriptPagesMarkup.join('')}
   </main>
 </body>
@@ -260,29 +280,32 @@ function getPrintableStyles() {
       padding: 0;
     }
     .print-page {
-      position: relative;
       width: ${EXPORT_PAGE_SETTINGS.widthIn}in;
-      min-height: ${EXPORT_PAGE_SETTINGS.heightIn}in;
+      height: ${EXPORT_PAGE_SETTINGS.heightIn}in;
       margin: 0 auto;
-      padding: ${EXPORT_PAGE_SETTINGS.marginsIn.top}in ${EXPORT_PAGE_SETTINGS.marginsIn.right}in ${EXPORT_PAGE_SETTINGS.marginsIn.bottom}in ${EXPORT_PAGE_SETTINGS.marginsIn.left}in;
       background: #fff;
       color: #111;
       page-break-after: always;
       break-after: page;
+      overflow: hidden;
     }
     .print-page:last-child {
       page-break-after: auto;
       break-after: auto;
     }
-    .cover-page {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
+    .print-frame {
+      display: grid;
+      grid-template-rows: ${EXPORT_PAGE_SETTINGS.marginsIn.top}in 1fr ${EXPORT_PAGE_SETTINGS.marginsIn.bottom}in;
+      height: 100%;
+      padding: 0 ${EXPORT_PAGE_SETTINGS.marginsIn.right}in 0 ${EXPORT_PAGE_SETTINGS.marginsIn.left}in;
     }
-    .script-page-first {
-      page-break-before: always !important;
-      break-before: page !important;
+    .print-header,
+    .print-footer-slot {
+      width: 100%;
+    }
+    .cover-page {
+      page-break-after: always;
+      break-after: page;
     }
     .print-cover-text {
       white-space: pre-wrap;
@@ -291,7 +314,13 @@ function getPrintableStyles() {
     }
     .print-body {
       width: 100%;
-      padding-bottom: 0.35in;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .print-cover-body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .print-line {
       margin: 0;
@@ -307,9 +336,11 @@ function getPrintableStyles() {
     ${buildTypeCss('print')}
     ${buildDualCss('print')}
     .print-footer {
-      position: absolute;
-      right: ${EXPORT_PAGE_SETTINGS.marginsIn.right}in;
-      bottom: 0.4in;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
       font-size: 10pt;
       color: #111111;
     }
@@ -343,28 +374,40 @@ function getWordStyles() {
     }
     .word-page {
       page: WordSection;
-      position: relative;
       width: 100%;
-      min-height: 9in;
-    }
-    .cover-page {
-      min-height: 9in;
+      height: ${EXPORT_PAGE_SETTINGS.heightIn}in;
       page-break-after: always;
       break-after: page;
       mso-break-type: page;
+      overflow: hidden;
     }
-    .word-script-page {
-      page-break-before: always;
-      break-before: page;
-      mso-break-type: page;
+    .word-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
     }
-    .word-script-page-first {
-      page-break-before: always;
-      break-before: page;
+    .word-explicit-page-break {
+      page-break-after: always;
+      break-after: page;
       mso-break-type: page;
+      height: 0;
+      overflow: hidden;
+    }
+    .word-frame {
+      display: grid;
+      grid-template-rows: ${EXPORT_PAGE_SETTINGS.marginsIn.top}in 1fr ${EXPORT_PAGE_SETTINGS.marginsIn.bottom}in;
+      height: 100%;
+      padding: 0 ${EXPORT_PAGE_SETTINGS.marginsIn.right}in 0 ${EXPORT_PAGE_SETTINGS.marginsIn.left}in;
+    }
+    .word-header,
+    .word-footer-slot {
+      width: 100%;
+    }
+    .cover-page {
+      page-break-after: auto;
+      break-after: auto;
+      mso-break-type: auto;
     }
     .word-cover-shell {
-      min-height: 9in;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -396,9 +439,11 @@ function getWordStyles() {
       margin-top: 24pt;
     }
     .word-page-number {
-      position: absolute;
-      top: -0.3in;
-      right: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
       font-size: 10pt;
     }
     .word-page-number-placeholder {
@@ -406,6 +451,8 @@ function getWordStyles() {
     }
     .word-body {
       width: 100%;
+      min-height: 0;
+      overflow: hidden;
     }
     .word-line {
       margin: 0;

@@ -6,12 +6,12 @@ export const EXPORT_PAGE_SETTINGS = {
   widthIn: 8.5,
   heightIn: 11,
   marginsIn: {
-    top: 1,
-    right: 1,
-    bottom: 1,
-    left: 1
+    top: 2,
+    right: 2,
+    bottom: 2,
+    left: 2
   },
-  pageUnitCapacity: 54
+  pageUnitCapacity: 42
 };
 
 export const EXPORT_TYPOGRAPHY = {
