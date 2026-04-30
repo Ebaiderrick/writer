@@ -16,6 +16,12 @@ import {
 import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
 import { paginateScriptLines } from './pagination.js';
 import {
+  buildExportFilename,
+  buildExportSnapshot,
+  buildPreparedExportLines,
+  getExportLayout
+} from './exportFormat.js';
+import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
@@ -27,9 +33,8 @@ import {
 import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
-  slugify, downloadFile, selectElementText, parseTextToLines, uid,
+  downloadFile, selectElementText, parseTextToLines, uid,
   placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
-  formatLineText
 } from './utils.js';
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
 import {
@@ -1652,33 +1657,26 @@ function exportTxt() {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
 
-  const preparedLines = buildPreparedExportLines(project);
-
-  const coverParts = [
-    project.title || "Untitled Script",
-    project.author ? `by ${project.author}` : "",
-    [project.contact, project.company, project.details].filter(Boolean).join("\n"),
-    project.logline || ""
-  ].filter(Boolean);
-  const cover = coverParts.join("\n\n");
-
-  const pageBreak = "\n\n" + "-".repeat(60) + "\n\n";
-  const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
-
-  const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
-  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+  const preparedLines = buildPreparedExportLines(project, { autoNumberScenes: state.autoNumberScenes });
+  const pages = paginateScriptLines(preparedLines);
+  const content = [renderTxtCoverPage(project), ...pages.map(renderTxtScriptPage)].join("\f\n");
+  downloadFile(buildExportFilename(project.title, "txt"), `${content}\n`, "text/plain;charset=utf-8");
 }
 
 function exportJson() {
   const project = syncProjectFromInputs() || getCurrentProject();
-  downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+  if (!project) return;
+  const preparedLines = buildPreparedExportLines(project, { autoNumberScenes: state.autoNumberScenes });
+  const pages = paginateScriptLines(preparedLines);
+  const payload = buildExportSnapshot(project, pages, { autoNumberScenes: state.autoNumberScenes });
+  downloadFile(buildExportFilename(project.title, "json"), JSON.stringify(payload, null, 2), "application/json");
 }
 
 function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
     if (!project) return;
     const content = `\uFEFF${buildWordDocument(project)}`;
-    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword;charset=utf-8");
+    downloadFile(buildExportFilename(project.title, "doc"), content, "application/msword;charset=utf-8");
 }
 
 function exportPdf() { printWithHiddenFrame(); }
@@ -1742,27 +1740,114 @@ function printWithHiddenFrame() {
   frame.srcdoc = buildPrintableDocument(project, false);
 }
 
-function buildPreparedExportLines(project) {
-  let sceneNumber = 0;
+function renderTxtCoverPage(project) {
+  const title = centerTxtLine(project.title || "Untitled Script");
+  const byline = centerTxtLine("by");
+  const author = centerTxtLine(project.author || "Unknown Author");
+  const meta = [project.contact, project.company, project.details].filter(Boolean).map(centerTxtLine);
+  const logline = project.logline ? wrapTxtBlock(project.logline, 61).map(centerTxtLine) : [];
 
-  return project.lines.reduce((accumulator, line) => {
-    const normalized = formatLineText(line.text, line.type);
-    if (!normalized) {
-      return accumulator;
+  return [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    title,
+    "",
+    byline,
+    "",
+    author,
+    "",
+    ...meta,
+    ...(meta.length ? [""] : []),
+    ...logline
+  ].join("\n").replace(/\n+$/, "");
+}
+
+function renderTxtScriptPage(pageLines) {
+  const rows = [];
+  pageLines.forEach((line) => {
+    const beforeLines = Math.max(0, getExportLayout(line.type).beforeLines || 0);
+    if (rows.length) {
+      for (let index = 0; index < beforeLines; index += 1) {
+        rows.push("");
+      }
+    }
+    rows.push(renderTxtLine(line));
+  });
+  return rows.join("\n");
+}
+
+function renderTxtLine(line) {
+  if (line.secondary !== undefined) {
+    const leftLines = wrapTxtBlock(line.displayText, getExportLayout("dual").widthChars);
+    const rightLines = wrapTxtBlock(line.secondary, getExportLayout("dual").widthChars);
+    const count = Math.max(leftLines.length, rightLines.length);
+    const rows = [];
+
+    for (let index = 0; index < count; index += 1) {
+      const left = (leftLines[index] || "").padEnd(getExportLayout("dual").widthChars, " ");
+      const right = rightLines[index] || "";
+      rows.push(`${left}     ${right}`.trimEnd());
     }
 
-    if (line.type === "scene") {
-      sceneNumber += 1;
+    return rows.join("\n");
+  }
+
+  const layout = getExportLayout(line.type);
+  const indent = " ".repeat(Math.round(layout.indentIn * 10));
+  const wrapped = wrapTxtBlock(line.displayText, layout.widthChars).map((chunk) => {
+    if (layout.align === "right") {
+      return `${indent}${chunk.padStart(layout.widthChars, " ")}`.trimEnd();
+    }
+    return `${indent}${chunk}`.trimEnd();
+  });
+
+  return wrapped.join("\n");
+}
+
+function wrapTxtBlock(text, width) {
+  const normalized = String(text || "");
+  const lines = [];
+
+  normalized.split("\n").forEach((segment) => {
+    const words = segment.split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      lines.push("");
+      return;
     }
 
-    accumulator.push({
-      id: line.id,
-      type: line.type,
-      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
+    let current = "";
+    words.forEach((word) => {
+      if (!current) {
+        current = word;
+        return;
+      }
+      if (`${current} ${word}`.length <= width) {
+        current = `${current} ${word}`;
+      } else {
+        lines.push(current);
+        current = word;
+      }
     });
 
-    return accumulator;
-  }, []);
+    if (current) {
+      lines.push(current);
+    }
+  });
+
+  return lines.length ? lines : [""];
+}
+
+function centerTxtLine(text, width = 61) {
+  const value = String(text || "");
+  const padding = Math.max(0, Math.floor((width - value.length) / 2));
+  return `${" ".repeat(padding)}${value}`.trimEnd();
 }
 
 function importFile(event) {
@@ -1777,7 +1862,8 @@ function importFile(event) {
 
     if (file.name.toLowerCase().endsWith(".json")) {
       try {
-        nextProject = sanitizeProject(JSON.parse(text));
+        const parsed = JSON.parse(text);
+        nextProject = sanitizeProject(parsed?.project || parsed);
       } catch (error) {
         console.error("Invalid JSON import", error);
         return;
