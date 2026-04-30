@@ -1,29 +1,29 @@
 :root {
-  /* Core Variables (Rose/Cedar) */
-  --bg: #f4efe7;
-  --bg-gradient: linear-gradient(135deg, #f4efe7 0%, #e8ddd4 100%);
-  --panel: rgba(255, 255, 255, 0.85);
-  --ink: #2c241b;
-  --ink-muted: #6b5e52;
-  --muted: #6b5e52;
-  --accent: #1f7a6b;
-  --accent-strong: #12584c;
-  --accent-soft: #e4f0ed;
-  --line: rgba(44, 36, 33, 0.12);
-  --shadow: 0 14px 36px rgba(0, 0, 0, 0.06);
+  /* Core Variables (Rose/Cedar - Sky Theme) */
+  --bg: #f0f9ff;
+  --bg-gradient: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  --panel: rgba(255, 255, 255, 0.9);
+  --ink: #0c4a6e;
+  --ink-muted: #334155;
+  --muted: #64748b;
+  --accent: #0ea5e9;
+  --accent-strong: #0284c7;
+  --accent-soft: #f0f9ff;
+  --line: rgba(14, 165, 233, 0.12);
+  --shadow: 0 14px 36px rgba(14, 165, 233, 0.1);
   --radius: 16px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
   /* Compatibility / Editor specific */
-  --soft: #f7f2ea;
-  --rose: #e8ddd0;
-  --theme-tertiary: #1f7a6b;
-  --surface-strong: #fffdf8;
-  --surface-muted: #f7f1e8;
-  --editor-shell: linear-gradient(180deg, #fffdf8 0%, #f2ebe1 100%);
+  --soft: #f0f9ff;
+  --rose: #e0f2fe;
+  --theme-tertiary: #0ea5e9;
+  --surface-strong: #ffffff;
+  --surface-muted: #f8fafc;
+  --editor-shell: linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%);
   --paper-bg: #ffffff;
-  --paper-ink: #241b13;
-  --control-bg: #f0e6d8;
+  --paper-ink: #0f172a;
+  --control-bg: #e0f2fe;
 
   /* Layout */
   --left-pane-width: 260px;

@@ -354,25 +354,25 @@ class LiquidApp {
 
     this.palettes = {
       cedar: {
-        background: 0xfffcf5,
-        base: hexToVector3(0xfffcf5),
+        background: 0xf0f9ff,
+        base: hexToVector3(0xf0f9ff),
         colors: [
-          hexToVector3(0xffd700), // Gold
-          hexToVector3(0xffa500), // Orange
-          hexToVector3(0xb8860b), // Dark Goldenrod
-          hexToVector3(0xff8c00), // Dark Orange
-          hexToVector3(0xdaa520), // Goldenrod
-          hexToVector3(0xffe135)  // Banana Yellow
+          hexToVector3(0x0ea5e9), // Sky Blue
+          hexToVector3(0x38bdf8), // Light Sky Blue
+          hexToVector3(0xffffff), // Cloud White
+          hexToVector3(0x7dd3fc), // Sky Blue 300
+          hexToVector3(0xe0f2fe), // Sky Blue 100
+          hexToVector3(0xbae6fd)  // Sky Blue 200
         ],
         settings: {
-          speed: 0.8,
-          intensity: 1.6,
-          grainIntensity: 0.02,
-          gradientSize: 0.6,
+          speed: 0.4,
+          intensity: 1.4,
+          grainIntensity: 0.01,
+          gradientSize: 0.8,
           gradientCount: 12.0,
-          color1Weight: 1.0,
-          color2Weight: 1.4,
-          touchStrength: 0.5
+          color1Weight: 1.2,
+          color2Weight: 1.0,
+          touchStrength: 0.4
         }
       },
       white: {
