@@ -199,6 +199,7 @@ export function buildExportSnapshot(project, pages, options = {}) {
     exportVersion: EXPORT_FORMAT_METADATA.version,
     exportedAt: new Date().toISOString(),
     exportFileBase: buildExportFileBase(project?.title),
+    author: project?.author || "",
     screenplayFormat: EXPORT_FORMAT_METADATA,
     autoNumberScenes: Boolean(options.autoNumberScenes),
     project,

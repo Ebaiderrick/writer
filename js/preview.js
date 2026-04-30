@@ -166,7 +166,8 @@ export async function buildWordDocumentBlob(project) {
     TableCell,
     WidthType,
     BorderStyle,
-    VerticalAlign
+    VerticalAlign,
+    TableLayoutType
   } = docx;
 
   const cmToTwip = (cm) => Math.round(cm * 567);
@@ -212,6 +213,7 @@ export async function buildWordDocumentBlob(project) {
     WidthType,
     BorderStyle,
     VerticalAlign,
+    TableLayoutType,
     cmToTwip,
     ptToHalfPoint,
     lineTwip,
@@ -219,6 +221,9 @@ export async function buildWordDocumentBlob(project) {
   }));
 
   const doc = new Document({
+    creator: project.author || "",
+    lastModifiedBy: project.author || "",
+    title: project.title || "Untitled Script",
     sections: [
       {
         properties: {
@@ -331,20 +336,30 @@ function buildWordDualBlock(line, index, ctx) {
     WidthType,
     BorderStyle,
     VerticalAlign,
+    TableLayoutType,
+    AlignmentType,
     cmToTwip
   } = ctx;
 
   const config = getWordTypeConfig(line.type);
   const dualParagraphs = buildDualCellParagraphs(line, index, ctx);
   const totalWritingWidthCm = 21.59 - 2.5 - 2.5;
+  const sideInsetCm = 1.5;
   const gapCm = 0.8;
-  const columnWidthCm = (totalWritingWidthCm - gapCm) / 2;
+  const dualBlockWidthCm = totalWritingWidthCm - (sideInsetCm * 2);
+  const columnWidthCm = (dualBlockWidthCm - gapCm) / 2;
   const beforeTwip = (index === 0 ? 0 : config.beforePt) * 20;
 
   return new Table({
     width: {
-      size: 100,
-      type: WidthType.PERCENTAGE
+      size: cmToTwip(dualBlockWidthCm),
+      type: WidthType.DXA
+    },
+    layout: TableLayoutType.FIXED,
+    alignment: AlignmentType.CENTER,
+    indent: {
+      size: cmToTwip(sideInsetCm),
+      type: WidthType.DXA
     },
     borders: {
       top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
@@ -374,6 +389,7 @@ function buildWordDualBlock(line, index, ctx) {
               left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
               right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
             },
+            shading: { fill: "FFFFFF", color: "FFFFFF", type: "clear" },
             children: dualParagraphs.left
           }),
           new TableCell({
@@ -391,6 +407,7 @@ function buildWordDualBlock(line, index, ctx) {
               left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
               right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
             },
+            shading: { fill: "FFFFFF", color: "FFFFFF", type: "clear" },
             children: dualParagraphs.right
           })
         ]
@@ -418,9 +435,11 @@ function buildWordCellParagraph(text, type, index, ctx) {
   const config = getWordTypeConfig(type);
 
   return new Paragraph({
-    alignment: config.align === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT,
+    alignment: type === "dual"
+      ? AlignmentType.CENTER
+      : (config.align === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT),
     spacing: {
-      before: 0,
+      before: type === "dual" ? 12 * 20 : 0,
       after: 0,
       line: lineTwip
     },
