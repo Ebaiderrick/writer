@@ -13,7 +13,7 @@ import {
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
   showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
 } from './editor.js';
-import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
+import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocumentBlob } from './preview.js';
 import { paginateScriptLines } from './pagination.js';
 import {
   buildExportFilename,
@@ -33,7 +33,7 @@ import {
 import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
-  downloadFile, selectElementText, parseTextToLines, uid,
+  downloadFile, downloadBlob, selectElementText, parseTextToLines, uid,
   placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
 } from './utils.js';
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
@@ -1672,11 +1672,16 @@ function exportJson() {
   downloadFile(buildExportFilename(project.title, "json"), JSON.stringify(payload, null, 2), "application/json");
 }
 
-function exportWord() {
+async function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
     if (!project) return;
-    const content = `\uFEFF${buildWordDocument(project)}`;
-    downloadFile(buildExportFilename(project.title, "doc"), content, "application/msword;charset=utf-8");
+    try {
+      const blob = await buildWordDocumentBlob(project);
+      downloadBlob(buildExportFilename(project.title, "docx"), blob);
+    } catch (error) {
+      console.error("Word export failed", error);
+      customAlert("Word export is not available right now. Please reload and try again.", "Word Export");
+    }
 }
 
 function exportPdf() { printWithHiddenFrame(); }

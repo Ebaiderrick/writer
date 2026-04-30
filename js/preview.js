@@ -149,53 +149,192 @@ export function buildPrintableDocument(project, autoPrint = false) {
 </html>`;
 }
 
-export function buildWordDocument(project) {
-  const previewData = buildPreviewData(project);
-  const coverMarkup = `
-    <div class="word-page cover-page">
-      <div class="word-frame cover-frame">
-        <div class="word-header"></div>
-        <div class="word-body word-cover-shell">
-          ${buildWordCoverMarkup(project)}
-        </div>
-        <div class="word-footer-slot"></div>
-      </div>
-    </div>
-  `;
+export async function buildWordDocumentBlob(project) {
+  const docx = globalThis.docx;
+  if (!docx) {
+    throw new Error("Word export library is not available.");
+  }
 
-  const scriptPagesMarkup = previewData.scriptPages.map((pageLines) => {
-    const pageClassName = 'word-page word-script-page';
+  const {
+    Document,
+    Packer,
+    Paragraph,
+    TextRun,
+    AlignmentType
+  } = docx;
 
-    return `
-      <div class="${pageClassName}">
-        <div class="word-frame">
-          <div class="word-header"></div>
-          <div class="word-body">
-            ${pageLines.map((line, lineIndex) => renderHtmlExportLine(line, 'word', lineIndex)).join('')}
-          </div>
-          <div class="word-footer-slot"></div>
-        </div>
-      </div>
-  `;
+  const cmToTwip = (cm) => Math.round(cm * 567);
+  const ptToHalfPoint = (pt) => pt * 2;
+  const lineTwip = 240;
+  const font = EXPORT_TYPOGRAPHY.fontFamily;
+  const preparedLines = buildPreparedExportLines(project, { autoNumberScenes: state.autoNumberScenes });
+
+  const coverChildren = [
+    spacerParagraph(6),
+    centeredParagraph(project.title, {
+      font,
+      bold: true,
+      spacingAfter: 36
+    }),
+    centeredParagraph(t("cover.by"), {
+      font,
+      spacingAfter: 12
+    }),
+    centeredParagraph(project.author || t("cover.authorFallback"), {
+      font,
+      bold: true,
+      spacingAfter: 36
+    }),
+    centeredParagraph(project.contact || "", { font, spacingAfter: 6 }),
+    centeredParagraph(project.company || "", { font, spacingAfter: 6 }),
+    centeredParagraph(project.details || "", { font, spacingAfter: 6 }),
+    centeredParagraph(project.logline || "", {
+      font,
+      spacingBefore: 24,
+      leftCm: 3.5,
+      rightCm: 3.5
+    })
+  ].filter(Boolean);
+
+  const bodyChildren = preparedLines.flatMap((line, index) => buildWordParagraphsForLine(line, index, {
+    Paragraph,
+    TextRun,
+    AlignmentType,
+    cmToTwip,
+    ptToHalfPoint,
+    lineTwip,
+    font
+  }));
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: {
+              top: cmToTwip(2),
+              right: cmToTwip(2.5),
+              bottom: cmToTwip(2),
+              left: cmToTwip(2.5)
+            }
+          }
+        },
+        children: coverChildren
+      },
+      {
+        properties: {
+          page: {
+            margin: {
+              top: cmToTwip(2),
+              right: cmToTwip(2.5),
+              bottom: cmToTwip(2),
+              left: cmToTwip(2.5)
+            }
+          }
+        },
+        children: bodyChildren
+      }
+    ]
   });
 
-  return `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-  <meta charset="UTF-8">
-  <meta name="ProgId" content="Word.Document">
-  <meta name="Generator" content="EyaWriter">
-  <title>${escapeHtml(project.title)}</title>
-  <style>${getWordStyles()}</style>
-</head>
-<body>
-  <main class="word-shell">
-    ${coverMarkup}
-    <br clear="all" class="word-explicit-page-break" style="mso-special-character: line-break; page-break-before: always;">
-    ${scriptPagesMarkup.join('')}
-  </main>
-</body>
-</html>`;
+  return Packer.toBlob(doc);
+}
+
+function centeredParagraph(text, { font, bold = false, spacingBefore = 0, spacingAfter = 0, leftCm = 0, rightCm = 0 }) {
+  if (!text) return null;
+  const docx = globalThis.docx;
+  return new docx.Paragraph({
+    alignment: docx.AlignmentType.CENTER,
+    spacing: {
+      before: spacingBefore * 20,
+      after: spacingAfter * 20,
+      line: 240
+    },
+    indent: {
+      left: Math.round(leftCm * 567),
+      right: Math.round(rightCm * 567)
+    },
+    children: [
+      new docx.TextRun({
+        text,
+        bold,
+        font,
+        size: 24
+      })
+    ]
+  });
+}
+
+function spacerParagraph(lines = 1) {
+  const docx = globalThis.docx;
+  return new docx.Paragraph({
+    spacing: {
+      after: Math.max(0, lines) * 12 * 20,
+      line: 240
+    },
+    children: [new docx.TextRun({ text: "" })]
+  });
+}
+
+function buildWordParagraphsForLine(line, index, ctx) {
+  if (line.secondary !== undefined) {
+    return [buildWordParagraph(line.displayText, line.type, index, ctx)];
+  }
+  return [buildWordParagraph(line.displayText, line.type, index, ctx)];
+}
+
+function buildWordParagraph(text, type, index, ctx) {
+  const { Paragraph, TextRun, AlignmentType, cmToTwip, ptToHalfPoint, lineTwip, font } = ctx;
+  const layout = getExportLayout(type);
+  const config = getWordTypeConfig(type);
+
+  return new Paragraph({
+    alignment: config.align === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT,
+    spacing: {
+      before: (index === 0 ? 0 : config.beforePt) * 20,
+      after: config.afterPt * 20,
+      line: lineTwip
+    },
+    indent: {
+      left: cmToTwip(config.leftCm),
+      right: cmToTwip(config.rightCm)
+    },
+    children: [
+      new TextRun({
+        text: config.uppercase ? text.toUpperCase() : text,
+        bold: Boolean(config.bold ?? layout.bold),
+        italics: Boolean(config.italic ?? layout.italic),
+        font,
+        size: ptToHalfPoint(EXPORT_TYPOGRAPHY.fontSizePt)
+      })
+    ]
+  });
+}
+
+function getWordTypeConfig(type) {
+  switch (type) {
+    case "scene":
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 12, bold: true, uppercase: true, align: "left" };
+    case "character":
+      return { leftCm: 5, rightCm: 0, beforePt: 12, afterPt: 0, bold: true, uppercase: true, align: "left" };
+    case "dialogue":
+      return { leftCm: 2.5, rightCm: 2.5, beforePt: 0, afterPt: 0, align: "left" };
+    case "parenthetical":
+      return { leftCm: 3.75, rightCm: 2.5, beforePt: 0, afterPt: 0, italic: true, align: "left" };
+    case "transition":
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 0, bold: true, uppercase: true, align: "right" };
+    case "shot":
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 0, bold: true, uppercase: true, align: "left" };
+    case "note":
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 0, italic: true, align: "left" };
+    case "dual":
+      return { leftCm: 5, rightCm: 0, beforePt: 12, afterPt: 0, bold: true, uppercase: true, align: "left" };
+    case "action":
+    case "text":
+    case "image":
+    default:
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 0, align: "left" };
+  }
 }
 
 function renderHtmlExportLine(line, prefix, lineIndex = 0) {
