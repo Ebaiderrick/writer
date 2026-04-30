@@ -2896,6 +2896,20 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   border-color: var(--accent) !important;
 }
 
+.spelling-error {
+  text-decoration: underline wavy #e53e3e;
+  text-decoration-skip-ink: none;
+}
+
+.grammar-error {
+  text-decoration-color: #38a169;
+}
+
+.spelling-error.is-selected {
+  background-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 2px;
+}
+
 /* Themed Scrollbars */
 ::-webkit-scrollbar {
   width: 8px;

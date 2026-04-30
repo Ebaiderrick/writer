@@ -1781,8 +1781,8 @@ function importFile(event) {
       });
     }
 
-    nextProject.id = project.id;
-    nextProject.createdAt = project.createdAt;
+    nextProject.id = uid();
+    nextProject.createdAt = new Date().toISOString();
     upsertProject(nextProject);
     openProject(nextProject.id);
     persistProjects(true);

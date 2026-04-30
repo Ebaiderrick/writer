@@ -419,7 +419,11 @@ export function setCommentFilter(key, value) {
 
 export async function addComment(projectId, text, { lineId = null, parentId = null } = {}) {
   const user = auth.currentUser;
-  if (!user || !text.trim()) return;
+  if (!user) {
+    await customAlert('You must be signed in with a full account to add comments.', 'Authentication Required');
+    return;
+  }
+  if (!text.trim()) return;
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
   const ref = commentDocRef(project, makeId('cmt'));
