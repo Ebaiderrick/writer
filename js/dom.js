@@ -69,7 +69,6 @@ export const refs = {
   get characterCount() { return getCached("#characterCount"); },
   get noteCount() { return getCached("#noteCount"); },
   get duplicateProjectBtn() { return getCached("#duplicateProjectBtn"); },
-  get loadSampleBtn() { return getCached("#loadSampleBtn"); },
   get deleteProjectBtn() { return getCached("#deleteProjectBtn"); },
   get homeRecentProjects() { return getCached("#homeRecentProjects"); },
   get homeSignOutBtn() { return getCached("#homeSignOutBtn"); },

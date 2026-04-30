@@ -180,10 +180,6 @@ export function buildContinuedSceneSuggestions(previousScene) {
 
 export function downloadFile(filename, content, mimeType) {
   const blob = new Blob([content], { type: mimeType });
-  downloadBlob(filename, blob);
-}
-
-export function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

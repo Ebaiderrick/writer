@@ -1,5 +1,5 @@
+import { PAGE_UNIT_CAPACITY } from './config.js';
 import { stripWrapperChars } from './utils.js';
-import { EXPORT_PAGE_SETTINGS, getExportLayout } from './exportFormat.js';
 
 /**
  * Paginates screenplay lines into pages based on line capacity and industry-standard rules.
@@ -36,7 +36,7 @@ export function paginateScriptLines(lines) {
       }
 
       // If the character + at least some dialogue doesn't fit, move the whole start of the block to the next page.
-      if (usedUnits + lookaheadUnits > EXPORT_PAGE_SETTINGS.pageUnitCapacity && currentPage.length > 0) {
+      if (usedUnits + lookaheadUnits > PAGE_UNIT_CAPACITY && currentPage.length > 0) {
         pages.push(currentPage);
         currentPage = [];
         usedUnits = 0;
@@ -44,7 +44,7 @@ export function paginateScriptLines(lines) {
     }
 
     // 2. Standard Page Break Handling
-    if (currentPage.length > 0 && usedUnits + lineUnits > EXPORT_PAGE_SETTINGS.pageUnitCapacity) {
+    if (currentPage.length > 0 && usedUnits + lineUnits > PAGE_UNIT_CAPACITY) {
       const lastLine = currentPage[currentPage.length - 1];
 
       // Split Dialogue Handling: (MORE) and (CONT'D)
@@ -103,9 +103,18 @@ export function paginateScriptLines(lines) {
 export function estimateLineUnits(type, text) {
   const compact = stripWrapperChars(text);
 
-  const layout = getExportLayout(type);
-  const wrappedLines = Math.max(1, Math.ceil(compact.length / layout.widthChars));
-  const breathingRoom = layout.beforeLines || 0;
+  // Character widths based on standard screenplay indentation/margins
+  let width = 60; // Default (Action/Scene)
+  if (type === "dialogue") width = 36;
+  if (type === "parenthetical") width = 24;
+  if (type === "character") width = 24;
+  if (type === "transition") width = 24;
+  if (type === "dual") width = 24;
+
+  const wrappedLines = Math.max(1, Math.ceil(compact.length / width));
+
+  // Industry standard often adds extra spacing before scenes and transitions
+  const breathingRoom = (type === "scene" || type === "transition") ? 1.0 : 0.0;
 
   return wrappedLines + breathingRoom;
 }

@@ -134,7 +134,6 @@ const TRANSLATIONS = {
     "field.details": "Other details",
     "field.logline": "Logline",
 
-    "projectTool.loadSample": "Load sample",
     "projectTool.import": "Import",
     "projectTool.save": "Save",
     "projectTool.exportTxt": "Export TXT",
@@ -370,7 +369,6 @@ const TRANSLATIONS = {
     "field.details": "Autres détails",
     "field.logline": "Pitch",
 
-    "projectTool.loadSample": "Charger un exemple",
     "projectTool.import": "Importer",
     "projectTool.save": "Enregistrer",
     "projectTool.exportTxt": "Exporter TXT",
@@ -606,7 +604,6 @@ const TRANSLATIONS = {
     "field.details": "Weitere Details",
     "field.logline": "Logline",
 
-    "projectTool.loadSample": "Beispiel laden",
     "projectTool.import": "Importieren",
     "projectTool.save": "Speichern",
     "projectTool.exportTxt": "TXT exportieren",
@@ -793,7 +790,6 @@ const SELECTOR_BINDINGS = [
   [".field-grid label:nth-of-type(4) span", "field.company"],
   [".field-grid label:nth-of-type(5) span", "field.details"],
   [".field-grid label:nth-of-type(6) span", "field.logline"],
-  ["#loadSampleBtn", "projectTool.loadSample"],
   [".import-button-label", "projectTool.import"],
   ["#saveBtn", "projectTool.save"],
   ["#exportTxtBtn", "projectTool.exportTxt"],

@@ -451,12 +451,3 @@ export function getSuggestedNextSpeaker(contextIndex) {
   return last;
 }
 
-export function replaceWithSample() {
-  const current = getCurrentProject();
-  if (!current) return null;
-  const replacement = cloneProject(sampleProject, false);
-  replacement.id = current.id;
-  replacement.createdAt = current.createdAt;
-  upsertProject(replacement);
-  return replacement;
-}
