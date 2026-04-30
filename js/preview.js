@@ -99,13 +99,12 @@ function buildPageNumberLabel(pageNumber, totalPages) {
 
 export function buildPrintableDocument(project, autoPrint = false) {
   const previewData = buildPreviewData(project);
-  const coverText = buildCoverText(project, 6);
   const coverMarkup = `
     <section class="print-page cover-page">
       <div class="print-frame cover-frame">
         <div class="print-header"></div>
         <div class="print-body print-cover-body">
-          <pre class="print-cover-text">${coverText}</pre>
+          ${buildPrintableCoverMarkup(project)}
         </div>
         <div class="print-footer-slot"></div>
       </div>
@@ -230,6 +229,20 @@ function buildBlockSpacingStyle(type, lineIndex) {
   }
   const spacingLines = Math.max(0, getExportLayout(type).beforeLines || 0);
   return `margin-top:${spacingLines * 12}pt;`;
+}
+
+function buildPrintableCoverMarkup(project) {
+  return `
+    <div class="print-cover-stack">
+      <p class="print-cover-title">${escapeHtml(project.title)}</p>
+      <p class="print-cover-byline">${escapeHtml(t("cover.by"))}</p>
+      <p class="print-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
+      <p class="print-cover-meta">${escapeHtml(project.contact || "")}</p>
+      <p class="print-cover-meta">${escapeHtml(project.company || "")}</p>
+      <p class="print-cover-meta">${escapeHtml(project.details || "")}</p>
+      <p class="print-cover-logline">${escapeHtml(project.logline || "")}</p>
+    </div>
+  `;
 }
 
 function buildCoverText(project, titleLeadingBreaks = 10) {
@@ -396,6 +409,39 @@ function getPrintableStyles() {
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+    .print-cover-stack {
+      width: 100%;
+      text-align: center;
+      transform: translateY(-48pt);
+    }
+    .print-cover-title,
+    .print-cover-byline,
+    .print-cover-author,
+    .print-cover-meta,
+    .print-cover-logline {
+      margin: 0;
+      white-space: pre-wrap;
+      font-weight: 400;
+    }
+    .print-cover-title {
+      font-weight: 700;
+      margin-bottom: 36pt;
+    }
+    .print-cover-byline {
+      margin-bottom: 12pt;
+    }
+    .print-cover-author {
+      font-weight: 700;
+      margin-bottom: 36pt;
+    }
+    .print-cover-meta {
+      margin-bottom: 6pt;
+    }
+    .print-cover-logline {
+      margin-top: 24pt;
+      margin-left: 3.5cm;
+      margin-right: 3.5cm;
     }
     .print-line {
       margin: 0;
