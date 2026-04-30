@@ -2,7 +2,13 @@ import { state } from './config.js';
 import { refs } from './dom.js';
 import { getCurrentProject, syncProjectFromInputs } from './project.js';
 import { paginateScriptLines } from './pagination.js';
-import { escapeHtml, createTextNode, formatLineText } from './utils.js';
+import { escapeHtml, createTextNode } from './utils.js';
+import {
+  EXPORT_PAGE_SETTINGS,
+  EXPORT_TYPOGRAPHY,
+  buildPreparedExportLines,
+  getExportLayout
+} from './exportFormat.js';
 import { t } from './i18n.js';
 
 export function renderCoverPreview() {
@@ -79,29 +85,10 @@ export function renderPreview() {
 }
 
 export function buildPreviewData(project) {
-  const preparedLines = [];
-  let sceneNumber = 0;
-
-  project.lines.forEach((line) => {
-    const normalized = formatLineText(line.text, line.type);
-    if (!normalized) {
-      return;
-    }
-    if (line.type === "scene") {
-      sceneNumber += 1;
-    }
-    const entry = {
-      id: line.id,
-      type: line.type,
-      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
-    };
-    if (line.secondary !== undefined) {
-      entry.secondary = formatLineText(line.secondary, line.type);
-    }
-    preparedLines.push(entry);
-  });
+  const preparedLines = buildPreparedExportLines(project, { autoNumberScenes: state.autoNumberScenes });
 
   return {
+    preparedLines,
     scriptPages: paginateScriptLines(preparedLines)
   };
 }
@@ -112,10 +99,15 @@ function buildPageNumberLabel(pageNumber, totalPages) {
 
 export function buildPrintableDocument(project, autoPrint = false) {
   const previewData = buildPreviewData(project);
-  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\n${escapeHtml(t("cover.by"))}\n\n${escapeHtml(project.author || t("cover.authorFallback"))}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
   const coverMarkup = `
     <section class="print-page cover-page">
-      <pre class="print-cover-text">${coverText}</pre>
+      <div class="print-frame cover-frame">
+        <div class="print-header"></div>
+        <div class="print-body print-cover-body">
+          ${buildPrintableCoverMarkup(project)}
+        </div>
+        <div class="print-footer-slot"></div>
+      </div>
     </section>
   `;
 
@@ -125,18 +117,20 @@ export function buildPrintableDocument(project, autoPrint = false) {
       ? `<div class="print-footer">${escapeHtml(buildPageNumberLabel(pageNum, previewData.scriptPages.length))}</div>`
       : "";
 
-    const firstScriptPageClass = index === 0 ? " script-page-first" : "";
     return `
-    <section class="print-page script-page${firstScriptPageClass}">
-      <div class="print-body">
-        ${pageLines.map((line) => line.secondary !== undefined
-          ? `<div class="print-line print-dual-row ${escapeHtml(line.type)}"><span class="print-dual-col">${escapeHtml(line.displayText)}</span><span class="print-dual-col">${escapeHtml(line.secondary)}</span></div>`
-          : `<p class="print-line ${escapeHtml(line.type)}">${escapeHtml(line.displayText)}</p>`
-        ).join("")}
+    <section class="print-page script-page">
+      <div class="print-frame">
+        <div class="print-header"></div>
+        <div class="print-body">
+          ${pageLines.map((line, lineIndex) => renderHtmlExportLine(line, 'print', lineIndex)).join('')}
+        </div>
+        <div class="print-footer-slot">
+          ${pageFooter}
+        </div>
       </div>
-      ${pageFooter}
     </section>
-  `}).join("");
+  `;
+  }).join("");
 
   return `<!DOCTYPE html>
 <html lang="${escapeHtml(state.language)}">
@@ -145,7 +139,7 @@ export function buildPrintableDocument(project, autoPrint = false) {
   <title>${escapeHtml(project.title)}</title>
   <style>${getPrintableStyles()}</style>
 </head>
-  <body data-theme="${escapeHtml(state.theme)}">
+<body>
   <main class="print-shell">
     ${coverMarkup}
     ${scriptMarkup}
@@ -155,197 +149,507 @@ export function buildPrintableDocument(project, autoPrint = false) {
 </html>`;
 }
 
-export function buildWordDocument(project) {
-  const previewData = buildPreviewData(project);
-  const coverMarkup = `
-    <div class="word-page cover-page">
-      <table class="word-cover-table" role="presentation">
-        <tr>
-          <td class="word-cover-cell" align="center" valign="middle">
-            <div class="word-cover-stack">
-              <p class="word-cover-title">${escapeHtml(project.title)}</p>
-              <p class="word-cover-byline">${escapeHtml(t("cover.by"))}</p>
-              <p class="word-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
-              <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
-              <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
-              <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
-              <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
-            </div>
-          </td>
-        </tr>
-      </table>
-    </div>
-  `;
+export async function buildWordDocumentBlob(project) {
+  const docx = globalThis.docx;
+  if (!docx) {
+    throw new Error("Word export library is not available.");
+  }
 
-  const scriptPagesMarkup = previewData.scriptPages.map((pageLines, index) => {
-    const pageNum = index + 1;
-    const pageHeader = state.viewOptions.pageNumbers
-      ? `<div class="word-page-number">${escapeHtml(buildPageNumberLabel(pageNum, previewData.scriptPages.length))}</div>`
-      : `<div class="word-page-number word-page-number-placeholder"></div>`;
-    const pageClassName = index === 0 ? "word-page word-script-page word-script-page-first" : "word-page word-script-page";
+  const {
+    Document,
+    Packer,
+    Paragraph,
+    TextRun,
+    AlignmentType,
+    Table,
+    TableRow,
+    TableCell,
+    WidthType,
+    BorderStyle,
+    VerticalAlign,
+    TableLayoutType
+  } = docx;
 
-    return `
-      <div class="${pageClassName}">
-        ${pageHeader}
-        <div class="word-body">
-          ${pageLines.map((line) => line.secondary !== undefined
-            ? `<table class="word-dual-row" style="width:100%;border-collapse:collapse;margin-bottom:10pt;"><tr>
-                <td class="word-dual-col" style="${buildWordDualColStyle(line.type)}">${escapeHtml(line.displayText)}</td>
-                <td class="word-dual-col" style="${buildWordDualColStyle(line.type)}">${escapeHtml(line.secondary)}</td>
-               </tr></table>`
-            : `<p class="word-line ${line.type}" style="${buildWordLineStyle(line.type)}">${escapeHtml(line.displayText)}</p>`
-          ).join("")}
-        </div>
-      </div>
-    `;
+  const cmToTwip = (cm) => Math.round(cm * 567);
+  const ptToHalfPoint = (pt) => pt * 2;
+  const lineTwip = 240;
+  const font = EXPORT_TYPOGRAPHY.fontFamily;
+  const preparedLines = buildPreparedExportLines(project, { autoNumberScenes: state.autoNumberScenes });
+
+  const coverChildren = [
+    spacerParagraph(6),
+    centeredParagraph(project.title, {
+      font,
+      bold: true,
+      spacingAfter: 36
+    }),
+    centeredParagraph(t("cover.by"), {
+      font,
+      spacingAfter: 12
+    }),
+    centeredParagraph(project.author || t("cover.authorFallback"), {
+      font,
+      bold: true,
+      spacingAfter: 36
+    }),
+    centeredParagraph(project.contact || "", { font, spacingAfter: 6 }),
+    centeredParagraph(project.company || "", { font, spacingAfter: 6 }),
+    centeredParagraph(project.details || "", { font, spacingAfter: 6 }),
+    centeredParagraph(project.logline || "", {
+      font,
+      spacingBefore: 24,
+      leftCm: 3.5,
+      rightCm: 3.5
+    })
+  ].filter(Boolean);
+
+  const bodyChildren = preparedLines.flatMap((line, index) => buildWordParagraphsForLine(line, index, {
+    Paragraph,
+    TextRun,
+    AlignmentType,
+    Table,
+    TableRow,
+    TableCell,
+    WidthType,
+    BorderStyle,
+    VerticalAlign,
+    TableLayoutType,
+    cmToTwip,
+    ptToHalfPoint,
+    lineTwip,
+    font
+  }));
+
+  const doc = new Document({
+    creator: project.author || "",
+    lastModifiedBy: project.author || "",
+    title: project.title || "Untitled Script",
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: {
+              top: cmToTwip(2),
+              right: cmToTwip(2.5),
+              bottom: cmToTwip(2),
+              left: cmToTwip(2.5)
+            }
+          }
+        },
+        children: coverChildren
+      },
+      {
+        properties: {
+          page: {
+            margin: {
+              top: cmToTwip(2),
+              right: cmToTwip(2.5),
+              bottom: cmToTwip(2),
+              left: cmToTwip(2.5)
+            }
+          }
+        },
+        children: bodyChildren
+      }
+    ]
   });
-  const scriptMarkup = scriptPagesMarkup.join("");
 
-  return `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-  <meta charset="UTF-8">
-  <meta name="ProgId" content="Word.Document">
-  <meta name="Generator" content="EyaWriter">
-  <title>${escapeHtml(project.title)}</title>
-  <style>
-    @page WordSection {
-      size: 8.5in 11in;
-      margin: 1.0in 1.0in 1.0in 1.5in;
-    }
-    body {
-      margin: 0;
-      background: #ffffff;
-      color: #111111;
-      font-family: "Courier New", Courier, monospace;
-      font-size: 12pt;
-    }
-    .word-shell {
-      width: 100%;
-    }
-    .word-page {
-      page: WordSection;
-      position: relative;
-      width: 100%;
-      min-height: 9in;
-    }
-    .cover-page {
-      min-height: 9in;
-      page-break-after: always;
-      break-after: page;
-      mso-break-type: page;
-    }
-    .word-script-page {
-      page-break-before: always;
-      break-before: page;
-      mso-break-type: page;
-    }
-    .word-script-page-first {
-      page-break-before: always;
-      break-before: page;
-      mso-break-type: page;
-    }
-    .word-cover-table {
-      width: 100%;
-      height: 9in;
-      border-collapse: collapse;
-    }
-    .word-cover-cell {
-      vertical-align: middle;
-      text-align: center;
-      padding: 0;
-    }
-    .word-cover-stack {
-      width: 100%;
-      text-align: center;
-    }
-    .word-cover-title,
-    .word-cover-byline,
-    .word-cover-author,
-    .word-cover-meta,
-    .word-cover-logline {
-      margin: 0;
-    }
-    .word-cover-title {
-      font-weight: bold;
-      text-transform: uppercase;
-      margin-bottom: 28pt;
-    }
-    .word-cover-byline {
-      margin-bottom: 18pt;
-    }
-    .word-cover-author {
-      margin-bottom: 28pt;
-    }
-    .word-cover-meta {
-      margin-bottom: 8pt;
-    }
-    .word-cover-logline {
-      margin-top: 24pt;
-      white-space: pre-wrap;
-    }
-    .word-page-number {
-      position: absolute;
-      bottom: 0.2in;
-      right: 0;
-      font-size: 10pt;
-    }
-    .word-body {
-      width: 100%;
-    }
-    .word-line {
-      margin: 0 0 12pt;
-      white-space: pre-wrap;
-      line-height: 1.2;
-    }
-  </style>
-</head>
-<body>
-  <main class="word-shell">
-    ${coverMarkup}
-    ${scriptMarkup}
-  </main>
-</body>
-</html>`;
+  return Packer.toBlob(doc);
 }
 
-function buildWordDualColStyle(type) {
-  const base = "margin:0;padding:0 4pt;white-space:pre-wrap;line-height:1.2;vertical-align:top;width:50%;";
-  switch (type) {
-    case "character":
-    case "dual":
-      return `${base}font-weight:bold;padding-left:0.5in;`;
-    case "parenthetical":
-      return `${base}padding-left:0.3in;`;
-    default:
-      return base;
+function centeredParagraph(text, { font, bold = false, spacingBefore = 0, spacingAfter = 0, leftCm = 0, rightCm = 0 }) {
+  if (!text) return null;
+  const docx = globalThis.docx;
+  return new docx.Paragraph({
+    alignment: docx.AlignmentType.CENTER,
+    spacing: {
+      before: spacingBefore * 20,
+      after: spacingAfter * 20,
+      line: 240
+    },
+    indent: {
+      left: Math.round(leftCm * 567),
+      right: Math.round(rightCm * 567)
+    },
+    children: [
+      new docx.TextRun({
+        text,
+        bold,
+        font,
+        size: 24
+      })
+    ]
+  });
+}
+
+function spacerParagraph(lines = 1) {
+  const docx = globalThis.docx;
+  return new docx.Paragraph({
+    spacing: {
+      after: Math.max(0, lines) * 12 * 20,
+      line: 240
+    },
+    children: [new docx.TextRun({ text: "" })]
+  });
+}
+
+function buildWordParagraphsForLine(line, index, ctx) {
+  if (line.secondary !== undefined) {
+    return [buildWordDualBlock(line, index, ctx)];
   }
+  return [buildWordParagraph(line.displayText, line.type, index, ctx)];
+}
+
+function buildWordParagraph(text, type, index, ctx) {
+  const { Paragraph, TextRun, AlignmentType, cmToTwip, ptToHalfPoint, lineTwip, font } = ctx;
+  const layout = getExportLayout(type);
+  const config = getWordTypeConfig(type);
+
+  return new Paragraph({
+    alignment: config.align === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT,
+    spacing: {
+      before: (index === 0 ? 0 : config.beforePt) * 20,
+      after: config.afterPt * 20,
+      line: lineTwip
+    },
+    indent: {
+      left: cmToTwip(config.leftCm),
+      right: cmToTwip(config.rightCm)
+    },
+    children: [
+      new TextRun({
+        text: config.uppercase ? text.toUpperCase() : text,
+        bold: Boolean(config.bold ?? layout.bold),
+        italics: Boolean(config.italic ?? layout.italic),
+        font,
+        size: ptToHalfPoint(EXPORT_TYPOGRAPHY.fontSizePt)
+      })
+    ]
+  });
+}
+
+function buildWordDualBlock(line, index, ctx) {
+  const {
+    Table,
+    TableRow,
+    TableCell,
+    WidthType,
+    BorderStyle,
+    VerticalAlign,
+    TableLayoutType,
+    AlignmentType,
+    cmToTwip
+  } = ctx;
+
+  const config = getWordTypeConfig(line.type);
+  const dualParagraphs = buildDualCellParagraphs(line, index, ctx);
+  const totalWritingWidthCm = 21.59 - 2.5 - 2.5;
+  const sideInsetCm = 1.5;
+  const gapCm = 0.8;
+  const dualBlockWidthCm = totalWritingWidthCm - (sideInsetCm * 2);
+  const columnWidthCm = (dualBlockWidthCm - gapCm) / 2;
+  const beforeTwip = (index === 0 ? 0 : config.beforePt) * 20;
+
+  return new Table({
+    width: {
+      size: cmToTwip(dualBlockWidthCm),
+      type: WidthType.DXA
+    },
+    layout: TableLayoutType.FIXED,
+    alignment: AlignmentType.CENTER,
+    indent: {
+      size: cmToTwip(sideInsetCm),
+      type: WidthType.DXA
+    },
+    borders: {
+      top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
+    },
+    columnWidths: [cmToTwip(columnWidthCm), cmToTwip(columnWidthCm)],
+    rows: [
+      new TableRow({
+        cantSplit: true,
+        children: [
+          new TableCell({
+            width: { size: cmToTwip(columnWidthCm), type: WidthType.DXA },
+            verticalAlign: VerticalAlign.TOP,
+            margins: {
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: cmToTwip(gapCm / 2)
+            },
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
+            },
+            shading: { fill: "FFFFFF", color: "FFFFFF", type: "clear" },
+            children: dualParagraphs.left
+          }),
+          new TableCell({
+            width: { size: cmToTwip(columnWidthCm), type: WidthType.DXA },
+            verticalAlign: VerticalAlign.TOP,
+            margins: {
+              top: 0,
+              bottom: 0,
+              left: cmToTwip(gapCm / 2),
+              right: 0
+            },
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
+            },
+            shading: { fill: "FFFFFF", color: "FFFFFF", type: "clear" },
+            children: dualParagraphs.right
+          })
+        ]
+      })
+    ],
+    margins: {
+      top: beforeTwip,
+      bottom: config.afterPt * 20,
+      left: 0,
+      right: 0
+    }
+  });
+}
+
+function buildDualCellParagraphs(line, index, ctx) {
+  return {
+    left: [buildWordCellParagraph(line.displayText, line.type, index, ctx)],
+    right: [buildWordCellParagraph(line.secondary, line.type, index, ctx)]
+  };
+}
+
+function buildWordCellParagraph(text, type, index, ctx) {
+  const { Paragraph, TextRun, AlignmentType, ptToHalfPoint, lineTwip, font } = ctx;
+  const layout = getExportLayout(type);
+  const config = getWordTypeConfig(type);
+
+  return new Paragraph({
+    alignment: type === "dual"
+      ? AlignmentType.CENTER
+      : (config.align === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT),
+    spacing: {
+      before: type === "dual" ? 12 * 20 : 0,
+      after: 0,
+      line: lineTwip
+    },
+    indent: {
+      left: 0,
+      right: 0
+    },
+    children: [
+      new TextRun({
+        text: config.uppercase ? text.toUpperCase() : text,
+        bold: Boolean(config.bold ?? layout.bold),
+        italics: Boolean(config.italic ?? layout.italic),
+        font,
+        size: ptToHalfPoint(EXPORT_TYPOGRAPHY.fontSizePt)
+      })
+    ]
+  });
+}
+
+function getWordTypeConfig(type) {
+  switch (type) {
+    case "scene":
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 12, bold: true, uppercase: true, align: "left" };
+    case "character":
+      return { leftCm: 5, rightCm: 0, beforePt: 12, afterPt: 0, bold: true, uppercase: true, align: "left" };
+    case "dialogue":
+      return { leftCm: 2.5, rightCm: 2.5, beforePt: 0, afterPt: 0, align: "left" };
+    case "parenthetical":
+      return { leftCm: 3.75, rightCm: 2.5, beforePt: 0, afterPt: 0, italic: true, align: "left" };
+    case "transition":
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 0, bold: true, uppercase: true, align: "right" };
+    case "shot":
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 0, bold: true, uppercase: true, align: "left" };
+    case "note":
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 0, italic: true, align: "left" };
+    case "dual":
+      return { leftCm: 5, rightCm: 0, beforePt: 12, afterPt: 0, bold: true, uppercase: true, align: "left" };
+    case "action":
+    case "text":
+    case "image":
+    default:
+      return { leftCm: 0, rightCm: 0, beforePt: 12, afterPt: 0, align: "left" };
+  }
+}
+
+function renderHtmlExportLine(line, prefix, lineIndex = 0) {
+  const spacingStyle = buildBlockSpacingStyle(line.type, lineIndex);
+  if (line.secondary !== undefined) {
+    const rowStyle = `${prefix === 'word' ? buildWordBlockSpacingStyle(line.type, lineIndex) : spacingStyle}${prefix === 'word' ? buildWordDualRowStyle(line.type) : ''}`;
+    const colStyle = prefix === 'word' ? buildWordDualColStyle(line.type) : '';
+    return `<div class="${prefix}-line ${prefix}-dual-row ${escapeHtml(line.type)}" style="${rowStyle}"><span class="${prefix}-dual-col" style="${colStyle}">${escapeHtml(line.displayText)}</span><span class="${prefix}-dual-col" style="${colStyle}">${escapeHtml(line.secondary)}</span></div>`;
+  }
+  const lineStyle = `${prefix === 'word' ? buildWordBlockSpacingStyle(line.type, lineIndex) : spacingStyle}${prefix === 'word' ? buildWordLineStyle(line.type) : ''}`;
+  return `<p class="${prefix}-line ${escapeHtml(line.type)}" style="${lineStyle}">${escapeHtml(line.displayText)}</p>`;
+}
+
+function buildBlockSpacingStyle(type, lineIndex) {
+  if (lineIndex === 0) {
+    return "margin-top:0;";
+  }
+  const spacingLines = Math.max(0, getExportLayout(type).beforeLines || 0);
+  return `margin-top:${spacingLines * 12}pt;`;
+}
+
+function buildPrintableCoverMarkup(project) {
+  return `
+    <div class="print-cover-stack">
+      <p class="print-cover-title">${escapeHtml(project.title)}</p>
+      <p class="print-cover-byline">${escapeHtml(t("cover.by"))}</p>
+      <p class="print-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
+      <p class="print-cover-meta">${escapeHtml(project.contact || "")}</p>
+      <p class="print-cover-meta">${escapeHtml(project.company || "")}</p>
+      <p class="print-cover-meta">${escapeHtml(project.details || "")}</p>
+      <p class="print-cover-logline">${escapeHtml(project.logline || "")}</p>
+    </div>
+  `;
+}
+
+function buildWordCoverMarkup(project) {
+  return `
+    <div class="word-cover-stack">
+      <p class="word-cover-title">${escapeHtml(project.title)}</p>
+      <p class="word-cover-byline">${escapeHtml(t("cover.by"))}</p>
+      <p class="word-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
+      <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
+      <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
+      <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
+      <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
+    </div>
+  `;
 }
 
 function buildWordLineStyle(type) {
-  const base = [
-    "margin-top:0",
-    "margin-bottom:12pt",
-    "white-space:pre-wrap",
-    "line-height:1.2"
+  const layout = getExportLayout(type);
+  const characterMarginCm = 5;
+  const dialogueMarginCm = 2.5;
+  const defaultMarginLeft = `${layout.indentIn}in`;
+  const defaultWidth = `${layout.widthIn}in`;
+  const rules = [
+    `margin-left:${type === 'character' ? `${characterMarginCm}cm` : defaultMarginLeft}`,
+    `width:${type === 'dialogue' ? 'auto' : defaultWidth}`,
+    `text-align:${layout.align}`,
+    `font-family:${EXPORT_TYPOGRAPHY.cssFontFamily}`,
+    `font-size:${EXPORT_TYPOGRAPHY.fontSizePt}pt`,
+    `line-height:${EXPORT_TYPOGRAPHY.lineHeight}`,
+    'white-space:pre-wrap',
+    'margin-bottom:0',
+    `margin-right:${type === 'dialogue' ? `${dialogueMarginCm}cm` : '0'}`,
+    `font-weight:${layout.bold ? '700' : '400'}`,
+    `font-style:${layout.italic ? 'italic' : 'normal'}`,
+    `mso-bidi-font-weight:${layout.bold ? 'bold' : 'normal'}`
   ];
 
-  switch (type) {
-    case "scene":
-    case "shot":
-      return `${base.join(";")};font-weight:bold;`;
-    case "transition":
-      return `${base.join(";")};font-weight:bold;margin-left:3.7in;text-align:right;`;
-    case "character":
-    case "dual":
-      return `${base.join(";")};font-weight:bold;margin-left:2.2in;`;
-    case "dialogue":
-      return `${base.join(";")};margin-left:1.5in;margin-right:1.5in;`;
-    case "parenthetical":
-      return `${base.join(";")};margin-left:1.9in;margin-right:2.0in;`;
-    default:
-      return `${base.join(";")};`;
+  if (type === 'dialogue') {
+    rules.push(`margin-left:${dialogueMarginCm}cm`);
   }
+  if (type === 'scene') {
+    rules.push('text-transform:uppercase');
+  }
+
+  return `${rules.join(';')};`;
+}
+
+function buildWordDualRowStyle(type) {
+  const layout = getExportLayout(type);
+  const rules = [
+    `margin-left:${type === 'character' || type === 'dual' ? '5cm' : `${layout.indentIn}in`}`,
+    'display:grid',
+    `grid-template-columns:${layout.widthIn}in ${layout.widthIn}in`,
+    'column-gap:0.5in',
+    `width:${(layout.widthIn * 2) + 0.5}in`,
+    'white-space:pre-wrap',
+    'margin-right:0',
+    `font-weight:${layout.bold ? '700' : '400'}`
+  ];
+  return `${rules.join(';')};`;
+}
+
+function buildWordDualColStyle(type) {
+  const layout = getExportLayout(type);
+  const rules = [
+    `width:${layout.widthIn}in`,
+    `text-align:${layout.align}`,
+    `font-family:${EXPORT_TYPOGRAPHY.cssFontFamily}`,
+    `font-size:${EXPORT_TYPOGRAPHY.fontSizePt}pt`,
+    `line-height:${EXPORT_TYPOGRAPHY.lineHeight}`,
+    'white-space:pre-wrap',
+    'vertical-align:top'
+  ];
+
+  rules.push(`font-weight:${layout.bold ? '700' : '400'}`);
+  rules.push(`font-style:${layout.italic ? 'italic' : 'normal'}`);
+
+  return `${rules.join(';')};`;
+}
+
+function buildWordBlockSpacingStyle(type, lineIndex) {
+  if (lineIndex === 0) {
+    return 'margin-top:0;margin-bottom:0;';
+  }
+  if (type === 'dialogue' || type === 'parenthetical') {
+    return 'margin-top:0;margin-bottom:0;';
+  }
+  if (type === 'scene') {
+    return 'margin-top:12pt;margin-bottom:12pt;';
+  }
+  return buildBlockSpacingStyle(type, lineIndex);
+}
+
+function buildTypeCss(prefix) {
+  return Object.entries({
+    scene: ['font-weight:700'],
+    shot: ['font-weight:700'],
+    transition: ['font-weight:700', 'text-align:right', 'margin-left:3.5in', 'width:3in'],
+    character: ['font-weight:700', 'margin-left:2in', 'width:4.25in'],
+    dialogue: ['margin-left:1in', 'width:4in'],
+    parenthetical: ['margin-left:1.5in', 'width:3in'],
+    text: [],
+    action: [],
+    note: ['font-style:italic'],
+    image: [],
+    dual: ['font-weight:700']
+  }).map(([type, declarations]) => `.${prefix}-line.${type}{${declarations.join(';')}}`).join('');
+}
+
+function buildDualCss(prefix) {
+  const left = getExportLayout('dual').widthIn;
+  return `
+    .${prefix}-dual-row {
+      display: grid;
+      grid-template-columns: ${left}in ${left}in;
+      column-gap: 0.5in;
+      width: 100%;
+      margin: 0;
+      white-space: pre-wrap;
+    }
+    .${prefix}-dual-col {
+      display: block;
+      width: ${left}in;
+      white-space: pre-wrap;
+      vertical-align: top;
+    }
+    .${prefix}-dual-row.dialogue .${prefix}-dual-col,
+    .${prefix}-dual-row.parenthetical .${prefix}-dual-col {
+      font-weight: 400;
+    }
+    .${prefix}-dual-row.parenthetical .${prefix}-dual-col {
+      padding-left: 0.5in;
+    }
+  `;
 }
 
 function getPrintableStyles() {
@@ -353,9 +657,11 @@ function getPrintableStyles() {
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: #f3f1ef;
-      color: #111;
-      font-family: "Courier New", Courier, monospace;
+      background: #ffffff;
+      color: #111111;
+      font-family: ${EXPORT_TYPOGRAPHY.cssFontFamily};
+      font-size: ${EXPORT_TYPOGRAPHY.fontSizePt}pt;
+      line-height: ${EXPORT_TYPOGRAPHY.lineHeight};
     }
     .print-shell {
       display: grid;
@@ -363,33 +669,32 @@ function getPrintableStyles() {
       padding: 0;
     }
     .print-page {
-      position: relative;
-      width: 8.5in;
-      min-height: 11in;
+      width: ${EXPORT_PAGE_SETTINGS.widthIn}in;
+      height: ${EXPORT_PAGE_SETTINGS.heightIn}in;
       margin: 0 auto;
-      padding: 1.0in 1.0in 1.0in 1.5in;
       background: #fff;
       color: #111;
       page-break-after: always;
       break-after: page;
-      font-size: 12pt;
+      overflow: hidden;
     }
     .print-page:last-child {
       page-break-after: auto;
       break-after: auto;
     }
-    .cover-page {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding-left: 1.0in; /* Center for cover */
-      page-break-after: always !important;
-      break-after: page !important;
+    .print-frame {
+      display: grid;
+      grid-template-rows: ${EXPORT_PAGE_SETTINGS.marginsIn.top}in 1fr ${EXPORT_PAGE_SETTINGS.marginsIn.bottom}in;
+      height: 100%;
+      padding: 0 ${2.5 * EXPORT_PAGE_SETTINGS.cmToIn}in 0 ${2.5 * EXPORT_PAGE_SETTINGS.cmToIn}in;
     }
-    .script-page-first {
-      page-break-before: always !important;
-      break-before: page !important;
+    .print-header,
+    .print-footer-slot {
+      width: 100%;
+    }
+    .cover-page {
+      page-break-after: always;
+      break-after: page;
     }
     .print-cover-text {
       white-space: pre-wrap;
@@ -398,66 +703,63 @@ function getPrintableStyles() {
     }
     .print-body {
       width: 100%;
-      padding-bottom: 0.35in;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .print-cover-body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .print-cover-stack {
+      width: 100%;
+      text-align: center;
+      transform: translateY(-48pt);
+    }
+    .print-cover-title,
+    .print-cover-byline,
+    .print-cover-author,
+    .print-cover-meta,
+    .print-cover-logline {
+      margin: 0;
+      white-space: pre-wrap;
+      font-weight: 400;
+    }
+    .print-cover-title {
+      font-weight: 700;
+      margin-bottom: 36pt;
+    }
+    .print-cover-byline {
+      margin-bottom: 12pt;
+    }
+    .print-cover-author {
+      font-weight: 700;
+      margin-bottom: 36pt;
+    }
+    .print-cover-meta {
+      margin-bottom: 6pt;
+    }
+    .print-cover-logline {
+      margin-top: 24pt;
+      margin-left: 3.5cm;
+      margin-right: 3.5cm;
     }
     .print-line {
-      margin: 0 0 12pt;
+      margin: 0;
       white-space: pre-wrap;
-      line-height: 1.2;
+      line-height: ${EXPORT_TYPOGRAPHY.lineHeight};
     }
-    .print-line.scene,
-    .print-line.shot,
-    .print-line.transition {
-      font-weight: bold;
-    }
-    .print-line.character,
-    .print-line.dual {
-      margin-left: 2.2in;
-      width: 2.4in;
-      font-weight: bold;
-    }
-    .print-line.dialogue {
-      margin-left: 1.0in;
-      width: 3.5in;
-    }
-    .print-line.parenthetical {
-      margin-left: 1.6in;
-      width: 2.4in;
-    }
-    .print-line.transition {
-      margin-left: auto;
-      width: 2.4in;
-      text-align: right;
-    }
-    .print-dual-row {
-      display: table;
-      width: 100%;
-      margin: 0 0 12pt;
-      table-layout: fixed;
-    }
-    .print-dual-col {
-      display: table-cell;
-      width: 50%;
-      white-space: pre-wrap;
-      line-height: 1.2;
-      vertical-align: top;
-      padding: 0 6pt;
-    }
-    .print-dual-row.character .print-dual-col,
-    .print-dual-row.dual .print-dual-col {
-      font-weight: bold;
-      padding-left: 0.5in;
-    }
-    .print-dual-row.parenthetical .print-dual-col {
-      padding-left: 0.3in;
-    }
+    ${buildTypeCss('print')}
+    ${buildDualCss('print')}
     .print-footer {
-      position: absolute;
-      right: 1.0in;
-      bottom: 0.5in;
-      font-family: "Courier New", Courier, monospace;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+      padding-bottom: ${EXPORT_PAGE_SETTINGS.footerNumberOffsetIn}in;
       font-size: 10pt;
-      color: #444;
+      color: #111111;
     }
     @page {
       size: letter;
@@ -467,5 +769,112 @@ function getPrintableStyles() {
       body { background: #fff; }
       .print-page { box-shadow: none; }
     }
+  `;
+}
+
+function getWordStyles() {
+  return `
+    @page WordSection {
+      size: ${EXPORT_PAGE_SETTINGS.widthIn}in ${EXPORT_PAGE_SETTINGS.heightIn}in;
+      margin: ${EXPORT_PAGE_SETTINGS.marginsIn.top}in ${EXPORT_PAGE_SETTINGS.marginsIn.right}in ${EXPORT_PAGE_SETTINGS.marginsIn.bottom}in ${EXPORT_PAGE_SETTINGS.marginsIn.left}in;
+    }
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: #111111;
+      font-family: ${EXPORT_TYPOGRAPHY.cssFontFamily};
+      font-size: ${EXPORT_TYPOGRAPHY.fontSizePt}pt;
+      line-height: ${EXPORT_TYPOGRAPHY.lineHeight};
+    }
+    .word-shell {
+      width: 100%;
+    }
+    .word-page {
+      page: WordSection;
+      width: 100%;
+      height: ${EXPORT_PAGE_SETTINGS.heightIn}in;
+      page-break-after: always;
+      break-after: page;
+      mso-break-type: page;
+      overflow: hidden;
+    }
+    .word-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    .word-explicit-page-break {
+      page-break-before: always;
+      break-before: page;
+      mso-break-type: page;
+      height: 0;
+      overflow: hidden;
+      line-height: 0;
+      font-size: 0;
+    }
+    .word-frame {
+      display: grid;
+      grid-template-rows: ${EXPORT_PAGE_SETTINGS.marginsIn.top}in 1fr ${EXPORT_PAGE_SETTINGS.marginsIn.bottom}in;
+      height: 100%;
+      padding: 0 ${2.5 * EXPORT_PAGE_SETTINGS.cmToIn}in 0 ${2.5 * EXPORT_PAGE_SETTINGS.cmToIn}in;
+    }
+    .word-header,
+    .word-footer-slot {
+      width: 100%;
+    }
+    .cover-page {
+      page-break-after: auto;
+      break-after: auto;
+      mso-break-type: auto;
+    }
+    .word-cover-shell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .word-cover-stack {
+      width: 100%;
+      text-align: center;
+      transform: translateY(-48pt);
+    }
+    .word-cover-title,
+    .word-cover-byline,
+    .word-cover-author,
+    .word-cover-meta,
+    .word-cover-logline {
+      margin: 0;
+      white-space: pre-wrap;
+    }
+    .word-cover-title {
+      font-weight: 700;
+      margin-bottom: 36pt;
+    }
+    .word-cover-byline {
+      margin-bottom: 12pt;
+    }
+    .word-cover-author {
+      font-weight: 700;
+      margin-bottom: 36pt;
+    }
+    .word-cover-meta {
+      margin-bottom: 6pt;
+    }
+    .word-cover-logline {
+      margin-top: 24pt;
+      margin-left: 3.5cm;
+      margin-right: 3.5cm;
+    }
+    .word-body {
+      width: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .word-line {
+      margin: 0;
+      white-space: pre-wrap;
+      line-height: ${EXPORT_TYPOGRAPHY.lineHeight};
+    }
+    ${buildTypeCss('word')}
+    ${buildDualCss('word')}
   `;
 }

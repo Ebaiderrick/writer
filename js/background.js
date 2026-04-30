@@ -354,47 +354,47 @@ class LiquidApp {
 
     this.palettes = {
       cedar: {
-        background: 0xf4efe7,
-        base: hexToVector3(0xf8f2e8),
+        background: 0xf0f9ff,
+        base: hexToVector3(0xf0f9ff),
         colors: [
-          hexToVector3(0xf6eee1),
-          hexToVector3(0xaebfb6),
-          hexToVector3(0xe1c5af),
-          hexToVector3(0xd7dfd2),
-          hexToVector3(0xcfa890),
-          hexToVector3(0xf5eadb)
+          hexToVector3(0x0ea5e9), // Sky Blue
+          hexToVector3(0x38bdf8), // Light Sky Blue
+          hexToVector3(0xffffff), // Cloud White
+          hexToVector3(0x7dd3fc), // Sky Blue 300
+          hexToVector3(0xe0f2fe), // Sky Blue 100
+          hexToVector3(0xbae6fd)  // Sky Blue 200
         ],
         settings: {
-          speed: 0.38,
-          intensity: 0.92,
-          grainIntensity: 0.02,
-          gradientSize: 0.95,
-          gradientCount: 6.0,
-          color1Weight: 0.86,
-          color2Weight: 0.9,
-          touchStrength: 0.22
+          speed: 0.4,
+          intensity: 1.4,
+          grainIntensity: 0.01,
+          gradientSize: 0.8,
+          gradientCount: 12.0,
+          color1Weight: 1.2,
+          color2Weight: 1.0,
+          touchStrength: 0.4
         }
       },
       white: {
-        background: 0xf0f4fa,
-        base: hexToVector3(0xf5f8ff),
+        background: 0xfafafa,
+        base: hexToVector3(0xfafafa),
         colors: [
-          hexToVector3(0xeef4ff),
-          hexToVector3(0xd5e3fb),
-          hexToVector3(0xdcecf8),
-          hexToVector3(0xe7eefc),
-          hexToVector3(0xffffff),
-          hexToVector3(0xdde8ff)
+          hexToVector3(0x00ffff), // Cyan
+          hexToVector3(0x7b68ee), // Medium Slate Blue
+          hexToVector3(0x9400d3), // Dark Violet
+          hexToVector3(0x0000ff), // Blue
+          hexToVector3(0x1e90ff), // Dodger Blue
+          hexToVector3(0xff00ff)  // Magenta
         ],
         settings: {
-          speed: 0.32,
-          intensity: 0.82,
-          grainIntensity: 0.015,
-          gradientSize: 1.05,
-          gradientCount: 5.0,
-          color1Weight: 0.88,
-          color2Weight: 0.78,
-          touchStrength: 0.16
+          speed: 1.0,
+          intensity: 1.8,
+          grainIntensity: 0.02,
+          gradientSize: 0.5,
+          gradientCount: 12.0,
+          color1Weight: 0.9,
+          color2Weight: 0.9,
+          touchStrength: 0.6
         }
       },
       dark: {
