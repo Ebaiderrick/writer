@@ -5,13 +5,15 @@ export const EXPORT_PAGE_SETTINGS = {
   size: 'Letter',
   widthIn: 8.5,
   heightIn: 11,
+  cmToIn: 0.3937007874,
   marginsIn: {
-    top: 2,
-    right: 2,
-    bottom: 2,
-    left: 2
+    top: 2 * 0.3937007874,
+    right: 2 * 0.3937007874,
+    bottom: 2 * 0.3937007874,
+    left: 2 * 0.3937007874
   },
-  pageUnitCapacity: 42
+  footerNumberOffsetIn: 0.18,
+  pageUnitCapacity: 50
 };
 
 export const EXPORT_TYPOGRAPHY = {

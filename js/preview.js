@@ -123,7 +123,7 @@ export function buildPrintableDocument(project, autoPrint = false) {
       <div class="print-frame">
         <div class="print-header"></div>
         <div class="print-body">
-          ${pageLines.map((line) => renderHtmlExportLine(line, 'print')).join('')}
+          ${pageLines.map((line, lineIndex) => renderHtmlExportLine(line, 'print', lineIndex)).join('')}
         </div>
         <div class="print-footer-slot">
           ${pageFooter}
@@ -184,7 +184,7 @@ export function buildWordDocument(project) {
         <div class="word-frame">
           <div class="word-header"></div>
           <div class="word-body">
-            ${pageLines.map((line) => renderHtmlExportLine(line, 'word')).join('')}
+            ${pageLines.map((line, lineIndex) => renderHtmlExportLine(line, 'word', lineIndex)).join('')}
           </div>
           <div class="word-footer-slot">
             ${pageFooter}
@@ -206,18 +206,27 @@ export function buildWordDocument(project) {
 <body>
   <main class="word-shell">
     ${coverMarkup}
-    <div class="word-explicit-page-break"></div>
+    <br clear="all" class="word-explicit-page-break" style="mso-special-character: line-break; page-break-before: always;">
     ${scriptPagesMarkup.join('')}
   </main>
 </body>
 </html>`;
 }
 
-function renderHtmlExportLine(line, prefix) {
+function renderHtmlExportLine(line, prefix, lineIndex = 0) {
+  const spacingStyle = buildBlockSpacingStyle(line.type, lineIndex);
   if (line.secondary !== undefined) {
-    return `<div class="${prefix}-line ${prefix}-dual-row ${escapeHtml(line.type)}"><span class="${prefix}-dual-col">${escapeHtml(line.displayText)}</span><span class="${prefix}-dual-col">${escapeHtml(line.secondary)}</span></div>`;
+    return `<div class="${prefix}-line ${prefix}-dual-row ${escapeHtml(line.type)}" style="${spacingStyle}"><span class="${prefix}-dual-col">${escapeHtml(line.displayText)}</span><span class="${prefix}-dual-col">${escapeHtml(line.secondary)}</span></div>`;
   }
-  return `<p class="${prefix}-line ${escapeHtml(line.type)}">${escapeHtml(line.displayText)}</p>`;
+  return `<p class="${prefix}-line ${escapeHtml(line.type)}" style="${spacingStyle}">${escapeHtml(line.displayText)}</p>`;
+}
+
+function buildBlockSpacingStyle(type, lineIndex) {
+  if (lineIndex === 0) {
+    return "margin-top:0;";
+  }
+  const spacingLines = Math.max(0, getExportLayout(type).beforeLines || 0);
+  return `margin-top:${spacingLines * 12}pt;`;
 }
 
 function buildTypeCss(prefix) {
@@ -327,12 +336,6 @@ function getPrintableStyles() {
       white-space: pre-wrap;
       line-height: ${EXPORT_TYPOGRAPHY.lineHeight};
     }
-    .print-line + .print-line,
-    .print-line + .print-dual-row,
-    .print-dual-row + .print-line,
-    .print-dual-row + .print-dual-row {
-      margin-top: 12pt;
-    }
     ${buildTypeCss('print')}
     ${buildDualCss('print')}
     .print-footer {
@@ -341,6 +344,7 @@ function getPrintableStyles() {
       display: flex;
       align-items: flex-end;
       justify-content: flex-end;
+      padding-bottom: ${EXPORT_PAGE_SETTINGS.footerNumberOffsetIn}in;
       font-size: 10pt;
       color: #111111;
     }
@@ -386,11 +390,13 @@ function getWordStyles() {
       break-after: auto;
     }
     .word-explicit-page-break {
-      page-break-after: always;
-      break-after: page;
+      page-break-before: always;
+      break-before: page;
       mso-break-type: page;
       height: 0;
       overflow: hidden;
+      line-height: 0;
+      font-size: 0;
     }
     .word-frame {
       display: grid;
@@ -444,6 +450,7 @@ function getWordStyles() {
       display: flex;
       align-items: flex-end;
       justify-content: flex-end;
+      padding-bottom: ${EXPORT_PAGE_SETTINGS.footerNumberOffsetIn}in;
       font-size: 10pt;
     }
     .word-page-number-placeholder {
@@ -458,12 +465,6 @@ function getWordStyles() {
       margin: 0;
       white-space: pre-wrap;
       line-height: ${EXPORT_TYPOGRAPHY.lineHeight};
-    }
-    .word-line + .word-line,
-    .word-line + .word-dual-row,
-    .word-dual-row + .word-line,
-    .word-dual-row + .word-dual-row {
-      margin-top: 12pt;
     }
     ${buildTypeCss('word')}
     ${buildDualCss('word')}
