@@ -156,26 +156,14 @@ export function buildWordDocument(project) {
       <div class="word-frame cover-frame">
         <div class="word-header"></div>
         <div class="word-body word-cover-shell">
-          <div class="word-cover-stack">
-            <p class="word-cover-title">${escapeHtml(project.title)}</p>
-            <p class="word-cover-byline">${escapeHtml(t("cover.by"))}</p>
-            <p class="word-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
-            <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
-            <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
-            <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
-            <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
-          </div>
+          ${buildWordCoverMarkup(project)}
         </div>
         <div class="word-footer-slot"></div>
       </div>
     </div>
   `;
 
-  const scriptPagesMarkup = previewData.scriptPages.map((pageLines, index) => {
-    const pageNum = index + 1;
-    const pageFooter = state.viewOptions.pageNumbers
-      ? `<div class="word-page-number">${escapeHtml(buildPageNumberLabel(pageNum, previewData.scriptPages.length))}</div>`
-      : `<div class="word-page-number word-page-number-placeholder"></div>`;
+  const scriptPagesMarkup = previewData.scriptPages.map((pageLines) => {
     const pageClassName = 'word-page word-script-page';
 
     return `
@@ -185,9 +173,7 @@ export function buildWordDocument(project) {
           <div class="word-body">
             ${pageLines.map((line, lineIndex) => renderHtmlExportLine(line, 'word', lineIndex)).join('')}
           </div>
-          <div class="word-footer-slot">
-            ${pageFooter}
-          </div>
+          <div class="word-footer-slot"></div>
         </div>
       </div>
   `;
@@ -245,9 +231,18 @@ function buildPrintableCoverMarkup(project) {
   `;
 }
 
-function buildCoverText(project, titleLeadingBreaks = 10) {
-  const topPadding = "\n".repeat(Math.max(0, titleLeadingBreaks));
-  return `${topPadding}${escapeHtml(project.title)}\n\n\n${escapeHtml(t("cover.by"))}\n\n${escapeHtml(project.author || t("cover.authorFallback"))}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
+function buildWordCoverMarkup(project) {
+  return `
+    <div class="word-cover-stack">
+      <p class="word-cover-title">${escapeHtml(project.title)}</p>
+      <p class="word-cover-byline">${escapeHtml(t("cover.by"))}</p>
+      <p class="word-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
+      <p class="word-cover-meta">${escapeHtml(project.contact || "")}</p>
+      <p class="word-cover-meta">${escapeHtml(project.company || "")}</p>
+      <p class="word-cover-meta">${escapeHtml(project.details || "")}</p>
+      <p class="word-cover-logline">${escapeHtml(project.logline || "")}</p>
+    </div>
+  `;
 }
 
 function buildWordLineStyle(type) {
@@ -260,7 +255,8 @@ function buildWordLineStyle(type) {
     `font-size:${EXPORT_TYPOGRAPHY.fontSizePt}pt`,
     `line-height:${EXPORT_TYPOGRAPHY.lineHeight}`,
     'white-space:pre-wrap',
-    'margin-bottom:0'
+    'margin-bottom:0',
+    'margin-right:0'
   ];
 
   if (layout.bold) {
@@ -281,7 +277,8 @@ function buildWordDualRowStyle(type) {
     `grid-template-columns:${layout.widthIn}in ${layout.widthIn}in`,
     'column-gap:0.5in',
     `width:${(layout.widthIn * 2) + 0.5}in`,
-    'white-space:pre-wrap'
+    'white-space:pre-wrap',
+    'margin-right:0'
   ];
   return `${rules.join(';')};`;
 }
@@ -514,7 +511,7 @@ function getWordStyles() {
       display: grid;
       grid-template-rows: ${EXPORT_PAGE_SETTINGS.marginsIn.top}in 1fr ${EXPORT_PAGE_SETTINGS.marginsIn.bottom}in;
       height: 100%;
-      padding: 0 ${EXPORT_PAGE_SETTINGS.marginsIn.right}in 0 ${EXPORT_PAGE_SETTINGS.marginsIn.left}in;
+      padding: 0 ${2.5 * EXPORT_PAGE_SETTINGS.cmToIn}in 0 ${2.5 * EXPORT_PAGE_SETTINGS.cmToIn}in;
     }
     .word-header,
     .word-footer-slot {
@@ -534,6 +531,7 @@ function getWordStyles() {
     .word-cover-stack {
       width: 100%;
       text-align: center;
+      transform: translateY(-48pt);
     }
     .word-cover-title,
     .word-cover-byline,
@@ -544,29 +542,23 @@ function getWordStyles() {
       white-space: pre-wrap;
     }
     .word-cover-title {
-      margin-bottom: 36pt;
       font-weight: 700;
+      margin-bottom: 36pt;
     }
     .word-cover-byline {
       margin-bottom: 12pt;
     }
     .word-cover-author {
+      font-weight: 700;
       margin-bottom: 36pt;
+    }
+    .word-cover-meta {
+      margin-bottom: 6pt;
     }
     .word-cover-logline {
       margin-top: 24pt;
-    }
-    .word-page-number {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: flex-end;
-      justify-content: flex-end;
-      padding-bottom: ${EXPORT_PAGE_SETTINGS.footerNumberOffsetIn}in;
-      font-size: 10pt;
-    }
-    .word-page-number-placeholder {
-      visibility: hidden;
+      margin-left: 3.5cm;
+      margin-right: 3.5cm;
     }
     .word-body {
       width: 100%;
