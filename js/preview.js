@@ -99,7 +99,7 @@ function buildPageNumberLabel(pageNumber, totalPages) {
 
 export function buildPrintableDocument(project, autoPrint = false) {
   const previewData = buildPreviewData(project);
-  const coverText = `\n\n\n\n\n\n\n\n\n\n${escapeHtml(project.title)}\n\n\n${escapeHtml(t("cover.by"))}\n\n${escapeHtml(project.author || t("cover.authorFallback"))}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
+  const coverText = buildCoverText(project, 6);
   const coverMarkup = `
     <section class="print-page cover-page">
       <div class="print-frame cover-frame">
@@ -191,7 +191,7 @@ export function buildWordDocument(project) {
           </div>
         </div>
       </div>
-    `;
+  `;
   });
 
   return `<!DOCTYPE html>
@@ -216,9 +216,12 @@ export function buildWordDocument(project) {
 function renderHtmlExportLine(line, prefix, lineIndex = 0) {
   const spacingStyle = buildBlockSpacingStyle(line.type, lineIndex);
   if (line.secondary !== undefined) {
-    return `<div class="${prefix}-line ${prefix}-dual-row ${escapeHtml(line.type)}" style="${spacingStyle}"><span class="${prefix}-dual-col">${escapeHtml(line.displayText)}</span><span class="${prefix}-dual-col">${escapeHtml(line.secondary)}</span></div>`;
+    const rowStyle = `${spacingStyle}${prefix === 'word' ? buildWordDualRowStyle(line.type) : ''}`;
+    const colStyle = prefix === 'word' ? buildWordDualColStyle(line.type) : '';
+    return `<div class="${prefix}-line ${prefix}-dual-row ${escapeHtml(line.type)}" style="${rowStyle}"><span class="${prefix}-dual-col" style="${colStyle}">${escapeHtml(line.displayText)}</span><span class="${prefix}-dual-col" style="${colStyle}">${escapeHtml(line.secondary)}</span></div>`;
   }
-  return `<p class="${prefix}-line ${escapeHtml(line.type)}" style="${spacingStyle}">${escapeHtml(line.displayText)}</p>`;
+  const lineStyle = `${spacingStyle}${prefix === 'word' ? buildWordLineStyle(line.type) : ''}`;
+  return `<p class="${prefix}-line ${escapeHtml(line.type)}" style="${lineStyle}">${escapeHtml(line.displayText)}</p>`;
 }
 
 function buildBlockSpacingStyle(type, lineIndex) {
@@ -227,6 +230,69 @@ function buildBlockSpacingStyle(type, lineIndex) {
   }
   const spacingLines = Math.max(0, getExportLayout(type).beforeLines || 0);
   return `margin-top:${spacingLines * 12}pt;`;
+}
+
+function buildCoverText(project, titleLeadingBreaks = 10) {
+  const topPadding = "\n".repeat(Math.max(0, titleLeadingBreaks));
+  return `${topPadding}${escapeHtml(project.title)}\n\n\n${escapeHtml(t("cover.by"))}\n\n${escapeHtml(project.author || t("cover.authorFallback"))}\n\n\n${escapeHtml(project.contact || "")}\n${escapeHtml(project.company || "")}\n${escapeHtml(project.details || "")}\n\n${escapeHtml(project.logline || "")}`;
+}
+
+function buildWordLineStyle(type) {
+  const layout = getExportLayout(type);
+  const rules = [
+    `margin-left:${layout.indentIn}in`,
+    `width:${layout.widthIn}in`,
+    `text-align:${layout.align}`,
+    `font-family:${EXPORT_TYPOGRAPHY.cssFontFamily}`,
+    `font-size:${EXPORT_TYPOGRAPHY.fontSizePt}pt`,
+    `line-height:${EXPORT_TYPOGRAPHY.lineHeight}`,
+    'white-space:pre-wrap',
+    'margin-bottom:0'
+  ];
+
+  if (layout.bold) {
+    rules.push('font-weight:700');
+  }
+  if (layout.italic) {
+    rules.push('font-style:italic');
+  }
+
+  return `${rules.join(';')};`;
+}
+
+function buildWordDualRowStyle(type) {
+  const layout = getExportLayout(type);
+  const rules = [
+    `margin-left:${layout.indentIn}in`,
+    'display:grid',
+    `grid-template-columns:${layout.widthIn}in ${layout.widthIn}in`,
+    'column-gap:0.5in',
+    `width:${(layout.widthIn * 2) + 0.5}in`,
+    'white-space:pre-wrap'
+  ];
+  return `${rules.join(';')};`;
+}
+
+function buildWordDualColStyle(type) {
+  const layout = getExportLayout(type);
+  const rules = [
+    `width:${layout.widthIn}in`,
+    `text-align:${layout.align}`,
+    `font-family:${EXPORT_TYPOGRAPHY.cssFontFamily}`,
+    `font-size:${EXPORT_TYPOGRAPHY.fontSizePt}pt`,
+    `line-height:${EXPORT_TYPOGRAPHY.lineHeight}`,
+    'white-space:pre-wrap',
+    'vertical-align:top'
+  ];
+
+  if (layout.bold) {
+    rules.push('font-weight:700');
+  }
+  if (layout.italic) {
+    rules.push('font-style:italic');
+  }
+
+  return `${rules.join(';')};`;
 }
 
 function buildTypeCss(prefix) {
@@ -306,7 +372,7 @@ function getPrintableStyles() {
       display: grid;
       grid-template-rows: ${EXPORT_PAGE_SETTINGS.marginsIn.top}in 1fr ${EXPORT_PAGE_SETTINGS.marginsIn.bottom}in;
       height: 100%;
-      padding: 0 ${EXPORT_PAGE_SETTINGS.marginsIn.right}in 0 ${EXPORT_PAGE_SETTINGS.marginsIn.left}in;
+      padding: 0 ${2.5 * EXPORT_PAGE_SETTINGS.cmToIn}in 0 ${2.5 * EXPORT_PAGE_SETTINGS.cmToIn}in;
     }
     .print-header,
     .print-footer-slot {
