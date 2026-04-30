@@ -201,11 +201,11 @@ export function buildWordDocument(project) {
 function renderHtmlExportLine(line, prefix, lineIndex = 0) {
   const spacingStyle = buildBlockSpacingStyle(line.type, lineIndex);
   if (line.secondary !== undefined) {
-    const rowStyle = `${spacingStyle}${prefix === 'word' ? buildWordDualRowStyle(line.type) : ''}`;
+    const rowStyle = `${prefix === 'word' ? buildWordBlockSpacingStyle(line.type, lineIndex) : spacingStyle}${prefix === 'word' ? buildWordDualRowStyle(line.type) : ''}`;
     const colStyle = prefix === 'word' ? buildWordDualColStyle(line.type) : '';
     return `<div class="${prefix}-line ${prefix}-dual-row ${escapeHtml(line.type)}" style="${rowStyle}"><span class="${prefix}-dual-col" style="${colStyle}">${escapeHtml(line.displayText)}</span><span class="${prefix}-dual-col" style="${colStyle}">${escapeHtml(line.secondary)}</span></div>`;
   }
-  const lineStyle = `${spacingStyle}${prefix === 'word' ? buildWordLineStyle(line.type) : ''}`;
+  const lineStyle = `${prefix === 'word' ? buildWordBlockSpacingStyle(line.type, lineIndex) : spacingStyle}${prefix === 'word' ? buildWordLineStyle(line.type) : ''}`;
   return `<p class="${prefix}-line ${escapeHtml(line.type)}" style="${lineStyle}">${escapeHtml(line.displayText)}</p>`;
 }
 
@@ -247,23 +247,30 @@ function buildWordCoverMarkup(project) {
 
 function buildWordLineStyle(type) {
   const layout = getExportLayout(type);
+  const characterMarginCm = 5;
+  const dialogueMarginCm = 2.5;
+  const defaultMarginLeft = `${layout.indentIn}in`;
+  const defaultWidth = `${layout.widthIn}in`;
   const rules = [
-    `margin-left:${layout.indentIn}in`,
-    `width:${layout.widthIn}in`,
+    `margin-left:${type === 'character' ? `${characterMarginCm}cm` : defaultMarginLeft}`,
+    `width:${type === 'dialogue' ? 'auto' : defaultWidth}`,
     `text-align:${layout.align}`,
     `font-family:${EXPORT_TYPOGRAPHY.cssFontFamily}`,
     `font-size:${EXPORT_TYPOGRAPHY.fontSizePt}pt`,
     `line-height:${EXPORT_TYPOGRAPHY.lineHeight}`,
     'white-space:pre-wrap',
     'margin-bottom:0',
-    'margin-right:0'
+    `margin-right:${type === 'dialogue' ? `${dialogueMarginCm}cm` : '0'}`,
+    `font-weight:${layout.bold ? '700' : '400'}`,
+    `font-style:${layout.italic ? 'italic' : 'normal'}`,
+    `mso-bidi-font-weight:${layout.bold ? 'bold' : 'normal'}`
   ];
 
-  if (layout.bold) {
-    rules.push('font-weight:700');
+  if (type === 'dialogue') {
+    rules.push(`margin-left:${dialogueMarginCm}cm`);
   }
-  if (layout.italic) {
-    rules.push('font-style:italic');
+  if (type === 'scene') {
+    rules.push('text-transform:uppercase');
   }
 
   return `${rules.join(';')};`;
@@ -272,13 +279,14 @@ function buildWordLineStyle(type) {
 function buildWordDualRowStyle(type) {
   const layout = getExportLayout(type);
   const rules = [
-    `margin-left:${layout.indentIn}in`,
+    `margin-left:${type === 'character' || type === 'dual' ? '5cm' : `${layout.indentIn}in`}`,
     'display:grid',
     `grid-template-columns:${layout.widthIn}in ${layout.widthIn}in`,
     'column-gap:0.5in',
     `width:${(layout.widthIn * 2) + 0.5}in`,
     'white-space:pre-wrap',
-    'margin-right:0'
+    'margin-right:0',
+    `font-weight:${layout.bold ? '700' : '400'}`
   ];
   return `${rules.join(';')};`;
 }
@@ -295,14 +303,23 @@ function buildWordDualColStyle(type) {
     'vertical-align:top'
   ];
 
-  if (layout.bold) {
-    rules.push('font-weight:700');
-  }
-  if (layout.italic) {
-    rules.push('font-style:italic');
-  }
+  rules.push(`font-weight:${layout.bold ? '700' : '400'}`);
+  rules.push(`font-style:${layout.italic ? 'italic' : 'normal'}`);
 
   return `${rules.join(';')};`;
+}
+
+function buildWordBlockSpacingStyle(type, lineIndex) {
+  if (lineIndex === 0) {
+    return 'margin-top:0;margin-bottom:0;';
+  }
+  if (type === 'dialogue' || type === 'parenthetical') {
+    return 'margin-top:0;margin-bottom:0;';
+  }
+  if (type === 'scene') {
+    return 'margin-top:12pt;margin-bottom:12pt;';
+  }
+  return buildBlockSpacingStyle(type, lineIndex);
 }
 
 function buildTypeCss(prefix) {
