@@ -2561,7 +2561,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   width: 100%;
 }
 
-.help-dialog, .custom-modal {
+.help-dialog, .custom-modal, .notepad-modal {
   border: 0;
   padding: 0;
   background: transparent;
@@ -2569,9 +2569,9 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   box-shadow: var(--shadow);
 }
 
-.custom-modal::backdrop, .notepad-modal::backdrop {
+.custom-modal::backdrop, .notepad-modal::backdrop, .help-dialog::backdrop {
   background: rgba(16, 16, 16, 0.15);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 
 .modal-content, .notepad-content {
@@ -2599,6 +2599,11 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.notepad-header h3 {
+  color: var(--accent);
+  margin: 0;
 }
 
 .help-sheet {
