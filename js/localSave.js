@@ -1,13 +1,14 @@
 import { state } from './config.js';
 import { getCurrentProject } from './project.js';
 import { refs } from './dom.js';
+import { slugify } from './utils.js';
 
 const IDB_NAME = 'eyawriter-handles';
 const IDB_STORE = 'handles';
 const IDB_KEY = 'localSaveFile';
 
 export function isLocalSaveSupported() {
-  return typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function';
+  return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
 }
 
 function openIDB() {
@@ -61,8 +62,8 @@ async function ensureWritePermission(handle) {
 function updateFileLabel() {
   if (!refs.localSaveFileLabel) return;
   refs.localSaveFileLabel.textContent = state.localSaveFileHandle
-    ? `Saving to: ${state.localSaveFileHandle.name}`
-    : 'No file selected';
+    ? `Backup folder: ${state.localSaveFileHandle.name}`
+    : 'No folder selected';
 }
 
 export async function chooseLocalSaveFile() {
@@ -70,10 +71,7 @@ export async function chooseLocalSaveFile() {
     return { ok: false, reason: 'unsupported' };
   }
   try {
-    const handle = await window.showSaveFilePicker({
-      suggestedName: 'eyawriter-backup.json',
-      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
-    });
+    const handle = await window.showDirectoryPicker();
     state.localSaveFileHandle = handle;
     await idbPut(handle);
     updateFileLabel();
@@ -81,7 +79,7 @@ export async function chooseLocalSaveFile() {
     return { ok: true };
   } catch (error) {
     if (error?.name === 'AbortError') return { ok: false, reason: 'cancelled' };
-    console.error('Failed to choose local save file', error);
+    console.error('Failed to choose local backup folder', error);
     return { ok: false, reason: 'error', error };
   }
 }
@@ -112,20 +110,27 @@ export async function clearLocalSaveFile() {
   updateFileLabel();
 }
 
-export async function writeLocalSaveFile() {
-  const handle = state.localSaveFileHandle;
-  if (!handle) return false;
-  const project = getCurrentProject();
-  if (!project) return false;
+export async function writeLocalSaveFile(targetProject = null) {
+  const directoryHandle = state.localSaveFileHandle;
+  if (!directoryHandle) return false;
+
+  const projectsToSave = targetProject ? [targetProject] : state.projects;
+  if (!projectsToSave.length) return false;
+
   try {
-    const granted = await ensureWritePermission(handle);
+    const granted = await ensureWritePermission(directoryHandle);
     if (!granted) return false;
-    const writable = await handle.createWritable();
-    await writable.write(JSON.stringify(project, null, 2));
-    await writable.close();
+
+    for (const project of projectsToSave) {
+      const fileName = `${slugify(project.title)}.json`;
+      const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(project, null, 2));
+      await writable.close();
+    }
     return true;
   } catch (error) {
-    console.error('Local save failed', error);
+    console.error('Local backup failed', error);
     return false;
   }
 }

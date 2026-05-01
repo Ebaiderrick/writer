@@ -43,11 +43,24 @@ async function syncCurrentProjectToFirestore() {
 
   const payload = { ...project, syncedAt: new Date().toISOString() };
   try {
+  // Record word count progress before sync
+  const currentWords = serializeScript(project).match(/\b[\w'-]+\b/g)?.length || 0;
+  const history = project.wordCountHistory || [];
+  const lastEntry = history[history.length - 1];
+  const now = new Date().toISOString();
+
+  if (!lastEntry || lastEntry.count !== currentWords) {
+    history.push({ timestamp: now, count: currentWords, uid: userId });
+    // Keep last 50 entries
+    if (history.length > 50) history.shift();
+    project.wordCountHistory = history;
+  }
+
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
-        'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId'];
+      'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
       );
@@ -189,6 +202,7 @@ export function sanitizeProject(project) {
     ownerEmail: project.ownerEmail || "",
     collaborators: (project.collaborators && typeof project.collaborators === 'object') ? project.collaborators : {},
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
+    wordCountHistory: Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [],
     lines: Array.isArray(project.lines) && project.lines.length
       ? project.lines.map((line) => {
           const type = TYPE_LABELS[line.type] ? line.type : "action";

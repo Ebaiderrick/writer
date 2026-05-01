@@ -482,6 +482,53 @@ export function renderMetrics() {
   refs.pageCount.textContent = Math.max(1, Math.round((words.length / 180) * 10) / 10).toFixed(1);
   refs.characterCount.textContent = characters.size.toString();
   refs.noteCount.textContent = notes.toString();
+
+  renderProgressGraph(project);
+}
+
+function renderProgressGraph(project) {
+  const container = refs.metricsGraph;
+  if (!container) return;
+
+  const history = project.wordCountHistory || [];
+  if (history.length < 2) {
+    container.innerHTML = '<p class="collab-empty" style="padding:10px;text-align:center">Waiting for more data...</p>';
+    return;
+  }
+
+  const width = container.clientWidth || 240;
+  const height = 80;
+  const padding = 10;
+
+  const counts = history.map(h => h.count);
+  const minCount = Math.min(...counts);
+  const maxCount = Math.max(...counts);
+  const range = maxCount - minCount || 1;
+
+  const getX = (i) => (i / (history.length - 1)) * (width - 2 * padding) + padding;
+  const getY = (c) => height - (((c - minCount) / range) * (height - 2 * padding) + padding);
+
+  const ownerId = project.ownerId || JSON.parse(localStorage.getItem('eyawriter_session') || '{}')?.userId;
+
+  let pathData = `M ${getX(0)} ${getY(history[0].count)}`;
+  for (let i = 1; i < history.length; i++) {
+    pathData += ` L ${getX(i)} ${getY(history[i].count)}`;
+  }
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+      <path d="${pathData}" class="graph-path" />
+      ${history.map((h, i) => {
+        const isOwner = !h.uid || h.uid === ownerId;
+        const colorClass = isOwner ? "graph-point" : "graph-point graph-point-collab";
+        return `
+          <circle cx="${getX(i)}" cy="${getY(h.count)}" r="3" class="${colorClass}">
+            <title>${h.count} words by ${isOwner ? 'Owner' : 'Collaborator'} (${new Date(h.timestamp).toLocaleDateString()})</title>
+          </circle>
+        `;
+      }).join('')}
+    </svg>
+  `;
 }
 
 export function renderCurrentScriptId() {
@@ -495,6 +542,12 @@ export function renderCurrentScriptId() {
 export function closeMenus() {
   document.querySelectorAll(".nav-menu").forEach((menu) => {
     menu.hidden = true;
+    // Auto-collapse details groups within the menu when closing
+    menu.querySelectorAll("details.menu-group[open]").forEach((group) => {
+      // Keep only those that should be 'open' by default if needed,
+      // but the user wants 'every menu submenu auto collapse when the user leaves'.
+      group.removeAttribute("open");
+    });
   });
   document.querySelectorAll("[data-menu-trigger]").forEach((button) => {
     button.classList.remove("is-open");

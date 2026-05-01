@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
 </head>
 <body>
   <div id="liquid-bg-container" class="mesh-background"></div>
@@ -374,6 +377,10 @@
               </div>
             </details>
             <div class="nav-menu-section">
+              <label class="menu-row toggle-row">
+                <span>Bg Annim</span>
+                <input id="bgAnimationToggle" type="checkbox">
+              </label>
               <button class="nav-menu-button" type="button" data-view-toggle="pageNumbers">Page numbering</button>
               <button class="nav-menu-button" type="button" data-menu-action="fullscreen">Full Screen</button>
             </div>
@@ -404,6 +411,7 @@
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
                 <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
               </div>
             </details>
             <details class="menu-group" open>
@@ -492,10 +500,6 @@
         </div>
 
         <div class="topbar-actions">
-          <label class="mini-radio-option topbar-bg-anim">
-            <input id="bgAnimationToggle" type="checkbox">
-            <span id="bgAnimationToggleLabel">Bg Annim</span>
-          </label>
           <div class="save-status-stack">
             <span id="saveBadge" class="save-badge">Saved</span>
             <span id="currentScriptIdFlag" class="script-id-flag" hidden></span>
@@ -764,6 +768,10 @@
                   <div><span>Characters</span><strong id="characterCount">0</strong></div>
                   <div><span>Notes</span><strong id="noteCount">0</strong></div>
                 </div>
+                <div class="metrics-graph-container">
+                  <span class="metrics-graph-label">Progress over time</span>
+                  <div id="metricsGraph" class="metrics-graph"></div>
+                </div>
                 </div>
               </section>
               <p id="leftPaneEmptyState" class="pane-empty-state" hidden>No active blocks selected. Use Tools to customize this pane.</p>
@@ -969,6 +977,17 @@
         <p><kbd>1-9</kbd><span>Choose suggestion</span></p>
       </div>
     </form>
+  </dialog>
+
+  <!-- Notepad Modal -->
+  <dialog id="notepadDialog" class="notepad-modal">
+    <div class="notepad-content">
+      <div class="notepad-header">
+        <h3>Notepad</h3>
+        <button id="closeNotepad" class="ghost-button btn-sm" type="button">✕</button>
+      </div>
+      <div id="summernote"></div>
+    </div>
   </dialog>
 
   <!-- Profile Popup Overlay -->

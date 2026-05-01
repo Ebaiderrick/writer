@@ -84,5 +84,6 @@ export const refs = {
   get localSaveControls() { return getCached("#localSaveControls"); },
   get localSaveInterval() { return getCached("#localSaveInterval"); },
   get chooseLocalSaveFileBtn() { return getCached("#chooseLocalSaveFileBtn"); },
-  get localSaveFileLabel() { return getCached("#localSaveFileLabel"); }
+  get localSaveFileLabel() { return getCached("#localSaveFileLabel"); },
+  get metricsGraph() { return getCached("#metricsGraph"); }
   };

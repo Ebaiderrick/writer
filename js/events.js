@@ -84,6 +84,18 @@ export function bindEvents() {
         closeMenus();
       }
     });
+    // Accordion behavior for menu groups
+    menu.addEventListener("click", (e) => {
+      const summary = e.target.closest(".menu-group-summary");
+      if (summary) {
+        const details = summary.parentElement;
+        if (!details.open) {
+          menu.querySelectorAll(".menu-group[open]").forEach((group) => {
+            if (group !== details) group.removeAttribute("open");
+          });
+        }
+      }
+    });
   });
 
   refs.themeButtons.forEach((button) => {
@@ -1207,6 +1219,9 @@ function handleMenuAction(action) {
     case "show-metrics":
       revealMetricsPanel();
       break;
+    case "open-notepad":
+      openNotepad();
+      break;
   }
   closeMenus();
   if (action === "toggle-grammar-check") {
@@ -1815,6 +1830,38 @@ function importFile(event) {
 
   reader.readAsText(file);
   refs.fileInput.value = "";
+}
+
+function openNotepad() {
+  const dialog = document.getElementById("notepadDialog");
+  const closeBtn = document.getElementById("closeNotepad");
+
+  if (!dialog) return;
+
+  // Initialize Summernote if not already done
+  if (!$( '#summernote' ).data('summernote')) {
+    $( '#summernote' ).summernote({
+      placeholder: 'Type your notes here...',
+      tabsize: 2,
+      height: 400,
+      toolbar: [
+        ['style', ['style']],
+        ['font', ['bold', 'italic', 'underline', 'clear']],
+        ['fontname', ['fontname']],
+        ['color', ['color']],
+        ['para', ['ul', 'ol', 'paragraph']],
+        ['table', ['table']],
+        ['insert', ['link', 'picture', 'video']],
+        ['view', ['fullscreen', 'codeview', 'help']]
+      ]
+    });
+  }
+
+  dialog.showModal();
+
+  closeBtn.onclick = () => {
+    dialog.close();
+  };
 }
 
 async function checkFirstWorkBackup() {
