@@ -464,6 +464,9 @@ export function applyToolbarState() {
   if (refs.bgAnimationToggle) {
     refs.bgAnimationToggle.checked = state.backgroundAnimation;
   }
+  if (refs.bgAnimationLandingToggle) {
+    refs.bgAnimationLandingToggle.checked = state.backgroundAnimation;
+  }
   setBackgroundAnimationEnabled(state.backgroundAnimation);
   updateMenuStateButtons();
 }
@@ -498,18 +501,25 @@ export function closeMenus() {
   });
 }
 
-export function toggleMenu(menuId) {
+export function toggleMenu(menuId, forceState = null) {
   const menu = document.getElementById(menuId);
   if (!menu) {
     return;
   }
   const trigger = document.querySelector(`[data-menu-trigger="${menuId}"]`);
-  const willOpen = menu.hidden;
-  closeMenus();
-  menu.hidden = !willOpen;
-  trigger?.classList.toggle("is-open", willOpen);
+  const willOpen = forceState !== null ? forceState : menu.hidden;
+
+  if (willOpen && !menu.hidden) return; // Already open
+  if (!willOpen && menu.hidden) return; // Already closed
+
   if (willOpen) {
+    closeMenus();
+    menu.hidden = false;
+    trigger?.classList.add("is-open");
     positionMenuUnderTrigger(menu, trigger);
+  } else {
+    menu.hidden = true;
+    trigger?.classList.remove("is-open");
   }
 }
 

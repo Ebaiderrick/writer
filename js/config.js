@@ -57,7 +57,7 @@ export const state = {
   grammarCheck: false,
   toolStripCollapsed: false,
   autoNumberScenes: false,
-  backgroundAnimation: true,
+  backgroundAnimation: false,
   theme: "cedar",
   language: "en",
   writingLanguage: "en",

@@ -25,6 +25,10 @@ export const ContextMenu = (() => {
       handleAction(action);
       hide();
     });
+
+    menuEl.addEventListener("mouseleave", () => {
+      hide();
+    });
   }
 
   function show(x, y, targetBlock = null) {

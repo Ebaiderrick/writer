@@ -17,10 +17,18 @@
     <section id="authView" class="auth-view">
       <!-- Theme toggle -->
       <div class="theme-toggle">
-        <button class="theme-btn active" data-theme="rose">🌹</button>
-        <button class="theme-btn" data-theme="dark">🌙</button>
-        <button class="theme-btn" data-theme="white">☀️</button>
-        <button class="theme-btn" data-theme="navy">🌊</button>
+        <div class="theme-toggle-row">
+          <label class="mini-radio-option bg-anim-landing">
+            <input id="bgAnimationLandingToggle" type="checkbox">
+            <span id="bgAnimationLandingToggleLabel">Bg Annim</span>
+          </label>
+          <div class="theme-btns">
+            <button class="theme-btn active" data-theme="rose">🌹</button>
+            <button class="theme-btn" data-theme="dark">🌙</button>
+            <button class="theme-btn" data-theme="white">☀️</button>
+            <button class="theme-btn" data-theme="navy">🌊</button>
+          </div>
+        </div>
       </div>
 
       <!-- Auth Container -->

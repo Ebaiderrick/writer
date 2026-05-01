@@ -32,6 +32,7 @@ export const refs = {
   get autoCapsToggle() { return getCached("#autoCapsToggle"); },
   get autoNumberToggle() { return getCached("#autoNumberToggle"); },
   get bgAnimationToggle() { return getCached("#bgAnimationToggle"); },
+  get bgAnimationLandingToggle() { return getCached("#bgAnimationLandingToggle"); },
   get typewriterToggle() { return getCached("#typewriterToggle"); },
   get aiAssistToggle() { return getCached("#aiAssistToggle"); },
   get grammarCheckToggle() { return getCached("#grammarCheckToggle"); },

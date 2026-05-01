@@ -146,7 +146,7 @@ export function loadProjects() {
     state.aiAssist = Boolean(parsed?.aiAssist);
       state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
       state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
-      state.backgroundAnimation = parsed?.backgroundAnimation !== false;
+      state.backgroundAnimation = Boolean(parsed?.backgroundAnimation);
       state.theme = parsed?.theme === "rose" ? "cedar" : (parsed?.theme || "cedar");
       state.language = ["en", "fr", "de"].includes(parsed?.language) ? parsed.language : "en";
       state.writingLanguage = ["en", "fr", "de"].includes(parsed?.writingLanguage) ? parsed.writingLanguage : state.language;
@@ -161,7 +161,7 @@ export function loadProjects() {
     console.error("Unable to load projects", error);
       state.projects = [cloneProject(sampleProject, true)];
       state.currentProjectId = state.projects[0].id;
-      state.backgroundAnimation = true;
+      state.backgroundAnimation = false;
       state.language = "en";
       state.writingLanguage = "en";
       state.grammarCheck = false;

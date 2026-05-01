@@ -71,6 +71,19 @@ export function bindEvents() {
       event.stopPropagation();
       toggleMenu(button.dataset.menuTrigger);
     });
+    button.addEventListener("mouseenter", () => {
+      if (window.innerWidth > 900) {
+        toggleMenu(button.dataset.menuTrigger, true);
+      }
+    });
+  });
+
+  document.querySelectorAll(".nav-menu").forEach((menu) => {
+    menu.addEventListener("mouseleave", () => {
+      if (window.innerWidth > 900) {
+        closeMenus();
+      }
+    });
   });
 
   refs.themeButtons.forEach((button) => {
@@ -163,10 +176,20 @@ export function bindEvents() {
     queueSave();
   });
 
-  refs.bgAnimationToggle?.addEventListener("change", () => {
-    state.backgroundAnimation = refs.bgAnimationToggle.checked;
+  const syncBgAnim = (enabled) => {
+    state.backgroundAnimation = enabled;
+    if (refs.bgAnimationToggle) refs.bgAnimationToggle.checked = enabled;
+    if (refs.bgAnimationLandingToggle) refs.bgAnimationLandingToggle.checked = enabled;
     applyToolbarState();
     persistProjects(false);
+  };
+
+  refs.bgAnimationToggle?.addEventListener("change", () => {
+    syncBgAnim(refs.bgAnimationToggle.checked);
+  });
+
+  refs.bgAnimationLandingToggle?.addEventListener("change", () => {
+    syncBgAnim(refs.bgAnimationLandingToggle.checked);
   });
 
   refs.aiAssistToggle.addEventListener("change", () => {

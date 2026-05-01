@@ -2961,9 +2961,23 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   position: fixed;
   top: 20px;
   right: 20px;
+  z-index: 1100;
+}
+
+.theme-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--panel);
+  padding: 8px 16px;
+  border-radius: 30px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.theme-btns {
   display: flex;
   gap: 8px;
-  z-index: 1100;
 }
 
 .theme-btn {
