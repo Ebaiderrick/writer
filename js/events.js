@@ -571,6 +571,8 @@ export function openProject(projectId) {
   if (state.activeBlockId) {
     focusBlock(state.activeBlockId);
   }
+
+  checkFirstWorkBackup();
 }
 
 export function renderStudio() {
@@ -1813,4 +1815,25 @@ function importFile(event) {
 
   reader.readAsText(file);
   refs.fileInput.value = "";
+}
+
+async function checkFirstWorkBackup() {
+  if (state.localBackupEnabled || state.backupPrompted) return;
+
+  state.backupPrompted = true;
+  persistProjects(false);
+
+  const confirmed = await customConfirm(
+    "Would you like to enable Local Backup? This automatically saves a copy of your work to a folder on your computer for extra safety.",
+    "Enable Local Backup?"
+  );
+
+  if (confirmed) {
+    const result = await chooseLocalSaveFile();
+    if (result.ok) {
+      state.localBackupEnabled = true;
+      applySaveModeButtons();
+      persistProjects(false);
+    }
+  }
 }

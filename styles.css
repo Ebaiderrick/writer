@@ -763,11 +763,32 @@ html[data-theme="rose"] .mesh-background {
   justify-content: flex-end;
 }
 
-.save-home-stack {
+.save-status-stack {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-end;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.topbar-bg-anim {
+  margin-right: 4px;
+}
+
+.topbar-bg-anim span {
+  font-size: 0.65rem;
+  opacity: 0.8;
+}
+
+.local-backup-toggle-row {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
+}
+
+.local-backup-toggle-row:hover {
+  background: var(--accent-soft);
 }
 
 .save-badge,

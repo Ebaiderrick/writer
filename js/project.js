@@ -153,6 +153,7 @@ export function loadProjects() {
       state.grammarCheck = Boolean(parsed?.grammarCheck);
       state.localBackupEnabled = Boolean(parsed?.localBackupEnabled);
       state.localSaveIntervalMinutes = [5, 10, 60].includes(parsed?.localSaveIntervalMinutes) ? parsed.localSaveIntervalMinutes : 5;
+      state.backupPrompted = Boolean(parsed?.backupPrompted);
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
     state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
@@ -271,6 +272,7 @@ export function persistProjects(forceSavedBadge = false, { syncInputs = true } =
       grammarCheck: state.grammarCheck,
       localBackupEnabled: state.localBackupEnabled,
       localSaveIntervalMinutes: state.localSaveIntervalMinutes,
+      backupPrompted: state.backupPrompted,
       viewOptions: state.viewOptions,
     leftPaneBlocks: state.leftPaneBlocks,
     leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),

@@ -17,18 +17,10 @@
     <section id="authView" class="auth-view">
       <!-- Theme toggle -->
       <div class="theme-toggle">
-        <div class="theme-toggle-row">
-          <label class="mini-radio-option bg-anim-landing">
-            <input id="bgAnimationLandingToggle" type="checkbox">
-            <span id="bgAnimationLandingToggleLabel">Bg Annim</span>
-          </label>
-          <div class="theme-btns">
-            <button class="theme-btn active" data-theme="rose">🌹</button>
-            <button class="theme-btn" data-theme="dark">🌙</button>
-            <button class="theme-btn" data-theme="white">☀️</button>
-            <button class="theme-btn" data-theme="navy">🌊</button>
-          </div>
-        </div>
+        <button class="theme-btn active" data-theme="rose">🌹</button>
+        <button class="theme-btn" data-theme="dark">🌙</button>
+        <button class="theme-btn" data-theme="white">☀️</button>
+        <button class="theme-btn" data-theme="navy">🌊</button>
       </div>
 
       <!-- Auth Container -->
@@ -265,6 +257,24 @@
                   <button class="nav-menu-button" type="button" data-menu-action="rename-project">Rename</button>
                   <button class="nav-menu-button" type="button" data-menu-action="duplicate-project">Duplicate</button>
                   <button class="nav-menu-button nav-menu-button-danger" type="button" data-menu-action="delete-project">Delete</button>
+
+                  <div class="menu-divider"></div>
+                  <label class="menu-row toggle-row local-backup-toggle-row">
+                    <span>Local Backup</span>
+                    <input type="checkbox" id="localBackupToggle">
+                  </label>
+                  <div id="localSaveControls" class="local-save-controls" hidden>
+                    <label class="menu-row" for="localSaveInterval">
+                      <span>Every</span>
+                      <select id="localSaveInterval">
+                        <option value="5">5m</option>
+                        <option value="10">10m</option>
+                        <option value="60">1h</option>
+                      </select>
+                    </label>
+                    <button id="chooseLocalSaveFileBtn" class="nav-menu-button btn-sm" type="button">Choose folder/file…</button>
+                    <p id="localSaveFileLabel" class="local-save-file-label">No file selected</p>
+                  </div>
                 </div>
               </details>
               <details class="menu-group">
@@ -478,36 +488,19 @@
                 </div>
               </div>
             </details>
-            <details class="menu-group">
-              <summary class="menu-group-summary">Local Backup</summary>
-              <div class="menu-group-body">
-                <label class="menu-row toggle-row">
-                  <span>Enable local backup</span>
-                  <input type="checkbox" id="localBackupToggle">
-                </label>
-                <div id="localSaveControls" class="local-save-controls" hidden>
-                  <label class="menu-row" for="localSaveInterval">
-                    <span>Backup every</span>
-                    <select id="localSaveInterval">
-                      <option value="5">5 minutes</option>
-                      <option value="10">10 minutes</option>
-                      <option value="60">1 hour</option>
-                    </select>
-                  </label>
-                  <button id="chooseLocalSaveFileBtn" class="ghost-button" type="button">Choose file…</button>
-                  <p id="localSaveFileLabel" class="local-save-file-label">No file selected</p>
-                </div>
-              </div>
-            </details>
           </div>
         </div>
 
         <div class="topbar-actions">
-          <span id="saveBadge" class="save-badge">Saved</span>
-          <div class="save-home-stack">
-            <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
+          <label class="mini-radio-option topbar-bg-anim">
+            <input id="bgAnimationToggle" type="checkbox">
+            <span id="bgAnimationToggleLabel">Bg Annim</span>
+          </label>
+          <div class="save-status-stack">
+            <span id="saveBadge" class="save-badge">Saved</span>
             <span id="currentScriptIdFlag" class="script-id-flag" hidden></span>
           </div>
+          <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
           <button class="user-trigger open-profile-btn" aria-label="Open profile">
             <div class="user-avatar-circle">
               <img src="" alt="" class="user-avatar-img" hidden>
@@ -521,10 +514,6 @@
         <div class="tool-strip-row">
           <div class="strip-start-controls">
             <button id="leftRailToggle" class="collapse-arrow" type="button" aria-label="Collapse left pane">◀</button>
-            <label class="mini-radio-option" for="bgAnimationToggle">
-              <input id="bgAnimationToggle" type="checkbox" checked>
-              <span id="bgAnimationToggleLabel">Bg Annim</span>
-            </label>
           </div>
 
           <div class="tool-groups">
