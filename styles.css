@@ -3064,6 +3064,161 @@ kbd {
   opacity: 0.92;
 }
 
+.smart-proofread-panel-copy {
+  margin: 0 0 var(--space-2);
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+}
+
+.smart-proofread-open-btn {
+  width: 100%;
+}
+
+.smart-proofread-launcher,
+.smart-proofread-results {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.smart-proofread-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.smart-proofread-mode-card {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 92%, var(--control-bg));
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.smart-proofread-mode-card strong {
+  font-size: 0.9rem;
+}
+
+.smart-proofread-mode-card span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.smart-proofread-mode-card.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 74%, var(--panel));
+}
+
+.smart-proofread-panel {
+  display: none;
+  gap: var(--space-3);
+}
+
+.smart-proofread-panel.is-active {
+  display: grid;
+}
+
+.smart-proofread-inline-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.smart-proofread-range-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.smart-proofread-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.84rem;
+  color: var(--ink);
+}
+
+.smart-proofread-check input {
+  accent-color: var(--accent);
+}
+
+.smart-proofread-results-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.smart-proofread-results-list {
+  display: grid;
+  gap: var(--space-3);
+  max-height: min(62vh, 560px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.proofread-suggestion-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 94%, var(--control-bg));
+}
+
+.proofread-suggestion-card.is-accepted {
+  border-color: color-mix(in srgb, #16a34a 42%, var(--line));
+  background: color-mix(in srgb, #dcfce7 55%, var(--panel));
+}
+
+.proofread-suggestion-card.is-rejected {
+  opacity: 0.68;
+}
+
+.proofread-suggestion-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.proofread-suggestion-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.proofread-suggestion-column {
+  min-width: 0;
+}
+
+.proofread-suggestion-text {
+  max-height: 132px;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-strong) 88%, var(--control-bg));
+  font-size: 0.84rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.proofread-suggestion-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 .is-hidden {
   opacity: 0;
   visibility: hidden;

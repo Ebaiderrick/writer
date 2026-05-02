@@ -591,88 +591,443 @@ export const AI = (() => {
   }
 
   function triggerSmartProofread() {
-    let activeEl = document.querySelector(".script-block.is-active") || document.querySelector(".script-block:focus");
-    if (!activeEl) {
-      activeEl = document.querySelector(".script-block");
-      if (activeEl) {
-        activeEl.focus();
-      }
-    }
-
-    if (!activeEl) {
-      customAlert("Select some text or focus a block first.", "Smart Proofreading");
+    const project = getCurrentProject();
+    const activeEl = getActiveScriptBlock();
+    const activeLine = activeEl ? getLine(activeEl.dataset.id) : null;
+    if (!project || !activeEl || !activeLine) {
+      customAlert("Select a line first, then run Smart Proofreading.", "Smart Proofreading");
       return;
     }
 
-    const lineId = activeEl.dataset.id;
-    const line = getLine(lineId);
-    if (!line) {
-      customAlert("Select some text or focus a block first.", "Smart Proofreading");
+    const scenes = getProofreadScenes(project);
+    const launcher = document.createElement("div");
+    launcher.className = "smart-proofread-launcher";
+    launcher.innerHTML = `
+      <div class="smart-proofread-mode-grid">
+        <button class="smart-proofread-mode-card is-active" type="button" data-proofread-mode="line">
+          <strong>Manual</strong>
+          <span>Proofread the current line or selected text.</span>
+        </button>
+        <button class="smart-proofread-mode-card" type="button" data-proofread-mode="auto">
+          <strong>Automatic</strong>
+          <span>Proofread a scene range or the whole script.</span>
+        </button>
+      </div>
+      <div class="smart-proofread-panel is-active" data-proofread-panel="line">
+        <div class="smart-proofread-inline-meta">
+          <span class="role-badge">${escapeHtml((activeLine.type || "line").toUpperCase())}</span>
+          <span>${escapeHtml((activeLine.text || "").trim().slice(0, 120) || "Current line")}</span>
+        </div>
+        <p class="modal-copy">Stand on any line and run a focused proofread. If you select text, only that selection is improved.</p>
+        <button class="ghost-button" type="button" data-proofread-run="line">Run On Current Line</button>
+      </div>
+      <div class="smart-proofread-panel" data-proofread-panel="auto">
+        <label class="smart-proofread-check">
+          <input type="checkbox" id="proofreadAllScenes" ${scenes.length <= 1 ? "checked" : ""}>
+          <span>Proofread all scenes</span>
+        </label>
+        <div class="smart-proofread-range-grid">
+          <label class="field field-wide">
+            <span>From scene</span>
+            <select id="proofreadSceneStart" ${scenes.length <= 1 ? "disabled" : ""}>
+              ${scenes.map((scene) => `<option value="${escapeHtml(scene.id)}">${escapeHtml(scene.label)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field field-wide">
+            <span>To scene</span>
+            <select id="proofreadSceneEnd" ${scenes.length <= 1 ? "disabled" : ""}>
+              ${scenes.map((scene, index) => `<option value="${escapeHtml(scene.id)}" ${index === scenes.length - 1 ? "selected" : ""}>${escapeHtml(scene.label)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <p class="modal-copy">Automatic mode collects compact fix cards for each changed line so you can accept or reject edits individually.</p>
+        <button class="ghost-button" type="button" data-proofread-run="auto">Run Scene Proofread</button>
+      </div>
+      <p class="collab-status-msg" data-proofread-status></p>
+    `;
+
+    const setMode = (mode) => {
+      launcher.querySelectorAll("[data-proofread-mode]").forEach((button) => {
+        button.classList.toggle("is-active", button.dataset.proofreadMode === mode);
+      });
+      launcher.querySelectorAll("[data-proofread-panel]").forEach((panel) => {
+        panel.classList.toggle("is-active", panel.dataset.proofreadPanel === mode);
+      });
+    };
+
+    launcher.querySelectorAll("[data-proofread-mode]").forEach((button) => {
+      button.addEventListener("click", () => setMode(button.dataset.proofreadMode));
+    });
+
+    const allScenesToggle = launcher.querySelector("#proofreadAllScenes");
+    const startSelect = launcher.querySelector("#proofreadSceneStart");
+    const endSelect = launcher.querySelector("#proofreadSceneEnd");
+    const statusEl = launcher.querySelector("[data-proofread-status]");
+    const syncRangeInputs = () => {
+      const disabled = allScenesToggle?.checked;
+      if (startSelect) startSelect.disabled = disabled;
+      if (endSelect) endSelect.disabled = disabled;
+    };
+    allScenesToggle?.addEventListener("change", syncRangeInputs);
+    syncRangeInputs();
+
+    launcher.querySelector('[data-proofread-run="line"]')?.addEventListener("click", async () => {
+      closeProofreadModal();
+      await runSmartProofreadLine(getActiveScriptBlock() || activeEl);
+    });
+
+    launcher.querySelector('[data-proofread-run="auto"]')?.addEventListener("click", async () => {
+      const latestProject = getCurrentProject();
+      const latestScenes = getProofreadScenes(latestProject);
+      const allScenes = Boolean(allScenesToggle?.checked);
+      const startSceneId = startSelect?.value || latestScenes[0]?.id || "";
+      const endSceneId = endSelect?.value || latestScenes[latestScenes.length - 1]?.id || "";
+      if (!latestProject) {
+        return;
+      }
+
+      launcher.querySelectorAll("[data-proofread-run]").forEach((button) => {
+        button.disabled = true;
+      });
+      if (statusEl) {
+        statusEl.textContent = "Reviewing selected scenes...";
+      }
+
+      try {
+        const suggestions = await buildAutomaticProofreadSuggestions(latestProject, {
+          allScenes,
+          startSceneId,
+          endSceneId
+        }, (message) => {
+          if (statusEl) {
+            statusEl.textContent = message;
+          }
+        });
+
+        closeProofreadModal();
+        await showAutomaticProofreadResults(suggestions);
+      } catch (error) {
+        console.error("Automatic smart proofreading error:", error);
+        if (statusEl) {
+          statusEl.textContent = error instanceof Error ? error.message : "Smart proofreading failed.";
+        }
+      } finally {
+        launcher.querySelectorAll("[data-proofread-run]").forEach((button) => {
+          button.disabled = false;
+        });
+      }
+    });
+
+    showModal({
+      title: "Smart Proofreading",
+      message: launcher,
+      showConfirm: false,
+      cancelLabel: "Close"
+    });
+  }
+
+  function getActiveScriptBlock() {
+    const activeByState = state.activeBlockId
+      ? refs.screenplayEditor?.querySelector(`.script-block[data-id="${state.activeBlockId}"]:not([data-secondary])`)
+      : null;
+    const focused = document.activeElement?.closest?.(".script-block:not([data-secondary])") || null;
+    const activeRowBlock = document.querySelector(".script-block-row.is-active .script-block:not([data-secondary])");
+    const fallback = refs.screenplayEditor?.querySelector(".script-block:not([data-secondary])") || null;
+    return activeByState || focused || activeRowBlock || fallback;
+  }
+
+  function closeProofreadModal() {
+    document.getElementById("customModal")?.close();
+  }
+
+  function getProofreadScenes(project) {
+    if (!project) {
+      return [];
+    }
+
+    const scenes = project.lines
+      .map((line, index) => ({ ...line, index }))
+      .filter((line) => line.type === "scene" && line.text.trim());
+
+    if (!scenes.length) {
+      return [{ id: "__all__", index: 0, label: "Entire Script" }];
+    }
+
+    return scenes.map((scene, index) => ({
+      id: scene.id,
+      index: scene.index,
+      label: `${index + 1}. ${scene.text.trim()}`
+    }));
+  }
+
+  function isProofreadableLine(line) {
+    return Boolean(line?.text?.trim()) && line.type !== "image";
+  }
+
+  async function runSmartProofreadLine(activeEl) {
+    const lineId = activeEl?.dataset?.id;
+    const line = lineId ? getLine(lineId) : null;
+    if (!activeEl || !line) {
+      await customAlert("Select some text or focus a block first.", "Smart Proofreading");
       return;
     }
 
     const selection = getSelectedTextInBlock(activeEl);
     const sourceText = selection?.text || activeEl.innerText.trim() || line.text;
     if (!sourceText.trim()) {
-      customAlert("Select some text or focus a block with content first.", "Smart Proofreading");
+      await customAlert("Select some text or focus a block with content first.", "Smart Proofreading");
       return;
     }
 
-    const project = getCurrentProject();
-    const scenes = getLastScenes(lineId);
-    const memoryContext = buildStoryMemoryContext(project);
+    try {
+      const output = await requestSmartProofreadSuggestion({
+        line,
+        sourceText,
+        contextLineId: lineId
+      });
+      await showLineProofreadComparison({
+        lineId,
+        lineType: line.type,
+        original: sourceText,
+        improved: output,
+        selection
+      });
+    } catch (error) {
+      console.error("Smart proofreading error:", error);
+      await customAlert(error instanceof Error ? error.message : "Smart proofreading failed.", "Smart Proofreading");
+    }
+  }
 
-    requestAiText({
-      type: activeEl.dataset.type || line.type,
+  async function requestSmartProofreadSuggestion({ line, sourceText, contextLineId }) {
+    const project = getCurrentProject();
+    const scenes = getLastScenes(contextLineId || line.id);
+    const memoryContext = buildStoryMemoryContext(project);
+    const output = await requestAiText({
+      type: line.type,
       action: "Improve",
       current: sourceText,
-      instruction: "Fix grammar and spelling, improve clarity and sentence structure, and keep the writer's intent intact.",
+      instruction: "Proofread this script text. Fix grammar and spelling, improve clarity and sentence structure, preserve screenplay intent and formatting, and return only the improved text with no explanation.",
       context: memoryContext + formatScenesForAI(scenes)
-    }).then(async (output) => {
-      if (!output) {
-        throw new Error("The AI assistant returned no text.");
+    });
+
+    const cleaned = String(output || "").trim();
+    if (!cleaned) {
+      throw new Error("The AI assistant returned no text.");
+    }
+    return cleaned;
+  }
+
+  async function showLineProofreadComparison({ lineId, lineType, original, improved, selection }) {
+    const compare = document.createElement("div");
+    compare.className = "smart-proofread-compare";
+    compare.innerHTML = `
+      <div class="proofread-compare-card">
+        <span class="nav-menu-label">Original</span>
+        <div class="bio-text">${escapeHtml(original)}</div>
+      </div>
+      <div class="proofread-compare-card">
+        <span class="nav-menu-label">Improved</span>
+        <div class="bio-text">${escapeHtml(improved)}</div>
+      </div>
+    `;
+
+    const accepted = await showModal({
+      title: `Smart Proofreading • ${lineType.toUpperCase()}`,
+      message: compare,
+      confirmLabel: "Accept Changes",
+      cancelLabel: "Keep Original"
+    });
+
+    if (!accepted) {
+      return;
+    }
+
+    const line = getLine(lineId);
+    if (!line) {
+      return;
+    }
+
+    if (selection) {
+      line.text = `${line.text.slice(0, selection.start)}${improved}${line.text.slice(selection.end)}`;
+    } else {
+      line.text = improved;
+    }
+
+    renderStudio();
+    queueSave();
+  }
+
+  async function buildAutomaticProofreadSuggestions(project, range, onProgress) {
+    const targets = getAutomaticProofreadTargets(project, range);
+    if (!targets.length) {
+      throw new Error("There are no proofreadable lines in the selected scene range.");
+    }
+
+    const suggestions = [];
+    for (let index = 0; index < targets.length; index += 1) {
+      const target = targets[index];
+      onProgress?.(`Proofreading ${index + 1} of ${targets.length}...`);
+      const line = getLine(target.lineId);
+      if (!line || !isProofreadableLine(line)) {
+        continue;
       }
 
-      const compare = document.createElement("div");
-      compare.className = "smart-proofread-compare";
-      compare.innerHTML = `
-        <div class="proofread-compare-card">
-          <span class="nav-menu-label">Original</span>
-          <div class="bio-text">${escapeHtml(sourceText)}</div>
-        </div>
-        <div class="proofread-compare-card">
-          <span class="nav-menu-label">Improved</span>
-          <div class="bio-text">${escapeHtml(output)}</div>
-        </div>
-      `;
-
-      const accepted = await showModal({
-        title: "Smart Proofreading",
-        message: compare,
-        confirmLabel: "Accept Changes",
-        cancelLabel: "Keep Original"
+      const improved = await requestSmartProofreadSuggestion({
+        line,
+        sourceText: line.text,
+        contextLineId: line.id
       });
 
-      if (!accepted) {
+      if (improved !== line.text.trim()) {
+        suggestions.push({
+          lineId: line.id,
+          type: line.type,
+          original: line.text,
+          improved,
+          sceneLabel: target.sceneLabel
+        });
+      }
+    }
+
+    if (!suggestions.length) {
+      await customAlert("No changes were suggested for the selected scene range.", "Smart Proofreading");
+    }
+
+    return suggestions;
+  }
+
+  function getAutomaticProofreadTargets(project, { allScenes, startSceneId, endSceneId }) {
+    const sceneMarkers = getProofreadScenes(project);
+    if (!sceneMarkers.length || sceneMarkers[0].id === "__all__") {
+      return project.lines
+        .filter((line) => isProofreadableLine(line))
+        .map((line) => ({
+          lineId: line.id,
+          sceneLabel: "Entire Script"
+        }));
+    }
+
+    const startMarker = allScenes
+      ? sceneMarkers[0]
+      : sceneMarkers.find((scene) => scene.id === startSceneId) || sceneMarkers[0];
+    const endMarker = allScenes
+      ? sceneMarkers[sceneMarkers.length - 1]
+      : sceneMarkers.find((scene) => scene.id === endSceneId) || sceneMarkers[sceneMarkers.length - 1];
+
+    const startIndex = Math.min(startMarker.index, endMarker.index);
+    const endIndex = Math.max(startMarker.index, endMarker.index);
+
+    let currentSceneLabel = sceneMarkers[0].label;
+    return project.lines.reduce((list, line, index) => {
+      const matchedScene = sceneMarkers.find((scene) => scene.id === line.id);
+      if (matchedScene) {
+        currentSceneLabel = matchedScene.label;
+      }
+      if (index < startIndex || index > endIndex || !isProofreadableLine(line)) {
+        return list;
+      }
+      list.push({
+        lineId: line.id,
+        sceneLabel: currentSceneLabel
+      });
+      return list;
+    }, []);
+  }
+
+  async function showAutomaticProofreadResults(suggestions) {
+    if (!suggestions.length) {
+      return;
+    }
+
+    const container = document.createElement("div");
+    container.className = "smart-proofread-results";
+    container.innerHTML = `
+      <div class="smart-proofread-results-head">
+        <div>
+          <strong>${suggestions.length} suggested ${suggestions.length === 1 ? "edit" : "edits"}</strong>
+          <p class="modal-copy">Review each change in a compact list. Accept only what improves the draft.</p>
+        </div>
+        <button class="ghost-button btn-sm" type="button" data-proofread-accept-all>Accept All</button>
+      </div>
+      <div class="smart-proofread-results-list">
+        ${suggestions.map((item, index) => `
+          <article class="proofread-suggestion-card" data-proofread-card="${index}">
+            <div class="proofread-suggestion-meta">
+              <span class="role-badge">${escapeHtml(item.type.toUpperCase())}</span>
+              <span>${escapeHtml(item.sceneLabel)}</span>
+            </div>
+            <div class="proofread-suggestion-body">
+              <div class="proofread-suggestion-column">
+                <span class="nav-menu-label">Original</span>
+                <div class="proofread-suggestion-text">${escapeHtml(item.original)}</div>
+              </div>
+              <div class="proofread-suggestion-column">
+                <span class="nav-menu-label">Suggested</span>
+                <div class="proofread-suggestion-text">${escapeHtml(item.improved)}</div>
+              </div>
+            </div>
+            <div class="proofread-suggestion-actions">
+              <button class="ghost-button btn-sm" type="button" data-proofread-accept="${index}">Accept</button>
+              <button class="ghost-button btn-sm" type="button" data-proofread-reject="${index}">Reject</button>
+            </div>
+          </article>
+        `).join("")}
+      </div>
+    `;
+
+    const applySuggestion = (item, card, { rerender = true } = {}) => {
+      const line = getLine(item.lineId);
+      if (!line) {
         return;
       }
-
-      if (selection) {
-        line.text = `${line.text.slice(0, selection.start)}${output}${line.text.slice(selection.end)}`;
-      } else {
-        line.text = output;
+      line.text = item.improved;
+      card?.classList.add("is-accepted");
+      card?.querySelectorAll("button").forEach((button) => {
+        button.disabled = true;
+      });
+      if (rerender) {
+        renderStudio();
+        queueSave();
       }
+    };
 
+    const rejectSuggestion = (card) => {
+      card?.classList.add("is-rejected");
+      card?.querySelectorAll("button").forEach((button) => {
+        button.disabled = true;
+      });
+    };
+
+    container.querySelector('[data-proofread-accept-all]')?.addEventListener("click", () => {
+      suggestions.forEach((item, index) => {
+        const card = container.querySelector(`[data-proofread-card="${index}"]`);
+        if (!card?.classList.contains("is-accepted") && !card?.classList.contains("is-rejected")) {
+          applySuggestion(item, card, { rerender: false });
+        }
+      });
       renderStudio();
       queueSave();
-    }).catch((error) => {
-      console.error("Smart proofreading error:", error);
-      customAlert(error instanceof Error ? error.message : "Smart proofreading failed.", "Smart Proofreading");
+    });
+
+    suggestions.forEach((item, index) => {
+      container.querySelector(`[data-proofread-accept="${index}"]`)?.addEventListener("click", () => {
+        applySuggestion(item, container.querySelector(`[data-proofread-card="${index}"]`));
+      });
+      container.querySelector(`[data-proofread-reject="${index}"]`)?.addEventListener("click", () => {
+        rejectSuggestion(container.querySelector(`[data-proofread-card="${index}"]`));
+      });
+    });
+
+    await showModal({
+      title: "Smart Proofreading • Automatic",
+      message: container,
+      showConfirm: false,
+      cancelLabel: "Close"
     });
   }
 
   function triggerAssistant() {
-    let activeEl = document.querySelector(".script-block.is-active") || document.querySelector(".script-block:focus");
+    let activeEl = getActiveScriptBlock() || document.querySelector(".script-block:focus");
     if (!activeEl) {
       activeEl = document.querySelector(".script-block");
       if (activeEl) activeEl.focus();
