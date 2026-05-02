@@ -440,6 +440,7 @@ export const AI = (() => {
       submitButton.innerText = isLoading ? "..." : "▶";
     }
 
+    if (input) {
       input.disabled = isLoading;
     }
 
