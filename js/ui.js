@@ -927,23 +927,11 @@ export function renderMetrics() {
   refs.pageCount.textContent = Math.max(1, Math.round((words.length / 180) * 10) / 10).toFixed(1);
   refs.characterCount.textContent = characters.size.toString();
   refs.sceneMetricCount.textContent = scenes.toString();
-
-  renderProgressGraph(project);
-  renderAnalyticsIfVisible();
-}
-
-function renderProgressGraph(project) {
-  const container = refs.metricsGraph;
-  if (!container) return;
-
-  const history = project.wordCountHistory || [];
-  if (history.length < 2) {
-    container.innerHTML = '<p class="collab-empty" style="padding:10px;text-align:center">Waiting for more data...</p>';
-    return;
+  if (refs.metricsGraph) {
+    refs.metricsGraph.innerHTML = "";
+    refs.metricsGraph.hidden = true;
   }
-
-  const width = container.clientWidth || 240;
-  container.innerHTML = buildCollaboratorProgressGraph(project, width, 80, false);
+  renderAnalyticsIfVisible();
 }
 
 export function renderCurrentScriptId() {
@@ -1299,6 +1287,7 @@ export async function showProofreadReport() {
   if (!project) {
     return;
   }
+  const emptyLineCount = project.lines.filter((line) => line && line.type !== "image" && !String(line.text || "").trim()).length;
 
   const emptyScenes = project.lines
     .map((line, index) => ({ line, index }))
@@ -1310,7 +1299,7 @@ export async function showProofreadReport() {
     .map((line, index) => ({ line, index }))
     .filter(({ line, index }) => line.type === "character" && !project.lines[index + 1]?.text?.trim());
 
-  if (!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length) {
+  if (!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !emptyLineCount) {
     await customAlert(t("proofread.none"), t("proofread.title"));
     return;
   }
@@ -1318,6 +1307,10 @@ export async function showProofreadReport() {
   const container = document.createElement("div");
   container.className = "proofread-report";
   container.innerHTML = `
+    <div class="proofread-report-toolbar">
+      <button class="ghost-button btn-sm" type="button" data-proofread-clean-empty-lines="true">Clean Empty Lines${emptyLineCount ? ` (${emptyLineCount})` : ""}</button>
+    </div>
+    ${!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length ? '<p class="collab-empty">No screenplay issues found. You can still clean out empty lines.</p>' : ""}
     ${buildProofreadSection("Scene Heading Issues", weakSceneLines, ({ line }) => ({
       title: normalizeLineText(line.text, "scene") || "Scene heading needs attention",
       note: "Scene heading should start with INT., EXT., INT./EXT., or EST.",
@@ -1337,6 +1330,18 @@ export async function showProofreadReport() {
       tags: ["Character cue", "Dialogue"]
     }))}
   `;
+
+  container.querySelector('[data-proofread-clean-empty-lines="true"]')?.addEventListener("click", async () => {
+    const removedCount = cleanEmptyLinesFromProject(project);
+    if (!removedCount) {
+      await customAlert("There were no empty lines to clean.", "Proofreading");
+      return;
+    }
+    modalRefs.dialog.close();
+    persistProjects(false);
+    window.dispatchEvent(new CustomEvent("proofreadCleanupApplied", { detail: { removedCount } }));
+    await customAlert(`Removed ${removedCount} empty ${removedCount === 1 ? "line" : "lines"}.`, "Proofreading");
+  });
 
   container.querySelectorAll("[data-proofread-line-id]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1367,7 +1372,7 @@ export async function showWorkTracking() {
   const contributions = buildCollaboratorContributionSummary(project);
 
   const container = document.createElement("div");
-  container.className = "work-tracking-report";
+  container.className = "work-tracking-report work-tracking-report-compact";
   container.innerHTML = `
     <div class="metric-grid analytics-metric-grid">
       <div><span>Project</span><strong>${escapeHtml(project.title)}</strong></div>
@@ -1382,7 +1387,7 @@ export async function showWorkTracking() {
     <section class="analytics-section">
       <span class="nav-menu-label">Word Count vs Time</span>
       <div class="work-tracking-graph-wrap">
-        ${buildCollaboratorProgressGraph(project, 640, 220, true)}
+        ${buildCollaboratorProgressGraph(project, 640, 180, true)}
       </div>
       <div class="work-contribution-list">
         ${contributions.length ? contributions.map((item) => `
@@ -1628,6 +1633,25 @@ function buildProofreadReference(project, lineId) {
     : "No scene heading";
 
   return `Scene ${sceneNumber} • Line ${lineIndex + 1} • ${sceneHeading}`;
+}
+
+function cleanEmptyLinesFromProject(project) {
+  const originalLength = project.lines.length;
+  project.lines = project.lines.filter((line) => {
+    if (!line) {
+      return false;
+    }
+    if (line.type === "image") {
+      return true;
+    }
+    return Boolean(String(line.text || "").trim());
+  });
+
+  if (!project.lines.length) {
+    project.lines = [{ id: `line-${Date.now()}`, type: "action", text: "" }];
+  }
+
+  return Math.max(0, originalLength - project.lines.length);
 }
 
 function findSceneIndexForLine(project, lineIndex) {

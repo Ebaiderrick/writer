@@ -671,11 +671,20 @@ export async function resolveComment(projectId, commentId, resolved) {
   }
   const ref = commentDocRef(project, commentId);
   if (!ref) return;
-  await updateDoc(ref, {
-    resolved,
+  const patch = {
+    resolved: Boolean(resolved),
     resolvedBy: resolved ? (user.displayName || user.email) : null,
     resolvedAt: resolved ? new Date().toISOString() : null
-  });
+  };
+  await updateDoc(ref, patch);
+  allComments = allComments.map((comment) => comment.id === commentId ? { ...comment, ...patch } : comment);
+  renderCommentList(allComments, projectId);
+  renderLeftPaneComments();
+  updateCommentIcons(allComments);
+  const detailDialog = document.getElementById('commentDetailDialog');
+  if (detailDialog?.open) {
+    showCommentDetail(commentId);
+  }
 }
 
 // ── UI renderers ──────────────────────────────────────────────

@@ -607,6 +607,10 @@ export function bindEvents() {
   window.addEventListener('focusScriptLine', ({ detail }) => {
     if (detail?.lineId) focusBlock(detail.lineId);
   });
+
+  window.addEventListener('proofreadCleanupApplied', () => {
+    renderStudio();
+  });
 }
 
 // Action Handlers
