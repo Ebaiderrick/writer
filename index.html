@@ -883,12 +883,16 @@
                 <div class="panel-head">
                   <div>
                     <h3>Smart Proofread</h3>
-                    <p>Refine your writing</p>
+                    <p>Refine your writing with AI</p>
                   </div>
                   <button class="panel-toggle" type="button" data-left-pane-section-toggle="smart-proofread" aria-label="Collapse Smart Proofread">▼</button>
                 </div>
                 <div class="panel-section-body">
-                   <button class="ghost-button btn-sm" data-menu-action="smart-proofread">Refine Selection</button>
+                  <p style="font-size:0.78rem;color:var(--ink-muted);margin-bottom:8px;">Click below to improve the active block — grammar, clarity, and flow. Review the original vs. improved before accepting.</p>
+                  <button class="ghost-button btn-sm" id="smartProofreadBtn" style="width:100%;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:middle"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    Improve Text
+                  </button>
                 </div>
               </section>
 
@@ -931,7 +935,7 @@
                   <div><span>Words</span><strong id="wordCount">0</strong></div>
                   <div><span>Pages est.</span><strong id="pageCount">0</strong></div>
                   <div><span>Characters</span><strong id="characterCount">0</strong></div>
-                  <div><span>Notes</span><strong id="noteCount">0</strong></div>
+                  <div><span>Scenes</span><strong id="sceneCount">0</strong></div>
                 </div>
                 <div class="metrics-graph-container">
                   <span class="metrics-graph-label">Progress over time</span>
@@ -1205,9 +1209,9 @@
       <!-- Profile Writeup -->
       <div class="profile-bio-container">
         <label class="bio-label">About</label>
-        <p class="bio-text" id="profile-bio">Tell us about yourself...</p>
+        <p class="bio-text" id="profile-bio">About me</p>
         <div class="bio-meta">
-          <span id="word-count">0</span>/100 words
+          <span id="word-count">0</span>/35 words
         </div>
       </div>
 

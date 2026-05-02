@@ -569,7 +569,7 @@ async function showCollabProfile({ uid, name, email }) {
 
   if (uid) {
     try {
-      const snap = await getDoc(doc(db, 'users', uid, 'profile'));
+      const snap = await getDoc(doc(db, 'users', uid, 'profile', 'data'));
       if (snap.exists()) {
         const data = snap.data();
         if (data.bio) bioEl.textContent = data.bio;

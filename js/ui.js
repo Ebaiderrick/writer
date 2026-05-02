@@ -524,6 +524,8 @@ export function renderAnalytics(filter = 'all') {
        </select>
     </div>
     <div class="metric-grid">
+      <div><span>Words</span><strong>${data.totalWords.toLocaleString()}</strong></div>
+      <div><span>Sentences</span><strong>${data.totalSentences}</strong></div>
       <div><span>Avg Sentence</span><strong>${data.avgSentenceLength}</strong></div>
       <div><span>Readability</span><strong>${data.readability}</strong></div>
     </div>
@@ -796,12 +798,12 @@ export function renderMetrics() {
   if (!project) return;
   const words = serializeScript(project).match(/\b[\w'-]+\b/g) || [];
   const characters = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase()));
-  const notes = project.lines.filter((line) => line.type === "note" && line.text.trim()).length;
+  const scenes = project.lines.filter((line) => line.type === "scene").length;
 
   refs.wordCount.textContent = words.length.toLocaleString();
   refs.pageCount.textContent = Math.max(1, Math.round((words.length / 180) * 10) / 10).toFixed(1);
   refs.characterCount.textContent = characters.size.toString();
-  refs.noteCount.textContent = notes.toString();
+  if (refs.sceneCount) refs.sceneCount.textContent = scenes.toString();
 
   renderProgressGraph(project);
 }

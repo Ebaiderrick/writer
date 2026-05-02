@@ -37,6 +37,7 @@ export function calculateAnalytics(project, filter = 'all') {
 
   return {
     totalWords: words.length,
+    totalSentences: sentences.length,
     avgSentenceLength: avgSentenceLength.toFixed(1),
     topWords: sortedFreq,
     dialoguePercent: Math.round((dialogueWords / totalActionDialogue) * 100),

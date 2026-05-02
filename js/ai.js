@@ -586,12 +586,17 @@ export const AI = (() => {
     if (!activeEl) return;
 
     const row = activeEl.closest(".script-block-row");
-    if (row) {
-      activeBlock = activeEl;
-      openMenu(row);
-      showInput("Improve");
-      const input = menuEl.querySelector(".ai-input");
-      if (input) input.value = "Correct grammar, enhance clarity, and reduce redundancy.";
+    if (!row) return;
+
+    activeBlock = activeEl;
+    openMenu(row);
+    showInput("Improve");
+    const input = menuEl?.querySelector(".ai-input");
+    const submitBtn = menuEl?.querySelector(".ai-submit-btn");
+    if (input) {
+      input.value = "Correct grammar, enhance clarity, and reduce redundancy.";
+      // Auto-run immediately — no extra click needed
+      runAI("Improve", input.value, submitBtn, input);
     }
   }
 

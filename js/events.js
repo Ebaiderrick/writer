@@ -63,6 +63,10 @@ export function bindEvents() {
     showEditStoryElementModal();
   });
 
+  document.getElementById("smartProofreadBtn")?.addEventListener("click", () => {
+    AI.triggerSmartProofread();
+  });
+
   // Meta Inputs
   [refs.titleInput, refs.authorInput, refs.contactInput, refs.companyInput, refs.detailsInput, refs.loglineInput]
     .forEach((input) => input.addEventListener("input", handleMetaInput));
@@ -434,7 +438,8 @@ export function bindEvents() {
   refs.screenplayEditor.addEventListener("focusout", (e) => {
     if (e.target.classList.contains("script-block")) {
         const id = e.target.dataset.id;
-        if (id === state.activeBlockId) return;
+        // Skip if this is the active block or the block we just left via Enter
+        if (id === state.activeBlockId || id === _enterPrevBlockId) return;
         const line = getLine(id);
         const project = getCurrentProject();
         if (line && line.secondary === undefined && !line.text.trim() && project && project.lines.length > 1) {
@@ -747,6 +752,10 @@ function handleBlockInput(id, element) {
   renderCharacterList();
   renderMetrics();
   renderHome();
+  // Update analytics in real-time only if the panel is currently visible/expanded
+  if (document.querySelector('[data-left-pane-block="analytics"] .panel-section-body:not([hidden])')) {
+    renderAnalytics();
+  }
   if (line.type === "scene") {
     hideSuggestionTray(true);
   } else {
@@ -756,6 +765,7 @@ function handleBlockInput(id, element) {
 }
 
 let lastKeyDownCode = "";
+let _enterPrevBlockId = null;  // tracks block left behind when Enter creates a new one
 
 function insertSoftLineBreak(id, element) {
   if (!element) {
@@ -878,9 +888,11 @@ function handleBlockKeydown(event, id) {
 
     line.text = textBefore;
     const nextType = inferNextType(index);
+    _enterPrevBlockId = id;  // protect this block from focusout deletion during render
     const newId = addBlock(nextType, textAfter || getDefaultText(nextType, index), index + 1);
 
     renderStudio();
+    _enterPrevBlockId = null;
     focusBlock(newId, !textAfter);
     queueSave();
     return;
@@ -1364,16 +1376,7 @@ function handleMenuAction(action) {
       break;
     }
     case "smart-proofread":
-      showModal({
-        title: "Smart Proofreading",
-        message: "Run smart proofreading on the active block to refine clarity, tone, and readability.",
-        confirmLabel: "Run Proofread",
-        cancelLabel: "Close"
-      }).then((confirmed) => {
-        if (confirmed) {
-          AI.triggerSmartProofread();
-        }
-      });
+      AI.triggerSmartProofread();
       break;
     case "customize-active-blocks":
       showCustomizeActiveBlocksModal();

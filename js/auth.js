@@ -535,7 +535,7 @@ export const Auth = (() => {
           data.photoURL = pendingImageBase64;
         }
         // Save bio first so onAuthStateChanged re-load picks up the new value
-        await setDoc(doc(db, 'users', user.uid, 'profile'), data, { merge: true });
+        await setDoc(doc(db, 'users', user.uid, 'profile', 'data'), data, { merge: true });
         if (pendingImageBase64) {
           await updateProfile(user, { photoURL: pendingImageBase64 });
         }
@@ -548,7 +548,7 @@ export const Auth = (() => {
       isSavingProfile = false;
       profileEditBtn.disabled = false;
       setEditBtnMode('edit');
-      profileBio.textContent = bio || 'Tell us about yourself...';
+      profileBio.textContent = bio || 'About me';
       if (isDemo && session.photoURL) profileImg.src = session.photoURL;
       else if (!isDemo && data.photoURL) profileImg.src = data.photoURL;
 
@@ -597,7 +597,7 @@ export const Auth = (() => {
       if (isDemo) {
         profileData = { bio: session.bio, photoURL: session.photoURL };
       } else {
-        const snap = await getDoc(doc(db, 'users', user.uid, 'profile'));
+        const snap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
         profileData = snap.exists() ? snap.data() : {};
       }
 
@@ -609,7 +609,7 @@ export const Auth = (() => {
         profileImg.src = fallbackAvatar;
       }
 
-      profileBio.textContent = profileData.bio || 'Tell us about yourself...';
+      profileBio.textContent = profileData.bio || 'About me';
       updateBioWordCount();
     } catch (err) {
       console.error('Profile load failed', err);
@@ -687,7 +687,7 @@ export const Auth = (() => {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(credential.user, { displayName: name });
-      await setDoc(doc(db, 'users', credential.user.uid, 'profile'), {
+      await setDoc(doc(db, 'users', credential.user.uid, 'profile', 'data'), {
         uid: credential.user.uid,
         name,
         email,
