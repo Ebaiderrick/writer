@@ -21,9 +21,11 @@ import {
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
+  showModal,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
-  renderAnalytics, openAnalytics, showStoryMemoryPicker
+  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal,
+  showStoryMemoryPopup, showWorkspacePopup
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -266,6 +268,20 @@ export function bindEvents() {
     const checkbox = event.target.closest("[data-left-pane-visibility]");
     if (checkbox) {
       setLeftPaneBlockVisibility(checkbox.dataset.leftPaneVisibility, checkbox.checked);
+    }
+  });
+
+  window.addEventListener("workspaceInviteRequested", async (event) => {
+    const email = event.detail?.email;
+    if (!email) {
+      return;
+    }
+    const result = await inviteCollaborator(email);
+    window.dispatchEvent(new CustomEvent("workspaceInviteResult", { detail: result }));
+    if (result?.ok) {
+      await customAlert("Workspace invite sent.", "Workspace");
+    } else if (result?.reason) {
+      await customAlert(result.reason, "Workspace");
     }
   });
 
@@ -645,6 +661,20 @@ function togglePaneSection(body, button) {
   button.innerHTML = body.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;";
 }
 
+function readEditableText(element) {
+  if (!element) {
+    return "";
+  }
+
+  const raw = typeof element.innerText === "string" && element.innerText.length
+    ? element.innerText
+    : (element.textContent || "");
+
+  return raw
+    .replace(/\r/g, "")
+    .replace(/\n$/, "");
+}
+
 function handleBlockInput(id, element) {
   const line = getLine(id);
   const project = getCurrentProject();
@@ -652,7 +682,7 @@ function handleBlockInput(id, element) {
 
   // Secondary (right) field of a dual row: update line.secondary only
   if (element.dataset.secondary === "true") {
-    const normalized = normalizeLineText(element.textContent || "", "dual", true);
+    const normalized = normalizeLineText(readEditableText(element), "dual", true);
     line.secondary = normalized;
     project.updatedAt = new Date().toISOString();
     setActiveBlock(id);
@@ -664,7 +694,7 @@ function handleBlockInput(id, element) {
   }
 
   const offset = getCaretOffset(element);
-  const beforeText = element.textContent || "";
+  const beforeText = readEditableText(element);
   let normalized = normalizeLineText(beforeText, line.type, true);
   let autoCompleted = false;
 
@@ -726,6 +756,35 @@ function handleBlockInput(id, element) {
 }
 
 let lastKeyDownCode = "";
+
+function insertSoftLineBreak(id, element) {
+  if (!element) {
+    return;
+  }
+
+  element.focus();
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) {
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+
+  const br = document.createElement("br");
+  const trailingTextNode = document.createTextNode("");
+
+  range.insertNode(trailingTextNode);
+  range.insertNode(br);
+
+  const nextRange = document.createRange();
+  nextRange.setStart(trailingTextNode, 0);
+  nextRange.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(nextRange);
+
+  handleBlockInput(id, element);
+}
 
 export function intelligentSplit(element) {
   const id = element.dataset.id;
@@ -827,6 +886,12 @@ function handleBlockKeydown(event, id) {
     return;
   }
 
+  if (event.key === "Enter" && event.shiftKey) {
+    event.preventDefault();
+    insertSoftLineBreak(id, event.target);
+    return;
+  }
+
   if (event.key === "Backspace") {
     const offset = getCaretOffset(event.target);
     if (offset === 0 && index > 0) {
@@ -916,11 +981,14 @@ function handleBlockKeydown(event, id) {
 function inferNextType(index) {
   const current = getCurrentProject()?.lines[index]?.type || "action";
   if (current === "scene") return "action";
+  if (current === "action") return "action";
   if (current === "character") return "dialogue";
   if (current === "parenthetical") return "dialogue";
   if (current === "dialogue") return "character";
   if (current === "transition") return "scene";
   if (current === "dual") return "dialogue";
+  if (current === "text") return "text";
+  if (current === "note") return "note";
   return "action";
 }
 
@@ -1210,11 +1278,31 @@ function handleMenuAction(action) {
       refs.aiPanel.hidden = !state.aiAssist;
       applyToolbarState();
       updateMenuStateButtons();
-      AI.triggerAssistant();
+      showModal({
+        title: "AI Assistant",
+        message: "AI Assistant is ready. Use the assistant on the active block for rewrites, next beats, or dialogue help.",
+        confirmLabel: "Launch Assistant",
+        cancelLabel: "Close"
+      }).then((confirmed) => {
+        if (confirmed) {
+          AI.triggerAssistant();
+        }
+      });
       queueSave();
       break;
     case "toggle-grammar-check":
-      setGrammarCheck(!state.grammarCheck);
+      showModal({
+        title: "Grammar Check",
+        message: state.grammarCheck
+          ? "Grammar check is active for the editor. You can turn it off or keep reviewing the current script."
+          : "Turn on grammar check to review spelling and language issues across the current script.",
+        confirmLabel: state.grammarCheck ? "Turn Off" : "Turn On",
+        cancelLabel: "Close"
+      }).then((confirmed) => {
+        if (confirmed) {
+          setGrammarCheck(!state.grammarCheck);
+        }
+      });
       break;
     case "toggle-auto-number":
       refs.autoNumberToggle.checked = !refs.autoNumberToggle.checked;
@@ -1246,7 +1334,7 @@ function handleMenuAction(action) {
       openNotepad();
       break;
     case "open-story-memory":
-      openStoryMemory();
+      showStoryMemoryPopup();
       break;
     case "open-scenes": {
       const container = document.createElement("div");
@@ -1266,7 +1354,7 @@ function handleMenuAction(action) {
       showStoryMemoryPicker();
       break;
     case "open-workspace":
-      toggleMenu("studioCollabMenu", true);
+      showWorkspacePopup();
       break;
     case "open-analytics": {
       const container = document.createElement("div");
@@ -1276,7 +1364,19 @@ function handleMenuAction(action) {
       break;
     }
     case "smart-proofread":
-      AI.triggerSmartProofread();
+      showModal({
+        title: "Smart Proofreading",
+        message: "Run smart proofreading on the active block to refine clarity, tone, and readability.",
+        confirmLabel: "Run Proofread",
+        cancelLabel: "Close"
+      }).then((confirmed) => {
+        if (confirmed) {
+          AI.triggerSmartProofread();
+        }
+      });
+      break;
+    case "customize-active-blocks":
+      showCustomizeActiveBlocksModal();
       break;
   }
   closeMenus();

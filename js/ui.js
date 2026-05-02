@@ -255,11 +255,13 @@ function getLeftPaneBlockLabel(key) {
   const meta = getLeftPaneBlockMeta(key);
   const translationKeys = {
     current: "pane.currentScript",
+    workspace: "Team Workspace",
     tools: "pane.projectTools",
     scenes: "pane.scenes",
     characters: "pane.characters",
     metrics: "pane.metrics",
     "story-memory": "Story Memory",
+    "insert-story-element": "Insert Story Element",
     analytics: "Writing Analytics",
     notepad: "Notepad",
     "ai-assistant": "AI Assistant",
@@ -270,6 +272,56 @@ function getLeftPaneBlockLabel(key) {
   };
 
   return t(translationKeys[key] || "") || meta?.label || key;
+}
+
+function getCustomizerGroupLabel(key) {
+  if (key === "current") return "Core";
+  if (["workspace", "comments"].includes(key)) return "Workspace";
+  if (["notepad"].includes(key)) return "Tools";
+  if (["grammar-check", "scenes", "characters"].includes(key)) return "Writing";
+  if (["ai-assistant", "story-memory", "insert-story-element", "smart-proofread"].includes(key)) return "AI";
+  if (["metrics", "work-tracking", "proofread", "analytics"].includes(key)) return "Revision & Insight";
+  return "Editor";
+}
+
+function buildCustomizerRowsMarkup() {
+  const groups = new Map();
+  state.leftPaneBlocks.forEach((block, index) => {
+    const meta = getLeftPaneBlockMeta(block.key);
+    if (!meta) {
+      return;
+    }
+
+    const group = getCustomizerGroupLabel(block.key);
+    const rows = groups.get(group) || [];
+    const label = getLeftPaneBlockLabel(block.key);
+    const toggleMarkup = block.key === "current"
+      ? `<span class="block-customizer-label is-fixed"><span>${escapeHtml(label)}</span></span>`
+      : `<label class="block-customizer-label">
+          <input type="checkbox" data-left-pane-visibility="${escapeHtml(block.key)}" ${block.visible ? "checked" : ""}>
+          <span>${escapeHtml(label)}</span>
+        </label>`;
+
+    rows.push(`
+      <div class="block-customizer-item">
+        ${toggleMarkup}
+        <div class="block-customizer-actions">
+          <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(label)} up" data-left-pane-move="up" data-left-pane-key="${escapeHtml(block.key)}" ${index === 0 ? "disabled" : ""}>${MENU_GLYPHS.up}</button>
+          <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(label)} down" data-left-pane-move="down" data-left-pane-key="${escapeHtml(block.key)}" ${index === state.leftPaneBlocks.length - 1 ? "disabled" : ""}>${MENU_GLYPHS.down}</button>
+        </div>
+      </div>
+    `);
+    groups.set(group, rows);
+  });
+
+  return [...groups.entries()].map(([group, rows]) => `
+    <section class="block-customizer-group">
+      <div class="block-customizer-group-title">${escapeHtml(group)}</div>
+      <div class="block-customizer-list">
+        ${rows.join("")}
+      </div>
+    </section>
+  `).join("");
 }
 
 function positionMenuUnderTrigger(menu, trigger) {
@@ -296,31 +348,7 @@ export function renderLeftPaneBlockControls() {
     return;
   }
 
-  refs.leftPaneBlockControls.innerHTML = "";
-  state.leftPaneBlocks.forEach((block, index) => {
-    const meta = getLeftPaneBlockMeta(block.key);
-    if (!meta) {
-      return;
-    }
-
-    const row = document.createElement("div");
-    row.className = "block-customizer-item";
-    const label = getLeftPaneBlockLabel(block.key);
-    const labelMarkup = block.key === "current"
-      ? `<span class="block-customizer-label is-fixed"><span>${escapeHtml(label)}</span></span>`
-      : `<label class="block-customizer-label">
-          <input type="checkbox" data-left-pane-visibility="${escapeHtml(block.key)}" ${block.visible ? "checked" : ""}>
-          <span>${escapeHtml(label)}</span>
-        </label>`;
-    row.innerHTML = `
-      ${labelMarkup}
-      <div class="block-customizer-actions">
-        <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(label)} up" data-left-pane-move="up" data-left-pane-key="${escapeHtml(block.key)}" ${index === 0 ? "disabled" : ""}>${MENU_GLYPHS.up}</button>
-        <button class="block-customizer-move" type="button" aria-label="Move ${escapeHtml(label)} down" data-left-pane-move="down" data-left-pane-key="${escapeHtml(block.key)}" ${index === state.leftPaneBlocks.length - 1 ? "disabled" : ""}>${MENU_GLYPHS.down}</button>
-      </div>
-    `;
-    refs.leftPaneBlockControls.appendChild(row);
-  });
+  refs.leftPaneBlockControls.innerHTML = buildCustomizerRowsMarkup();
 }
 
 export function renderLeftPaneLayout() {
@@ -546,6 +574,221 @@ export function openAnalytics() {
   }
 
   document.querySelector('[data-left-pane-block="analytics"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+export async function showCustomizeActiveBlocksModal() {
+  const container = document.createElement("div");
+  container.className = "active-block-config-modal";
+  container.innerHTML = `
+    <p class="modal-copy">Choose what appears in the Active Block column and reorder it for a clearer workspace.</p>
+    <div class="active-block-config-body">${buildCustomizerRowsMarkup()}</div>
+  `;
+
+  const rerender = () => {
+    const body = container.querySelector(".active-block-config-body");
+    if (body) {
+      body.innerHTML = buildCustomizerRowsMarkup();
+    }
+  };
+
+  container.addEventListener("click", (event) => {
+    const moveBtn = event.target.closest("[data-left-pane-move]");
+    if (!moveBtn) {
+      return;
+    }
+    moveLeftPaneBlock(moveBtn.dataset.leftPaneKey, moveBtn.dataset.leftPaneMove);
+    rerender();
+  });
+
+  container.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("[data-left-pane-visibility]");
+    if (!checkbox) {
+      return;
+    }
+    setLeftPaneBlockVisibility(checkbox.dataset.leftPaneVisibility, checkbox.checked);
+    rerender();
+  });
+
+  await showModal({
+    title: "Customize Active Blocks",
+    message: container,
+    showConfirm: false,
+    cancelLabel: "Close"
+  });
+}
+
+export async function showStoryMemoryPopup() {
+  const project = getCurrentProject();
+  if (!project) {
+    return;
+  }
+
+  const memory = project.storyMemory || { characters: [], locations: [], themes: [], plotPoints: [] };
+  const sections = [
+    { key: "characters", label: "Characters" },
+    { key: "locations", label: "Locations" },
+    { key: "themes", label: "Themes" },
+    { key: "plotPoints", label: "Plot Points" }
+  ];
+
+  const container = document.createElement("div");
+  container.className = "modal-list story-memory-popup";
+  container.innerHTML = `
+    <div class="story-memory-popup-actions">
+      <button class="ghost-button btn-sm" type="button" data-story-memory-action="add">Add Element</button>
+      <button class="ghost-button btn-sm" type="button" data-story-memory-action="insert">Insert Into Active Block</button>
+    </div>
+    ${sections.map(({ key, label }) => `
+      <section class="story-memory-popup-group">
+        <h4>${escapeHtml(label)}</h4>
+        <div class="list-stack">
+          ${(memory[key] || []).map((item) => `
+            <button class="list-item" type="button" data-story-memory-edit="${escapeHtml(item.id)}">
+              <span class="list-item-title">${escapeHtml(item.name)}</span>
+              <span class="list-item-meta">${escapeHtml(item.description || "No description yet")}</span>
+            </button>
+          `).join("") || '<p class="collab-empty">Nothing added yet.</p>'}
+        </div>
+      </section>
+    `).join("")}
+  `;
+
+  container.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-story-memory-action]")?.dataset.storyMemoryAction;
+    if (action === "add") {
+      modalRefs.dialog.close();
+      showEditStoryElementModal();
+      return;
+    }
+    if (action === "insert") {
+      modalRefs.dialog.close();
+      showStoryMemoryPicker();
+      return;
+    }
+
+    const editId = event.target.closest("[data-story-memory-edit]")?.dataset.storyMemoryEdit;
+    if (!editId) {
+      return;
+    }
+    const allItems = sections.flatMap(({ key }) => (memory[key] || []).map((item) => ({ ...item, bucket: key })));
+    const selected = allItems.find((item) => item.id === editId);
+    if (selected) {
+      modalRefs.dialog.close();
+      showEditStoryElementModal({
+        ...selected,
+        type: selected.bucket === "plotPoints" ? "Plot Point" : selected.bucket.slice(0, -1).replace(/^./, (char) => char.toUpperCase())
+      });
+    }
+  });
+
+  await showModal({
+    title: "Story Memory",
+    message: container,
+    showConfirm: false,
+    cancelLabel: "Close"
+  });
+}
+
+export async function showWorkspacePopup() {
+  const project = getCurrentProject();
+  if (!project) {
+    return;
+  }
+
+  const ownerLabel = project.ownerName || project.ownerEmail || project.author || "Workspace owner";
+  const collaborators = Object.values(project.collaborators || {});
+  const activeUsers = [ownerLabel, ...collaborators.map((person) => person.name || person.email)].filter(Boolean);
+  const inviteLink = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(project.id)}&script=${encodeURIComponent(project.scriptId || "")}`;
+  const lastEditedBy = project.lastEditorName || ownerLabel;
+
+  const container = document.createElement("div");
+  container.className = "workspace-popup";
+  container.innerHTML = `
+    <section class="workspace-popup-section">
+      <h4>Team Workspace</h4>
+      <p>Create shared writing spaces where projects belong to the workspace, not just one user.</p>
+      <div class="metric-grid workspace-metric-grid">
+        <div><span>Owner</span><strong>${escapeHtml(ownerLabel)}</strong></div>
+        <div><span>Editors</span><strong>${collaborators.length}</strong></div>
+        <div><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
+        <div><span>Last Edited By</span><strong>${escapeHtml(lastEditedBy)}</strong></div>
+      </div>
+    </section>
+    <section class="workspace-popup-section">
+      <h4>Sharing</h4>
+      <p>Invite collaborators by email or share a workspace link. Full role management can expand later from this base.</p>
+      <div class="workspace-share-row">
+        <input class="modal-input" type="text" value="${escapeHtml(inviteLink)}" readonly>
+        <button class="ghost-button" type="button" data-workspace-action="copy-link">Copy Link</button>
+      </div>
+      <div class="workspace-share-row">
+        <input id="workspaceInviteEmail" class="modal-input" type="email" placeholder="collaborator@email.com">
+        <button class="ghost-button" type="button" data-workspace-action="invite">Invite by Email</button>
+      </div>
+      <p class="collab-status-msg" data-workspace-status></p>
+    </section>
+    <section class="workspace-popup-section">
+      <h4>Roles & Activity</h4>
+      <div class="list-stack">
+        <div class="list-item"><span class="list-item-title">Owner</span><span class="list-item-meta">${escapeHtml(ownerLabel)}</span></div>
+        ${collaborators.map((person) => `
+          <div class="list-item">
+            <span class="list-item-title">${escapeHtml(person.name || person.email || "Collaborator")}</span>
+            <span class="list-item-meta">Editor</span>
+          </div>
+        `).join("") || '<p class="collab-empty">No editors added yet.</p>'}
+      </div>
+      <div class="workspace-action-row">
+        <button class="ghost-button" type="button" data-workspace-action="comments">Open Comments</button>
+      </div>
+    </section>
+  `;
+
+  container.addEventListener("click", async (event) => {
+    const action = event.target.closest("[data-workspace-action]")?.dataset.workspaceAction;
+    const status = container.querySelector("[data-workspace-status]");
+    if (!action) {
+      return;
+    }
+
+    if (action === "copy-link") {
+      await navigator.clipboard?.writeText(inviteLink);
+      if (status) status.textContent = "Workspace link copied.";
+      return;
+    }
+
+    if (action === "comments") {
+      modalRefs.dialog.close();
+      document.getElementById("viewCommentsBtn")?.click();
+      return;
+    }
+
+    if (action === "invite") {
+      const email = container.querySelector("#workspaceInviteEmail")?.value?.trim();
+      if (!email) {
+        if (status) status.textContent = "Enter an email address first.";
+        return;
+      }
+      if (status) status.textContent = "Sending invite...";
+      window.dispatchEvent(new CustomEvent("workspaceInviteRequested", { detail: { email } }));
+    }
+  });
+
+  const handleInviteResult = (event) => {
+    const status = container.querySelector("[data-workspace-status]");
+    if (!status) {
+      return;
+    }
+    status.textContent = event.detail?.ok ? "Invitation sent." : (event.detail?.reason || "Unable to send invite.");
+  };
+  window.addEventListener("workspaceInviteResult", handleInviteResult, { once: true });
+
+  await showModal({
+    title: "Workspace",
+    message: container,
+    showConfirm: false,
+    cancelLabel: "Close"
+  });
 }
 
 export function renderMetrics() {

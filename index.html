@@ -412,10 +412,13 @@
           </div>
 
           <div id="studioToolsMenu" class="nav-menu nav-menu-wide" hidden>
-            <div class="nav-menu-section">
-              <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
-              <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Workspace</button>
-            </div>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Tools</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Workspace</button>
+              </div>
+            </details>
 
             <details class="menu-group" open>
               <summary class="menu-group-summary">Writing</summary>
@@ -502,9 +505,7 @@
               <summary class="menu-group-summary">Editor</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-auto-number">Auto Number Scenes</button>
-                <div class="menu-divider"></div>
-                <span class="nav-menu-label">Customize Active Blocks</span>
-                <div id="leftPaneBlockControls" class="block-customizer-list"></div>
+                <button class="nav-menu-button" type="button" data-menu-action="customize-active-blocks">Customize Active Blocks</button>
               </div>
             </details>
             <details class="menu-group">
@@ -703,6 +704,19 @@
                 </div>
               </section>
 
+              <section class="panel section-workspace" data-left-pane-block="workspace" data-left-pane-label="Team Workspace" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Team Workspace</h3>
+                    <p>Shared access, roles, comments, and activity</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Team Workspace">â–¼</button>
+                </div>
+                <div class="panel-section-body">
+                  <button class="ghost-button btn-sm" data-menu-action="open-workspace">Open Workspace</button>
+                </div>
+              </section>
+
               <section class="panel list-panel section-tools" data-left-pane-block="tools" data-left-pane-label="Project Tools">
                 <div class="panel-head">
                   <div>
@@ -797,6 +811,19 @@
                     <button class="ghost-button btn-sm" id="addStoryElementBtn">+ Add Element</button>
                   </div>
                   <div id="storyMemoryList" class="list-stack"></div>
+                </div>
+              </section>
+
+              <section class="panel section-insert-story-element" data-left-pane-block="insert-story-element" data-left-pane-label="Insert Story Element" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Insert Story Element</h3>
+                    <p>Place saved characters, locations, themes, and plot points</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="insert-story-element" aria-label="Collapse Insert Story Element">â–¼</button>
+                </div>
+                <div class="panel-section-body">
+                  <button class="ghost-button btn-sm" data-menu-action="pick-story-memory">Insert Into Active Block</button>
                 </div>
               </section>
 
@@ -912,7 +939,7 @@
                 </div>
                 </div>
               </section>
-              <p id="leftPaneEmptyState" class="pane-empty-state" hidden>No active blocks selected. Use Tools to customize this pane.</p>
+              <p id="leftPaneEmptyState" class="pane-empty-state" hidden>No active blocks selected. Use Settings to customize this pane.</p>
             </div>
           </div>
         </aside>

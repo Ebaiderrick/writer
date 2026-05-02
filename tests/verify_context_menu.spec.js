@@ -106,20 +106,28 @@ test('parenthetical typing preserves spaces immediately and revision moves under
   await page.keyboard.type('quietly ');
   await expect(page.locator('.script-block').first()).toHaveText('(quietly )');
 
-  await page.locator('[data-menu-trigger="studioToolsMenu"]').click();
+  await page.locator('[data-menu-trigger="studioToolsMenu"]').hover();
   await expect(page.locator('[data-menu-trigger="studioRevisionMenu"]')).toHaveCount(0);
-  await expect(page.locator('#studioToolsMenu .menu-group-summary').filter({ hasText: 'Revision' })).toBeVisible();
+  await expect(page.locator('#studioToolsMenu .menu-group-summary').filter({ hasText: 'Revision & Insight' })).toBeVisible();
   await expect(page.locator('[data-menu-trigger="studioSettingsMenu"]')).toBeVisible();
 });
 
-test('left pane blocks can be reordered, hidden, and collapsed from tools', async ({ page }) => {
+test('active block customization lives in settings and updates the left pane', async ({ page }) => {
   await openEditor(page);
 
-  await page.locator('[data-menu-trigger="studioToolsMenu"]').click();
-  await expect(page.locator('#leftPaneBlockControls [data-left-pane-visibility="current"]')).toHaveCount(0);
-  await page.locator('#leftPaneBlockControls [data-left-pane-key="metrics"][data-left-pane-move="up"]').evaluate((button) => button.click());
-  await page.locator('#leftPaneBlockControls [data-left-pane-key="metrics"][data-left-pane-move="up"]').evaluate((button) => button.click());
-  await page.locator('#leftPaneBlockControls [data-left-pane-visibility="characters"]').evaluate((checkbox) => {
+  await page.locator('[data-menu-trigger="studioSettingsMenu"]').hover();
+  await expect(page.locator('#studioSettingsMenu')).toBeVisible();
+  await page.locator('#studioSettingsMenu .menu-group-summary').filter({ hasText: 'Editor' }).click();
+  await page.locator('#studioSettingsMenu [data-menu-action="customize-active-blocks"]').click();
+  await expect(page.locator('#customModal')).toHaveAttribute('open', '');
+  await expect(page.locator('#modalTitle')).toHaveText('Customize Active Blocks');
+  await expect(page.locator('#customModal')).toContainText('Workspace');
+  await expect(page.locator('#customModal')).toContainText('Writing');
+  await expect(page.locator('#customModal')).toContainText('Revision & Insight');
+
+  await page.locator('#customModal [data-left-pane-key="metrics"][data-left-pane-move="up"]').evaluate((button) => button.click());
+  await page.locator('#customModal [data-left-pane-key="metrics"][data-left-pane-move="up"]').evaluate((button) => button.click());
+  await page.locator('#customModal [data-left-pane-visibility="characters"]').evaluate((checkbox) => {
     checkbox.checked = false;
     checkbox.dispatchEvent(new Event('change', { bubbles: true }));
   });
@@ -130,11 +138,59 @@ test('left pane blocks can be reordered, hidden, and collapsed from tools', asyn
       .sort((a, b) => Number(a.style.order) - Number(b.style.order))
       .map((section) => section.dataset.leftPaneBlock)
   );
-  expect(order[1]).toBe('metrics');
+  expect(order.indexOf('metrics')).toBeLessThan(order.indexOf('scenes'));
   await expect(page.locator('[data-left-pane-block="characters"]')).toBeHidden();
 
+  await page.locator('#modalCancelBtn').click();
   await page.locator('[data-left-pane-section-toggle="metrics"]').click();
   await expect(page.locator('[data-left-pane-block="metrics"] .panel-section-body')).toBeHidden();
+});
+
+test('toolbar tools open popups for workspace, story memory, and grammar check', async ({ page }) => {
+  const block = await openEditor(page);
+
+  await block.click();
+  await page.keyboard.type('Line one');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('Line two');
+  const hasSoftBreak = await page.locator('.script-block').first().evaluate((el) => {
+    const innerHtml = el.innerHTML || '';
+    const innerText = el.innerText || '';
+    return innerHtml.includes('<br') || innerText.includes('\n');
+  });
+  expect(hasSoftBreak).toBe(true);
+
+  await page.locator('[data-menu-trigger="studioToolsMenu"]').hover();
+  await page.locator('#studioToolsMenu').evaluate((menu) => {
+    menu.querySelectorAll('details.menu-group').forEach((group) => {
+      group.open = true;
+    });
+  });
+  await page.locator('#studioToolsMenu [data-menu-action="open-workspace"]').click();
+  await expect(page.locator('#modalTitle')).toHaveText('Workspace');
+  await expect(page.locator('#customModal')).toContainText('Team Workspace');
+  await page.locator('#modalCancelBtn').click();
+
+  await page.locator('[data-menu-trigger="studioToolsMenu"]').hover();
+  await page.locator('#studioToolsMenu').evaluate((menu) => {
+    menu.querySelectorAll('details.menu-group').forEach((group) => {
+      group.open = true;
+    });
+  });
+  await page.locator('#studioToolsMenu [data-menu-action="open-story-memory"]').click();
+  await expect(page.locator('#modalTitle')).toHaveText('Story Memory');
+  await expect(page.locator('#customModal')).toContainText('Insert Into Active Block');
+  await page.locator('#modalCancelBtn').click();
+
+  await page.locator('[data-menu-trigger="studioToolsMenu"]').hover();
+  await page.locator('#studioToolsMenu').evaluate((menu) => {
+    menu.querySelectorAll('details.menu-group').forEach((group) => {
+      group.open = true;
+    });
+  });
+  await page.locator('#studioToolsMenu [data-menu-action="toggle-grammar-check"]').click();
+  await expect(page.locator('#modalTitle')).toHaveText('Grammar Check');
+  await expect(page.locator('#modalConfirmBtn')).toHaveText(/Turn On|Turn Off/);
 });
 
 test('view menu removes ruler, page count, and show outline options', async ({ page }) => {
@@ -149,14 +205,23 @@ test('view menu removes ruler, page count, and show outline options', async ({ p
 test('file and edit menus expose the new export and text controls', async ({ page }) => {
   await openEditor(page);
 
-  await page.locator('[data-menu-trigger="studioFileMenu"]').click();
-  await page.locator('#studioFileMenu .menu-group-summary').filter({ hasText: 'Manage' }).click();
-  await page.locator('#studioFileMenu .menu-group-summary').filter({ hasText: 'Export' }).click();
+  await page.locator('[data-menu-trigger="studioFileMenu"]').hover();
+  await expect(page.locator('#studioFileMenu')).toBeVisible();
+  await page.locator('#studioFileMenu').evaluate((menu) => {
+    menu.querySelectorAll('details.menu-group').forEach((group) => {
+      group.open = true;
+    });
+  });
   await expect(page.locator('#studioFileMenu [data-menu-action="save-home"]')).toBeVisible();
   await expect(page.locator('#studioFileMenu [data-menu-action="export-txt"]')).toBeVisible();
 
-  await page.locator('[data-menu-trigger="studioEditMenu"]').click();
-  await page.locator('#studioEditMenu .menu-group-summary').filter({ hasText: 'Capitalization' }).click();
+  await page.locator('[data-menu-trigger="studioEditMenu"]').hover();
+  await expect(page.locator('#studioEditMenu')).toBeVisible();
+  await page.locator('#studioEditMenu').evaluate((menu) => {
+    menu.querySelectorAll('details.menu-group').forEach((group) => {
+      group.open = true;
+    });
+  });
   await expect(page.locator('#studioEditMenu [data-menu-action="text-caps-sentence"]')).toBeVisible();
   await expect(page.locator('#studioEditMenu [data-menu-action="text-copy"]')).toBeVisible();
   await expect(page.locator('#studioEditMenu [data-menu-action="text-cut"]')).toBeVisible();
