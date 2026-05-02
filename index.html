@@ -265,6 +265,7 @@
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
             <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
             <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tool</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate</button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
 
@@ -433,11 +434,6 @@
               <summary class="menu-group-summary">Editor</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
-                <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Team Workspace</button>
-                <details class="menu-group">
-                  <summary class="menu-group-summary">Customize Active Blocks</summary>
-                  <div id="leftPaneBlockControls" class="menu-group-body block-customizer-list"></div>
-                </details>
               </div>
             </details>
             <details class="menu-group" open>
@@ -446,6 +442,7 @@
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-story-memory">Story Memory</button>
+                <button class="nav-menu-button" type="button" data-menu-action="pick-story-memory">Insert Story Element</button>
                 <button class="nav-menu-button" type="button" data-menu-action="smart-proofread">Smart Proofreading</button>
               </div>
             </details>
@@ -514,6 +511,9 @@
               <summary class="menu-group-summary">Editor</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-auto-number">Auto Number Scenes</button>
+                <div class="menu-divider"></div>
+                <span class="nav-menu-label">Customize Active Blocks</span>
+                <div id="leftPaneBlockControls" class="block-customizer-list"></div>
               </div>
             </details>
             <details class="menu-group">

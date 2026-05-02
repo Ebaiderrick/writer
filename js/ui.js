@@ -780,6 +780,91 @@ export function openStoryMemory() {
   document.querySelector('[data-left-pane-block="story-memory"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
+export async function showStoryMemoryPicker() {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  const memory = project.storyMemory || { characters: [], locations: [], themes: [], plotPoints: [] };
+  const categories = [
+    { key: 'characters', label: 'Characters' },
+    { key: 'locations', label: 'Locations' },
+    { key: 'themes', label: 'Themes' },
+    { key: 'plotPoints', label: 'Plot Points' }
+  ].filter(cat => memory[cat.key].length > 0);
+
+  if (categories.length === 0) {
+    customAlert("Your Story Memory is empty. Add elements first to pick from them.", "Story Memory Empty");
+    return;
+  }
+
+  const categoryContainer = document.createElement("div");
+  categoryContainer.className = "modal-list";
+
+  categories.forEach(cat => {
+    const btn = document.createElement("button");
+    btn.className = "modal-list-item";
+    btn.innerHTML = `<strong>${escapeHtml(cat.label)}</strong>`;
+    btn.onclick = () => {
+      showElementPicker(cat.key, cat.label, memory[cat.key]);
+    };
+    categoryContainer.appendChild(btn);
+  });
+
+  showModal({
+    title: "Pick Category",
+    message: categoryContainer,
+    showConfirm: false,
+    showCancel: true,
+    cancelLabel: "Close"
+  });
+
+  function showElementPicker(key, label, elements) {
+    const elementContainer = document.createElement("div");
+    elementContainer.className = "modal-list";
+
+    elements.forEach(el => {
+      const btn = document.createElement("button");
+      btn.className = "modal-list-item";
+      btn.innerHTML = `<strong>${escapeHtml(el.name)}</strong><small>${escapeHtml(el.description)}</small>`;
+      btn.onclick = () => {
+        insertElementIntoEditor(el.name);
+        modalRefs.dialog.close();
+      };
+      elementContainer.appendChild(btn);
+    });
+
+    showModal({
+      title: `Pick ${label}`,
+      message: elementContainer,
+      showConfirm: false,
+      showCancel: true,
+      cancelLabel: "Back"
+    });
+  }
+}
+
+function insertElementIntoEditor(text) {
+  let activeEl = document.querySelector(".script-block.is-active") || document.querySelector(".script-block:focus");
+  if (!activeEl) {
+    activeEl = document.querySelector(".script-block");
+    if (activeEl) activeEl.focus();
+  }
+  if (!activeEl) return;
+
+  const selection = window.getSelection();
+  if (!selection.rangeCount) return;
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  range.insertNode(document.createTextNode(text));
+
+  // Trigger input to sync state
+  activeEl.dispatchEvent(new Event('input', { bubbles: true }));
+
+  // Move caret to end of inserted text
+  selection.collapseToEnd();
+}
+
 export function closeMenus() {
   document.querySelectorAll(".nav-menu").forEach((menu) => {
     menu.hidden = true;

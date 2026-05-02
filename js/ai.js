@@ -255,7 +255,7 @@ export const AI = (() => {
         ...mem.plotPoints.map(e => `Plot Point: ${e.name} (${e.description})`)
       ];
       if (elements.length > 0) {
-        memoryContext = "STORY CONTEXT:\n" + elements.join("\n") + "\n\n";
+        memoryContext = "IMPORTANT: THE FOLLOWING STORY ELEMENTS MUST BE RESPECTED FOR CONSISTENCY:\n" + elements.join("\n") + "\n\n";
       }
     }
 
@@ -578,11 +578,13 @@ export const AI = (() => {
   }
 
   function triggerSmartProofread() {
-    const activeEl = document.querySelector(".script-block.is-active") || document.querySelector(".script-block:focus");
+    let activeEl = document.querySelector(".script-block.is-active") || document.querySelector(".script-block:focus");
     if (!activeEl) {
-      alert("Please click or focus on a script line first.");
-      return;
+      activeEl = document.querySelector(".script-block");
+      if (activeEl) activeEl.focus();
     }
+    if (!activeEl) return;
+
     const row = activeEl.closest(".script-block-row");
     if (row) {
       activeBlock = activeEl;
@@ -593,5 +595,20 @@ export const AI = (() => {
     }
   }
 
-  return { init, triggerAction, triggerSmartProofread };
+  function triggerAssistant() {
+    let activeEl = document.querySelector(".script-block.is-active") || document.querySelector(".script-block:focus");
+    if (!activeEl) {
+      activeEl = document.querySelector(".script-block");
+      if (activeEl) activeEl.focus();
+    }
+    if (!activeEl) return;
+
+    const row = activeEl.closest(".script-block-row");
+    if (row) {
+      activeBlock = activeEl;
+      openMenu(row);
+    }
+  }
+
+  return { init, triggerAction, triggerSmartProofread, triggerAssistant };
 })();

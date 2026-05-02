@@ -23,7 +23,7 @@ import {
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
-  renderAnalytics, openAnalytics
+  renderAnalytics, openAnalytics, showStoryMemoryPicker
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -1204,11 +1204,12 @@ function handleMenuAction(action) {
       showProofreadReport();
       break;
     case "toggle-ai-assistant":
-      state.aiAssist = !state.aiAssist;
+      state.aiAssist = true;
       refs.aiAssistToggle.checked = state.aiAssist;
       refs.aiPanel.hidden = !state.aiAssist;
       applyToolbarState();
       updateMenuStateButtons();
+      AI.triggerAssistant();
       queueSave();
       break;
     case "toggle-grammar-check":
@@ -1231,6 +1232,9 @@ function handleMenuAction(action) {
       break;
     case "open-story-memory":
       openStoryMemory();
+      break;
+    case "pick-story-memory":
+      showStoryMemoryPicker();
       break;
     case "open-workspace":
       toggleMenu("studioCollabMenu", true);
