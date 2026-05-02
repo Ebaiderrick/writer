@@ -38,6 +38,12 @@ export const LEFT_PANE_BLOCK_DEFS = [
   { key: "metrics", label: "Metrics" },
   { key: "analytics", label: "Writing Analytics" },
   { key: "story-memory", label: "Story Memory" },
+  { key: "notepad", label: "Notepad" },
+  { key: "ai-assistant", label: "AI Assistant" },
+  { key: "grammar-check", label: "Grammar Check" },
+  { key: "smart-proofread", label: "Smart Proofreading" },
+  { key: "work-tracking", label: "Work Tracking" },
+  { key: "proofread", label: "Screenplay Proofread" },
   { key: "tools", label: "Project Tools" }
 ];
 export const DEFAULT_LEFT_PANE_BLOCKS = LEFT_PANE_BLOCK_DEFS.map(({ key }) => ({
@@ -66,7 +72,7 @@ export const state = {
   grammarCheck: false,
   toolStripCollapsed: false,
   autoNumberScenes: false,
-  backgroundAnimation: false,
+  backgroundAnimation: true,
   theme: "cedar",
   language: "en",
   writingLanguage: "en",

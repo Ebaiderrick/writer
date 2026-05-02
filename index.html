@@ -33,6 +33,12 @@
           <div class="auth-header">
             <h1>Eya<span>Writer</span></h1>
             <p class="tagline">Where stories take flight.</p>
+            <div class="auth-bg-control" style="margin-top: 10px; font-size: 0.8rem; opacity: 0.7;">
+              <label style="display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
+                <input id="bgAnimationLandingToggle" type="checkbox">
+                <span>Bg Anim</span>
+              </label>
+            </div>
           </div>
 
           <!-- Toggle Tabs -->
@@ -188,30 +194,6 @@
               </div>
             </details>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Activity Log</summary>
-              <div class="menu-group-body">
-                <div id="studioActivityLog" class="collaborator-list">
-                  <p class="collab-empty">No activity yet.</p>
-                </div>
-              </div>
-            </details>
-            <details class="menu-group" open>
-              <summary class="menu-group-summary">Activity Log</summary>
-              <div class="menu-group-body">
-                <div id="studioActivityLog" class="collaborator-list">
-                  <p class="collab-empty">No activity yet.</p>
-                </div>
-              </div>
-            </details>
-            <details class="menu-group" open>
-              <summary class="menu-group-summary">Activity Log</summary>
-              <div class="menu-group-body">
-                <div id="studioActivityLog" class="collaborator-list">
-                  <p class="collab-empty">No activity yet.</p>
-                </div>
-              </div>
-            </details>
-            <details class="menu-group">
               <summary class="menu-group-summary">Sent Invites</summary>
               <div class="menu-group-body">
                 <div id="studioSentInvites" class="collab-requests-list">
@@ -430,27 +412,36 @@
           </div>
 
           <div id="studioToolsMenu" class="nav-menu nav-menu-wide" hidden>
-            <details class="menu-group" open>
-              <summary class="menu-group-summary">Editor</summary>
-              <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
-              </div>
-            </details>
+            <div class="nav-menu-section">
+              <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
+              <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Workspace</button>
+            </div>
+
             <details class="menu-group" open>
               <summary class="menu-group-summary">Writing</summary>
               <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-scenes">Scenes</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-characters">Characters</button>
+              </div>
+            </details>
+
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">AI</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-story-memory">Story Memory</button>
                 <button class="nav-menu-button" type="button" data-menu-action="pick-story-memory">Insert Story Element</button>
                 <button class="nav-menu-button" type="button" data-menu-action="smart-proofread">Smart Proofreading</button>
               </div>
             </details>
+
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Analytics</summary>
+              <summary class="menu-group-summary">Revision &amp; Insight</summary>
               <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
+                <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
                 <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
+                <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofreading</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-analytics">Analytics Dashboard</button>
               </div>
             </details>
@@ -819,6 +810,84 @@
                 </div>
                 <div class="panel-section-body">
                   <div id="analyticsDashboardContent"></div>
+                </div>
+              </section>
+
+              <section class="panel notepad-panel section-notepad" data-left-pane-block="notepad" data-left-pane-label="Notepad" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Notepad</h3>
+                    <p>Scratchpad notes</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="notepad" aria-label="Collapse Notepad">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="open-notepad">Open Notepad</button>
+                </div>
+              </section>
+
+              <section class="panel ai-assistant-panel section-ai-assistant" data-left-pane-block="ai-assistant" data-left-pane-label="AI Assistant" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>AI Assistant</h3>
+                    <p>AI writing tools</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="ai-assistant" aria-label="Collapse AI Assistant">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="toggle-ai-assistant">Launch Assistant</button>
+                </div>
+              </section>
+
+              <section class="panel grammar-check-panel section-grammar-check" data-left-pane-block="grammar-check" data-left-pane-label="Grammar Check" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Grammar Check</h3>
+                    <p>Language tools</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="grammar-check" aria-label="Collapse Grammar Check">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="toggle-grammar-check">Grammar Tools</button>
+                </div>
+              </section>
+
+              <section class="panel smart-proofread-panel section-smart-proofread" data-left-pane-block="smart-proofread" data-left-pane-label="Smart Proofread" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Smart Proofread</h3>
+                    <p>Refine your writing</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="smart-proofread" aria-label="Collapse Smart Proofread">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="smart-proofread">Refine Selection</button>
+                </div>
+              </section>
+
+              <section class="panel work-tracking-panel section-work-tracking" data-left-pane-block="work-tracking" data-left-pane-label="Work Tracking" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Work Tracking</h3>
+                    <p>Project milestones</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="work-tracking" aria-label="Collapse Work Tracking">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="show-work-tracking">View Tracking</button>
+                </div>
+              </section>
+
+              <section class="panel proofread-panel section-proofread" data-left-pane-block="proofread" data-left-pane-label="Proofread Report" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Proofread Report</h3>
+                    <p>Script analysis</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="proofread" aria-label="Collapse Proofread Report">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="proofread">View Report</button>
                 </div>
               </section>
 

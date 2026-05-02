@@ -652,7 +652,7 @@ function handleBlockInput(id, element) {
 
   // Secondary (right) field of a dual row: update line.secondary only
   if (element.dataset.secondary === "true") {
-    const normalized = normalizeLineText(element.textContent || "", "dual");
+    const normalized = normalizeLineText(element.textContent || "", "dual", true);
     line.secondary = normalized;
     project.updatedAt = new Date().toISOString();
     setActiveBlock(id);
@@ -665,15 +665,16 @@ function handleBlockInput(id, element) {
 
   const offset = getCaretOffset(element);
   const beforeText = element.textContent || "";
-  let normalized = normalizeLineText(beforeText, line.type);
+  let normalized = normalizeLineText(beforeText, line.type, true);
   let autoCompleted = false;
 
   if (line.type === "character") {
     const completion = getCharacterAutocomplete(normalized, id);
     if (completion && completion !== normalized) {
+      const completionSuffix = completion.substring(normalized.length);
       normalized = completion;
       element.textContent = completion;
-      selectTextSuffix(element, beforeText.trim().length, completion.length);
+      selectTextSuffix(element, beforeText.length, completion.length);
       autoCompleted = true;
     }
   }
@@ -1224,24 +1225,56 @@ function handleMenuAction(action) {
     case "show-work-tracking":
       showWorkTracking();
       break;
-    case "show-metrics":
-      revealMetricsPanel();
+    case "show-metrics": {
+      const container = document.createElement("div");
+      container.className = "metric-grid";
+      const project = getCurrentProject();
+      const words = serializeScript(project).match(/\b[\w'-]+\b/g) || [];
+      const characters = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase()));
+      const notes = project.lines.filter((line) => line.type === "note" && line.text.trim()).length;
+
+      container.innerHTML = `
+        <div><span>Words</span><strong>${words.length.toLocaleString()}</strong></div>
+        <div><span>Pages est.</span><strong>${Math.max(1, Math.round((words.length / 180) * 10) / 10).toFixed(1)}</strong></div>
+        <div><span>Characters</span><strong>${characters.size}</strong></div>
+        <div><span>Notes</span><strong>${notes}</strong></div>
+      `;
+      showModal({ title: "Metrics", message: container, showConfirm: false, cancelLabel: "Close" });
       break;
+    }
     case "open-notepad":
       openNotepad();
       break;
     case "open-story-memory":
       openStoryMemory();
       break;
+    case "open-scenes": {
+      const container = document.createElement("div");
+      container.className = "modal-list";
+      container.appendChild(refs.sceneList.cloneNode(true));
+      showModal({ title: "Scenes", message: container, showConfirm: false, cancelLabel: "Close" });
+      break;
+    }
+    case "open-characters": {
+      const container = document.createElement("div");
+      container.className = "modal-list";
+      container.appendChild(refs.characterList.cloneNode(true));
+      showModal({ title: "Characters", message: container, showConfirm: false, cancelLabel: "Close" });
+      break;
+    }
     case "pick-story-memory":
       showStoryMemoryPicker();
       break;
     case "open-workspace":
       toggleMenu("studioCollabMenu", true);
       break;
-    case "open-analytics":
-      openAnalytics();
+    case "open-analytics": {
+      const container = document.createElement("div");
+      container.id = "analyticsDashboardContent";
+      showModal({ title: "Writing Analytics", message: container, showConfirm: false, cancelLabel: "Close" });
+      renderAnalytics();
       break;
+    }
     case "smart-proofread":
       AI.triggerSmartProofread();
       break;

@@ -1,16 +1,16 @@
 :root {
-  /* Core Variables (Rose/Cedar - Sky Theme) */
-  --bg: #f0f9ff;
-  --bg-gradient: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  /* Core Variables (Rose/Cedar Theme) */
+  --bg: #fff1f2;
+  --bg-gradient: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
   --panel: rgba(255, 255, 255, 0.9);
-  --ink: #0c4a6e;
-  --ink-muted: #334155;
-  --muted: #64748b;
-  --accent: #0ea5e9;
-  --accent-strong: #0284c7;
-  --accent-soft: #f0f9ff;
-  --line: rgba(14, 165, 233, 0.12);
-  --shadow: 0 14px 36px rgba(14, 165, 233, 0.1);
+  --ink: #881337;
+  --ink-muted: #9f1239;
+  --muted: #be123c;
+  --accent: #f43f5e;
+  --accent-strong: #e11d48;
+  --accent-soft: #fff1f2;
+  --line: rgba(244, 63, 94, 0.12);
+  --shadow: 0 14px 36px rgba(244, 63, 94, 0.1);
   --radius: 16px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
@@ -170,9 +170,10 @@ img {
 }
 
 html[data-theme="white"] .mesh-background,
+html[data-theme="cedar"] .mesh-background,
 html:not([data-theme]) .mesh-background,
 html[data-theme="rose"] .mesh-background {
-  opacity: 0.9;
+  opacity: 1.0;
 }
 
 .gradient-container {

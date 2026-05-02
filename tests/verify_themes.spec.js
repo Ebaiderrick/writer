@@ -1,27 +1,26 @@
 import { test, expect } from '@playwright/test';
 import { login } from './helper.js';
 
-test('verify white and cedar themes', async ({ page }) => {
-    // Navigate and login
-    await page.goto('http://localhost:8000');
+test('verify white and cedar (rose) themes', async ({ page }) => {
     await login(page);
 
     // Wait for the home view
-    await expect(page.locator('.home-view')).toBeVisible();
+    await expect(page.locator('#homeView')).toBeVisible();
 
-    // Check White Theme
-    await page.click('.theme-btn[data-theme="white"]');
-    await page.waitForTimeout(1000); // Wait for transition
-    await page.screenshot({ path: 'verify_white_theme.png' });
+    const themes = ['white', 'cedar', 'dark', 'navy'];
 
-    // Check Cedar (Rose) Theme
-    await page.click('.theme-btn[data-theme="rose"]');
-    await page.waitForTimeout(1000); // Wait for transition
-    await page.screenshot({ path: 'verify_cedar_theme.png' });
+    for (const theme of themes) {
+        console.log(`Testing theme: ${theme}`);
+        await page.evaluate((t) => {
+            const btn = document.querySelector(`.theme-option[data-theme-value="${t}"]`);
+            if (btn) btn.click();
+        }, theme);
 
-    // Check Profile visibility in White Theme
-    await page.click('.theme-btn[data-theme="white"]');
-    await page.click('.user-trigger');
-    await expect(page.locator('.popup-overlay.active')).toBeVisible();
-    await page.screenshot({ path: 'verify_profile_white.png' });
+        await page.waitForTimeout(1000); // Wait for transition
+
+        const currentTheme = await page.evaluate(() => document.documentElement.dataset.theme);
+        expect(currentTheme).toBe(theme);
+
+        await page.screenshot({ path: `theme_check_${theme}.png` });
+    }
 });

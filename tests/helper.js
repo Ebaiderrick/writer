@@ -11,21 +11,21 @@ export async function login(page) {
       email: 'test@example.com',
       loggedIn: true,
       userId: 'user_test',
-      name: 'Tester'
+      name: 'Tester',
+      isDemoSession: true // Prevent onAuthStateChanged from clearing the session
     }));
-  });
-
-  // Verify that the view actually changes to home
-  await page.evaluate(() => {
-    const authView = document.getElementById('authView');
-    const homeView = document.getElementById('homeView');
-    if (authView) authView.hidden = true;
-    if (homeView) homeView.hidden = false;
+    // Bypass backup prompt modal and tour by setting it in the main storage object
+    const storageKey = "eyawriter-projects-v5";
+    const existing = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    localStorage.setItem(storageKey, JSON.stringify({
+      ...existing,
+      backupPrompted: true,
+      tourShown: true
+    }));
   });
 
   await page.reload();
 
-  // Longer wait and check visibility
-  const homeView = page.locator('#homeView');
-  await expect(homeView).toBeVisible({ timeout: 30000 });
+  // Wait for the app to detect session and show homeView
+  await expect(page.locator('#homeView')).toBeVisible({ timeout: 15000 });
 }

@@ -258,7 +258,15 @@ function getLeftPaneBlockLabel(key) {
     tools: "pane.projectTools",
     scenes: "pane.scenes",
     characters: "pane.characters",
-    metrics: "pane.metrics"
+    metrics: "pane.metrics",
+    "story-memory": "Story Memory",
+    analytics: "Writing Analytics",
+    notepad: "Notepad",
+    "ai-assistant": "AI Assistant",
+    "grammar-check": "Grammar Check",
+    "smart-proofread": "Smart Proofread",
+    "work-tracking": "Work Tracking",
+    proofread: "Proofread Report"
   };
 
   return t(translationKeys[key] || "") || meta?.label || key;

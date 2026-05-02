@@ -45,13 +45,16 @@ export function stripWrapperChars(value, trim = true) {
   return trim ? stripped.trim() : stripped;
 }
 
-export function normalizeLineText(text, type) {
-  const compact = String(text || "")
+export function normalizeLineText(text, type, isActiveTyping = false) {
+  let compact = String(text || "")
     .replace(/\r/g, "")
-    .replace(/\u00a0/g, " ")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/^\s+/, "");
+    .replace(/\u00a0/g, " ");
+
+  if (!isActiveTyping) {
+    compact = compact.replace(/[ \t]+\n/g, "\n")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/^\s+/, "");
+  }
 
   if (!compact && compact !== "") {
     return "";
@@ -59,7 +62,7 @@ export function normalizeLineText(text, type) {
 
   // If it's just spaces, we keep them for active typing feel
   if (compact.length > 0 && compact.trim() === "") {
-      return compact;
+    return compact;
   }
 
   if (type === "note") {
@@ -85,8 +88,8 @@ export function shouldDisplayUppercase(type) {
   return FORCED_DISPLAY_UPPERCASE_TYPES.has(type);
 }
 
-export function formatLineText(text, type) {
-  const normalized = normalizeLineText(text, type);
+export function formatLineText(text, type, isActiveTyping = false) {
+  const normalized = normalizeLineText(text, type, isActiveTyping);
   return shouldDisplayUppercase(type) ? normalized.toUpperCase() : normalized;
 }
 
