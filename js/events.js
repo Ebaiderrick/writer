@@ -45,8 +45,13 @@ import {
 } from './localSave.js';
 import {
   inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
-  hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel
+  hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel,
+  canEditProject, updateCollaboratorRole, addWorkspaceReminder,
+  toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace
 } from './collaborate.js';
+
+let studioSidebarRefreshFrame = 0;
+let hasShownReadOnlyNotice = false;
 
 export function bindEvents() {
   // Navigation
@@ -277,16 +282,60 @@ export function bindEvents() {
 
   window.addEventListener("workspaceInviteRequested", async (event) => {
     const email = event.detail?.email;
+    const role = event.detail?.role || "editor";
     if (!email) {
       return;
     }
-    const result = await inviteCollaborator(email);
+    const result = await inviteCollaborator(email, role);
     window.dispatchEvent(new CustomEvent("workspaceInviteResult", { detail: result }));
     if (result?.ok) {
       await customAlert("Workspace invite sent.", "Workspace");
     } else if (result?.reason) {
       await customAlert(result.reason, "Workspace");
     }
+  });
+
+  window.addEventListener("workspaceRenameRequested", async (event) => {
+    const result = await renameWorkspace(event.detail?.projectId, event.detail?.name);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Workspace name saved." : "" }
+    }));
+    if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("workspaceRoleChangeRequested", async (event) => {
+    const result = await updateCollaboratorRole(event.detail?.projectId, event.detail?.collaboratorUid, event.detail?.role);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Member role updated." : "" }
+    }));
+    if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("workspaceReminderRequested", async (event) => {
+    const result = await addWorkspaceReminder(event.detail?.projectId, {
+      text: event.detail?.text,
+      dueAt: event.detail?.dueAt
+    });
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Reminder added." : "" }
+    }));
+    if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("workspaceReminderToggleRequested", async (event) => {
+    const result = await toggleWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Reminder updated." : "" }
+    }));
+    if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("workspaceReminderDeleteRequested", async (event) => {
+    const result = await deleteWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Reminder deleted." : "" }
+    }));
+    if (result.ok) renderStudio();
   });
 
   refs.duplicateProjectBtn.addEventListener("click", duplicateProject);
@@ -565,6 +614,7 @@ export function openProject(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
   state.currentProjectId = project.id;
+  hasShownReadOnlyNotice = false;
 
   // Reset history for the new project
   state.history = [];
@@ -606,7 +656,6 @@ export function renderStudio() {
   renderSceneList();
   renderCharacterList();
   renderStoryMemory();
-  renderAnalytics();
   renderMetrics();
   renderCurrentScriptId();
   renderRecentProjectMenus();
@@ -623,6 +672,7 @@ export function renderStudio() {
 }
 
 export function duplicateActiveBlock() {
+  if (!canEditCurrentProjectWithNotice()) return;
   const project = getCurrentProject();
   const index = getLineIndex(state.activeBlockId);
   if (!project || index < 0) {
@@ -640,7 +690,7 @@ function handleMetaInput() {
   syncProjectFromInputs();
   renderCoverPreview();
   renderPreview();
-  renderHome();
+  scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: false });
   queueSave();
 }
 
@@ -663,7 +713,46 @@ function readEditableText(element) {
     .replace(/\n$/, "");
 }
 
+function canEditCurrentProjectWithNotice() {
+  const project = getCurrentProject();
+  if (canEditProject(project)) {
+    hasShownReadOnlyNotice = false;
+    return true;
+  }
+
+  if (!hasShownReadOnlyNotice) {
+    hasShownReadOnlyNotice = true;
+    customAlert("Viewer access is read-only. Ask the workspace owner to promote you to Editor if you need to make changes.", "Read-only Workspace");
+  }
+
+  return false;
+}
+
+function scheduleStudioSidebarRefresh({ includeHome = true, includeAnalytics = true } = {}) {
+  if (studioSidebarRefreshFrame) {
+    return;
+  }
+
+  studioSidebarRefreshFrame = window.requestAnimationFrame(() => {
+    studioSidebarRefreshFrame = 0;
+    renderSceneList();
+    renderCharacterList();
+    renderMetrics();
+    if (includeHome) {
+      renderHome();
+    }
+    if (includeAnalytics && document.querySelector('[data-left-pane-block="analytics"] .panel-section-body:not([hidden])')) {
+      renderAnalytics();
+    }
+  });
+}
+
 function handleBlockInput(id, element) {
+  if (!canEditCurrentProjectWithNotice()) {
+    renderStudio();
+    return;
+  }
+
   const line = getLine(id);
   const project = getCurrentProject();
   if (!line || !project) return;
@@ -675,7 +764,7 @@ function handleBlockInput(id, element) {
     project.updatedAt = new Date().toISOString();
     setActiveBlock(id);
     renderPreview();
-    renderCharacterList();
+    scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: true });
     updateSuggestions();
     queueSave();
     return;
@@ -731,14 +820,7 @@ function handleBlockInput(id, element) {
 
   setActiveBlock(id);
   renderPreview();
-  renderSceneList();
-  renderCharacterList();
-  renderMetrics();
-  renderHome();
-  // Update analytics in real-time only if the panel is currently visible/expanded
-  if (document.querySelector('[data-left-pane-block="analytics"] .panel-section-body:not([hidden])')) {
-    renderAnalytics();
-  }
+  scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: true });
   if (line.type === "scene") {
     hideSuggestionTray(true);
   } else {
@@ -988,6 +1070,9 @@ function inferNextType(index) {
 }
 
 export function addBlock(type, text = "", index) {
+  if (!canEditCurrentProjectWithNotice()) {
+    return state.activeBlockId;
+  }
   const project = getCurrentProject();
   const insertAt = Number.isInteger(index) ? index : project.lines.length;
   const line = { id: uid(), type, text: normalizeLineText(text, type) };
@@ -1006,6 +1091,7 @@ function cycleBlockType(id) {
 }
 
 function changeBlockType(id, nextType) {
+  if (!canEditCurrentProjectWithNotice()) return;
   const line = getLine(id);
   const project = getCurrentProject();
   if (!line || !project) return;
@@ -1758,6 +1844,7 @@ function handleGlobalKeydown(event) {
 }
 
 function insertAiAssistNote() {
+  if (!canEditCurrentProjectWithNotice()) return;
   const project = getCurrentProject();
   if (!project) return;
   const index = getLineIndex(state.activeBlockId);
@@ -1769,6 +1856,7 @@ function insertAiAssistNote() {
 }
 
 function insertMenuBlock(type, text) {
+  if (!canEditCurrentProjectWithNotice()) return;
   const index = Math.max(getLineIndex(state.activeBlockId), -1);
   const newId = addBlock(type, text, index + 1);
   renderStudio();

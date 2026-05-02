@@ -6,6 +6,7 @@ import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTe
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
 import { calculateAnalytics } from './analytics.js';
+import { auth } from './firebase.js';
 
 const MENU_GLYPHS = {
   left: "&#9664;",
@@ -514,42 +515,44 @@ export function renderAnalytics(filter = 'all') {
   if (!project || !container) return;
 
   const data = calculateAnalytics(project, filter);
+  const topWordsMarkup = data.topWords.length
+    ? data.topWords.map(([word, count]) => `
+        <div class="analytics-word-row">
+          <span>${escapeHtml(word)}</span>
+          <strong>${count}x</strong>
+        </div>
+      `).join("")
+    : '<p class="collab-empty">Not enough words yet.</p>';
 
   container.innerHTML = `
-    <div style="margin-bottom: 10px;">
+    <div class="analytics-toolbar">
        <select id="analyticsFilter" class="comment-filter-select">
          <option value="all" ${filter === 'all' ? 'selected' : ''}>All Lines</option>
          <option value="dialogue" ${filter === 'dialogue' ? 'selected' : ''}>Dialogue Only</option>
          <option value="action" ${filter === 'action' ? 'selected' : ''}>Action Only</option>
        </select>
     </div>
-    <div class="metric-grid">
+    <div class="metric-grid analytics-metric-grid">
       <div><span>Total Words</span><strong>${data.totalWords.toLocaleString()}</strong></div>
       <div><span>Sentences</span><strong>${data.totalSentences}</strong></div>
       <div><span>Avg Sentence</span><strong>${data.avgSentenceLength}</strong></div>
       <div><span>Readability</span><strong>${data.readability}</strong></div>
     </div>
-    <div style="margin-top: 12px;">
+    <div class="analytics-section">
       <span class="nav-menu-label">Style Breakdown</span>
-      <div style="display:flex; height:8px; border-radius:4px; overflow:hidden; background:var(--soft);">
-        <div style="width:${data.dialoguePercent}%; background:var(--accent);" title="Dialogue: ${data.dialoguePercent}%"></div>
-        <div style="width:${data.narrationPercent}%; background:var(--muted);" title="Narration: ${data.narrationPercent}%"></div>
+      <div class="analytics-breakdown-bar">
+        <div style="width:${data.dialoguePercent}%;" class="analytics-breakdown-fill analytics-breakdown-dialogue" title="Dialogue: ${data.dialoguePercent}%"></div>
+        <div style="width:${data.narrationPercent}%;" class="analytics-breakdown-fill analytics-breakdown-narration" title="Narration: ${data.narrationPercent}%"></div>
       </div>
-      <div style="display:flex; justify-content:space-between; font-size:0.7rem; margin-top:4px; color:var(--muted);">
+      <div class="analytics-breakdown-legend">
         <span>Dialogue: ${data.dialoguePercent}%</span>
         <span>Narration: ${data.narrationPercent}%</span>
       </div>
     </div>
-    <div style="margin-top: 12px;">
+    <div class="analytics-section">
       <span class="nav-menu-label">Overused Words (>3 chars)</span>
-      <div class="list-stack">
-        ${data.topWords.map(([word, count]) => `
-          <div style="display:flex; justify-content:space-between; font-size:0.8rem; padding: 2px 0;">
-            <span>${escapeHtml(word)}</span>
-            <span style="color:var(--muted);">${count}x</span>
-          </div>
-        `).join('')}
-        ${data.topWords.length === 0 ? '<p class="collab-empty">Not enough words yet.</p>' : ''}
+      <div class="list-stack analytics-word-list">
+        ${topWordsMarkup}
       </div>
     </div>
   `;
@@ -697,10 +700,15 @@ export async function showWorkspacePopup() {
   }
 
   const ownerLabel = project.ownerName || project.ownerEmail || project.author || "Workspace owner";
-  const collaborators = Object.values(project.collaborators || {});
-  const activeUsers = [ownerLabel, ...collaborators.map((person) => person.name || person.email)].filter(Boolean);
+  const collaborators = Object.entries(project.collaborators || {});
+  const activeUsers = [ownerLabel, ...collaborators.map(([, person]) => person.name || person.email)].filter(Boolean);
   const inviteLink = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(project.id)}&script=${encodeURIComponent(project.scriptId || "")}`;
   const lastEditedBy = project.lastEditorName || ownerLabel;
+  const workspace = project.workspace || { name: project.title || "Team Workspace", reminders: [] };
+  const reminders = workspace.reminders || [];
+  const activity = [...(project.activityLog || [])].slice(-5).reverse();
+  const ownerCanManage = !project.ownerId || project.ownerId === auth.currentUser?.uid;
+  const lastActivity = project.lastActivityAt || project.updatedAt;
 
   const container = document.createElement("div");
   container.className = "workspace-popup";
@@ -708,36 +716,87 @@ export async function showWorkspacePopup() {
     <section class="workspace-popup-section">
       <h4>Team Workspace</h4>
       <p>Create shared writing spaces where projects belong to the workspace, not just one user.</p>
+      <div class="workspace-title-row">
+        <input id="workspaceNameInput" class="modal-input" type="text" value="${escapeHtml(workspace.name || project.title || 'Team Workspace')}" ${ownerCanManage ? '' : 'readonly'}>
+        ${ownerCanManage ? '<button class="ghost-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
+      </div>
       <div class="metric-grid workspace-metric-grid">
         <div><span>Owner</span><strong>${escapeHtml(ownerLabel)}</strong></div>
-        <div><span>Editors</span><strong>${collaborators.length}</strong></div>
+        <div><span>Members</span><strong>${collaborators.length}</strong></div>
         <div><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
         <div><span>Last Edited By</span><strong>${escapeHtml(lastEditedBy)}</strong></div>
+        <div><span>Last Activity</span><strong>${escapeHtml(formatDateTime(lastActivity))}</strong></div>
+        <div><span>Workspace Code</span><strong>${escapeHtml(workspace.inviteCode || project.scriptId || "")}</strong></div>
       </div>
     </section>
     <section class="workspace-popup-section">
       <h4>Sharing</h4>
-      <p>Invite collaborators by email or share a workspace link. Full role management can expand later from this base.</p>
+      <p>Invite collaborators by email or share a workspace link, then assign Editor or Viewer access.</p>
       <div class="workspace-share-row">
         <input class="modal-input" type="text" value="${escapeHtml(inviteLink)}" readonly>
         <button class="ghost-button" type="button" data-workspace-action="copy-link">Copy Link</button>
       </div>
       <div class="workspace-share-row">
         <input id="workspaceInviteEmail" class="modal-input" type="email" placeholder="collaborator@email.com">
+        <select id="workspaceInviteRole" class="comment-filter-select">
+          <option value="editor">Editor</option>
+          <option value="viewer">Viewer</option>
+        </select>
         <button class="ghost-button" type="button" data-workspace-action="invite">Invite by Email</button>
       </div>
       <p class="collab-status-msg" data-workspace-status></p>
     </section>
     <section class="workspace-popup-section">
-      <h4>Roles & Activity</h4>
+      <h4>Roles</h4>
       <div class="list-stack">
         <div class="list-item"><span class="list-item-title">Owner</span><span class="list-item-meta">${escapeHtml(ownerLabel)}</span></div>
-        ${collaborators.map((person) => `
-          <div class="list-item">
-            <span class="list-item-title">${escapeHtml(person.name || person.email || "Collaborator")}</span>
-            <span class="list-item-meta">Editor</span>
+        ${collaborators.map(([uid, person]) => `
+          <div class="list-item workspace-member-row">
+            <div>
+              <span class="list-item-title">${escapeHtml(person.name || person.email || "Collaborator")}</span>
+              <span class="list-item-meta">${escapeHtml(person.email || "")}</span>
+            </div>
+            ${ownerCanManage ? `
+              <select class="comment-filter-select workspace-role-select" data-member-role="${escapeHtml(uid)}">
+                <option value="editor" ${(person.role || "editor") === "editor" ? "selected" : ""}>Editor</option>
+                <option value="viewer" ${(person.role || "editor") === "viewer" ? "selected" : ""}>Viewer</option>
+              </select>
+            ` : `<span class="role-badge">${escapeHtml((person.role || "editor").replace(/^./, (char) => char.toUpperCase()))}</span>`}
           </div>
         `).join("") || '<p class="collab-empty">No editors added yet.</p>'}
+      </div>
+    </section>
+    <section class="workspace-popup-section">
+      <h4>Reminders</h4>
+      <div class="workspace-share-row">
+        <input id="workspaceReminderText" class="modal-input" type="text" placeholder="Prepare scene board, review act two, share draft…">
+        <input id="workspaceReminderDue" class="modal-input" type="datetime-local">
+        <button class="ghost-button" type="button" data-workspace-action="add-reminder">Add Reminder</button>
+      </div>
+      <div class="list-stack">
+        ${reminders.map((reminder) => `
+          <div class="list-item workspace-reminder-item${reminder.completed ? ' is-complete' : ''}">
+            <label class="workspace-reminder-main">
+              <input type="checkbox" data-workspace-reminder-toggle="${escapeHtml(reminder.id)}" ${reminder.completed ? 'checked' : ''}>
+              <span>
+                <span class="list-item-title">${escapeHtml(reminder.text)}</span>
+                <span class="list-item-meta">${escapeHtml(reminder.dueAt ? `Due ${formatDateTime(reminder.dueAt)}` : `Added by ${reminder.createdByName || 'team member'}`)}</span>
+              </span>
+            </label>
+            <button class="ghost-button btn-sm danger-text" type="button" data-workspace-reminder-delete="${escapeHtml(reminder.id)}">Delete</button>
+          </div>
+        `).join("") || '<p class="collab-empty">No reminders yet.</p>'}
+      </div>
+    </section>
+    <section class="workspace-popup-section">
+      <h4>Recent Activity</h4>
+      <div class="list-stack">
+        ${activity.map((entry) => `
+          <div class="list-item workspace-activity-item">
+            <span class="list-item-title">${escapeHtml(entry.user)}</span>
+            <span class="list-item-meta">${escapeHtml(entry.message)} • ${escapeHtml(formatDateTime(entry.timestamp))}</span>
+          </div>
+        `).join("") || '<p class="collab-empty">No activity recorded yet.</p>'}
       </div>
       <div class="workspace-action-row">
         <button class="ghost-button" type="button" data-workspace-action="comments">Open Comments</button>
@@ -758,6 +817,19 @@ export async function showWorkspacePopup() {
       return;
     }
 
+    if (action === "rename") {
+      const name = container.querySelector("#workspaceNameInput")?.value?.trim();
+      if (!name) {
+        if (status) status.textContent = "Enter a workspace name first.";
+        return;
+      }
+      if (status) status.textContent = "Saving workspace name...";
+      window.dispatchEvent(new CustomEvent("workspaceRenameRequested", {
+        detail: { projectId: project.id, name }
+      }));
+      return;
+    }
+
     if (action === "comments") {
       modalRefs.dialog.close();
       document.getElementById("viewCommentsBtn")?.click();
@@ -766,13 +838,53 @@ export async function showWorkspacePopup() {
 
     if (action === "invite") {
       const email = container.querySelector("#workspaceInviteEmail")?.value?.trim();
+      const role = container.querySelector("#workspaceInviteRole")?.value || "editor";
       if (!email) {
         if (status) status.textContent = "Enter an email address first.";
         return;
       }
       if (status) status.textContent = "Sending invite...";
-      window.dispatchEvent(new CustomEvent("workspaceInviteRequested", { detail: { email } }));
+      window.dispatchEvent(new CustomEvent("workspaceInviteRequested", { detail: { email, role } }));
+      return;
     }
+
+    if (action === "add-reminder") {
+      const text = container.querySelector("#workspaceReminderText")?.value?.trim();
+      const dueAt = container.querySelector("#workspaceReminderDue")?.value || "";
+      if (!text) {
+        if (status) status.textContent = "Enter a reminder first.";
+        return;
+      }
+      if (status) status.textContent = "Adding reminder...";
+      window.dispatchEvent(new CustomEvent("workspaceReminderRequested", {
+        detail: { projectId: project.id, text, dueAt }
+      }));
+    }
+  });
+
+  container.addEventListener("change", (event) => {
+    const roleTarget = event.target.closest("[data-member-role]");
+    if (roleTarget) {
+      window.dispatchEvent(new CustomEvent("workspaceRoleChangeRequested", {
+        detail: { projectId: project.id, collaboratorUid: roleTarget.dataset.memberRole, role: roleTarget.value }
+      }));
+      return;
+    }
+
+    const reminderToggle = event.target.closest("[data-workspace-reminder-toggle]");
+    if (reminderToggle) {
+      window.dispatchEvent(new CustomEvent("workspaceReminderToggleRequested", {
+        detail: { projectId: project.id, reminderId: reminderToggle.dataset.workspaceReminderToggle }
+      }));
+    }
+  });
+
+  container.querySelectorAll("[data-workspace-reminder-delete]").forEach((button) => {
+    button.addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("workspaceReminderDeleteRequested", {
+        detail: { projectId: project.id, reminderId: button.dataset.workspaceReminderDelete }
+      }));
+    });
   });
 
   const handleInviteResult = (event) => {
@@ -782,7 +894,15 @@ export async function showWorkspacePopup() {
     }
     status.textContent = event.detail?.ok ? "Invitation sent." : (event.detail?.reason || "Unable to send invite.");
   };
-  window.addEventListener("workspaceInviteResult", handleInviteResult, { once: true });
+  const handleMutationResult = (event) => {
+    const status = container.querySelector("[data-workspace-status]");
+    if (!status) {
+      return;
+    }
+    status.textContent = event.detail?.ok ? (event.detail?.message || "Workspace updated.") : (event.detail?.reason || "Unable to update workspace.");
+  };
+  window.addEventListener("workspaceInviteResult", handleInviteResult);
+  window.addEventListener("workspaceMutationResult", handleMutationResult);
 
   await showModal({
     title: "Workspace",
@@ -790,6 +910,9 @@ export async function showWorkspacePopup() {
     showConfirm: false,
     cancelLabel: "Close"
   });
+
+  window.removeEventListener("workspaceInviteResult", handleInviteResult);
+  window.removeEventListener("workspaceMutationResult", handleMutationResult);
 }
 
 export function renderMetrics() {

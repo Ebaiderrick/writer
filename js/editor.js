@@ -14,6 +14,7 @@ import {
   buildProjectLexicon, buildSpellingIssues, buildGrammarIssues, clearSpellingHighlights,
   hasLanguageDictionary, renderSpellingIssues
 } from './spelling.js';
+import { canEditProject } from './collaborate.js';
 
 let _renderingEditor = false;
 
@@ -30,6 +31,7 @@ export function renderEditor() {
 function _renderEditorInner() {
   const project = getCurrentProject();
   if (!project) return;
+  const editable = canEditProject(project);
   refs.screenplayEditor.innerHTML = "";
   const template = document.querySelector("#blockTemplate");
   const filterSet = buildVisibleFilterSet(project);
@@ -71,6 +73,7 @@ function _renderEditorInner() {
     tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
     block.dataset.id = line.id;
     block.dataset.type = line.type;
+    block.contentEditable = editable ? "true" : "false";
     block.spellcheck = state.grammarCheck;
     block.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
     block.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");
@@ -83,7 +86,7 @@ function _renderEditorInner() {
 
       const secBlock = document.createElement("div");
       secBlock.className = "script-block dual-secondary";
-      secBlock.contentEditable = "true";
+      secBlock.contentEditable = editable ? "true" : "false";
       secBlock.spellcheck = state.grammarCheck;
       secBlock.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
       secBlock.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");

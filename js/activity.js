@@ -17,6 +17,7 @@ export async function logActivity(projectId, message) {
 
   project.activityLog = project.activityLog || [];
   project.activityLog.push(entry);
+  project.lastActivityAt = entry.timestamp;
 
   // Keep last 50
   if (project.activityLog.length > 50) {
@@ -29,7 +30,8 @@ export async function logActivity(projectId, message) {
       await updateDoc(ref, {
         activityLog: project.activityLog,
         updatedBy: user?.uid || 'system',
-        lastEditorName: userName
+        lastEditorName: userName,
+        lastActivityAt: entry.timestamp
       });
     } catch (err) {
       console.error('Failed to sync activity log', err);

@@ -60,7 +60,8 @@ async function syncCurrentProjectToFirestore() {
     if (project.isShared) {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
-      'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory', 'activityLog', 'lastEditorName'];
+      'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
+      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
       );
@@ -68,7 +69,8 @@ async function syncCurrentProjectToFirestore() {
         ...contentPayload,
         syncedAt: new Date().toISOString(),
         updatedBy: userId,
-        lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown'
+        lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+        lastActivityAt: new Date().toISOString()
       }, { merge: true });
     }
 
@@ -205,7 +207,9 @@ export function sanitizeProject(project) {
     ownerEmail: project.ownerEmail || "",
     ownerPhotoURL: project.ownerPhotoURL || "",
     lastEditorName: project.lastEditorName || "",
-    collaborators: (project.collaborators && typeof project.collaborators === 'object') ? project.collaborators : {},
+    lastActivityAt: project.lastActivityAt || project.updatedAt || new Date().toISOString(),
+    workspace: sanitizeWorkspace(project.workspace, project),
+    collaborators: sanitizeCollaborators(project.collaborators),
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     wordCountHistory: Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [],
     lines: Array.isArray(project.lines) && project.lines.length
@@ -433,6 +437,44 @@ function sanitizeStoryMemory(storyMemory) {
     themes: Array.isArray(storyMemory?.themes) ? storyMemory.themes : [],
     plotPoints: Array.isArray(storyMemory?.plotPoints) ? storyMemory.plotPoints : []
   };
+}
+
+function sanitizeWorkspace(workspace, project) {
+  return {
+    id: workspace?.id || project.id || uid("workspace"),
+    name: String(workspace?.name || project.title || "Team Workspace").trim() || "Team Workspace",
+    inviteCode: String(workspace?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
+    reminders: sanitizeWorkspaceReminders(workspace?.reminders)
+  };
+}
+
+function sanitizeWorkspaceReminders(reminders) {
+  if (!Array.isArray(reminders)) {
+    return [];
+  }
+
+  return reminders.map((reminder, index) => ({
+    id: reminder?.id || uid(`rem-${index}`),
+    text: String(reminder?.text || "").trim(),
+    dueAt: reminder?.dueAt || "",
+    completed: Boolean(reminder?.completed),
+    createdAt: reminder?.createdAt || new Date().toISOString(),
+    updatedAt: reminder?.updatedAt || reminder?.createdAt || new Date().toISOString(),
+    createdByName: reminder?.createdByName || ""
+  })).filter((reminder) => reminder.text);
+}
+
+function sanitizeCollaborators(collaborators) {
+  if (!collaborators || typeof collaborators !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(collaborators).map(([uid, collaborator]) => [uid, {
+      ...collaborator,
+      role: collaborator?.role === "viewer" ? "viewer" : "editor"
+    }])
+  );
 }
 
 export function serializeScript(project) {

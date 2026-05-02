@@ -13,6 +13,14 @@
   --shadow: 0 14px 36px rgba(244, 63, 94, 0.1);
   --radius: 16px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --font-size-label: 0.78rem;
+  --font-size-body: 0.95rem;
+  --font-size-title: 1.1rem;
+  --button-height: 36px;
 
   /* Compatibility / Editor specific */
   --soft: #f0f9ff;
@@ -347,7 +355,7 @@ html[data-theme="rose"] .mesh-background {
   display: block;
   margin-bottom: 8px;
   color: color-mix(in srgb, var(--ink) 58%, var(--muted));
-  font-size: 0.76rem;
+  font-size: var(--font-size-label);
   font-weight: 600;
 }
 
@@ -589,7 +597,7 @@ html[data-theme="rose"] .mesh-background {
 .project-card h3,
 .panel-head h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--font-size-title);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -692,8 +700,10 @@ html[data-theme="rose"] .mesh-background {
 
 .primary-button,
 .ghost-button {
-  min-height: 34px;
+  min-height: var(--button-height);
   padding: 6px 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
 }
 
 .primary-button {
@@ -2860,7 +2870,7 @@ kbd {
 .story-memory-popup,
 .workspace-popup {
   display: grid;
-  gap: 14px;
+  gap: var(--space-4);
 }
 
 .modal-copy {
@@ -2873,7 +2883,7 @@ kbd {
 .workspace-share-row,
 .workspace-action-row {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -2881,7 +2891,7 @@ kbd {
 .story-memory-popup-group,
 .workspace-popup-section {
   display: grid;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .story-memory-popup-group h4,
@@ -2892,10 +2902,166 @@ kbd {
 
 .workspace-popup-section p {
   margin: 0;
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  line-height: 1.45;
 }
 
 .workspace-metric-grid strong {
   white-space: pre-wrap;
+}
+
+.workspace-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+}
+
+.workspace-member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.workspace-role-select,
+.collab-role-select {
+  min-width: 112px;
+}
+
+.workspace-reminder-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.workspace-reminder-item.is-complete .list-item-title {
+  text-decoration: line-through;
+  opacity: 0.72;
+}
+
+.workspace-reminder-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.workspace-reminder-main input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.workspace-activity-item {
+  align-items: flex-start;
+}
+
+.analytics-toolbar {
+  margin-bottom: var(--space-3);
+}
+
+.analytics-metric-grid {
+  margin-bottom: var(--space-4);
+}
+
+.analytics-section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.analytics-breakdown-bar {
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--control-bg) 88%, var(--panel));
+}
+
+.analytics-breakdown-fill {
+  height: 100%;
+}
+
+.analytics-breakdown-dialogue {
+  background: var(--accent);
+}
+
+.analytics-breakdown-narration {
+  background: color-mix(in srgb, var(--ink) 34%, var(--muted));
+}
+
+.analytics-breakdown-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.analytics-word-list {
+  gap: 6px;
+}
+
+.analytics-word-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 0.84rem;
+}
+
+.analytics-word-row strong {
+  color: var(--muted);
+}
+
+.activity-log-item {
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.76rem;
+}
+
+.activity-log-item + .activity-log-item {
+  padding-top: var(--space-2);
+}
+
+.activity-log-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.activity-log-copy {
+  margin-top: 2px;
+  color: var(--ink);
+}
+
+.role-badge,
+.owner-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 78%, var(--panel));
+  color: var(--accent-strong);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.collab-role-field {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.collab-role-field span,
+.collaborator-role-copy {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.script-block[contenteditable="false"] {
+  cursor: default;
+  opacity: 0.92;
 }
 
 .is-hidden {
