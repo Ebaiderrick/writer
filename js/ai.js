@@ -3,6 +3,7 @@ import { refs } from "./dom.js";
 import { getCurrentProject, getLine, getLineIndex, queueSave } from "./project.js";
 import { renderStudio, addBlock } from "./events.js";
 import { escapeHtml } from "./utils.js";
+import { customAlert, showModal } from "./ui.js";
 
 export const AI = (() => {
   let activeBlock = null;
@@ -251,8 +252,7 @@ export const AI = (() => {
       const elements = [
         ...mem.characters.map(e => `Character: ${e.name} (${e.description})`),
         ...mem.locations.map(e => `Location: ${e.name} (${e.description})`),
-        ...mem.themes.map(e => `Theme: ${e.name} (${e.description})`),
-        ...mem.plotPoints.map(e => `Plot Point: ${e.name} (${e.description})`)
+        ...mem.themes.map(e => `Theme: ${e.name} (${e.description})`)
       ];
       if (elements.length > 0) {
         memoryContext = "IMPORTANT: THE FOLLOWING STORY ELEMENTS MUST BE RESPECTED FOR CONSISTENCY:\n" + elements.join("\n") + "\n\n";
@@ -272,26 +272,7 @@ export const AI = (() => {
     showMessage("AI assistant is thinking...", "info");
 
     try {
-      const response = await fetch(getAiEndpoint(), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(request)
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        let msg = data.error || `AI assistant failed (Status ${response.status})`;
-        if (response.status === 401) msg = "Invalid API Key. Please check your OpenRouter configuration.";
-        if (response.status === 402) msg = "Insufficient credits in your OpenRouter account.";
-        if (response.status === 403) msg = "Access forbidden. Your OpenRouter key may be restricted.";
-        if (response.status === 429) msg = "Rate limit exceeded. Please wait a moment.";
-        if (response.status === 502) msg = "The AI model is temporarily unavailable. Please try again later.";
-        throw new Error(msg);
-      }
-
-      const output = normalizeAiOutput(data);
+      const output = await requestAiText(request);
       if (!output) {
         throw new Error("The AI assistant returned no text.");
       }
@@ -459,7 +440,6 @@ export const AI = (() => {
       submitButton.innerText = isLoading ? "..." : "▶";
     }
 
-    if (input) {
       input.disabled = isLoading;
     }
 
@@ -501,6 +481,29 @@ export const AI = (() => {
     }
 
     return "";
+  }
+
+  async function requestAiText(request) {
+    const response = await fetch(getAiEndpoint(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      let msg = data.error || `AI assistant failed (Status ${response.status})`;
+      if (response.status === 401) msg = "Invalid API Key. Please check your OpenRouter configuration.";
+      if (response.status === 402) msg = "Insufficient credits in your OpenRouter account.";
+      if (response.status === 403) msg = "Access forbidden. Your OpenRouter key may be restricted.";
+      if (response.status === 429) msg = "Rate limit exceeded. Please wait a moment.";
+      if (response.status === 502) msg = "The AI model is temporarily unavailable. Please try again later.";
+      throw new Error(msg);
+    }
+
+    return normalizeAiOutput(data);
   }
 
   function getLastScenes(activeLineId) {
@@ -583,21 +586,88 @@ export const AI = (() => {
       activeEl = document.querySelector(".script-block");
       if (activeEl) activeEl.focus();
     }
-    if (!activeEl) return;
-
-    const row = activeEl.closest(".script-block-row");
-    if (!row) return;
-
-    activeBlock = activeEl;
-    openMenu(row);
-    showInput("Improve");
-    const input = menuEl?.querySelector(".ai-input");
-    const submitBtn = menuEl?.querySelector(".ai-submit-btn");
-    if (input) {
-      input.value = "Correct grammar, enhance clarity, and reduce redundancy.";
       // Auto-run immediately — no extra click needed
-      runAI("Improve", input.value, submitBtn, input);
+    if (!activeEl) {
+      customAlert("Select some text or focus a block first.", "Smart Proofreading");
+      return;
     }
+
+    const lineId = activeEl.dataset.id;
+    const line = getLine(lineId);
+    if (!line) {
+      customAlert("Select some text or focus a block first.", "Smart Proofreading");
+      return;
+    }
+
+    const selection = getSelectedTextInBlock(activeEl);
+    const sourceText = selection?.text || activeEl.innerText.trim() || line.text;
+    if (!sourceText.trim()) {
+      customAlert("Select some text or focus a block with content first.", "Smart Proofreading");
+      return;
+    }
+
+    const project = getCurrentProject();
+    const scenes = getLastScenes(lineId);
+    let memoryContext = "";
+    if (project?.storyMemory) {
+      const mem = project.storyMemory;
+      const elements = [
+        ...mem.characters.map(e => `Character: ${e.name} (${e.description})`),
+        ...mem.locations.map(e => `Location: ${e.name} (${e.description})`),
+        ...mem.themes.map(e => `Theme: ${e.name} (${e.description})`)
+      ];
+      if (elements.length > 0) {
+        memoryContext = "IMPORTANT: THE FOLLOWING STORY ELEMENTS MUST BE RESPECTED FOR CONSISTENCY:\n" + elements.join("\n") + "\n\n";
+      }
+    }
+
+    requestAiText({
+      type: activeEl.dataset.type || line.type,
+      action: "Improve",
+      current: sourceText,
+      instruction: "Fix grammar and spelling, improve clarity and sentence structure, and keep the writer's intent intact.",
+      context: memoryContext + formatScenesForAI(scenes)
+    }).then(async (output) => {
+      if (!output) {
+        throw new Error("The AI assistant returned no text.");
+      }
+
+      const compare = document.createElement("div");
+      compare.className = "smart-proofread-compare";
+      compare.innerHTML = `
+        <div class="proofread-compare-card">
+          <span class="nav-menu-label">Original</span>
+          <div class="bio-text">${escapeHtml(sourceText)}</div>
+        </div>
+        <div class="proofread-compare-card">
+          <span class="nav-menu-label">Improved</span>
+          <div class="bio-text">${escapeHtml(output)}</div>
+        </div>
+      `;
+
+      const accepted = await showModal({
+        title: "Smart Proofreading",
+        message: compare,
+        confirmLabel: "Accept Changes",
+        cancelLabel: "Keep Original"
+      });
+
+      if (!accepted) {
+        return;
+      }
+
+      if (selection) {
+        line.text = `${line.text.slice(0, selection.start)}${output}${line.text.slice(selection.end)}`;
+      } else {
+        line.text = output;
+      }
+
+      renderStudio();
+      queueSave();
+    }).catch((error) => {
+      console.error("Smart proofreading error:", error);
+      customAlert(error instanceof Error ? error.message : "Smart proofreading failed.", "Smart Proofreading");
+    });
   }
 
   function triggerAssistant() {
@@ -617,3 +687,35 @@ export const AI = (() => {
 
   return { init, triggerAction, triggerSmartProofread, triggerAssistant };
 })();
+
+function getSelectedTextInBlock(block) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return null;
+  }
+
+  const range = selection.getRangeAt(0);
+  if (!block.contains(range.commonAncestorContainer)) {
+    return null;
+  }
+
+  const start = getRangeOffset(block, range, true);
+  const end = getRangeOffset(block, range, false);
+  const text = selection.toString();
+  if (!text.trim() || end <= start) {
+    return null;
+  }
+
+  return { text, start, end };
+}
+
+function getRangeOffset(block, range, useStart) {
+  const clone = range.cloneRange();
+  clone.selectNodeContents(block);
+  if (useStart) {
+    clone.setEnd(range.startContainer, range.startOffset);
+  } else {
+    clone.setEnd(range.endContainer, range.endOffset);
+  }
+  return clone.toString().length;
+}

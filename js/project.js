@@ -199,10 +199,11 @@ export function sanitizeProject(project) {
     updatedAt: project.updatedAt || new Date().toISOString(),
     isShared: Boolean(project.isShared),
     ownerId: project.ownerId || null,
-    storyMemory: project.storyMemory || { ...DEFAULT_STORY_MEMORY },
+    storyMemory: sanitizeStoryMemory(project.storyMemory),
     activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
     ownerName: project.ownerName || "",
     ownerEmail: project.ownerEmail || "",
+    ownerPhotoURL: project.ownerPhotoURL || "",
     lastEditorName: project.lastEditorName || "",
     collaborators: (project.collaborators && typeof project.collaborators === 'object') ? project.collaborators : {},
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
@@ -423,6 +424,15 @@ export function sanitizeLeftPaneBlocks(blocks) {
   });
 
   return sanitized;
+}
+
+function sanitizeStoryMemory(storyMemory) {
+  return {
+    characters: Array.isArray(storyMemory?.characters) ? storyMemory.characters : [],
+    locations: Array.isArray(storyMemory?.locations) ? storyMemory.locations : [],
+    themes: Array.isArray(storyMemory?.themes) ? storyMemory.themes : [],
+    plotPoints: Array.isArray(storyMemory?.plotPoints) ? storyMemory.plotPoints : []
+  };
 }
 
 export function serializeScript(project) {

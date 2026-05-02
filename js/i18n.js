@@ -146,7 +146,7 @@ const TRANSLATIONS = {
     "metric.words": "Words",
     "metric.pagesEst": "Pages est.",
     "metric.characters": "Characters",
-    "metric.notes": "Notes",
+"metric.notes": "Scenes",
 
     "ai.bannerTitle": "AI assisted writing is on.",
     "ai.bannerDesc": "Hover or focus a script block, then click the AI button on that line for rewrites, next beats, or dialogue help.",
@@ -381,7 +381,7 @@ const TRANSLATIONS = {
     "metric.words": "Mots",
     "metric.pagesEst": "Pages est.",
     "metric.characters": "Personnages",
-    "metric.notes": "Notes",
+"metric.notes": "Scènes",
 
     "ai.bannerTitle": "L’écriture assistée par IA est activée.",
     "ai.bannerDesc": "Survolez ou activez un bloc du script, puis cliquez sur le bouton IA de cette ligne pour des réécritures, la suite des idées ou de l’aide au dialogue.",
@@ -616,7 +616,7 @@ const TRANSLATIONS = {
     "metric.words": "Wörter",
     "metric.pagesEst": "Seiten ca.",
     "metric.characters": "Charaktere",
-    "metric.notes": "Notizen",
+"metric.notes": "Szenen",
 
     "ai.bannerTitle": "KI-gestütztes Schreiben ist aktiv.",
     "ai.bannerDesc": "Bewegen Sie den Mauszeiger über einen Skriptblock oder fokussieren Sie ihn und klicken Sie dann auf die KI-Schaltfläche dieser Zeile für Überarbeitungen, nächste Beats oder Dialoghilfe.",

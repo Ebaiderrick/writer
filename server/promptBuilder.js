@@ -48,6 +48,7 @@ function getActionInstruction(type, action) {
     "Add Tension": "Rewrite or continue the current block to ramp up the stakes.",
     "Describe": "Paint a clearer picture of this specific moment.",
     "Grammar": "Proofread and fix all spelling, grammar, and punctuation issues in this block. Maintain the existing style and format exactly.",
+    "Improve": "Fix grammar and spelling, improve clarity and sentence structure, and return a polished rewrite that preserves the original meaning and tone.",
 
     // Shots
     "Camera Angle": "Suggest a dynamic camera angle for this shot.",

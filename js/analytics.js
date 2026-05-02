@@ -1,7 +1,14 @@
 import { serializeScript } from './project.js';
 
 export function calculateAnalytics(project, filter = 'all') {
-  const text = serializeScript(project);
+  const filteredLines = project.lines.filter((line) => {
+    if (filter === 'all') return true;
+    if (filter === 'dialogue') return line.type === 'dialogue';
+    if (filter === 'action') return line.type === 'action' || line.type === 'scene';
+    return true;
+  });
+
+  const text = filteredLines.map((line) => line.text).join('\n');
   const words = text.match(/\b[\w'-]+\b/g) || [];
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
 
@@ -23,8 +30,7 @@ export function calculateAnalytics(project, filter = 'all') {
   let dialogueWords = 0;
   let narrationWords = 0;
 
-  project.lines.forEach(line => {
-    if (filter !== 'all' && line.type !== filter) return;
+  filteredLines.forEach(line => {
     const count = (line.text.match(/\b[\w'-]+\b/g) || []).length;
     if (line.type === 'dialogue') {
       dialogueWords += count;

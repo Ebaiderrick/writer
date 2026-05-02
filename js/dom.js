@@ -68,7 +68,7 @@ export const refs = {
   get wordCount() { return getCached("#wordCount"); },
   get pageCount() { return getCached("#pageCount"); },
   get characterCount() { return getCached("#characterCount"); },
-  get noteCount() { return getCached("#noteCount"); },
+  get sceneMetricCount() { return getCached("#sceneMetricCount"); },
   get duplicateProjectBtn() { return getCached("#duplicateProjectBtn"); },
   get deleteProjectBtn() { return getCached("#deleteProjectBtn"); },
   get homeRecentProjects() { return getCached("#homeRecentProjects"); },

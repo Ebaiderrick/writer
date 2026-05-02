@@ -205,6 +205,7 @@ async function ensureSharedProject(project, user) {
       ownerId: user.uid,
       ownerName: user.displayName || user.email,
       ownerEmail: user.email,
+      ownerPhotoURL: user.photoURL || '',
       collaborators: {},
       isShared: true,
       updatedBy: user.uid,
@@ -215,6 +216,7 @@ async function ensureSharedProject(project, user) {
   project.ownerId = user.uid;
   project.ownerName = user.displayName || user.email;
   project.ownerEmail = user.email;
+  project.ownerPhotoURL = user.photoURL || "";
   project.collaborators = project.collaborators || {};
   persistProjects(false);
   syncSharedProjectWatchers();
@@ -230,6 +232,9 @@ export async function acceptInvitation(inviteId) {
   if (!invSnap.exists()) return;
   const inv = invSnap.data();
 
+  const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
+  const profileData = profileSnap.exists() ? profileSnap.data() : {};
+
   const sharedRef = doc(db, 'sharedProjects', inv.projectId);
 
   // Step 1: Add self to collaborators using dot-notation.
@@ -239,6 +244,7 @@ export async function acceptInvitation(inviteId) {
     [`collaborators.${user.uid}`]: {
       name: user.displayName || user.email,
       email: user.email,
+      photoURL: profileData.photoURL || user.photoURL || '',
       addedAt: new Date().toISOString()
     },
     updatedBy: user.uid
@@ -486,12 +492,19 @@ export function renderCollaboratorList() {
     countEl.textContent = total ? `(${total}/${MAX_COLLABORATORS})` : '';
   }
 
+  const ownerDisplay = project.ownerName || project.ownerEmail || 'Owner';
   const ownerRow = project.ownerId || project.ownerName || project.ownerEmail
     ? `<div class="collaborator-item">
-        <div class="collaborator-avatar">${(project.ownerName || project.ownerEmail || 'O')[0].toUpperCase()}</div>
+        ${buildCollaboratorAvatarMarkup({
+          uid: project.ownerId || '',
+          name: ownerDisplay,
+          email: project.ownerEmail || '',
+          photoURL: project.ownerPhotoURL || '',
+          isOwner: true
+        })}
         <div class="collaborator-info">
-          <span class="collaborator-name">${esc(project.ownerName || project.ownerEmail || 'Owner')} <span class="owner-badge">Owner</span></span>
-          <span class="collaborator-email collab-profile-trigger" data-uid="${esc(project.ownerId || '')}" data-name="${esc(project.ownerName || '')}" data-email="${esc(project.ownerEmail || '')}" style="cursor:pointer;">${esc(project.ownerEmail || '')}</span>
+          <span class="collaborator-name">${esc(ownerDisplay)} <span class="owner-badge">Owner</span></span>
+          <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(project.ownerId || '')}" data-name="${esc(project.ownerName || '')}" data-email="${esc(project.ownerEmail || '')}" data-photourl="${esc(project.ownerPhotoURL || '')}">${esc(project.ownerEmail || '')}</button>
         </div>
       </div>`
     : '';
@@ -504,10 +517,10 @@ export function renderCollaboratorList() {
 
   list.innerHTML = ownerRow + collaboratorEntries.map(([uid, c]) => `
     <div class="collaborator-item">
-      <div class="collaborator-avatar">${esc(c.name || c.email)[0].toUpperCase()}</div>
+      ${buildCollaboratorAvatarMarkup({ uid, name: c.name || c.email, email: c.email || '', photoURL: c.photoURL || '' })}
       <div class="collaborator-info">
         <span class="collaborator-name">${esc(c.name || c.email)}</span>
-        <span class="collaborator-email collab-profile-trigger" data-uid="${esc(uid)}" data-name="${esc(c.name || '')}" data-email="${esc(c.email || '')}" style="cursor:pointer;">${esc(c.email)}</span>
+        <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(uid)}" data-name="${esc(c.name || '')}" data-email="${esc(c.email || '')}" data-photourl="${esc(c.photoURL || '')}">${esc(c.email)}</button>
       </div>
       ${isOwner ? `<button class="kick-btn" data-uid="${uid}" title="Remove collaborator">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -532,13 +545,13 @@ function attachCollabProfileTriggers(list) {
   list.querySelectorAll('.collab-profile-trigger').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      const { uid, name, email } = el.dataset;
-      showCollabProfile({ uid, name, email });
+      const { uid, name, email, photourl } = el.dataset;
+      showCollabProfile({ uid, name, email, photoURL: photourl });
     });
   });
 }
 
-async function showCollabProfile({ uid, name, email }) {
+async function showCollabProfile({ uid, name, email, photoURL }) {
   const popup = document.getElementById('collab-profile-popup');
   const imgEl = document.getElementById('collab-profile-img');
   const nameEl = document.getElementById('collab-profile-name');
@@ -551,7 +564,7 @@ async function showCollabProfile({ uid, name, email }) {
   nameEl.textContent = displayName;
   emailEl.textContent = email || '';
   bioEl.textContent = '—';
-  imgEl.src = generateCollabAvatar(displayName);
+  imgEl.src = photoURL || generateCollabAvatar(displayName);
 
   popup.classList.add('active');
 
@@ -594,6 +607,15 @@ function generateCollabAvatar(name) {
   const color = palette[(name || '').charCodeAt(0) % palette.length];
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><circle cx="48" cy="48" r="48" fill="${color}"/><text x="48" y="56" text-anchor="middle" font-family="system-ui,sans-serif" font-size="32" font-weight="600" fill="white">${initials}</text></svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+function buildCollaboratorAvatarMarkup({ uid, name, email, photoURL, isOwner = false }) {
+  const label = name || email || (isOwner ? 'Owner' : 'Collaborator');
+  const attrs = `data-uid="${esc(uid || '')}" data-name="${esc(name || '')}" data-email="${esc(email || '')}" data-photourl="${esc(photoURL || '')}"`;
+  if (photoURL) {
+    return `<button class="collaborator-avatar collaborator-avatar-button collab-profile-trigger" type="button" aria-label="Open ${esc(label)} profile" ${attrs}><img src="${esc(photoURL)}" alt="${esc(label)}"></button>`;
+  }
+  return `<button class="collaborator-avatar collaborator-avatar-button collab-profile-trigger" type="button" aria-label="Open ${esc(label)} profile" ${attrs}>${esc(label)[0].toUpperCase()}</button>`;
 }
 
 function renderSentInvites(invitations) {

@@ -524,7 +524,7 @@ export function renderAnalytics(filter = 'all') {
        </select>
     </div>
     <div class="metric-grid">
-      <div><span>Words</span><strong>${data.totalWords.toLocaleString()}</strong></div>
+      <div><span>Total Words</span><strong>${data.totalWords.toLocaleString()}</strong></div>
       <div><span>Sentences</span><strong>${data.totalSentences}</strong></div>
       <div><span>Avg Sentence</span><strong>${data.avgSentenceLength}</strong></div>
       <div><span>Readability</span><strong>${data.readability}</strong></div>
@@ -625,12 +625,11 @@ export async function showStoryMemoryPopup() {
     return;
   }
 
-  const memory = project.storyMemory || { characters: [], locations: [], themes: [], plotPoints: [] };
+  const memory = project.storyMemory || { characters: [], locations: [], themes: [] };
   const sections = [
     { key: "characters", label: "Characters" },
     { key: "locations", label: "Locations" },
-    { key: "themes", label: "Themes" },
-    { key: "plotPoints", label: "Plot Points" }
+    { key: "themes", label: "Themes" }
   ];
 
   const container = document.createElement("div");
@@ -678,7 +677,7 @@ export async function showStoryMemoryPopup() {
       modalRefs.dialog.close();
       showEditStoryElementModal({
         ...selected,
-        type: selected.bucket === "plotPoints" ? "Plot Point" : selected.bucket.slice(0, -1).replace(/^./, (char) => char.toUpperCase())
+        type: selected.bucket.slice(0, -1).replace(/^./, (char) => char.toUpperCase())
       });
     }
   });
@@ -798,14 +797,15 @@ export function renderMetrics() {
   if (!project) return;
   const words = serializeScript(project).match(/\b[\w'-]+\b/g) || [];
   const characters = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase()));
-  const scenes = project.lines.filter((line) => line.type === "scene").length;
+  const scenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
 
   refs.wordCount.textContent = words.length.toLocaleString();
   refs.pageCount.textContent = Math.max(1, Math.round((words.length / 180) * 10) / 10).toFixed(1);
   refs.characterCount.textContent = characters.size.toString();
-  if (refs.sceneCount) refs.sceneCount.textContent = scenes.toString();
+  refs.sceneMetricCount.textContent = scenes.toString();
 
   renderProgressGraph(project);
+  renderAnalyticsIfVisible();
 }
 
 function renderProgressGraph(project) {
@@ -887,12 +887,11 @@ export function renderStoryMemory() {
   const list = document.getElementById("storyMemoryList");
   if (!project || !list) return;
 
-  const memory = project.storyMemory || { characters: [], locations: [], themes: [], plotPoints: [] };
+  const memory = project.storyMemory || { characters: [], locations: [], themes: [] };
   const allElements = [
     ...memory.characters.map(e => ({ ...e, type: 'Character' })),
     ...memory.locations.map(e => ({ ...e, type: 'Location' })),
-    ...memory.themes.map(e => ({ ...e, type: 'Theme' })),
-    ...memory.plotPoints.map(e => ({ ...e, type: 'Plot Point' }))
+    ...memory.themes.map(e => ({ ...e, type: 'Theme' }))
   ];
 
   if (!allElements.length) {
@@ -949,7 +948,6 @@ export async function showEditStoryElementModal(element = null) {
         <option value="characters" ${element?.type === 'Character' ? 'selected' : ''}>Character</option>
         <option value="locations" ${element?.type === 'Location' ? 'selected' : ''}>Location</option>
         <option value="themes" ${element?.type === 'Theme' ? 'selected' : ''}>Theme</option>
-        <option value="plotPoints" ${element?.type === 'Plot Point' ? 'selected' : ''}>Plot Point</option>
       </select>
     </label>
     <label class="field field-wide">
@@ -983,7 +981,7 @@ export async function showEditStoryElementModal(element = null) {
     } else {
       // Find and update, possibly moving type
       let found = false;
-      ['characters', 'locations', 'themes', 'plotPoints'].forEach(t => {
+      ['characters', 'locations', 'themes'].forEach(t => {
         const idx = project.storyMemory[t].findIndex(el => el.id === element.id);
         if (idx !== -1) {
           if (t === type) {
@@ -1006,7 +1004,7 @@ function deleteStoryElement(id) {
   const project = getCurrentProject();
   if (!project) return;
 
-  ['characters', 'locations', 'themes', 'plotPoints'].forEach(t => {
+  ['characters', 'locations', 'themes'].forEach(t => {
     project.storyMemory[t] = project.storyMemory[t].filter(el => el.id !== id);
   });
 
@@ -1037,12 +1035,11 @@ export async function showStoryMemoryPicker() {
   const project = getCurrentProject();
   if (!project) return;
 
-  const memory = project.storyMemory || { characters: [], locations: [], themes: [], plotPoints: [] };
+  const memory = project.storyMemory || { characters: [], locations: [], themes: [] };
   const categories = [
     { key: 'characters', label: 'Characters' },
     { key: 'locations', label: 'Locations' },
-    { key: 'themes', label: 'Themes' },
-    { key: 'plotPoints', label: 'Plot Points' }
+    { key: 'themes', label: 'Themes' }
   ].filter(cat => memory[cat.key].length > 0);
 
   if (categories.length === 0) {
@@ -1094,6 +1091,16 @@ export async function showStoryMemoryPicker() {
       cancelLabel: "Back"
     });
   }
+}
+
+function renderAnalyticsIfVisible() {
+  const block = document.querySelector('[data-left-pane-block="analytics"]');
+  const container = document.getElementById("analyticsDashboardContent");
+  if (!block || block.hidden || !container) {
+    return;
+  }
+  const currentFilter = container.querySelector("#analyticsFilter")?.value || "all";
+  renderAnalytics(currentFilter);
 }
 
 function insertElementIntoEditor(text) {

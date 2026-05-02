@@ -435,23 +435,6 @@ export function bindEvents() {
       queueSave();
   });
 
-  refs.screenplayEditor.addEventListener("focusout", (e) => {
-    if (e.target.classList.contains("script-block")) {
-        const id = e.target.dataset.id;
-        // Skip if this is the active block or the block we just left via Enter
-        if (id === state.activeBlockId || id === _enterPrevBlockId) return;
-        const line = getLine(id);
-        const project = getCurrentProject();
-        if (line && line.secondary === undefined && !line.text.trim() && project && project.lines.length > 1) {
-            const index = getLineIndex(id);
-            project.lines.splice(index, 1);
-            project.updatedAt = new Date().toISOString();
-            renderStudio();
-            queueSave();
-        }
-    }
-  });
-
   // Project Grid (Delegated)
   refs.projectGrid.addEventListener("click", (e) => {
       const card = e.target.closest(".project-card");
@@ -1331,13 +1314,13 @@ function handleMenuAction(action) {
       const project = getCurrentProject();
       const words = serializeScript(project).match(/\b[\w'-]+\b/g) || [];
       const characters = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase()));
-      const notes = project.lines.filter((line) => line.type === "note" && line.text.trim()).length;
+      const scenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
 
       container.innerHTML = `
         <div><span>Words</span><strong>${words.length.toLocaleString()}</strong></div>
         <div><span>Pages est.</span><strong>${Math.max(1, Math.round((words.length / 180) * 10) / 10).toFixed(1)}</strong></div>
         <div><span>Characters</span><strong>${characters.size}</strong></div>
-        <div><span>Notes</span><strong>${notes}</strong></div>
+        <div><span>Scenes</span><strong>${scenes}</strong></div>
       `;
       showModal({ title: "Metrics", message: container, showConfirm: false, cancelLabel: "Close" });
       break;
