@@ -15,7 +15,19 @@ import {
   hasLanguageDictionary, renderSpellingIssues
 } from './spelling.js';
 
+let _renderingEditor = false;
+
 export function renderEditor() {
+  if (_renderingEditor) return;
+  _renderingEditor = true;
+  try {
+    _renderEditorInner();
+  } finally {
+    _renderingEditor = false;
+  }
+}
+
+function _renderEditorInner() {
   const project = getCurrentProject();
   if (!project) return;
   refs.screenplayEditor.innerHTML = "";

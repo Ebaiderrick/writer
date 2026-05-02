@@ -48,9 +48,10 @@ export const LEFT_PANE_BLOCK_DEFS = [
   { key: "proofread", label: "Screenplay Proofread" },
   { key: "tools", label: "Project Tools" }
 ];
+const DEFAULT_VISIBLE_BLOCK_KEYS = new Set(['current', 'scenes', 'characters', 'comments', 'metrics', 'tools']);
 export const DEFAULT_LEFT_PANE_BLOCKS = LEFT_PANE_BLOCK_DEFS.map(({ key }) => ({
   key,
-  visible: true,
+  visible: DEFAULT_VISIBLE_BLOCK_KEYS.has(key),
   collapsed: false
 }));
 export const PAGE_UNIT_CAPACITY = 54;

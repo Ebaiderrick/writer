@@ -3747,6 +3747,19 @@ html[data-theme="white"] .user-trigger {
   font-weight: 700;
 }
 
+#collab-profile-popup {
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.collab-profile-card {
+  position: relative;
+  top: unset;
+  left: unset;
+}
+
 .danger-text {
   color: #e53e3e !important;
 }

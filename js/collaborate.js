@@ -491,13 +491,14 @@ export function renderCollaboratorList() {
         <div class="collaborator-avatar">${(project.ownerName || project.ownerEmail || 'O')[0].toUpperCase()}</div>
         <div class="collaborator-info">
           <span class="collaborator-name">${esc(project.ownerName || project.ownerEmail || 'Owner')} <span class="owner-badge">Owner</span></span>
-          <span class="collaborator-email">${esc(project.ownerEmail || '')}</span>
+          <span class="collaborator-email collab-profile-trigger" data-uid="${esc(project.ownerId || '')}" data-name="${esc(project.ownerName || '')}" data-email="${esc(project.ownerEmail || '')}" style="cursor:pointer;">${esc(project.ownerEmail || '')}</span>
         </div>
       </div>`
     : '';
 
   if (!collaboratorEntries.length) {
     list.innerHTML = ownerRow || '<p class="collab-empty">No collaborators yet.</p>';
+    if (ownerRow) attachCollabProfileTriggers(list);
     return;
   }
 
@@ -506,7 +507,7 @@ export function renderCollaboratorList() {
       <div class="collaborator-avatar">${esc(c.name || c.email)[0].toUpperCase()}</div>
       <div class="collaborator-info">
         <span class="collaborator-name">${esc(c.name || c.email)}</span>
-        <span class="collaborator-email">${esc(c.email)}</span>
+        <span class="collaborator-email collab-profile-trigger" data-uid="${esc(uid)}" data-name="${esc(c.name || '')}" data-email="${esc(c.email || '')}" style="cursor:pointer;">${esc(c.email)}</span>
       </div>
       ${isOwner ? `<button class="kick-btn" data-uid="${uid}" title="Remove collaborator">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -523,6 +524,76 @@ export function renderCollaboratorList() {
       if (confirmed) kickCollaborator(project.id, btn.dataset.uid);
     });
   });
+
+  attachCollabProfileTriggers(list);
+}
+
+function attachCollabProfileTriggers(list) {
+  list.querySelectorAll('.collab-profile-trigger').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const { uid, name, email } = el.dataset;
+      showCollabProfile({ uid, name, email });
+    });
+  });
+}
+
+async function showCollabProfile({ uid, name, email }) {
+  const popup = document.getElementById('collab-profile-popup');
+  const imgEl = document.getElementById('collab-profile-img');
+  const nameEl = document.getElementById('collab-profile-name');
+  const emailEl = document.getElementById('collab-profile-email');
+  const bioEl = document.getElementById('collab-profile-bio');
+  const closeBtn = document.getElementById('close-collab-profile');
+  if (!popup) return;
+
+  const displayName = name || email || 'User';
+  nameEl.textContent = displayName;
+  emailEl.textContent = email || '';
+  bioEl.textContent = '—';
+  imgEl.src = generateCollabAvatar(displayName);
+
+  popup.classList.add('active');
+
+  const closePopup = () => {
+    popup.classList.remove('active');
+    popup.removeEventListener('click', onOverlayClick);
+    closeBtn.removeEventListener('click', closePopup);
+    document.removeEventListener('keydown', onEsc);
+  };
+  const onOverlayClick = (e) => { if (e.target === popup) closePopup(); };
+  const onEsc = (e) => { if (e.key === 'Escape') closePopup(); };
+  closeBtn.addEventListener('click', closePopup);
+  popup.addEventListener('click', onOverlayClick);
+  document.addEventListener('keydown', onEsc);
+
+  if (uid) {
+    try {
+      const snap = await getDoc(doc(db, 'users', uid, 'profile'));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.bio) bioEl.textContent = data.bio;
+        if (data.photoURL) {
+          imgEl.src = data.photoURL;
+          imgEl.onerror = () => { imgEl.src = generateCollabAvatar(displayName); imgEl.onerror = null; };
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load collaborator profile', err);
+    }
+  }
+}
+
+function generateCollabAvatar(name) {
+  const parts = (name || 'U').trim().split(/\s+/);
+  const initials = (parts.length >= 2
+    ? parts[0][0] + parts[parts.length - 1][0]
+    : (parts[0] || 'U').slice(0, 2)
+  ).toUpperCase();
+  const palette = ['#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f59e0b', '#3b82f6'];
+  const color = palette[(name || '').charCodeAt(0) % palette.length];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><circle cx="48" cy="48" r="48" fill="${color}"/><text x="48" y="56" text-anchor="middle" font-family="system-ui,sans-serif" font-size="32" font-weight="600" fill="white">${initials}</text></svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
 function renderSentInvites(invitations) {

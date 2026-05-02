@@ -46,6 +46,7 @@ export const Auth = (() => {
   let pendingImageBase64 = null;
   let isEditMode = false;
   let isModified = false;
+  let isSavingProfile = false;
 
   let generatedOTP = '';
   let pendingSignup = null;
@@ -513,6 +514,7 @@ export const Auth = (() => {
 
     profileBio.contentEditable = 'false';
     profileEditBtn.disabled = true;
+    isSavingProfile = true;
     const btnSpan = profileEditBtn.querySelector('span');
     const originalBtnText = btnSpan ? btnSpan.textContent : 'Save';
     if (btnSpan) btnSpan.textContent = 'Saving…';
@@ -531,15 +533,19 @@ export const Auth = (() => {
       } else {
         if (pendingImageBase64) {
           data.photoURL = pendingImageBase64;
+        }
+        // Save bio first so onAuthStateChanged re-load picks up the new value
+        await setDoc(doc(db, 'users', user.uid, 'profile'), data, { merge: true });
+        if (pendingImageBase64) {
           await updateProfile(user, { photoURL: pendingImageBase64 });
         }
-        await setDoc(doc(db, 'users', user.uid, 'profile'), data, { merge: true });
       }
 
       pendingImageBase64 = null;
       originalBio = bio;
       isEditMode = false;
       isModified = false;
+      isSavingProfile = false;
       profileEditBtn.disabled = false;
       setEditBtnMode('edit');
       profileBio.textContent = bio || 'Tell us about yourself...';
@@ -552,6 +558,7 @@ export const Auth = (() => {
 
     } catch (err) {
       console.error('Bio save failed', err);
+      isSavingProfile = false;
       profileEditBtn.disabled = false;
       if (btnSpan) btnSpan.textContent = originalBtnText;
       setEditBtnMode('save');
@@ -572,6 +579,7 @@ export const Auth = (() => {
   }
 
   async function loadUserProfile(firebaseUser) {
+    if (isSavingProfile) return;
     const session = getCachedSession();
     const isDemo = session?.isDemoSession;
     const user = auth.currentUser || firebaseUser;
