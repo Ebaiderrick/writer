@@ -1044,7 +1044,7 @@ export async function showEditStoryElementModal(element = null) {
         : 'themes';
 
   const container = document.createElement("div");
-  container.className = "field-grid";
+  container.className = "field-grid story-memory-form";
   container.innerHTML = `
     <label class="field field-wide">
       <span>Type</span>
@@ -1059,7 +1059,6 @@ export async function showEditStoryElementModal(element = null) {
       <span>Name</span>
       <input id="memoryName" type="text" list="memoryNameSuggestions" value="${escapeHtml(element?.name || '')}">
       <datalist id="memoryNameSuggestions"></datalist>
-      <div class="story-memory-suggestion-row" id="memorySuggestionRow"></div>
     </label>
     <label class="field field-wide">
       <span>Description / Traits</span>
@@ -1071,15 +1070,11 @@ export async function showEditStoryElementModal(element = null) {
   const nameInput = container.querySelector("#memoryName");
   const descInput = container.querySelector("#memoryDesc");
   const nameSuggestions = container.querySelector("#memoryNameSuggestions");
-  const suggestionRow = container.querySelector("#memorySuggestionRow");
 
   const renderSuggestionUI = () => {
     const bucket = typeSelect.value;
     const suggestions = editorSuggestions[bucket] || [];
     nameSuggestions.innerHTML = suggestions.map((item) => `<option value="${escapeHtml(item.name)}"></option>`).join("");
-    suggestionRow.innerHTML = suggestions.slice(0, 6).map((item) => `
-      <button class="ghost-button btn-sm" type="button" data-memory-suggestion="${escapeHtml(item.name)}">${escapeHtml(item.name)}</button>
-    `).join("");
   };
 
   const maybePrefillDescription = () => {
@@ -1098,12 +1093,6 @@ export async function showEditStoryElementModal(element = null) {
     maybePrefillDescription();
   });
   nameInput.addEventListener("change", maybePrefillDescription);
-  suggestionRow.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-memory-suggestion]");
-    if (!button) return;
-    nameInput.value = button.dataset.memorySuggestion;
-    maybePrefillDescription();
-  });
 
   const result = await showModal({
     title,
@@ -1330,16 +1319,22 @@ export async function showProofreadReport() {
   container.className = "proofread-report";
   container.innerHTML = `
     ${buildProofreadSection("Scene Heading Issues", weakSceneLines, ({ line }) => ({
-      title: normalizeLineText(line.text, "scene"),
-      note: "Scene heading should start with INT., EXT., INT./EXT., or EST."
+      title: normalizeLineText(line.text, "scene") || "Scene heading needs attention",
+      note: "Scene heading should start with INT., EXT., INT./EXT., or EST.",
+      ref: buildProofreadReference(project, line.id),
+      tags: ["Scene heading", "Format"]
     }))}
     ${buildProofreadSection("Empty Scene Headings", emptyScenes, ({ index }) => ({
       title: `Scene heading at line ${index + 1}`,
-      note: "This scene heading is empty."
+      note: "This scene heading is empty.",
+      ref: buildProofreadReference(project, project.lines[index].id),
+      tags: ["Scene heading", "Empty"]
     }))}
     ${buildProofreadSection("Character Cue Issues", loneCharacters, ({ line, index }) => ({
       title: normalizeLineText(line.text, "character") || `Character cue ${index + 1}`,
-      note: "This character cue is not followed by dialogue or an action beat."
+      note: "This character cue is not followed by dialogue or an action beat.",
+      ref: buildProofreadReference(project, line.id),
+      tags: ["Character cue", "Dialogue"]
     }))}
   `;
 
@@ -1369,6 +1364,7 @@ export async function showWorkTracking() {
   const pages = Math.max(1, Math.round((words / 180) * 10) / 10);
   const targets = project.workspace?.targets || { scenes: 0, pages: 0, lines: 0 };
   const completion = buildCompletionMetrics({ scenes, pages, lines }, targets);
+  const contributions = buildCollaboratorContributionSummary(project);
 
   const container = document.createElement("div");
   container.className = "work-tracking-report";
@@ -1387,6 +1383,17 @@ export async function showWorkTracking() {
       <span class="nav-menu-label">Word Count vs Time</span>
       <div class="work-tracking-graph-wrap">
         ${buildCollaboratorProgressGraph(project, 640, 220, true)}
+      </div>
+      <div class="work-contribution-list">
+        ${contributions.length ? contributions.map((item) => `
+          <div class="work-contribution-row">
+            <span class="work-contribution-user">
+              <span class="collab-progress-key-swatch" style="background:${item.color};"></span>
+              <span>${escapeHtml(item.label)}</span>
+            </span>
+            <strong>${item.words.toLocaleString()} words • ${item.share}%</strong>
+          </div>
+        `).join("") : '<div class="analytics-word-row"><span>Aggregate contribution</span><strong>Waiting for more data</strong></div>'}
       </div>
     </section>
     <section class="analytics-section">
@@ -1467,9 +1474,10 @@ function buildCollaboratorProgressGraph(project, width, height, showLegend) {
     const color = palette[index % palette.length];
     const meta = memberMeta[uid] || { label: entryUserLabel(entries[0]), color };
     legend.push({ label: meta.label, color });
-    const pathData = entries
-      .map((entry, pointIndex) => `${pointIndex === 0 ? "M" : "L"} ${getX(entry.timestamp)} ${getY(Number(entry.count || 0))}`)
-      .join(" ");
+    const pathData = buildSmoothGraphPath(entries.map((entry) => ({
+      x: getX(entry.timestamp),
+      y: getY(Number(entry.count || 0))
+    })));
 
     const pointsMarkup = entries.map((entry) => `
       <circle cx="${getX(entry.timestamp)}" cy="${getY(Number(entry.count || 0))}" r="3.5" fill="${color}">
@@ -1523,6 +1531,34 @@ function entryUserLabel(entry) {
   return entry?.userName || "Collaborator";
 }
 
+function buildCollaboratorContributionSummary(project) {
+  const palette = ["#e11d48", "#0ea5e9", "#16a34a", "#f59e0b", "#7c3aed", "#f97316"];
+  const history = Array.isArray(project.wordCountHistory) ? [...project.wordCountHistory] : [];
+  const memberMeta = getCollaboratorGraphMeta(project);
+  const totals = new Map();
+  const orderedUids = [...new Set(history.map((entry) => entry.uid || "owner"))];
+
+  for (let index = 1; index < history.length; index += 1) {
+    const current = history[index];
+    const previous = history[index - 1];
+    const delta = Math.max(0, Number(current.count || 0) - Number(previous.count || 0));
+    const uid = current.uid || "owner";
+    totals.set(uid, (totals.get(uid) || 0) + delta);
+  }
+
+  const overall = [...totals.values()].reduce((sum, value) => sum + value, 0) || 0;
+
+  return [...totals.entries()]
+    .map(([uid, words]) => ({
+      uid,
+      words,
+      color: palette[Math.max(0, orderedUids.indexOf(uid)) % palette.length],
+      label: memberMeta[uid]?.label || "Collaborator",
+      share: overall ? Math.round((words / overall) * 100) : 0
+    }))
+    .sort((a, b) => b.words - a.words);
+}
+
 function buildCompletionMetrics(current, targets) {
   const items = [
     { key: "scenes", label: "Scenes", current: current.scenes, target: Number(targets.scenes || 0) },
@@ -1560,7 +1596,15 @@ function buildProofreadSection(title, items, formatter) {
           const formatted = formatter(item);
           return `
             <button class="list-item proofread-report-item" type="button" data-proofread-line-id="${escapeHtml(item.line.id)}">
-              <span class="list-item-title">${escapeHtml(formatted.title)}</span>
+              <span class="proofread-report-head">
+                <span class="list-item-title">${escapeHtml(formatted.title)}</span>
+                <span class="proofread-report-ref">${escapeHtml(formatted.ref || "")}</span>
+              </span>
+              ${formatted.tags?.length ? `
+                <span class="proofread-report-tags">
+                  ${formatted.tags.map((tag) => `<span class="proofread-report-tag">${escapeHtml(tag)}</span>`).join("")}
+                </span>
+              ` : ""}
               <span class="list-item-meta">${escapeHtml(formatted.note)}</span>
             </button>
           `;
@@ -1568,6 +1612,58 @@ function buildProofreadSection(title, items, formatter) {
       </div>
     </section>
   `;
+}
+
+function buildProofreadReference(project, lineId) {
+  const lineIndex = project.lines.findIndex((line) => line.id === lineId);
+  if (lineIndex === -1) {
+    return "Script reference";
+  }
+
+  const sceneIndex = findSceneIndexForLine(project, lineIndex);
+  const sceneNumber = sceneIndex >= 0 ? countScenesThroughIndex(project, sceneIndex) : 1;
+  const sceneHeading = sceneIndex >= 0
+    ? normalizeLineText(project.lines[sceneIndex].text, "scene") || `Scene ${sceneNumber}`
+    : "No scene heading";
+
+  return `Scene ${sceneNumber} • Line ${lineIndex + 1} • ${sceneHeading}`;
+}
+
+function findSceneIndexForLine(project, lineIndex) {
+  for (let index = lineIndex; index >= 0; index -= 1) {
+    if (project.lines[index]?.type === "scene") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function countScenesThroughIndex(project, lineIndex) {
+  let count = 0;
+  for (let index = 0; index <= lineIndex; index += 1) {
+    if (project.lines[index]?.type === "scene") {
+      count += 1;
+    }
+  }
+  return count || 1;
+}
+
+function buildSmoothGraphPath(points) {
+  if (!points.length) {
+    return "";
+  }
+  if (points.length === 1) {
+    return `M ${points[0].x} ${points[0].y}`;
+  }
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const controlX = (current.x + next.x) / 2;
+    path += ` C ${controlX} ${current.y}, ${controlX} ${next.y}, ${next.x} ${next.y}`;
+  }
+  return path;
 }
 
 function getEditorStoryElementSuggestions(project) {

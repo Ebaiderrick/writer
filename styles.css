@@ -3138,9 +3138,9 @@ kbd {
 }
 
 .smart-proofread-range-grid .field {
-  padding: var(--space-2) var(--space-3);
+  padding: 10px 14px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 20px;
   background: color-mix(in srgb, var(--panel) 94%, var(--control-bg));
 }
 
@@ -3245,18 +3245,21 @@ kbd {
 .proofread-report-item {
   width: 100%;
   text-align: left;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
 }
 
 .work-tracking-graph-wrap {
-  padding: var(--space-3);
+  padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 22px;
   background: color-mix(in srgb, var(--panel) 94%, var(--control-bg));
 }
 
 .collab-progress-graph {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .collab-progress-graph svg {
@@ -3288,6 +3291,7 @@ kbd {
   width: 12px;
   height: 12px;
   border-radius: 999px;
+  flex: 0 0 auto;
 }
 
 .work-target-grid {
@@ -3296,11 +3300,83 @@ kbd {
   gap: var(--space-3);
 }
 
-.story-memory-suggestion-row {
+.work-target-grid .field {
+  padding: 8px 12px;
+  border-radius: 18px;
+}
+
+.work-target-grid .field input {
+  min-height: 38px;
+  font-size: 0.9rem;
+}
+
+.work-contribution-list {
+  display: grid;
+  gap: 8px;
+}
+
+.work-contribution-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--soft) 72%, var(--panel));
+  font-size: 0.82rem;
+}
+
+.work-contribution-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.story-memory-form .field {
+  padding: 10px 12px;
+  border-radius: 18px;
+}
+
+.story-memory-form .field span {
+  font-size: 0.78rem;
+}
+
+.story-memory-form input,
+.story-memory-form select,
+.story-memory-form textarea {
+  border-radius: 14px;
+  font-size: 0.88rem;
+}
+
+.proofread-report-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.proofread-report-ref {
+  font-size: 0.74rem;
+  color: var(--muted);
+  text-align: right;
+}
+
+.proofread-report-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
+  gap: 6px;
+}
+
+.proofread-report-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 78%, var(--panel));
+  color: var(--accent-strong);
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
 .is-hidden {
