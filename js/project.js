@@ -1,4 +1,4 @@
-import { STORAGE_KEY, state, TYPE_LABELS, DEFAULT_VIEW_OPTIONS, DEFAULT_LEFT_PANE_BLOCKS } from './config.js';
+import { STORAGE_KEY, state, TYPE_LABELS, DEFAULT_VIEW_OPTIONS, DEFAULT_LEFT_PANE_BLOCKS, DEFAULT_STORY_MEMORY } from './config.js';
 import { uid, normalizeLineText, stripWrapperChars, clamp } from './utils.js';
 import { refs } from './dom.js';
 import { t } from './i18n.js';
@@ -60,14 +60,15 @@ async function syncCurrentProjectToFirestore() {
     if (project.isShared) {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
-      'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory'];
+      'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory', 'activityLog', 'lastEditorName'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
       );
       await setDoc(doc(db, 'sharedProjects', project.id), {
         ...contentPayload,
         syncedAt: new Date().toISOString(),
-        updatedBy: userId
+        updatedBy: userId,
+        lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown'
       }, { merge: true });
     }
 
@@ -198,8 +199,11 @@ export function sanitizeProject(project) {
     updatedAt: project.updatedAt || new Date().toISOString(),
     isShared: Boolean(project.isShared),
     ownerId: project.ownerId || null,
+    storyMemory: project.storyMemory || { ...DEFAULT_STORY_MEMORY },
+    activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
     ownerName: project.ownerName || "",
     ownerEmail: project.ownerEmail || "",
+    lastEditorName: project.lastEditorName || "",
     collaborators: (project.collaborators && typeof project.collaborators === 'object') ? project.collaborators : {},
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     wordCountHistory: Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [],

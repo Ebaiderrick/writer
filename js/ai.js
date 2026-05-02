@@ -2,6 +2,7 @@ import { state } from "./config.js";
 import { refs } from "./dom.js";
 import { getCurrentProject, getLine, getLineIndex, queueSave } from "./project.js";
 import { renderStudio, addBlock } from "./events.js";
+import { escapeHtml } from "./utils.js";
 
 export const AI = (() => {
   let activeBlock = null;
@@ -238,15 +239,32 @@ export const AI = (() => {
       return;
     }
 
+    const project = getCurrentProject();
     const current = activeBlock.innerText.trim();
     const activeLineId = activeBlock.dataset.id;
     const scenes = getLastScenes(activeLineId);
+
+    // Build Story Memory context
+    let memoryContext = "";
+    if (project?.storyMemory) {
+      const mem = project.storyMemory;
+      const elements = [
+        ...mem.characters.map(e => `Character: ${e.name} (${e.description})`),
+        ...mem.locations.map(e => `Location: ${e.name} (${e.description})`),
+        ...mem.themes.map(e => `Theme: ${e.name} (${e.description})`),
+        ...mem.plotPoints.map(e => `Plot Point: ${e.name} (${e.description})`)
+      ];
+      if (elements.length > 0) {
+        memoryContext = "STORY CONTEXT:\n" + elements.join("\n") + "\n\n";
+      }
+    }
+
     const request = {
       type: activeBlock.dataset.type,
       action,
       current: current || "",
       instruction,
-      context: formatScenesForAI(scenes)
+      context: memoryContext + formatScenesForAI(scenes)
     };
 
     lastRequest = request;
@@ -302,11 +320,28 @@ export const AI = (() => {
     styleResultBox(box, "success");
 
     const content = document.createElement("div");
-    content.innerText = text;
     content.style.fontSize = "0.9rem";
     content.style.lineHeight = "1.4";
     content.style.marginBottom = "8px";
     content.style.whiteSpace = "pre-wrap";
+
+    if (request.action === "Improve" || request.action === "Refine") {
+      const diffContainer = document.createElement("div");
+      diffContainer.style.display = "flex";
+      diffContainer.style.flexDirection = "column";
+      diffContainer.style.gap = "8px";
+
+      const originalBox = document.createElement("div");
+      originalBox.innerHTML = `<span style="font-size:0.7rem; color:var(--muted); text-transform:uppercase;">Original</span><div style="opacity:0.6; text-decoration:line-through;">${escapeHtml(request.current)}</div>`;
+
+      const improvedBox = document.createElement("div");
+      improvedBox.innerHTML = `<span style="font-size:0.7rem; color:var(--accent-strong); text-transform:uppercase;">Improved</span><div>${escapeHtml(text)}</div>`;
+
+      diffContainer.append(originalBox, improvedBox);
+      content.appendChild(diffContainer);
+    } else {
+      content.innerText = text;
+    }
 
     const actions = document.createElement("div");
     actions.style.display = "flex";
@@ -542,5 +577,21 @@ export const AI = (() => {
     }
   }
 
-  return { init, triggerAction };
+  function triggerSmartProofread() {
+    const activeEl = document.querySelector(".script-block.is-active") || document.querySelector(".script-block:focus");
+    if (!activeEl) {
+      alert("Please click or focus on a script line first.");
+      return;
+    }
+    const row = activeEl.closest(".script-block-row");
+    if (row) {
+      activeBlock = activeEl;
+      openMenu(row);
+      showInput("Improve");
+      const input = menuEl.querySelector(".ai-input");
+      if (input) input.value = "Correct grammar, enhance clarity, and reduce redundancy.";
+    }
+  }
+
+  return { init, triggerAction, triggerSmartProofread };
 })();

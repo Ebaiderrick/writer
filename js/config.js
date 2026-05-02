@@ -36,6 +36,8 @@ export const LEFT_PANE_BLOCK_DEFS = [
   { key: "scenes", label: "Scenes" },
   { key: "comments", label: "Comments" },
   { key: "metrics", label: "Metrics" },
+  { key: "analytics", label: "Writing Analytics" },
+  { key: "story-memory", label: "Story Memory" },
   { key: "tools", label: "Project Tools" }
 ];
 export const DEFAULT_LEFT_PANE_BLOCKS = LEFT_PANE_BLOCK_DEFS.map(({ key }) => ({
@@ -44,6 +46,13 @@ export const DEFAULT_LEFT_PANE_BLOCKS = LEFT_PANE_BLOCK_DEFS.map(({ key }) => ({
   collapsed: false
 }));
 export const PAGE_UNIT_CAPACITY = 54;
+
+export const DEFAULT_STORY_MEMORY = {
+  characters: [],
+  locations: [],
+  themes: [],
+  plotPoints: []
+};
 
 export const state = {
   projects: [],

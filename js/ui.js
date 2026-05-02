@@ -5,6 +5,7 @@ import { getCurrentProject, persistProjects, serializeScript } from './project.j
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
+import { calculateAnalytics } from './analytics.js';
 
 const MENU_GLYPHS = {
   left: "&#9664;",
@@ -471,6 +472,74 @@ export function applyToolbarState() {
   updateMenuStateButtons();
 }
 
+export function renderAnalytics(filter = 'all') {
+  const project = getCurrentProject();
+  const container = document.getElementById("analyticsDashboardContent");
+  if (!project || !container) return;
+
+  const data = calculateAnalytics(project, filter);
+
+  container.innerHTML = `
+    <div style="margin-bottom: 10px;">
+       <select id="analyticsFilter" class="comment-filter-select">
+         <option value="all" ${filter === 'all' ? 'selected' : ''}>All Lines</option>
+         <option value="dialogue" ${filter === 'dialogue' ? 'selected' : ''}>Dialogue Only</option>
+         <option value="action" ${filter === 'action' ? 'selected' : ''}>Action Only</option>
+       </select>
+    </div>
+    <div class="metric-grid">
+      <div><span>Avg Sentence</span><strong>${data.avgSentenceLength}</strong></div>
+      <div><span>Readability</span><strong>${data.readability}</strong></div>
+    </div>
+    <div style="margin-top: 12px;">
+      <span class="nav-menu-label">Style Breakdown</span>
+      <div style="display:flex; height:8px; border-radius:4px; overflow:hidden; background:var(--soft);">
+        <div style="width:${data.dialoguePercent}%; background:var(--accent);" title="Dialogue: ${data.dialoguePercent}%"></div>
+        <div style="width:${data.narrationPercent}%; background:var(--muted);" title="Narration: ${data.narrationPercent}%"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:0.7rem; margin-top:4px; color:var(--muted);">
+        <span>Dialogue: ${data.dialoguePercent}%</span>
+        <span>Narration: ${data.narrationPercent}%</span>
+      </div>
+    </div>
+    <div style="margin-top: 12px;">
+      <span class="nav-menu-label">Overused Words (>3 chars)</span>
+      <div class="list-stack">
+        ${data.topWords.map(([word, count]) => `
+          <div style="display:flex; justify-content:space-between; font-size:0.8rem; padding: 2px 0;">
+            <span>${escapeHtml(word)}</span>
+            <span style="color:var(--muted);">${count}x</span>
+          </div>
+        `).join('')}
+        ${data.topWords.length === 0 ? '<p class="collab-empty">Not enough words yet.</p>' : ''}
+      </div>
+    </div>
+  `;
+
+  container.querySelector("#analyticsFilter")?.addEventListener("change", (e) => {
+    renderAnalytics(e.target.value);
+  });
+}
+
+export function openAnalytics() {
+  const block = getLeftPaneBlockState("analytics");
+  if (block) {
+    block.visible = true;
+    block.collapsed = false;
+    renderLeftPaneLayout();
+    renderAnalytics();
+    persistProjects(false);
+  }
+
+  if (refs.leftPane.classList.contains("is-hidden")) {
+    refs.leftPane.classList.remove("is-hidden");
+    refs.studioLayout.classList.remove("left-pane-hidden");
+    if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
+  }
+
+  document.querySelector('[data-left-pane-block="analytics"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
 export function renderMetrics() {
   const project = getCurrentProject();
   if (!project) return;
@@ -532,11 +601,183 @@ function renderProgressGraph(project) {
 }
 
 export function renderCurrentScriptId() {
-  const flag = document.getElementById("currentScriptIdFlag");
-  if (!flag) return;
+  const stack = document.querySelector(".save-status-stack");
+  if (!stack) return;
+
   const project = getCurrentProject();
-  flag.textContent = project?.scriptId || "";
-  flag.hidden = !project?.scriptId;
+
+  let flag = document.getElementById("currentScriptIdFlag");
+  if (flag) {
+    flag.textContent = project?.scriptId || "";
+    flag.hidden = !project?.scriptId;
+  }
+
+  let editorFlag = document.getElementById("lastEditorFlag");
+  if (!editorFlag) {
+    editorFlag = document.createElement("span");
+    editorFlag.id = "lastEditorFlag";
+    editorFlag.className = "script-id-flag";
+    editorFlag.style.marginTop = "2px";
+    stack.appendChild(editorFlag);
+  }
+
+  if (project?.lastEditorName) {
+    editorFlag.textContent = `Edited by ${project.lastEditorName}`;
+    editorFlag.hidden = false;
+  } else {
+    editorFlag.hidden = true;
+  }
+}
+
+export function renderStoryMemory() {
+  const project = getCurrentProject();
+  const list = document.getElementById("storyMemoryList");
+  if (!project || !list) return;
+
+  const memory = project.storyMemory || { characters: [], locations: [], themes: [], plotPoints: [] };
+  const allElements = [
+    ...memory.characters.map(e => ({ ...e, type: 'Character' })),
+    ...memory.locations.map(e => ({ ...e, type: 'Location' })),
+    ...memory.themes.map(e => ({ ...e, type: 'Theme' })),
+    ...memory.plotPoints.map(e => ({ ...e, type: 'Plot Point' }))
+  ];
+
+  if (!allElements.length) {
+    list.innerHTML = '<p class="collab-empty">No story elements defined yet.</p>';
+    return;
+  }
+
+  list.innerHTML = allElements.map(e => `
+    <div class="list-item story-memory-item" data-id="${e.id}" data-type="${e.type}">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <span class="list-item-title">${escapeHtml(e.name)}</span>
+          <span class="list-item-meta">${escapeHtml(e.type)}: ${escapeHtml(e.description || 'No description')}</span>
+        </div>
+        <div class="story-memory-actions">
+           <button class="ghost-button btn-sm edit-memory-btn" data-id="${e.id}">Edit</button>
+           <button class="ghost-button btn-sm delete-memory-btn" data-id="${e.id}">×</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.edit-memory-btn').forEach(btn => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.id;
+      const element = allElements.find(el => el.id === id);
+      if (element) showEditStoryElementModal(element);
+    };
+  });
+
+  list.querySelectorAll('.delete-memory-btn').forEach(btn => {
+    btn.onclick = async (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.id;
+      const confirmed = await customConfirm("Delete this story element?");
+      if (confirmed) {
+        deleteStoryElement(id);
+      }
+    };
+  });
+}
+
+export async function showEditStoryElementModal(element = null) {
+  const isNew = !element;
+  const title = isNew ? "Add Story Element" : "Edit Story Element";
+
+  const container = document.createElement("div");
+  container.className = "field-grid";
+  container.innerHTML = `
+    <label class="field field-wide">
+      <span>Type</span>
+      <select id="memoryType">
+        <option value="characters" ${element?.type === 'Character' ? 'selected' : ''}>Character</option>
+        <option value="locations" ${element?.type === 'Location' ? 'selected' : ''}>Location</option>
+        <option value="themes" ${element?.type === 'Theme' ? 'selected' : ''}>Theme</option>
+        <option value="plotPoints" ${element?.type === 'Plot Point' ? 'selected' : ''}>Plot Point</option>
+      </select>
+    </label>
+    <label class="field field-wide">
+      <span>Name</span>
+      <input id="memoryName" type="text" value="${escapeHtml(element?.name || '')}">
+    </label>
+    <label class="field field-wide">
+      <span>Description / Traits</span>
+      <textarea id="memoryDesc">${escapeHtml(element?.description || '')}</textarea>
+    </label>
+  `;
+
+  const result = await showModal({
+    title,
+    message: container,
+    confirmLabel: isNew ? "Add" : "Save"
+  });
+
+  if (result) {
+    const name = container.querySelector("#memoryName").value.trim();
+    const type = container.querySelector("#memoryType").value;
+    const description = container.querySelector("#memoryDesc").value.trim();
+
+    if (!name) return;
+
+    const project = getCurrentProject();
+    if (!project) return;
+
+    if (isNew) {
+      project.storyMemory[type].push({ id: 'mem-' + Date.now(), name, description });
+    } else {
+      // Find and update, possibly moving type
+      let found = false;
+      ['characters', 'locations', 'themes', 'plotPoints'].forEach(t => {
+        const idx = project.storyMemory[t].findIndex(el => el.id === element.id);
+        if (idx !== -1) {
+          if (t === type) {
+            project.storyMemory[t][idx] = { ...project.storyMemory[t][idx], name, description };
+          } else {
+            project.storyMemory[t].splice(idx, 1);
+            project.storyMemory[type].push({ id: element.id, name, description });
+          }
+          found = true;
+        }
+      });
+    }
+
+    renderStoryMemory();
+    persistProjects(false);
+  }
+}
+
+function deleteStoryElement(id) {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  ['characters', 'locations', 'themes', 'plotPoints'].forEach(t => {
+    project.storyMemory[t] = project.storyMemory[t].filter(el => el.id !== id);
+  });
+
+  renderStoryMemory();
+  persistProjects(false);
+}
+
+export function openStoryMemory() {
+  const block = getLeftPaneBlockState("story-memory");
+  if (block) {
+    block.visible = true;
+    block.collapsed = false;
+    renderLeftPaneLayout();
+    renderStoryMemory();
+    persistProjects(false);
+  }
+
+  if (refs.leftPane.classList.contains("is-hidden")) {
+    refs.leftPane.classList.remove("is-hidden");
+    refs.studioLayout.classList.remove("left-pane-hidden");
+    if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
+  }
+
+  document.querySelector('[data-left-pane-block="story-memory"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 export function closeMenus() {

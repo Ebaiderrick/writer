@@ -4,6 +4,7 @@ import {
   collection, query, where, onSnapshot, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { state } from './config.js';
+import { logActivity } from './activity.js';
 import { getCurrentProject, sanitizeProject, upsertProject, persistProjects, deleteProjectFromCloud } from './project.js';
 import { uid as makeId } from './utils.js';
 import { customAlert, customConfirm, showHome, renderHome } from './ui.js';
@@ -246,6 +247,8 @@ export async function acceptInvitation(inviteId) {
   // Step 2: Mark invitation accepted (recipient can always update their own invite).
   await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
 
+  await logActivity(inv.projectId, `Joined project as Editor.`);
+
   // Step 3: Now read the shared project — user is a collaborator so read is allowed.
   const projSnap = await getDoc(sharedRef);
   if (!projSnap.exists()) return;
@@ -289,7 +292,8 @@ export async function kickCollaborator(projectId, collaboratorUid) {
   // updatedBy set to owner so the kicked user's listener fires and shows the change.
   await updateDoc(doc(db, 'sharedProjects', projectId), {
     collaborators: newCollaborators,
-    updatedBy: user.uid
+    updatedBy: user.uid,
+    lastEditorName: user.displayName || user.email
   });
 
   project.collaborators = newCollaborators;
@@ -469,6 +473,8 @@ export function renderCollaboratorList() {
   const project = getCurrentProject();
   const list = document.getElementById('studioCollaboratorList');
   if (!list || !project) return;
+
+  renderActivityLog(project);
 
   const user = auth.currentUser;
   const isOwner = !project.ownerId || project.ownerId === user?.uid;
@@ -957,6 +963,25 @@ function fmtTime(iso) {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
   } catch { return ''; }
+}
+
+function renderActivityLog(project) {
+  const container = document.getElementById('studioActivityLog');
+  if (!container) return;
+  const log = project.activityLog || [];
+  if (!log.length) {
+    container.innerHTML = '<p class="collab-empty">No activity recorded yet.</p>';
+    return;
+  }
+  container.innerHTML = [...log].reverse().map(e => `
+    <div style="font-size: 0.75rem; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--line);">
+      <div style="display:flex; justify-content:space-between; color:var(--muted); font-weight:600;">
+        <span>${esc(e.user)}</span>
+        <span>${fmtTime(e.timestamp)}</span>
+      </div>
+      <div style="margin-top:2px; color:var(--ink);">${esc(e.message)}</div>
+    </div>
+  `).join('');
 }
 
 function esc(str) {

@@ -22,7 +22,8 @@ import {
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
-  renderCurrentScriptId
+  renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
+  renderAnalytics, openAnalytics
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -54,6 +55,10 @@ export function bindEvents() {
 
   refs.goHomeBtn.addEventListener("click", () => {
     saveAndGoHome();
+  });
+
+  document.getElementById("addStoryElementBtn")?.addEventListener("click", () => {
+    showEditStoryElementModal();
   });
 
   // Meta Inputs
@@ -596,6 +601,8 @@ export function renderStudio() {
   renderPreview();
   renderSceneList();
   renderCharacterList();
+  renderStoryMemory();
+  renderAnalytics();
   renderMetrics();
   renderCurrentScriptId();
   renderRecentProjectMenus();
@@ -1221,6 +1228,18 @@ function handleMenuAction(action) {
       break;
     case "open-notepad":
       openNotepad();
+      break;
+    case "open-story-memory":
+      openStoryMemory();
+      break;
+    case "open-workspace":
+      toggleMenu("studioCollabMenu", true);
+      break;
+    case "open-analytics":
+      openAnalytics();
+      break;
+    case "smart-proofread":
+      AI.triggerSmartProofread();
       break;
   }
   closeMenus();

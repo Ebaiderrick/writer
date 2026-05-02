@@ -179,6 +179,38 @@
                 </div>
               </div>
             </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Activity Log</summary>
+              <div class="menu-group-body">
+                <div id="studioActivityLog" class="collaborator-list">
+                  <p class="collab-empty">No activity yet.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Activity Log</summary>
+              <div class="menu-group-body">
+                <div id="studioActivityLog" class="collaborator-list">
+                  <p class="collab-empty">No activity yet.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Activity Log</summary>
+              <div class="menu-group-body">
+                <div id="studioActivityLog" class="collaborator-list">
+                  <p class="collab-empty">No activity yet.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Activity Log</summary>
+              <div class="menu-group-body">
+                <div id="studioActivityLog" class="collaborator-list">
+                  <p class="collab-empty">No activity yet.</p>
+                </div>
+              </div>
+            </details>
             <details class="menu-group">
               <summary class="menu-group-summary">Sent Invites</summary>
               <div class="menu-group-body">
@@ -232,8 +264,7 @@
             <button class="nav-link" type="button" data-menu-trigger="studioFormatMenu">Format</button>
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
             <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tools</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tool</button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
 
@@ -399,33 +430,37 @@
 
           <div id="studioToolsMenu" class="nav-menu nav-menu-wide" hidden>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Tools</summary>
+              <summary class="menu-group-summary">Editor</summary>
               <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
-                <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
-                <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Team Workspace</button>
                 <details class="menu-group">
-                  <summary class="menu-group-summary">Tools</summary>
-                  <div class="menu-group-body">
-                    <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
-                  </div>
+                  <summary class="menu-group-summary">Customize Active Blocks</summary>
+                  <div id="leftPaneBlockControls" class="menu-group-body block-customizer-list"></div>
                 </details>
               </div>
             </details>
-            <details class="menu-group">
-              <summary class="menu-group-summary">Revision</summary>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Writing</summary>
               <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
-                <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-story-memory">Story Memory</button>
+                <button class="nav-menu-button" type="button" data-menu-action="smart-proofread">Smart Proofreading</button>
               </div>
             </details>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Customize Active Blocks</summary>
-              <div id="leftPaneBlockControls" class="menu-group-body block-customizer-list"></div>
+              <summary class="menu-group-summary">Analytics</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
+                <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-analytics">Analytics Dashboard</button>
+              </div>
             </details>
           </div>
 
           <div id="studioCollabMenu" class="nav-menu nav-menu-wide" hidden>
+            <div class="nav-menu-label">Workspace</div>
             <details class="menu-group" open>
               <summary class="menu-group-summary">Invite Collaborator</summary>
               <div class="menu-group-body">
@@ -755,6 +790,35 @@
                     </select>
                   </div>
                   <button id="viewCommentsBtn" class="ghost-button comment-view-btn">View Comments</button>
+                </div>
+              </section>
+
+              <section class="panel story-memory-panel section-story-memory" data-left-pane-block="story-memory" data-left-pane-label="Story Memory" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Story Memory</h3>
+                    <p>Key characters, locations, and traits</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="story-memory" aria-label="Collapse Story Memory">▼</button>
+                </div>
+                <div class="panel-section-body">
+                  <div class="story-memory-controls">
+                    <button class="ghost-button btn-sm" id="addStoryElementBtn">+ Add Element</button>
+                  </div>
+                  <div id="storyMemoryList" class="list-stack"></div>
+                </div>
+              </section>
+
+              <section class="panel analytics-panel section-analytics" data-left-pane-block="analytics" data-left-pane-label="Writing Analytics" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Writing Analytics</h3>
+                    <p>Insights into your style</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="analytics" aria-label="Collapse Analytics">▼</button>
+                </div>
+                <div class="panel-section-body">
+                  <div id="analyticsDashboardContent"></div>
                 </div>
               </section>
 
