@@ -491,6 +491,73 @@ export const AI = (() => {
       return data.output_text.trim();
     }
 
+    const openAIText = extractTextFromUnknownShape(data?.response)
+      || extractTextFromUnknownShape(data?.message)
+      || extractTextFromUnknownShape(data?.completion)
+      || extractTextFromUnknownShape(data?.choices)
+      || extractTextFromUnknownShape(data?.content)
+      || extractTextFromUnknownShape(data);
+    if (openAIText) {
+      return openAIText;
+    }
+
+    return "";
+  }
+
+  function extractTextFromUnknownShape(value) {
+    if (!value) {
+      return "";
+    }
+    if (typeof value === "string") {
+      return value.trim();
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => extractTextFromUnknownShape(item)).filter(Boolean).join("\n").trim();
+    }
+    if (typeof value === "object") {
+      const direct = [
+        value.text,
+        value.output_text,
+        value.content,
+        value.result
+      ].find((entry) => typeof entry === "string" && entry.trim());
+      if (direct) {
+        return direct.trim();
+      }
+      if (value.message) {
+        const nestedMessage = extractTextFromUnknownShape(value.message);
+        if (nestedMessage) {
+          return nestedMessage;
+        }
+      }
+      if (value.delta) {
+        const nestedDelta = extractTextFromUnknownShape(value.delta);
+        if (nestedDelta) {
+          return nestedDelta;
+        }
+      }
+      if (Array.isArray(value.content)) {
+        const contentText = value.content
+          .map((part) => {
+            if (typeof part === "string") {
+              return part;
+            }
+            if (typeof part?.text === "string") {
+              return part.text;
+            }
+            if (typeof part?.content === "string") {
+              return part.content;
+            }
+            return "";
+          })
+          .filter(Boolean)
+          .join("\n")
+          .trim();
+        if (contentText) {
+          return contentText;
+        }
+      }
+    }
     return "";
   }
 
@@ -920,47 +987,87 @@ export const AI = (() => {
   }
 
   async function requestAutomaticProofreadBatch(project, targets) {
-    const memoryContext = buildStoryMemoryContext(project);
-    const contextSceneIds = [...new Set(targets.map((target) => target.lineId))];
-    const scenes = contextSceneIds.flatMap((lineId) => getLastScenes(lineId)).slice(-3);
-    const payload = targets.map((target) => {
-      const line = getLine(target.lineId);
-      return {
-        lineId: target.lineId,
-        type: line?.type || target.type,
-        scene: target.sceneLabel,
-        text: line?.text || target.original
-      };
+    const batches = splitAutomaticProofreadTargets(targets);
+    const suggestions = [];
+
+    for (const batch of batches) {
+      const memoryContext = buildStoryMemoryContext(project);
+      const contextSceneIds = [...new Set(batch.map((target) => target.lineId))];
+      const scenes = contextSceneIds.flatMap((lineId) => getLastScenes(lineId)).slice(-3);
+      const payload = batch.map((target) => {
+        const line = getLine(target.lineId);
+        return {
+          lineId: target.lineId,
+          type: line?.type || target.type,
+          scene: target.sceneLabel,
+          text: line?.text || target.original
+        };
+      });
+
+      const output = await requestAiText({
+        type: "script",
+        action: "Improve",
+        current: JSON.stringify(payload),
+        instruction: "You are proofreading screenplay lines in bulk. Return valid JSON as an array. Each item must be {\"lineId\":\"...\",\"improved\":\"...\",\"reason\":\"...\"}. Include every line that needs a correction. Preserve screenplay formatting, character cue capitalization, and scene heading style. If you cannot keep the response perfectly strict, still include the same fields clearly for each fix.",
+        context: `${memoryContext}${formatScenesForAI(scenes)}\n\nLINES TO REVIEW:\n${payload.map((item) => `[${item.lineId}] [${item.type.toUpperCase()}] ${item.text}`).join("\n")}`
+      });
+
+      const parsed = parseAutomaticProofreadPayload(output, payload);
+      if (!parsed.length && output) {
+        console.warn("Automatic proofread batch returned no parseable fixes.", {
+          batchSize: payload.length,
+          preview: String(output).slice(0, 500)
+        });
+      }
+
+      suggestions.push(...parsed.map((item) => {
+        const target = batch.find((entry) => entry.lineId === item.lineId);
+        if (!target) {
+          return null;
+        }
+        const line = getLine(item.lineId);
+        const improved = String(item.improved || "").trim();
+        if (!line || !improved || improved === line.text.trim()) {
+          return null;
+        }
+        return {
+          lineId: item.lineId,
+          type: line.type,
+          original: line.text,
+          improved,
+          sceneLabel: target.sceneLabel,
+          reason: String(item.reason || "").trim()
+        };
+      }).filter(Boolean));
+    }
+
+    return suggestions;
+  }
+
+  function splitAutomaticProofreadTargets(targets) {
+    const batches = [];
+    let current = [];
+    let currentChars = 0;
+    const maxItems = 12;
+    const maxChars = 2600;
+
+    targets.forEach((target) => {
+      const textLength = String(target.original || "").length;
+      const wouldOverflow = current.length >= maxItems || (current.length && currentChars + textLength > maxChars);
+      if (wouldOverflow) {
+        batches.push(current);
+        current = [];
+        currentChars = 0;
+      }
+      current.push(target);
+      currentChars += textLength;
     });
 
-    const output = await requestAiText({
-      type: "script",
-      action: "Improve",
-      current: JSON.stringify(payload),
-      instruction: "You are proofreading screenplay lines in bulk. Return valid JSON as an array. Each item must be {\"lineId\":\"...\",\"improved\":\"...\",\"reason\":\"...\"}. Include every line that needs a correction. Preserve screenplay formatting, character cue capitalization, and scene heading style. If you cannot keep the response perfectly strict, still include the same fields clearly for each fix.",
-      context: `${memoryContext}${formatScenesForAI(scenes)}\n\nLINES TO REVIEW:\n${payload.map((item) => `[${item.lineId}] [${item.type.toUpperCase()}] ${item.text}`).join("\n")}`
-    });
+    if (current.length) {
+      batches.push(current);
+    }
 
-    const parsed = parseAutomaticProofreadPayload(output, payload);
-    return parsed.map((item) => {
-      const target = targets.find((entry) => entry.lineId === item.lineId);
-      if (!target) {
-        return null;
-      }
-      const line = getLine(item.lineId);
-      const improved = String(item.improved || "").trim();
-      if (!line || !improved || improved === line.text.trim()) {
-        return null;
-      }
-      return {
-        lineId: item.lineId,
-        type: line.type,
-        original: line.text,
-        improved,
-        sceneLabel: target.sceneLabel,
-        reason: String(item.reason || "").trim()
-      };
-    }).filter(Boolean);
+    return batches;
   }
 
   function parseAutomaticProofreadPayload(output, payload = []) {
