@@ -158,6 +158,27 @@ export const AI = (() => {
     }
   }
 
+  function buildStoryMemoryContext(project) {
+    if (!project?.storyMemory) {
+      return "";
+    }
+
+    const mem = project.storyMemory;
+    const elements = [
+      ...mem.characters.map((entry) => `Character: ${entry.name} (${entry.description})`),
+      ...mem.locations.map((entry) => `Location: ${entry.name} (${entry.description})`),
+      ...mem.themes.map((entry) => `Theme: ${entry.name} (${entry.description})`)
+    ];
+
+    if (!elements.length) {
+      return "";
+    }
+
+    return "IMPORTANT: THE FOLLOWING STORY ELEMENTS MUST BE RESPECTED FOR CONSISTENCY:\n"
+      + elements.join("\n")
+      + "\n\n";
+  }
+
   function showInput(action) {
     if (!activeBlock || !menuEl) {
       return;
@@ -245,19 +266,7 @@ export const AI = (() => {
     const activeLineId = activeBlock.dataset.id;
     const scenes = getLastScenes(activeLineId);
 
-    // Build Story Memory context
-    let memoryContext = "";
-    if (project?.storyMemory) {
-      const mem = project.storyMemory;
-      const elements = [
-        ...mem.characters.map(e => `Character: ${e.name} (${e.description})`),
-        ...mem.locations.map(e => `Location: ${e.name} (${e.description})`),
-        ...mem.themes.map(e => `Theme: ${e.name} (${e.description})`)
-      ];
-      if (elements.length > 0) {
-        memoryContext = "IMPORTANT: THE FOLLOWING STORY ELEMENTS MUST BE RESPECTED FOR CONSISTENCY:\n" + elements.join("\n") + "\n\n";
-      }
-    }
+    const memoryContext = buildStoryMemoryContext(project);
 
     const request = {
       type: activeBlock.dataset.type,
@@ -585,9 +594,11 @@ export const AI = (() => {
     let activeEl = document.querySelector(".script-block.is-active") || document.querySelector(".script-block:focus");
     if (!activeEl) {
       activeEl = document.querySelector(".script-block");
-      if (activeEl) activeEl.focus();
+      if (activeEl) {
+        activeEl.focus();
+      }
     }
-      // Auto-run immediately — no extra click needed
+
     if (!activeEl) {
       customAlert("Select some text or focus a block first.", "Smart Proofreading");
       return;
@@ -609,18 +620,7 @@ export const AI = (() => {
 
     const project = getCurrentProject();
     const scenes = getLastScenes(lineId);
-    let memoryContext = "";
-    if (project?.storyMemory) {
-      const mem = project.storyMemory;
-      const elements = [
-        ...mem.characters.map(e => `Character: ${e.name} (${e.description})`),
-        ...mem.locations.map(e => `Location: ${e.name} (${e.description})`),
-        ...mem.themes.map(e => `Theme: ${e.name} (${e.description})`)
-      ];
-      if (elements.length > 0) {
-        memoryContext = "IMPORTANT: THE FOLLOWING STORY ELEMENTS MUST BE RESPECTED FOR CONSISTENCY:\n" + elements.join("\n") + "\n\n";
-      }
-    }
+    const memoryContext = buildStoryMemoryContext(project);
 
     requestAiText({
       type: activeEl.dataset.type || line.type,
