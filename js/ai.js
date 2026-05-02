@@ -874,7 +874,7 @@ export const AI = (() => {
       await customAlert("No changes were suggested for the selected scene range.", "Smart Proofreading");
     }
 
-    return suggestions;
+    return dedupeAutomaticProofreadSuggestions(suggestions);
   }
 
   function getAutomaticProofreadTargets(project, { allScenes, startSceneId, endSceneId }) {
@@ -937,11 +937,11 @@ export const AI = (() => {
       type: "script",
       action: "Improve",
       current: JSON.stringify(payload),
-      instruction: "You are proofreading screenplay lines in bulk. Return ONLY valid JSON as an array. Each item must be {\"lineId\":\"...\",\"improved\":\"...\",\"reason\":\"...\"}. Include only lines that truly need changes. Preserve screenplay formatting, character cue capitalization, and scene heading style. Do not wrap the JSON in markdown.",
+      instruction: "You are proofreading screenplay lines in bulk. Return valid JSON as an array. Each item must be {\"lineId\":\"...\",\"improved\":\"...\",\"reason\":\"...\"}. Include every line that needs a correction. Preserve screenplay formatting, character cue capitalization, and scene heading style. If you cannot keep the response perfectly strict, still include the same fields clearly for each fix.",
       context: `${memoryContext}${formatScenesForAI(scenes)}\n\nLINES TO REVIEW:\n${payload.map((item) => `[${item.lineId}] [${item.type.toUpperCase()}] ${item.text}`).join("\n")}`
     });
 
-    const parsed = parseAutomaticProofreadPayload(output);
+    const parsed = parseAutomaticProofreadPayload(output, payload);
     return parsed.map((item) => {
       const target = targets.find((entry) => entry.lineId === item.lineId);
       if (!target) {
@@ -963,7 +963,7 @@ export const AI = (() => {
     }).filter(Boolean);
   }
 
-  function parseAutomaticProofreadPayload(output) {
+  function parseAutomaticProofreadPayload(output, payload = []) {
     const raw = String(output || "").trim();
     if (!raw) {
       return [];
@@ -986,19 +986,72 @@ export const AI = (() => {
       if (Array.isArray(parsed?.suggestions)) {
         return parsed.suggestions;
       }
-      return [];
+      return parseAutomaticProofreadLooseObjects(cleaned, payload);
     } catch {
       const match = cleaned.match(/\[[\s\S]*\]/);
       if (!match) {
-        return [];
+        return parseAutomaticProofreadLooseObjects(cleaned, payload);
       }
       try {
         const parsed = JSON.parse(match[0]);
         return Array.isArray(parsed) ? parsed : [];
       } catch {
-        return [];
+        return parseAutomaticProofreadLooseObjects(cleaned, payload);
       }
     }
+  }
+
+  function parseAutomaticProofreadLooseObjects(raw, payload) {
+    const fixes = [];
+    const chunks = String(raw || "")
+      .split(/\n(?=(?:[-*]\s*)?(?:lineId|Line ID|LINE ID)\s*[:=])/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean);
+
+    chunks.forEach((chunk) => {
+      const lineId = chunk.match(/lineId\s*[:=]\s*["']?([A-Za-z0-9_-]+)["']?/i)?.[1]
+        || chunk.match(/^\[([A-Za-z0-9_-]+)\]/)?.[1];
+      const improved = chunk.match(/improved\s*[:=]\s*([\s\S]*?)(?:\n(?:reason|lineId)\s*[:=]|$)/i)?.[1]?.trim()
+        || chunk.match(/suggested\s*[:=]\s*([\s\S]*?)(?:\n(?:reason|lineId)\s*[:=]|$)/i)?.[1]?.trim();
+      const reason = chunk.match(/reason\s*[:=]\s*([\s\S]*?)$/i)?.[1]?.trim() || "";
+      if (lineId && improved) {
+        fixes.push({
+          lineId,
+          improved: improved.replace(/^["']|["']$/g, "").trim(),
+          reason: reason.replace(/^["']|["']$/g, "").trim()
+        });
+      }
+    });
+
+    if (fixes.length) {
+      return fixes;
+    }
+
+    return parseAutomaticProofreadLineMatches(raw, payload);
+  }
+
+  function parseAutomaticProofreadLineMatches(raw, payload) {
+    return payload.reduce((matches, item) => {
+      const escapedId = item.lineId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const pattern = new RegExp(`\\[${escapedId}\\][^\\n]*\\n([\\s\\S]*?)(?=\\n\\[[A-Za-z0-9_-]+\\]|$)`, "i");
+      const match = raw.match(pattern);
+      if (!match) {
+        return matches;
+      }
+      const improved = match[1]
+        .replace(/^improved\s*[:=]\s*/i, "")
+        .replace(/^suggested\s*[:=]\s*/i, "")
+        .trim();
+      if (!improved) {
+        return matches;
+      }
+      matches.push({
+        lineId: item.lineId,
+        improved,
+        reason: ""
+      });
+      return matches;
+    }, []);
   }
 
   async function buildAutomaticProofreadSuggestionsFallback(targets, onProgress) {
@@ -1043,7 +1096,7 @@ export const AI = (() => {
           <strong>${suggestions.length} suggested ${suggestions.length === 1 ? "edit" : "edits"}</strong>
           <p class="modal-copy">Review each change in a compact list. Accept only what improves the draft.</p>
         </div>
-        <button class="ghost-button btn-sm" type="button" data-proofread-accept-all>Accept All</button>
+        <button class="ghost-button btn-sm" type="button" data-proofread-accept-all="true">Accept All</button>
       </div>
       <div class="smart-proofread-results-list">
         ${suggestions.map((item, index) => `
@@ -1120,6 +1173,18 @@ export const AI = (() => {
       message: container,
       showConfirm: false,
       cancelLabel: "Close"
+    });
+  }
+
+  function dedupeAutomaticProofreadSuggestions(suggestions) {
+    const seen = new Set();
+    return suggestions.filter((item) => {
+      const key = `${item.lineId}:${item.improved}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
     });
   }
 

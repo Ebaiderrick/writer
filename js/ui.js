@@ -262,7 +262,6 @@ function getLeftPaneBlockLabel(key) {
     characters: "pane.characters",
     metrics: "pane.metrics",
     "story-memory": "Story Memory",
-    "insert-story-element": "Insert Story Element",
     analytics: "Writing Analytics",
     notepad: "Notepad",
     "ai-assistant": "AI Assistant",
@@ -280,7 +279,7 @@ function getCustomizerGroupLabel(key) {
   if (["workspace", "comments"].includes(key)) return "Workspace";
   if (["notepad"].includes(key)) return "Tools";
   if (["grammar-check", "scenes", "characters"].includes(key)) return "Writing";
-  if (["ai-assistant", "story-memory", "insert-story-element", "smart-proofread"].includes(key)) return "AI";
+  if (["ai-assistant", "story-memory", "smart-proofread"].includes(key)) return "AI";
   if (["metrics", "work-tracking", "proofread", "analytics"].includes(key)) return "Revision & Insight";
   return "Editor";
 }
@@ -908,6 +907,7 @@ export async function showWorkspacePopup() {
   await showModal({
     title: "Workspace",
     message: container,
+    contentClass: "modal-content-wide modal-content-workspace",
     showConfirm: false,
     cancelLabel: "Close"
   });
@@ -1426,6 +1426,7 @@ export async function showWorkTracking() {
   const saved = await showModal({
     title: t("work.title"),
     message: container,
+    contentClass: "modal-content-wide modal-content-work-tracking",
     confirmLabel: "Save Targets",
     cancelLabel: "Close"
   });
@@ -1753,10 +1754,15 @@ export function showModal({
     confirmLabel = t("modal.ok"),
     cancelLabel = t("modal.cancel"),
     showCancel = true,
-    showConfirm = true
+    showConfirm = true,
+    contentClass = ""
 }) {
     return new Promise((resolve) => {
         modalRefs.title.textContent = title;
+        const content = modalRefs.dialog?.querySelector(".modal-content");
+        if (content) {
+            content.className = ["modal-content", contentClass].filter(Boolean).join(" ");
+        }
         if (message instanceof HTMLElement) {
             modalRefs.message.textContent = "";
             modalRefs.message.appendChild(message);
@@ -1771,6 +1777,9 @@ export function showModal({
         modalRefs.cancelBtn.hidden = !showCancel;
 
         const cleanup = () => {
+            if (content) {
+                content.className = "modal-content";
+            }
             modalRefs.confirmBtn.removeEventListener("click", onConfirm);
             modalRefs.cancelBtn.removeEventListener("click", onCancel);
             modalRefs.dialog.removeEventListener("close", onCancel);

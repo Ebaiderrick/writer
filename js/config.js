@@ -39,7 +39,6 @@ export const LEFT_PANE_BLOCK_DEFS = [
   { key: "metrics", label: "Metrics" },
   { key: "analytics", label: "Writing Analytics" },
   { key: "story-memory", label: "Story Memory" },
-  { key: "insert-story-element", label: "Insert Story Element" },
   { key: "notepad", label: "Notepad" },
   { key: "ai-assistant", label: "AI Assistant" },
   { key: "grammar-check", label: "Grammar Check" },
