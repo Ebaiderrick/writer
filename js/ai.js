@@ -167,6 +167,7 @@ export const AI = (() => {
     const elements = [
       ...mem.characters.map((entry) => `Character: ${entry.name} (${entry.description})`),
       ...mem.locations.map((entry) => `Location: ${entry.name} (${entry.description})`),
+      ...mem.scenes.map((entry) => `Story Scene: ${entry.name} (${entry.description})`),
       ...mem.themes.map((entry) => `Theme: ${entry.name} (${entry.description})`)
     ];
 
@@ -863,30 +864,10 @@ export const AI = (() => {
       throw new Error("There are no proofreadable lines in the selected scene range.");
     }
 
-    const suggestions = [];
-    for (let index = 0; index < targets.length; index += 1) {
-      const target = targets[index];
-      onProgress?.(`Proofreading ${index + 1} of ${targets.length}...`);
-      const line = getLine(target.lineId);
-      if (!line || !isProofreadableLine(line)) {
-        continue;
-      }
-
-      const improved = await requestSmartProofreadSuggestion({
-        line,
-        sourceText: line.text,
-        contextLineId: line.id
-      });
-
-      if (improved !== line.text.trim()) {
-        suggestions.push({
-          lineId: line.id,
-          type: line.type,
-          original: line.text,
-          improved,
-          sceneLabel: target.sceneLabel
-        });
-      }
+    onProgress?.(`Reviewing ${targets.length} lines across the selected scenes...`);
+    let suggestions = await requestAutomaticProofreadBatch(project, targets);
+    if (!suggestions.length) {
+      suggestions = await buildAutomaticProofreadSuggestionsFallback(targets, onProgress);
     }
 
     if (!suggestions.length) {
@@ -903,6 +884,8 @@ export const AI = (() => {
         .filter((line) => isProofreadableLine(line))
         .map((line) => ({
           lineId: line.id,
+          type: line.type,
+          original: line.text,
           sceneLabel: "Entire Script"
         }));
     }
@@ -928,10 +911,123 @@ export const AI = (() => {
       }
       list.push({
         lineId: line.id,
+        type: line.type,
+        original: line.text,
         sceneLabel: currentSceneLabel
       });
       return list;
     }, []);
+  }
+
+  async function requestAutomaticProofreadBatch(project, targets) {
+    const memoryContext = buildStoryMemoryContext(project);
+    const contextSceneIds = [...new Set(targets.map((target) => target.lineId))];
+    const scenes = contextSceneIds.flatMap((lineId) => getLastScenes(lineId)).slice(-3);
+    const payload = targets.map((target) => {
+      const line = getLine(target.lineId);
+      return {
+        lineId: target.lineId,
+        type: line?.type || target.type,
+        scene: target.sceneLabel,
+        text: line?.text || target.original
+      };
+    });
+
+    const output = await requestAiText({
+      type: "script",
+      action: "Improve",
+      current: JSON.stringify(payload),
+      instruction: "You are proofreading screenplay lines in bulk. Return ONLY valid JSON as an array. Each item must be {\"lineId\":\"...\",\"improved\":\"...\",\"reason\":\"...\"}. Include only lines that truly need changes. Preserve screenplay formatting, character cue capitalization, and scene heading style. Do not wrap the JSON in markdown.",
+      context: `${memoryContext}${formatScenesForAI(scenes)}\n\nLINES TO REVIEW:\n${payload.map((item) => `[${item.lineId}] [${item.type.toUpperCase()}] ${item.text}`).join("\n")}`
+    });
+
+    const parsed = parseAutomaticProofreadPayload(output);
+    return parsed.map((item) => {
+      const target = targets.find((entry) => entry.lineId === item.lineId);
+      if (!target) {
+        return null;
+      }
+      const line = getLine(item.lineId);
+      const improved = String(item.improved || "").trim();
+      if (!line || !improved || improved === line.text.trim()) {
+        return null;
+      }
+      return {
+        lineId: item.lineId,
+        type: line.type,
+        original: line.text,
+        improved,
+        sceneLabel: target.sceneLabel,
+        reason: String(item.reason || "").trim()
+      };
+    }).filter(Boolean);
+  }
+
+  function parseAutomaticProofreadPayload(output) {
+    const raw = String(output || "").trim();
+    if (!raw) {
+      return [];
+    }
+
+    const cleaned = raw
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```$/i, "")
+      .trim();
+
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+      if (Array.isArray(parsed?.fixes)) {
+        return parsed.fixes;
+      }
+      if (Array.isArray(parsed?.suggestions)) {
+        return parsed.suggestions;
+      }
+      return [];
+    } catch {
+      const match = cleaned.match(/\[[\s\S]*\]/);
+      if (!match) {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(match[0]);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  async function buildAutomaticProofreadSuggestionsFallback(targets, onProgress) {
+    const suggestions = [];
+    for (let index = 0; index < targets.length; index += 1) {
+      const target = targets[index];
+      onProgress?.(`Proofreading ${index + 1} of ${targets.length}...`);
+      const line = getLine(target.lineId);
+      if (!line || !isProofreadableLine(line)) {
+        continue;
+      }
+
+      const improved = await requestSmartProofreadSuggestion({
+        line,
+        sourceText: line.text,
+        contextLineId: line.id
+      });
+
+      if (improved !== line.text.trim()) {
+        suggestions.push({
+          lineId: line.id,
+          type: line.type,
+          original: line.text,
+          improved,
+          sceneLabel: target.sceneLabel
+        });
+      }
+    }
+    return suggestions;
   }
 
   async function showAutomaticProofreadResults(suggestions) {
@@ -955,6 +1051,7 @@ export const AI = (() => {
             <div class="proofread-suggestion-meta">
               <span class="role-badge">${escapeHtml(item.type.toUpperCase())}</span>
               <span>${escapeHtml(item.sceneLabel)}</span>
+              ${item.reason ? `<span>${escapeHtml(item.reason)}</span>` : ""}
             </div>
             <div class="proofread-suggestion-body">
               <div class="proofread-suggestion-column">

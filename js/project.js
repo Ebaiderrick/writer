@@ -45,12 +45,23 @@ async function syncCurrentProjectToFirestore() {
   try {
   // Record word count progress before sync
   const currentWords = serializeScript(project).match(/\b[\w'-]+\b/g)?.length || 0;
+  const currentScenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+  const currentLines = project.lines.filter((line) => line.text.trim()).length;
+  const currentPages = Math.max(1, Math.round((currentWords / 180) * 10) / 10);
   const history = project.wordCountHistory || [];
   const lastEntry = history[history.length - 1];
   const now = new Date().toISOString();
 
   if (!lastEntry || lastEntry.count !== currentWords) {
-    history.push({ timestamp: now, count: currentWords, uid: userId });
+    history.push({
+      timestamp: now,
+      count: currentWords,
+      uid: userId,
+      userName: auth.currentUser?.displayName || auth.currentUser?.email || "Unknown",
+      scenes: currentScenes,
+      lines: currentLines,
+      pages: currentPages
+    });
     // Keep last 50 entries
     if (history.length > 50) history.shift();
     project.wordCountHistory = history;
@@ -434,6 +445,7 @@ function sanitizeStoryMemory(storyMemory) {
   return {
     characters: Array.isArray(storyMemory?.characters) ? storyMemory.characters : [],
     locations: Array.isArray(storyMemory?.locations) ? storyMemory.locations : [],
+    scenes: Array.isArray(storyMemory?.scenes) ? storyMemory.scenes : [],
     themes: Array.isArray(storyMemory?.themes) ? storyMemory.themes : [],
     plotPoints: Array.isArray(storyMemory?.plotPoints) ? storyMemory.plotPoints : []
   };
@@ -444,7 +456,8 @@ function sanitizeWorkspace(workspace, project) {
     id: workspace?.id || project.id || uid("workspace"),
     name: String(workspace?.name || project.title || "Team Workspace").trim() || "Team Workspace",
     inviteCode: String(workspace?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
-    reminders: sanitizeWorkspaceReminders(workspace?.reminders)
+    reminders: sanitizeWorkspaceReminders(workspace?.reminders),
+    targets: sanitizeWorkspaceTargets(workspace?.targets)
   };
 }
 
@@ -462,6 +475,14 @@ function sanitizeWorkspaceReminders(reminders) {
     updatedAt: reminder?.updatedAt || reminder?.createdAt || new Date().toISOString(),
     createdByName: reminder?.createdByName || ""
   })).filter((reminder) => reminder.text);
+}
+
+function sanitizeWorkspaceTargets(targets) {
+  return {
+    scenes: clamp(Number(targets?.scenes || 0), 0, 9999),
+    pages: clamp(Number(targets?.pages || 0), 0, 9999),
+    lines: clamp(Number(targets?.lines || 0), 0, 99999)
+  };
 }
 
 function sanitizeCollaborators(collaborators) {

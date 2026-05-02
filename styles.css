@@ -3091,7 +3091,7 @@ kbd {
   gap: 4px;
   padding: var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 18px;
   background: color-mix(in srgb, var(--panel) 92%, var(--control-bg));
   color: var(--ink);
   text-align: left;
@@ -3135,6 +3135,13 @@ kbd {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
+}
+
+.smart-proofread-range-grid .field {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 94%, var(--control-bg));
 }
 
 .smart-proofread-check {
@@ -3219,6 +3226,83 @@ kbd {
   gap: var(--space-2);
 }
 
+.proofread-report,
+.work-tracking-report {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.proofread-report-section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.proofread-report-section h4 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.proofread-report-item {
+  width: 100%;
+  text-align: left;
+}
+
+.work-tracking-graph-wrap {
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 94%, var(--control-bg));
+}
+
+.collab-progress-graph {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.collab-progress-graph svg {
+  width: 100%;
+  height: 220px;
+  overflow: visible;
+}
+
+.graph-axis {
+  stroke: color-mix(in srgb, var(--ink) 20%, transparent);
+  stroke-width: 1;
+}
+
+.collab-progress-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.collab-progress-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.collab-progress-key-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.work-target-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.story-memory-suggestion-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
 .is-hidden {
   opacity: 0;
   visibility: hidden;
@@ -3289,7 +3373,11 @@ body.outline-hidden .section-scenes {
 
   .field-grid,
   .metric-grid,
-  .shortcut-grid {
+  .shortcut-grid,
+  .work-target-grid,
+  .proofread-suggestion-body,
+  .smart-proofread-mode-grid,
+  .smart-proofread-range-grid {
     grid-template-columns: 1fr;
   }
 

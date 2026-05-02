@@ -59,6 +59,7 @@ export const PAGE_UNIT_CAPACITY = 54;
 export const DEFAULT_STORY_MEMORY = {
   characters: [],
   locations: [],
+  scenes: [],
   themes: [],
   plotPoints: []
 };

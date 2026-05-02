@@ -628,10 +628,11 @@ export async function showStoryMemoryPopup() {
     return;
   }
 
-  const memory = project.storyMemory || { characters: [], locations: [], themes: [] };
+  const memory = project.storyMemory || { characters: [], locations: [], scenes: [], themes: [] };
   const sections = [
     { key: "characters", label: "Characters" },
     { key: "locations", label: "Locations" },
+    { key: "scenes", label: "Scenes" },
     { key: "themes", label: "Themes" }
   ];
 
@@ -942,38 +943,7 @@ function renderProgressGraph(project) {
   }
 
   const width = container.clientWidth || 240;
-  const height = 80;
-  const padding = 10;
-
-  const counts = history.map(h => h.count);
-  const minCount = Math.min(...counts);
-  const maxCount = Math.max(...counts);
-  const range = maxCount - minCount || 1;
-
-  const getX = (i) => (i / (history.length - 1)) * (width - 2 * padding) + padding;
-  const getY = (c) => height - (((c - minCount) / range) * (height - 2 * padding) + padding);
-
-  const ownerId = project.ownerId || JSON.parse(localStorage.getItem('eyawriter_session') || '{}')?.userId;
-
-  let pathData = `M ${getX(0)} ${getY(history[0].count)}`;
-  for (let i = 1; i < history.length; i++) {
-    pathData += ` L ${getX(i)} ${getY(history[i].count)}`;
-  }
-
-  container.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-      <path d="${pathData}" class="graph-path" />
-      ${history.map((h, i) => {
-        const isOwner = !h.uid || h.uid === ownerId;
-        const colorClass = isOwner ? "graph-point" : "graph-point graph-point-collab";
-        return `
-          <circle cx="${getX(i)}" cy="${getY(h.count)}" r="3" class="${colorClass}">
-            <title>${h.count} words by ${isOwner ? 'Owner' : 'Collaborator'} (${new Date(h.timestamp).toLocaleDateString()})</title>
-          </circle>
-        `;
-      }).join('')}
-    </svg>
-  `;
+  container.innerHTML = buildCollaboratorProgressGraph(project, width, 80, false);
 }
 
 export function renderCurrentScriptId() {
@@ -1010,10 +980,11 @@ export function renderStoryMemory() {
   const list = document.getElementById("storyMemoryList");
   if (!project || !list) return;
 
-  const memory = project.storyMemory || { characters: [], locations: [], themes: [] };
+  const memory = project.storyMemory || { characters: [], locations: [], scenes: [], themes: [] };
   const allElements = [
     ...memory.characters.map(e => ({ ...e, type: 'Character' })),
     ...memory.locations.map(e => ({ ...e, type: 'Location' })),
+    ...memory.scenes.map(e => ({ ...e, type: 'Scene' })),
     ...memory.themes.map(e => ({ ...e, type: 'Theme' }))
   ];
 
@@ -1061,6 +1032,16 @@ export function renderStoryMemory() {
 export async function showEditStoryElementModal(element = null) {
   const isNew = !element;
   const title = isNew ? "Add Story Element" : "Edit Story Element";
+  const project = getCurrentProject();
+  if (!project) return;
+  const editorSuggestions = getEditorStoryElementSuggestions(project);
+  const selectedBucket = element?.type === 'Character'
+    ? 'characters'
+    : element?.type === 'Location'
+      ? 'locations'
+      : element?.type === 'Scene'
+        ? 'scenes'
+        : 'themes';
 
   const container = document.createElement("div");
   container.className = "field-grid";
@@ -1068,20 +1049,61 @@ export async function showEditStoryElementModal(element = null) {
     <label class="field field-wide">
       <span>Type</span>
       <select id="memoryType">
-        <option value="characters" ${element?.type === 'Character' ? 'selected' : ''}>Character</option>
-        <option value="locations" ${element?.type === 'Location' ? 'selected' : ''}>Location</option>
-        <option value="themes" ${element?.type === 'Theme' ? 'selected' : ''}>Theme</option>
+        <option value="characters" ${selectedBucket === 'characters' ? 'selected' : ''}>Character</option>
+        <option value="locations" ${selectedBucket === 'locations' ? 'selected' : ''}>Location</option>
+        <option value="scenes" ${selectedBucket === 'scenes' ? 'selected' : ''}>Scene</option>
+        <option value="themes" ${selectedBucket === 'themes' ? 'selected' : ''}>Theme</option>
       </select>
     </label>
     <label class="field field-wide">
       <span>Name</span>
-      <input id="memoryName" type="text" value="${escapeHtml(element?.name || '')}">
+      <input id="memoryName" type="text" list="memoryNameSuggestions" value="${escapeHtml(element?.name || '')}">
+      <datalist id="memoryNameSuggestions"></datalist>
+      <div class="story-memory-suggestion-row" id="memorySuggestionRow"></div>
     </label>
     <label class="field field-wide">
       <span>Description / Traits</span>
       <textarea id="memoryDesc">${escapeHtml(element?.description || '')}</textarea>
     </label>
   `;
+
+  const typeSelect = container.querySelector("#memoryType");
+  const nameInput = container.querySelector("#memoryName");
+  const descInput = container.querySelector("#memoryDesc");
+  const nameSuggestions = container.querySelector("#memoryNameSuggestions");
+  const suggestionRow = container.querySelector("#memorySuggestionRow");
+
+  const renderSuggestionUI = () => {
+    const bucket = typeSelect.value;
+    const suggestions = editorSuggestions[bucket] || [];
+    nameSuggestions.innerHTML = suggestions.map((item) => `<option value="${escapeHtml(item.name)}"></option>`).join("");
+    suggestionRow.innerHTML = suggestions.slice(0, 6).map((item) => `
+      <button class="ghost-button btn-sm" type="button" data-memory-suggestion="${escapeHtml(item.name)}">${escapeHtml(item.name)}</button>
+    `).join("");
+  };
+
+  const maybePrefillDescription = () => {
+    const bucket = typeSelect.value;
+    const selected = (editorSuggestions[bucket] || []).find((item) => item.name.toLowerCase() === nameInput.value.trim().toLowerCase());
+    if (selected && !descInput.value.trim()) {
+      descInput.value = selected.description || "";
+    }
+  };
+
+  renderSuggestionUI();
+  maybePrefillDescription();
+
+  typeSelect.addEventListener("change", () => {
+    renderSuggestionUI();
+    maybePrefillDescription();
+  });
+  nameInput.addEventListener("change", maybePrefillDescription);
+  suggestionRow.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-memory-suggestion]");
+    if (!button) return;
+    nameInput.value = button.dataset.memorySuggestion;
+    maybePrefillDescription();
+  });
 
   const result = await showModal({
     title,
@@ -1096,15 +1118,12 @@ export async function showEditStoryElementModal(element = null) {
 
     if (!name) return;
 
-    const project = getCurrentProject();
-    if (!project) return;
-
     if (isNew) {
       project.storyMemory[type].push({ id: 'mem-' + Date.now(), name, description });
     } else {
       // Find and update, possibly moving type
       let found = false;
-      ['characters', 'locations', 'themes'].forEach(t => {
+      ['characters', 'locations', 'scenes', 'themes'].forEach(t => {
         const idx = project.storyMemory[t].findIndex(el => el.id === element.id);
         if (idx !== -1) {
           if (t === type) {
@@ -1127,7 +1146,7 @@ function deleteStoryElement(id) {
   const project = getCurrentProject();
   if (!project) return;
 
-  ['characters', 'locations', 'themes'].forEach(t => {
+  ['characters', 'locations', 'scenes', 'themes'].forEach(t => {
     project.storyMemory[t] = project.storyMemory[t].filter(el => el.id !== id);
   });
 
@@ -1158,10 +1177,11 @@ export async function showStoryMemoryPicker() {
   const project = getCurrentProject();
   if (!project) return;
 
-  const memory = project.storyMemory || { characters: [], locations: [], themes: [] };
+  const memory = project.storyMemory || { characters: [], locations: [], scenes: [], themes: [] };
   const categories = [
     { key: 'characters', label: 'Characters' },
     { key: 'locations', label: 'Locations' },
+    { key: 'scenes', label: 'Scenes' },
     { key: 'themes', label: 'Themes' }
   ].filter(cat => memory[cat.key].length > 0);
 
@@ -1291,25 +1311,51 @@ export async function showProofreadReport() {
     return;
   }
 
-  const issues = [];
-  const emptyScenes = project.lines.filter((line) => line.type === "scene" && !normalizeLineText(line.text, "scene")).length;
-  const weakSceneLines = project.lines.filter((line) => line.type === "scene" && line.text && !/^(INT\.|EXT\.|INT\.\/EXT\.|EST\.)/i.test(normalizeLineText(line.text, "scene"))).length;
-  const loneCharacters = project.lines.filter((line, index) => line.type === "character" && !project.lines[index + 1]?.text?.trim()).length;
+  const emptyScenes = project.lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.type === "scene" && !normalizeLineText(line.text, "scene"));
+  const weakSceneLines = project.lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.type === "scene" && line.text && !/^(INT\.|EXT\.|INT\.\/EXT\.|EST\.)/i.test(normalizeLineText(line.text, "scene")));
+  const loneCharacters = project.lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line, index }) => line.type === "character" && !project.lines[index + 1]?.text?.trim());
 
-  if (emptyScenes) {
-    issues.push(t(emptyScenes === 1 ? "proofread.emptyScenesOne" : "proofread.emptyScenesOther", { count: emptyScenes }));
-  }
-  if (weakSceneLines) {
-    issues.push(t(weakSceneLines === 1 ? "proofread.weakSceneOne" : "proofread.weakSceneOther", { count: weakSceneLines }));
-  }
-  if (loneCharacters) {
-    issues.push(t(loneCharacters === 1 ? "proofread.loneCharacterOne" : "proofread.loneCharacterOther", { count: loneCharacters }));
+  if (!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length) {
+    await customAlert(t("proofread.none"), t("proofread.title"));
+    return;
   }
 
-  await customAlert(
-    issues.length ? t("proofread.highlights", { items: issues.join("\n- ") }) : t("proofread.none"),
-    t("proofread.title")
-  );
+  const container = document.createElement("div");
+  container.className = "proofread-report";
+  container.innerHTML = `
+    ${buildProofreadSection("Scene Heading Issues", weakSceneLines, ({ line }) => ({
+      title: normalizeLineText(line.text, "scene"),
+      note: "Scene heading should start with INT., EXT., INT./EXT., or EST."
+    }))}
+    ${buildProofreadSection("Empty Scene Headings", emptyScenes, ({ index }) => ({
+      title: `Scene heading at line ${index + 1}`,
+      note: "This scene heading is empty."
+    }))}
+    ${buildProofreadSection("Character Cue Issues", loneCharacters, ({ line, index }) => ({
+      title: normalizeLineText(line.text, "character") || `Character cue ${index + 1}`,
+      note: "This character cue is not followed by dialogue or an action beat."
+    }))}
+  `;
+
+  container.querySelectorAll("[data-proofread-line-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      modalRefs.dialog.close();
+      window.dispatchEvent(new CustomEvent("focusScriptLine", { detail: { lineId: button.dataset.proofreadLineId } }));
+    });
+  });
+
+  await showModal({
+    title: t("proofread.title"),
+    message: container,
+    showConfirm: false,
+    cancelLabel: "Close"
+  });
 }
 
 export async function showWorkTracking() {
@@ -1318,14 +1364,251 @@ export async function showWorkTracking() {
     return;
   }
   const scenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+  const lines = project.lines.filter((line) => line.text.trim()).length;
   const words = (serializeScript(project).match(/\b[\w'-]+\b/g) || []).length;
-  await customAlert([
-    t("work.project", { title: project.title }),
-    t("work.created", { value: formatDateTime(project.createdAt) }),
-    t("work.updated", { value: formatDateTime(project.updatedAt) }),
-    t("work.scenes", { count: scenes }),
-    t("work.words", { count: words.toLocaleString() })
-  ].join("\n"), t("work.title"));
+  const pages = Math.max(1, Math.round((words / 180) * 10) / 10);
+  const targets = project.workspace?.targets || { scenes: 0, pages: 0, lines: 0 };
+  const completion = buildCompletionMetrics({ scenes, pages, lines }, targets);
+
+  const container = document.createElement("div");
+  container.className = "work-tracking-report";
+  container.innerHTML = `
+    <div class="metric-grid analytics-metric-grid">
+      <div><span>Project</span><strong>${escapeHtml(project.title)}</strong></div>
+      <div><span>Created</span><strong>${escapeHtml(formatDateTime(project.createdAt))}</strong></div>
+      <div><span>Updated</span><strong>${escapeHtml(formatDateTime(project.updatedAt))}</strong></div>
+      <div><span>Words</span><strong>${words.toLocaleString()}</strong></div>
+      <div><span>Scenes</span><strong>${scenes}</strong></div>
+      <div><span>Lines</span><strong>${lines}</strong></div>
+      <div><span>Pages</span><strong>${pages.toFixed(1)}</strong></div>
+      <div><span>Completion</span><strong>${completion.overall}%</strong></div>
+    </div>
+    <section class="analytics-section">
+      <span class="nav-menu-label">Word Count vs Time</span>
+      <div class="work-tracking-graph-wrap">
+        ${buildCollaboratorProgressGraph(project, 640, 220, true)}
+      </div>
+    </section>
+    <section class="analytics-section">
+      <span class="nav-menu-label">Completion Targets</span>
+      <div class="work-target-grid">
+        <label class="field field-wide">
+          <span>Target Scenes</span>
+          <input id="workTargetScenes" type="number" min="0" value="${targets.scenes || 0}">
+        </label>
+        <label class="field field-wide">
+          <span>Target Pages</span>
+          <input id="workTargetPages" type="number" min="0" step="0.1" value="${targets.pages || 0}">
+        </label>
+        <label class="field field-wide">
+          <span>Target Lines</span>
+          <input id="workTargetLines" type="number" min="0" value="${targets.lines || 0}">
+        </label>
+      </div>
+      <div class="list-stack">
+        ${completion.items.map((item) => `
+          <div class="analytics-word-row">
+            <span>${item.label}</span>
+            <strong>${item.value}</strong>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+
+  const saved = await showModal({
+    title: t("work.title"),
+    message: container,
+    confirmLabel: "Save Targets",
+    cancelLabel: "Close"
+  });
+
+  if (saved) {
+    project.workspace = {
+      ...(project.workspace || {}),
+      targets: {
+        scenes: Number(container.querySelector("#workTargetScenes")?.value || 0),
+        pages: Number(container.querySelector("#workTargetPages")?.value || 0),
+        lines: Number(container.querySelector("#workTargetLines")?.value || 0)
+      }
+    };
+    persistProjects(false);
+  }
+}
+
+function buildCollaboratorProgressGraph(project, width, height, showLegend) {
+  const history = Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [];
+  if (history.length < 2) {
+    return '<p class="collab-empty" style="padding:10px;text-align:center">Waiting for more data...</p>';
+  }
+
+  const padding = 20;
+  const palette = ["#e11d48", "#0ea5e9", "#16a34a", "#f59e0b", "#7c3aed", "#f97316"];
+  const times = history.map((entry) => new Date(entry.timestamp).getTime());
+  const counts = history.map((entry) => Number(entry.count || 0));
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times);
+  const minCount = Math.min(...counts);
+  const maxCount = Math.max(...counts);
+  const timeRange = maxTime - minTime || 1;
+  const countRange = maxCount - minCount || 1;
+  const memberMeta = getCollaboratorGraphMeta(project);
+  const grouped = history.reduce((acc, entry) => {
+    const key = entry.uid || "owner";
+    (acc[key] = acc[key] || []).push(entry);
+    return acc;
+  }, {});
+  const legend = [];
+
+  const getX = (timestamp) => (((new Date(timestamp).getTime() - minTime) / timeRange) * (width - 2 * padding)) + padding;
+  const getY = (count) => height - ((((count - minCount) / countRange) * (height - 2 * padding)) + padding);
+
+  const linesMarkup = Object.entries(grouped).map(([uid, entries], index) => {
+    const color = palette[index % palette.length];
+    const meta = memberMeta[uid] || { label: entryUserLabel(entries[0]), color };
+    legend.push({ label: meta.label, color });
+    const pathData = entries
+      .map((entry, pointIndex) => `${pointIndex === 0 ? "M" : "L"} ${getX(entry.timestamp)} ${getY(Number(entry.count || 0))}`)
+      .join(" ");
+
+    const pointsMarkup = entries.map((entry) => `
+      <circle cx="${getX(entry.timestamp)}" cy="${getY(Number(entry.count || 0))}" r="3.5" fill="${color}">
+        <title>${escapeHtml(meta.label)} • ${Number(entry.count || 0).toLocaleString()} words • ${new Date(entry.timestamp).toLocaleString()}</title>
+      </circle>
+    `).join("");
+
+    return `
+      <path d="${pathData}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      ${pointsMarkup}
+    `;
+  }).join("");
+
+  return `
+    <div class="collab-progress-graph">
+      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+        <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" class="graph-axis"></line>
+        <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" class="graph-axis"></line>
+        ${linesMarkup}
+      </svg>
+      ${showLegend ? `
+        <div class="collab-progress-legend">
+          ${legend.map((item) => `
+            <span class="collab-progress-key">
+              <span class="collab-progress-key-swatch" style="background:${item.color};"></span>
+              <span>${escapeHtml(item.label)}</span>
+            </span>
+          `).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function getCollaboratorGraphMeta(project) {
+  const meta = {};
+  if (project.ownerId) {
+    meta[project.ownerId] = {
+      label: project.ownerName || project.ownerEmail || "Owner"
+    };
+  }
+  Object.entries(project.collaborators || {}).forEach(([uid, collaborator]) => {
+    meta[uid] = {
+      label: collaborator.name || collaborator.email || "Collaborator"
+    };
+  });
+  return meta;
+}
+
+function entryUserLabel(entry) {
+  return entry?.userName || "Collaborator";
+}
+
+function buildCompletionMetrics(current, targets) {
+  const items = [
+    { key: "scenes", label: "Scenes", current: current.scenes, target: Number(targets.scenes || 0) },
+    { key: "pages", label: "Pages", current: current.pages, target: Number(targets.pages || 0) },
+    { key: "lines", label: "Lines", current: current.lines, target: Number(targets.lines || 0) }
+  ].map((item) => {
+    const percent = item.target > 0 ? Math.min(100, Math.round((item.current / item.target) * 100)) : null;
+    return {
+      ...item,
+      percent,
+      value: item.target > 0
+        ? `${item.current}${item.key === "pages" ? "" : ""} / ${item.target} • ${percent}%`
+        : `${item.current} current • no target`
+    };
+  });
+
+  const withTargets = items.filter((item) => item.percent !== null);
+  const overall = withTargets.length
+    ? Math.round(withTargets.reduce((sum, item) => sum + item.percent, 0) / withTargets.length)
+    : 0;
+
+  return { items, overall };
+}
+
+function buildProofreadSection(title, items, formatter) {
+  if (!items.length) {
+    return "";
+  }
+
+  return `
+    <section class="proofread-report-section">
+      <h4>${escapeHtml(title)}</h4>
+      <div class="list-stack">
+        ${items.map((item) => {
+          const formatted = formatter(item);
+          return `
+            <button class="list-item proofread-report-item" type="button" data-proofread-line-id="${escapeHtml(item.line.id)}">
+              <span class="list-item-title">${escapeHtml(formatted.title)}</span>
+              <span class="list-item-meta">${escapeHtml(formatted.note)}</span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function getEditorStoryElementSuggestions(project) {
+  const characterMap = new Map();
+  const sceneMap = new Map();
+
+  project.lines.forEach((line, index) => {
+    if (line.type === "character" && line.text.trim()) {
+      const name = formatLineText(line.text, "character");
+      const key = name.trim().toUpperCase();
+      if (!characterMap.has(key)) {
+        const nearbyDialogue = project.lines.slice(index + 1, index + 4).find((entry) => entry.type === "dialogue" && entry.text.trim());
+        characterMap.set(key, {
+          name,
+          description: nearbyDialogue ? `Voice sample: ${nearbyDialogue.text.trim()}` : "Add traits, motivation, and relationship notes."
+        });
+      }
+    }
+
+    if (line.type === "scene" && line.text.trim()) {
+      const sceneName = formatLineText(line.text, "scene");
+      const key = sceneName.trim().toUpperCase();
+      if (!sceneMap.has(key)) {
+        const firstBeat = getSceneFirstLine(project, index);
+        sceneMap.set(key, {
+          name: sceneName,
+          description: firstBeat || "Add the dramatic purpose and key beats for this scene."
+        });
+      }
+    }
+  });
+
+  return {
+    characters: [...characterMap.values()],
+    scenes: [...sceneMap.values()],
+    locations: [...sceneMap.values()].map((scene) => ({
+      name: scene.name.split(" - ")[0],
+      description: `Location inspired by scene: ${scene.name}`
+    })),
+    themes: []
+  };
 }
 
 export function revealMetricsPanel() {
