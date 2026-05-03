@@ -158,6 +158,21 @@ export const AI = (() => {
     }
   }
 
+  function getWritingLanguageName() {
+    const names = { en: "English", fr: "French", de: "German", es: "Spanish", it: "Italian", pt: "Portuguese" };
+    return names[state.writingLanguage] || "English";
+  }
+
+  function buildProofreadInstruction(bulk = false) {
+    const lang = getWritingLanguageName();
+    const languageNote = `The primary script language is ${lang}. Fix all typos, spelling errors, and grammatical mistakes according to ${lang} conventions.`;
+    const foreignNote = `If a line is intentionally written in a different language (e.g. a character speaks French in an otherwise English script), preserve it exactly — do not flag it as an error.`;
+    if (bulk) {
+      return `You are proofreading screenplay lines in bulk. ${languageNote} ${foreignNote} Return valid JSON as an array. Each item must include lineId or lineNumber, improved, and reason. Preserve screenplay formatting, character cue capitalisation, and scene heading style. Only include lines that should change. If strict JSON fails, still clearly label each fix with lineId or lineNumber, improved, and reason.`;
+    }
+    return `Proofread this script text. ${languageNote} ${foreignNote} Improve clarity and sentence structure, preserve screenplay intent and formatting, and return only the improved text with no explanation.`;
+  }
+
   function buildStoryMemoryContext(project) {
     if (!project?.storyMemory) {
       return "";
@@ -874,7 +889,7 @@ export const AI = (() => {
       type: line.type,
       action: "Improve",
       current: sourceText,
-      instruction: "Proofread this script text. Fix grammar and spelling, improve clarity and sentence structure, preserve screenplay intent and formatting, and return only the improved text with no explanation.",
+      instruction: buildProofreadInstruction(false),
       context: memoryContext + formatScenesForAI(scenes)
     });
 
@@ -1013,7 +1028,7 @@ export const AI = (() => {
         type: "script",
         action: "Improve",
         current: JSON.stringify(payload),
-        instruction: "You are proofreading screenplay lines in bulk. Return valid JSON as an array. Each item must include lineId or lineNumber, improved, and reason. Preserve screenplay formatting, character cue capitalization, and scene heading style. Only include lines that should change. If strict JSON fails, still clearly label each fix with lineId or lineNumber, improved, and reason.",
+        instruction: buildProofreadInstruction(true),
         context: `${memoryContext}${formatScenesForAI(scenes)}\n\nLINES TO REVIEW:\n${payload.map((item) => `[${item.lineNumber}] [${item.lineId}] [${item.type.toUpperCase()}] ${item.text}`).join("\n")}`
       });
 

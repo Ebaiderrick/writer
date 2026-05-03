@@ -927,6 +927,11 @@ function handleBlockKeydown(event, id) {
   lastKeyDownCode = code;
 
   if (event.key === "Delete") {
+    const isEmpty = !activeEl.textContent.trim();
+    if (!isEmpty) {
+      // Let the browser delete one character forward — do not touch the line
+      return;
+    }
     event.preventDefault();
     project.updatedAt = new Date().toISOString();
     if (project.lines.length === 1) {
