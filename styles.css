@@ -2632,7 +2632,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .modal-content-proofread {
-  width: min(1650px, calc(100vw - 24px));
+  width: min(1320px, calc(100vw - 32px));
   max-height: min(90vh, 960px);
 }
 
