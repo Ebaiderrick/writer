@@ -134,7 +134,89 @@ export function renderHome() {
 
   refs.projectGrid.innerHTML = "";
   const template = document.querySelector("#projectCardTemplate");
-  const projects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  let projects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  let workspaceLead = null;
+
+  if (state.currentWorkspaceId) {
+    projects = projects.filter((project) => project.workspace?.id === state.currentWorkspaceId);
+    workspaceLead = projects.find((project) => project.creationKind === "workspace") || projects[0] || null;
+    if (!projects.length) {
+      state.currentWorkspaceId = null;
+      refs.homeWorkspaceDashboard.hidden = true;
+    }
+  }
+
+  if (state.currentWorkspaceId && workspaceLead) {
+    const memberEntries = [
+      workspaceLead.ownerName || workspaceLead.author || "Workspace Owner",
+      ...Object.values(workspaceLead.collaborators || {}).map((member) => member.name || member.email || "Collaborator")
+    ].filter(Boolean);
+    const uniqueMembers = [...new Set(memberEntries)];
+    const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
+
+    refs.homeHero.hidden = true;
+    refs.workspaceBackBtn.hidden = false;
+    refs.homeProjectsTitle.textContent = workspaceLead.workspace?.name || workspaceLead.title || "Workspace";
+    refs.homeProjectsSubtitle.textContent = "A focused studio view for projects, members, and recent movement inside this workspace.";
+    refs.homeWorkspaceDashboard.hidden = false;
+    refs.homeWorkspaceDashboard.innerHTML = `
+      <div class="workspace-home-shell">
+        <section class="workspace-home-hero-card">
+          <div class="workspace-home-hero-copy">
+            <span class="workspace-home-kicker">Film Workspace</span>
+            <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
+            <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
+          </div>
+          <div class="workspace-home-hero-metrics">
+            <div class="workspace-home-metric">
+              <span>Projects</span>
+              <strong>${projects.length}</strong>
+            </div>
+            <div class="workspace-home-metric">
+              <span>Members</span>
+              <strong>${uniqueMembers.length}</strong>
+            </div>
+            <div class="workspace-home-metric">
+              <span>Last activity</span>
+              <strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong>
+            </div>
+          </div>
+        </section>
+        <div class="workspace-home-grid">
+          <section class="workspace-home-panel">
+            <div class="workspace-home-panel-head">
+              <h4>Members</h4>
+              <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
+            </div>
+            <div class="workspace-home-members">
+              ${uniqueMembers.map((name) => `<span class="workspace-home-member-pill">${escapeHtml(name)}</span>`).join("")}
+            </div>
+          </section>
+          <section class="workspace-home-panel">
+            <div class="workspace-home-panel-head">
+              <h4>Recent activity</h4>
+              <button class="primary-button btn-sm" type="button" data-workspace-home-action="new-project">New Project</button>
+            </div>
+            <div class="workspace-home-activity">
+              ${activityItems.length ? activityItems.map((item) => `
+                <article class="workspace-home-activity-item">
+                  <strong>${escapeHtml(item.label || "Workspace updated")}</strong>
+                  <span>${escapeHtml(formatDateTime(item.at || workspaceLead.updatedAt))}</span>
+                </article>
+              `).join("") : '<p class="workspace-home-empty">No activity yet. The next change here will start the trail.</p>'}
+            </div>
+          </section>
+        </div>
+      </div>
+    `;
+  } else {
+    refs.homeHero.hidden = false;
+    refs.workspaceBackBtn.hidden = true;
+    refs.homeProjectsTitle.textContent = "Scripts:";
+    refs.homeProjectsSubtitle.textContent = "Start a new screenplay or reopen one already in motion.";
+    refs.homeWorkspaceDashboard.hidden = true;
+    refs.homeWorkspaceDashboard.innerHTML = "";
+  }
 
   projects.forEach((project) => {
     const node = template.content.firstElementChild.cloneNode(true);
@@ -145,6 +227,9 @@ export function renderHome() {
 
     node.querySelector(".project-card-title").textContent = project.title;
     node.querySelector(".project-script-id").textContent = project.scriptId;
+    if (project.creationKind === "workspace") {
+      node.querySelector(".project-card-title").textContent = `${project.title} · Workspace`;
+    }
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
     node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");

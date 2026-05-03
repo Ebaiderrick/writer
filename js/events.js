@@ -64,13 +64,77 @@ async function launchNewCreationFlow() {
     creationKind: selection.creationKind,
     workType: selection.workType
   });
+  if (selection.creationKind === "workspace") {
+    openWorkspaceDashboard(project.workspace?.id || project.id);
+    return;
+  }
+  openProject(project.id);
+}
+
+function openWorkspaceDashboard(workspaceId) {
+  if (!workspaceId) return;
+  state.currentWorkspaceId = workspaceId;
+  persistProjects(false, { syncInputs: false });
+  showHome();
+  renderHome();
+}
+
+function createProjectInsideCurrentWorkspace() {
+  const workspaceProject = state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId);
+  if (!workspaceProject) {
+    launchNewCreationFlow();
+    return;
+  }
+
+  const project = createProjectWithOptions({
+    creationKind: "project",
+    workType: "film-script",
+    isShared: workspaceProject.isShared,
+    ownerId: workspaceProject.ownerId,
+    ownerName: workspaceProject.ownerName,
+    ownerEmail: workspaceProject.ownerEmail,
+    ownerPhotoURL: workspaceProject.ownerPhotoURL,
+    collaborators: workspaceProject.collaborators,
+    activityLog: workspaceProject.activityLog,
+    lastEditorName: workspaceProject.lastEditorName,
+    lastActivityAt: workspaceProject.lastActivityAt,
+    workspace: {
+      id: workspaceProject.workspace?.id,
+      name: workspaceProject.workspace?.name || workspaceProject.title,
+      inviteCode: workspaceProject.workspace?.inviteCode,
+      reminders: workspaceProject.workspace?.reminders || [],
+      targets: workspaceProject.workspace?.targets || {}
+    }
+  });
   openProject(project.id);
 }
 
 export function bindEvents() {
   // Navigation
   refs.newProjectBtn.addEventListener("click", () => {
+    if (state.currentWorkspaceId && !refs.homeWorkspaceDashboard.hidden) {
+      createProjectInsideCurrentWorkspace();
+      return;
+    }
     launchNewCreationFlow();
+  });
+
+  refs.workspaceBackBtn?.addEventListener("click", () => {
+    state.currentWorkspaceId = null;
+    persistProjects(false, { syncInputs: false });
+    renderHome();
+  });
+
+  refs.homeWorkspaceDashboard?.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
+    if (!action) return;
+    if (action === "new-project") {
+      createProjectInsideCurrentWorkspace();
+      return;
+    }
+    if (action === "open-popup") {
+      showWorkspacePopup();
+    }
   });
 
   refs.goHomeBtn.addEventListener("click", () => {
@@ -502,9 +566,12 @@ export function bindEvents() {
       const card = e.target.closest(".project-card");
       if (!card) return;
       const projectId = card.dataset.projectId;
+      const project = state.projects.find((item) => item.id === projectId);
 
       if (e.target.closest(".project-delete")) {
           removeProject(projectId);
+      } else if (project?.creationKind === "workspace" && !state.currentWorkspaceId) {
+          openWorkspaceDashboard(project.workspace?.id || project.id);
       } else {
           openProject(projectId);
       }
@@ -514,11 +581,16 @@ export function bindEvents() {
   [refs.homeRecentProjects, refs.studioRecentProjects].forEach(container => {
       if (!container) return;
       container.addEventListener("click", (e) => {
-          const btn = e.target.closest(".recent-project-button");
-          if (btn) {
+        const btn = e.target.closest(".recent-project-button");
+        if (btn) {
+            const project = state.projects.find((item) => item.id === btn.dataset.projectId);
+            if (project?.creationKind === "workspace") {
+              openWorkspaceDashboard(project.workspace?.id || project.id);
+            } else {
               openProject(btn.dataset.projectId);
-              closeMenus();
-          }
+            }
+            closeMenus();
+        }
       });
   });
 

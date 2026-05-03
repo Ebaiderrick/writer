@@ -65,6 +65,7 @@ export const DEFAULT_STORY_MEMORY = {
 export const state = {
   projects: [],
   currentProjectId: null,
+  currentWorkspaceId: null,
   activeBlockId: null,
   activeType: "action",
   visibleSuggestions: [],

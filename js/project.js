@@ -126,11 +126,13 @@ export async function deleteProjectFromCloud(projectId) {
 export function setProjectsFromCloud(cloudProjects) {
   state.projects = cloudProjects.length > 0 ? cloudProjects : [cloneProject(sampleProject, true)];
   state.currentProjectId = state.projects[0].id;
+  state.currentWorkspaceId = null;
   try {
     const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       ...existing,
       currentProjectId: state.currentProjectId,
+      currentWorkspaceId: state.currentWorkspaceId,
       projects: state.projects
     }));
   } catch (err) {
@@ -170,6 +172,7 @@ export function loadProjects() {
       ? parsed.projects.map(sanitizeProject)
       : [cloneProject(sampleProject, true)];
     state.currentProjectId = parsed?.currentProjectId || state.projects[0].id;
+    state.currentWorkspaceId = typeof parsed?.currentWorkspaceId === "string" ? parsed.currentWorkspaceId : null;
     state.aiAssist = Boolean(parsed?.aiAssist);
       state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
       state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
@@ -189,6 +192,7 @@ export function loadProjects() {
     console.error("Unable to load projects", error);
       state.projects = [cloneProject(sampleProject, true)];
       state.currentProjectId = state.projects[0].id;
+      state.currentWorkspaceId = null;
       state.backgroundAnimation = false;
       state.language = "en";
       state.writingLanguage = "en";
@@ -267,6 +271,7 @@ export function createProjectWithOptions(options = {}) {
   const index = state.projects.length + 1;
   const creationKind = options.creationKind === "workspace" ? "workspace" : "project";
   const workType = options.workType === "prose-poetry" ? "prose-poetry" : "film-script";
+  const workspaceSeed = options.workspace && typeof options.workspace === "object" ? options.workspace : null;
   const defaultTitle = creationKind === "workspace"
     ? `Film Workspace ${index}`
     : `Film Script ${index}`;
@@ -275,7 +280,10 @@ export function createProjectWithOptions(options = {}) {
     title: options.title || defaultTitle,
     workType,
     creationKind,
-    workspace: {
+    workspace: workspaceSeed ? {
+      ...workspaceSeed,
+      name: options.workspaceName || workspaceSeed.name || `Workspace ${index}`
+    } : {
       name: options.workspaceName || (creationKind === "workspace" ? defaultTitle : `Workspace ${index}`)
     },
     lines: [{ id: uid(), type: "action", text: "" }]
@@ -312,6 +320,7 @@ export function persistProjects(forceSavedBadge = false, { syncInputs = true } =
   if (syncInputs) syncProjectFromInputs();
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     currentProjectId: state.currentProjectId,
+    currentWorkspaceId: state.currentWorkspaceId,
     projects: state.projects,
     aiAssist: state.aiAssist,
     toolStripCollapsed: state.toolStripCollapsed,

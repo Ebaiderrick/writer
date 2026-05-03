@@ -215,7 +215,7 @@
         </div>
       </header>
 
-      <section class="home-hero">
+      <section id="homeHero" class="home-hero">
         <img class="home-logo" src="logo.png" alt="EyaWriter logo">
         <h1>EyaWriter</h1>
         <p class="home-tagline">Where your stories take flight.</p>
@@ -223,9 +223,16 @@
 
       <section class="home-projects">
         <div class="home-projects-head">
-          <h2>Scripts:</h2>
-          <button id="newProjectBtn" class="primary-button" type="button">New</button>
+          <div class="home-projects-copy">
+            <h2 id="homeProjectsTitle">Scripts:</h2>
+            <p id="homeProjectsSubtitle" class="home-projects-subtitle">Start a new screenplay or reopen one already in motion.</p>
+          </div>
+          <div class="home-projects-actions">
+            <button id="workspaceBackBtn" class="ghost-button" type="button" hidden>All Workspaces</button>
+            <button id="newProjectBtn" class="primary-button" type="button">New</button>
+          </div>
         </div>
+        <section id="homeWorkspaceDashboard" class="workspace-home" hidden></section>
         <div id="projectGrid" class="project-grid"></div>
       </section>
     </section>

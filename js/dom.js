@@ -12,6 +12,11 @@ function getCached(selector, multi = false) {
 export const refs = {
   get authView() { return getCached("#authView"); },
   get homeView() { return getCached("#homeView"); },
+  get homeHero() { return getCached("#homeHero"); },
+  get homeProjectsTitle() { return getCached("#homeProjectsTitle"); },
+  get homeProjectsSubtitle() { return getCached("#homeProjectsSubtitle"); },
+  get workspaceBackBtn() { return getCached("#workspaceBackBtn"); },
+  get homeWorkspaceDashboard() { return getCached("#homeWorkspaceDashboard"); },
   get studioView() { return getCached("#studioView"); },
   get toolStrip() { return getCached("#toolStrip"); },
   get studioLayout() { return getCached("#studioLayout"); },
