@@ -4490,3 +4490,97 @@ html[data-theme="white"] .user-trigger {
   left: auto;
   right: calc(100% - 6px);
 }
+
+/* Character Interface */
+.character-interface {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 380px;
+}
+
+.char-interface-head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.char-section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.char-section-label {
+  margin: 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.char-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.char-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.char-card-script {
+  opacity: 0.75;
+}
+
+.char-card-info {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.char-card-info strong {
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.char-card-info span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.char-card-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.char-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.char-form-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.char-form-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.char-panel-btns {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

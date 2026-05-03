@@ -1387,13 +1387,24 @@ export const AI = (() => {
       const sceneLabel = [...sceneMarkers]
         .reverse()
         .find((scene) => scene.index <= entry.index)?.label || "Selected Scene";
+      const memChar = (project.storyMemory?.characters || []).find(
+        (c) => String(c.name || "").trim().toUpperCase() === entry.name
+      );
+      const charDetail = memChar
+        ? [
+            memChar.age ? `Age: ${memChar.age}` : "",
+            memChar.outfit ? `Outfit: ${memChar.outfit}` : "",
+            memChar.behaviour ? `Behaviour: ${memChar.behaviour}` : "",
+            memChar.other || ""
+          ].filter(Boolean).join(". ")
+        : "";
       let improved = "";
       try {
         improved = await requestAiText({
           type: "action",
           action: "Improve",
           current: "",
-          instruction: `Write one concise screenplay action line that visually introduces the character ${entry.name} before their first line of dialogue. Return only the action line.`,
+          instruction: `Write one concise screenplay action line that visually introduces the character ${entry.name} before their first line of dialogue. Return only the action line.${charDetail ? ` Use these character details: ${charDetail}.` : ""}`,
           context: `${buildStoryMemoryContext(project)}${formatScenesForAI(getLastScenes(entry.line.id))}`
         });
       } catch (error) {

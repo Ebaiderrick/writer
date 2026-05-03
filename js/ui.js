@@ -267,7 +267,7 @@ function getLeftPaneBlockLabel(key) {
     "ai-assistant": "AI Assistant",
     "smart-proofread": "Smart Proofread",
     "work-tracking": "Work Tracking",
-    proofread: "Simple Proofread"
+    proofread: "Style Proofread"
   };
 
   return t(translationKeys[key] || "") || meta?.label || key;
@@ -690,6 +690,182 @@ export async function showStoryMemoryPopup() {
     showConfirm: false,
     cancelLabel: "Close"
   });
+}
+
+export async function showCharactersInterface(startWithForm = false) {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  const container = document.createElement("div");
+  container.className = "character-interface";
+
+  function getScriptCharacters() {
+    const map = new Map();
+    (project.lines || []).forEach((line) => {
+      if ((line.type === "character" || line.type === "dual") && line.text?.trim()) {
+        const name = line.text.trim().toUpperCase();
+        const entry = map.get(name) || { name, count: 0 };
+        entry.count++;
+        map.set(name, entry);
+      }
+    });
+    return [...map.values()];
+  }
+
+  function renderList() {
+    const memChars = project.storyMemory?.characters || [];
+    const memNames = new Set(memChars.map((c) => String(c.name || "").trim().toUpperCase()));
+    const unregistered = getScriptCharacters().filter((c) => !memNames.has(c.name));
+
+    container.innerHTML = `
+      <div class="char-interface-head">
+        <button class="ghost-button btn-sm" type="button" data-char-action="new">+ New Character</button>
+      </div>
+      ${memChars.length ? `
+        <div class="char-section">
+          <h4 class="char-section-label">Registered Characters</h4>
+          <div class="char-list">
+            ${memChars.map((char, i) => `
+              <div class="char-card">
+                <div class="char-card-info">
+                  <strong>${escapeHtml(char.name)}</strong>
+                  <span>${escapeHtml(char.description || "No details yet")}</span>
+                </div>
+                <div class="char-card-actions">
+                  <button class="ghost-button btn-sm" type="button" data-char-refine="${i}">Refine</button>
+                  <button class="ghost-button btn-sm" type="button" data-char-delete="${i}">Delete</button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      ` : `<p class="collab-empty">No characters registered yet. Add one so Smart Proofread can write precise introductions.</p>`}
+      ${unregistered.length ? `
+        <div class="char-section">
+          <h4 class="char-section-label">In Script — Not Yet Registered</h4>
+          <div class="char-list">
+            ${unregistered.map((char) => `
+              <div class="char-card char-card-script">
+                <div class="char-card-info">
+                  <strong>${escapeHtml(char.name)}</strong>
+                  <span>${char.count} line${char.count !== 1 ? "s" : ""} in script</span>
+                </div>
+                <div class="char-card-actions">
+                  <button class="ghost-button btn-sm" type="button" data-char-register="${escapeHtml(char.name)}">+ Add Details</button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      ` : ""}
+    `;
+    attachListHandlers();
+  }
+
+  function renderForm(existing = null, prefillName = "") {
+    const isEdit = Boolean(existing);
+    container.innerHTML = `
+      <div class="char-form">
+        <button class="ghost-button btn-sm" type="button" data-char-action="back">← Back</button>
+        <h4 class="char-form-title">${isEdit ? "Refine Character" : "New Character"}</h4>
+        <div class="field-grid">
+          <label class="field field-wide">
+            <span>Name</span>
+            <input class="modal-input" id="charName" type="text" value="${escapeHtml(existing?.name || prefillName)}" placeholder="e.g. JOHN" ${isEdit ? "readonly" : ""}>
+          </label>
+          <label class="field field-wide">
+            <span>Age</span>
+            <input class="modal-input" id="charAge" type="text" value="${escapeHtml(existing?.age || "")}" placeholder="e.g. 35">
+          </label>
+          <label class="field field-wide">
+            <span>Outfit / Appearance</span>
+            <input class="modal-input" id="charOutfit" type="text" value="${escapeHtml(existing?.outfit || "")}" placeholder="e.g. grey tailored suit, tired eyes">
+          </label>
+          <label class="field field-wide">
+            <span>Behaviour / Personality</span>
+            <input class="modal-input" id="charBehaviour" type="text" value="${escapeHtml(existing?.behaviour || "")}" placeholder="e.g. calculated, speaks rarely">
+          </label>
+          <label class="field field-wide">
+            <span>Other Notes</span>
+            <textarea class="modal-input" id="charOther" placeholder="Backstory, role, or anything else...">${escapeHtml(existing?.other || "")}</textarea>
+          </label>
+        </div>
+        <div class="char-form-actions">
+          <button class="ghost-button" type="button" data-char-action="save">${isEdit ? "Save Changes" : "Add Character"}</button>
+        </div>
+      </div>
+    `;
+    attachFormHandlers(existing);
+  }
+
+  function attachListHandlers() {
+    container.querySelector('[data-char-action="new"]')?.addEventListener("click", () => renderForm());
+    container.querySelectorAll("[data-char-refine]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const char = (project.storyMemory?.characters || [])[Number(btn.dataset.charRefine)];
+        if (char) renderForm(char);
+      });
+    });
+    container.querySelectorAll("[data-char-delete]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const chars = project.storyMemory?.characters || [];
+        chars.splice(Number(btn.dataset.charDelete), 1);
+        persistProjects(false);
+        renderCharacterList();
+        renderList();
+      });
+    });
+    container.querySelectorAll("[data-char-register]").forEach((btn) => {
+      btn.addEventListener("click", () => renderForm(null, btn.dataset.charRegister));
+    });
+  }
+
+  function attachFormHandlers(existing) {
+    container.querySelector('[data-char-action="back"]')?.addEventListener("click", renderList);
+    container.querySelector('[data-char-action="save"]')?.addEventListener("click", () => {
+      const name = (container.querySelector("#charName")?.value || "").trim().toUpperCase();
+      if (!name) return;
+      const age = (container.querySelector("#charAge")?.value || "").trim();
+      const outfit = (container.querySelector("#charOutfit")?.value || "").trim();
+      const behaviour = (container.querySelector("#charBehaviour")?.value || "").trim();
+      const other = (container.querySelector("#charOther")?.value || "").trim();
+
+      const parts = [];
+      if (age) parts.push(`Age: ${age}`);
+      if (outfit) parts.push(`Outfit: ${outfit}`);
+      if (behaviour) parts.push(`Behaviour: ${behaviour}`);
+      if (other) parts.push(other);
+      const description = parts.join(". ");
+
+      if (!project.storyMemory) project.storyMemory = { characters: [], locations: [], scenes: [], themes: [], plotPoints: [] };
+      if (!Array.isArray(project.storyMemory.characters)) project.storyMemory.characters = [];
+
+      if (existing) {
+        const idx = project.storyMemory.characters.findIndex((c) => c.id === existing.id);
+        if (idx !== -1) {
+          project.storyMemory.characters[idx] = { ...existing, name, age, outfit, behaviour, other, description };
+        }
+      } else {
+        project.storyMemory.characters.push({
+          id: `char-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name, age, outfit, behaviour, other, description
+        });
+      }
+
+      persistProjects(false);
+      renderCharacterList();
+      renderStoryMemory();
+      renderList();
+    });
+  }
+
+  if (startWithForm) {
+    renderForm();
+  } else {
+    renderList();
+  }
+
+  await showModal({ title: "Characters", message: container, showConfirm: false, cancelLabel: "Close" });
 }
 
 export async function showWorkspacePopup() {
@@ -1386,14 +1562,14 @@ export async function showProofreadReport() {
   container.querySelector('[data-proofread-accept-all-corrections="true"]')?.addEventListener("click", async () => {
     const applied = applyProofreadCorrections(project, fixableCorrections);
     if (!applied) {
-      await customAlert("There were no automatic corrections left to apply.", "Simple Proofread");
+      await customAlert("There were no automatic corrections left to apply.", "Style Proofread");
       return;
     }
     markProofreadCorrectionsApplied(container, fixableCorrections, correctionKeyMap);
     modalRefs.dialog.close();
     persistProjects(false);
     window.dispatchEvent(new CustomEvent("proofreadCleanupApplied", { detail: { removedCount: 0 } }));
-    await customAlert(`Applied ${applied} correction${applied === 1 ? "" : "s"}.`, "Simple Proofread");
+    await customAlert(`Applied ${applied} correction${applied === 1 ? "" : "s"}.`, "Style Proofread");
   });
 
   container.querySelector('[data-proofread-apply-selected="true"]')?.addEventListener("click", async () => {
@@ -1402,13 +1578,13 @@ export async function showProofreadReport() {
       .filter(Boolean);
     const applied = applyProofreadCorrections(project, selectedCorrections);
     if (!applied) {
-      await customAlert("Select at least one automatic correction to apply.", "Simple Proofread");
+      await customAlert("Select at least one automatic correction to apply.", "Style Proofread");
       return;
     }
     markProofreadCorrectionsApplied(container, selectedCorrections, correctionKeyMap);
     persistProjects(false);
     window.dispatchEvent(new CustomEvent("proofreadCleanupApplied", { detail: { removedCount: 0 } }));
-    await customAlert(`Applied ${applied} selected correction${applied === 1 ? "" : "s"}.`, "Simple Proofread");
+    await customAlert(`Applied ${applied} selected correction${applied === 1 ? "" : "s"}.`, "Style Proofread");
   });
 
   container.querySelectorAll("[data-proofread-correction-index]").forEach((button) => {
@@ -1420,7 +1596,7 @@ export async function showProofreadReport() {
       }
       const applied = applyProofreadCorrections(project, [correction]);
       if (!applied) {
-        await customAlert("That correction could not be applied.", "Simple Proofread");
+        await customAlert("That correction could not be applied.", "Style Proofread");
         return;
       }
       markProofreadCorrectionsApplied(container, [correction], correctionKeyMap);

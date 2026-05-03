@@ -26,7 +26,7 @@ import {
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal,
-  showStoryMemoryPopup, showWorkspacePopup
+  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -1429,13 +1429,12 @@ function handleMenuAction(action) {
       showModal({ title: "Scenes", message: container, showConfirm: false, cancelLabel: "Close" });
       break;
     }
-    case "open-characters": {
-      const container = document.createElement("div");
-      container.className = "modal-list";
-      container.appendChild(refs.characterList.cloneNode(true));
-      showModal({ title: "Characters", message: container, showConfirm: false, cancelLabel: "Close" });
+    case "open-characters":
+      showCharactersInterface();
       break;
-    }
+    case "add-character":
+      showCharactersInterface(true);
+      break;
     case "pick-story-memory":
       showStoryMemoryPicker();
       break;
