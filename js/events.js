@@ -526,7 +526,7 @@ export function bindEvents() {
       if (item) focusBlock(item.dataset.lineId);
   });
 
-  refs.characterList.addEventListener("click", (e) => {
+  refs.characterList?.addEventListener("click", (e) => {
       const item = e.target.closest(".list-item");
       if (!item) return;
 
