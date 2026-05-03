@@ -2005,6 +2005,8 @@ const modalRefs = {
     get confirmBtn() { return document.querySelector("#modalConfirmBtn"); }
 };
 
+let _modalEpoch = 0;
+
 export function showModal({
     title,
     message,
@@ -2017,6 +2019,8 @@ export function showModal({
     contentClass = ""
 }) {
     return new Promise((resolve) => {
+        const myEpoch = ++_modalEpoch;
+
         modalRefs.title.textContent = title;
         const content = modalRefs.dialog?.querySelector(".modal-content");
         if (content) {
@@ -2035,7 +2039,9 @@ export function showModal({
         modalRefs.cancelBtn.textContent = cancelLabel;
         modalRefs.cancelBtn.hidden = !showCancel;
 
+        let closeListenerTimer;
         const cleanup = () => {
+            clearTimeout(closeListenerTimer);
             if (content) {
                 content.className = "modal-content";
             }
@@ -2052,14 +2058,32 @@ export function showModal({
         };
 
         const onCancel = () => {
+            // The dialog's close event fires as an async task. If a new modal was
+            // opened between the close() call and this handler firing, this is a
+            // stale event — clean up stale listeners but don't close the new modal.
+            if (myEpoch !== _modalEpoch) {
+                cleanup();
+                resolve(showInput ? null : false);
+                return;
+            }
             cleanup();
-            modalRefs.dialog.close();
+            if (modalRefs.dialog.open) {
+                modalRefs.dialog.close();
+            }
             resolve(showInput ? null : false);
         };
 
         modalRefs.confirmBtn.addEventListener("click", onConfirm);
         modalRefs.cancelBtn.addEventListener("click", onCancel);
-        modalRefs.dialog.addEventListener("close", onCancel, { once: true });
+
+        // Register the close listener in the next task so stale close events
+        // queued by a previous dialog.close() call are already dispatched and
+        // handled before our listener is attached.
+        closeListenerTimer = setTimeout(() => {
+            if (myEpoch === _modalEpoch) {
+                modalRefs.dialog.addEventListener("close", onCancel, { once: true });
+            }
+        }, 0);
 
         modalRefs.dialog.showModal();
         if (showInput) {
