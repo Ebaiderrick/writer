@@ -572,6 +572,40 @@ html[data-theme="rose"] .mesh-background {
   gap: 10px;
 }
 
+.workspace-view {
+  min-height: 100vh;
+  padding: 18px 24px 40px;
+}
+
+.workspace-topbar {
+  margin-bottom: 28px;
+}
+
+.workspace-view-brand {
+  display: grid;
+  gap: 6px;
+}
+
+.workspace-view-brand strong {
+  font-size: clamp(1.8rem, 2.2vw, 2.4rem);
+  letter-spacing: -0.03em;
+}
+
+.workspace-view-brand span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.workspace-view-body,
+.workspace-projects {
+  display: grid;
+  gap: 24px;
+}
+
+.workspace-projects-head {
+  margin-bottom: 0;
+}
+
 .workspace-home {
   margin-bottom: 24px;
 }

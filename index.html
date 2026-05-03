@@ -228,12 +228,38 @@
             <p id="homeProjectsSubtitle" class="home-projects-subtitle">Start a new screenplay or reopen one already in motion.</p>
           </div>
           <div class="home-projects-actions">
-            <button id="workspaceBackBtn" class="ghost-button" type="button" hidden>All Workspaces</button>
-            <button id="newProjectBtn" class="primary-button" type="button">New</button>
+            <button id="newProjectBtn" class="primary-button" type="button">New Project</button>
           </div>
         </div>
         <section id="homeWorkspaceDashboard" class="workspace-home" hidden></section>
         <div id="projectGrid" class="project-grid"></div>
+      </section>
+    </section>
+
+    <section id="workspaceView" class="workspace-view" hidden>
+      <header class="home-topbar workspace-topbar">
+        <div class="nav-stack">
+          <div class="workspace-view-brand">
+            <strong id="workspaceViewTitle">Workspace</strong>
+            <span id="workspaceViewSubtitle">Projects, members, and delegation live here.</span>
+          </div>
+        </div>
+        <div class="home-projects-actions">
+          <button id="workspaceBackBtn" class="ghost-button" type="button">All Projects</button>
+          <button id="workspaceNewProjectBtn" class="primary-button" type="button">New Project</button>
+        </div>
+      </header>
+      <section class="workspace-view-body">
+        <section id="workspaceDashboard" class="workspace-home"></section>
+        <section class="workspace-projects">
+          <div class="home-projects-head workspace-projects-head">
+            <div class="home-projects-copy">
+              <h2>Workspace Projects</h2>
+              <p class="home-projects-subtitle">Every script in this workspace stays connected to the same team context.</p>
+            </div>
+          </div>
+          <div id="workspaceProjectGrid" class="project-grid"></div>
+        </section>
       </section>
     </section>
 

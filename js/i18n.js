@@ -36,7 +36,7 @@ const TRANSLATIONS = {
 
     "home.tagline": "Where your stories take flight.",
     "home.scripts": "Scripts:",
-    "home.newScript": "New Script",
+    "home.newScript": "New Project",
     "home.workspace": "Workspace",
 
     "menu.newProject": "New Project",

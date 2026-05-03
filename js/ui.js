@@ -17,6 +17,7 @@ const MENU_GLYPHS = {
 
 export function showAuth() {
   refs.homeView.hidden = true;
+  refs.workspaceView.hidden = true;
   refs.studioView.hidden = true;
   refs.authView.hidden = false;
 }
@@ -24,12 +25,160 @@ export function showAuth() {
 export function showHome() {
   refs.authView.hidden = true;
   refs.homeView.hidden = false;
+  refs.workspaceView.hidden = true;
+  refs.studioView.hidden = true;
+}
+
+export function showWorkspaceView() {
+  refs.authView.hidden = true;
+  refs.homeView.hidden = true;
+  refs.workspaceView.hidden = false;
   refs.studioView.hidden = true;
 }
 
 export function showStudio() {
   refs.homeView.hidden = true;
+  refs.workspaceView.hidden = true;
   refs.studioView.hidden = false;
+}
+
+export function renderWorkspaceView() {
+  const workspaceId = state.currentWorkspaceId;
+  const allProjects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  const workspaceLead = allProjects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot)
+    || allProjects.find((project) => project.workspace?.id === workspaceId)
+    || null;
+
+  if (!workspaceLead) {
+    state.currentWorkspaceId = null;
+    showHome();
+    renderHome();
+    return;
+  }
+
+  const projects = allProjects.filter((project) => project.workspace?.id === workspaceId && !project.isWorkspaceRoot);
+  const memberEntries = [
+    workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner",
+    ...Object.values(workspaceLead.collaborators || {}).map((member) => member.name || member.email || "Collaborator")
+  ].filter(Boolean);
+  const uniqueMembers = [...new Set(memberEntries)];
+  const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
+  const taskItems = [...(workspaceLead.workspace?.tasks || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  const assignees = [
+    { id: workspaceLead.ownerId || "workspace_owner", label: workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner" },
+    ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: person.name || person.email || "Collaborator" })),
+    { id: "ai_assist", label: "@AIassist" }
+  ];
+
+  if (refs.workspaceViewTitle) refs.workspaceViewTitle.textContent = workspaceLead.workspace?.name || workspaceLead.title || "Workspace";
+  if (refs.workspaceViewSubtitle) refs.workspaceViewSubtitle.textContent = "Projects, members, delegation, and shared progress live here.";
+
+  refs.workspaceDashboard.innerHTML = `
+    <div class="workspace-home-shell">
+      <section class="workspace-home-hero-card">
+        <div class="workspace-home-hero-copy">
+          <span class="workspace-home-kicker">Film Workspace</span>
+          <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
+          <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
+        </div>
+        <div class="workspace-home-hero-metrics">
+          <div class="workspace-home-metric"><span>Projects</span><strong>${projects.length}</strong></div>
+          <div class="workspace-home-metric"><span>Members</span><strong>${uniqueMembers.length}</strong></div>
+          <div class="workspace-home-metric"><span>Tasks</span><strong>${taskItems.length}</strong></div>
+          <div class="workspace-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong></div>
+        </div>
+      </section>
+      <div class="workspace-home-grid">
+        <section class="workspace-home-panel">
+          <div class="workspace-home-panel-head">
+            <h4>Members</h4>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
+          </div>
+          <div class="workspace-home-members">
+            ${uniqueMembers.map((name) => `<span class="workspace-home-member-pill">${escapeHtml(name)}</span>`).join("")}
+          </div>
+        </section>
+        <section class="workspace-home-panel">
+          <div class="workspace-home-panel-head">
+            <h4>Recent activity</h4>
+            <button class="primary-button btn-sm" type="button" data-workspace-home-action="new-project">New Project</button>
+          </div>
+          <div class="workspace-home-activity">
+            ${activityItems.length ? activityItems.map((item) => `
+              <article class="workspace-home-activity-item">
+                <strong>${escapeHtml(item.label || item.message || "Workspace updated")}</strong>
+                <span>${escapeHtml(formatDateTime(item.at || item.timestamp || workspaceLead.updatedAt))}</span>
+              </article>
+            `).join("") : '<p class="workspace-home-empty">No activity yet. The next change here will start the trail.</p>'}
+          </div>
+        </section>
+        <section class="workspace-home-panel workspace-home-panel-wide">
+          <div class="workspace-home-panel-head">
+            <h4>Tasks & Delegation</h4>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">Add Script</button>
+          </div>
+          <div class="workspace-task-form">
+            <input class="modal-input" type="text" placeholder="Task title" data-workspace-task-title>
+            <select class="comment-filter-select" data-workspace-task-project>
+              ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
+            </select>
+            <select class="comment-filter-select" data-workspace-task-assignee>
+              ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+            </select>
+            <select class="comment-filter-select" data-workspace-task-status-new>
+              <option value="todo">To Do</option>
+              <option value="in-progress">In Progress</option>
+              <option value="done">Done</option>
+            </select>
+            <input class="modal-input" type="text" placeholder="Scene / block reference (optional)" data-workspace-task-reference>
+            <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
+            <button class="primary-button btn-sm" type="button" data-workspace-home-action="add-task">Create Task</button>
+          </div>
+          <div class="workspace-task-list">
+            ${taskItems.length ? taskItems.map((task) => `
+              <article class="workspace-task-card">
+                <div class="workspace-task-head">
+                  <div>
+                    <strong>${escapeHtml(task.title)}</strong>
+                    <span>${escapeHtml(task.assignedLabel || "Unassigned")} - ${escapeHtml(task.reference || "General workspace task")}</span>
+                  </div>
+                  <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
+                    <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
+                    <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+                    <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
+                  </select>
+                </div>
+                ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                <div class="workspace-task-meta">
+                  <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
+                  ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-project-id="${escapeHtml(task.projectId)}">Open Project</button>` : ""}
+                </div>
+              </article>
+            `).join("") : '<p class="workspace-home-empty">No tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  refs.workspaceProjectGrid.innerHTML = "";
+  const template = document.querySelector("#projectCardTemplate");
+  projects.forEach((project) => {
+    const node = template.content.firstElementChild.cloneNode(true);
+    const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+    const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+    node.querySelector(".project-card-title").textContent = project.title;
+    node.querySelector(".project-script-id").textContent = project.scriptId;
+    node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
+    node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
+    node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
+    node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
+    node.dataset.projectId = project.id;
+    node.querySelector(".project-card-open").dataset.projectId = project.id;
+    refs.workspaceProjectGrid.appendChild(node);
+  });
+
+  applyTranslations();
 }
 
 export function showNewCreationFlow() {

@@ -20,14 +20,14 @@ import { paginateScriptLines } from './pagination.js';
 import { auth } from './firebase.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
-  showStudio, showHome, applyViewState, setTheme, toggleMenu,
+  showStudio, showHome, showWorkspaceView, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
   showModal,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
-  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal,
+  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView,
   showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow
 } from './ui.js';
 import { AI } from './ai.js';
@@ -98,8 +98,8 @@ function openWorkspaceDashboard(workspaceId) {
     state.currentProjectId = workspaceRoot.id;
   }
   persistProjects(false, { syncInputs: false });
-  showHome();
-  renderHome();
+  showWorkspaceView();
+  renderWorkspaceView();
 }
 
 function createProjectInsideCurrentWorkspace() {
@@ -133,6 +133,33 @@ function createProjectInsideCurrentWorkspace() {
   openProject(project.id);
 }
 
+function isDisposableUntitledDraft(project = getCurrentProject()) {
+  if (!project || project.isWorkspaceRoot) return false;
+  const defaultLikeTitle = /^(Untitled Script|Film Script \d+)$/i.test(String(project.title || "").trim());
+  const hasMeta = [project.author, project.contact, project.company, project.details, project.logline].some((value) => String(value || "").trim());
+  const hasContent = (project.lines || []).some((line) => String(line?.text || "").trim() || String(line?.secondary || "").trim());
+  return defaultLikeTitle && !hasMeta && !hasContent;
+}
+
+async function discardUntitledDraftIfNeeded() {
+  if (refs.studioView?.hidden) return false;
+  const project = getCurrentProject();
+  if (!isDisposableUntitledDraft(project)) return false;
+  const workspaceId = project.workspace?.id || project.id;
+  state.projects = state.projects.filter((item) => item.id !== project.id);
+  if (!state.projects.length) {
+    const fallback = createProjectWithOptions();
+    state.projects = [fallback];
+  }
+  if (state.currentWorkspaceId === workspaceId && project.workspace?.id !== project.id) {
+    state.currentWorkspaceId = workspaceId;
+  }
+  state.currentProjectId = state.projects[0].id;
+  persistProjects(true, { syncInputs: false });
+  await customAlert("This project was not created because no project name or content was added.", "Project Not Created");
+  return true;
+}
+
 function getWorkspaceTaskAssignees(workspaceProject) {
   const ownerUid = workspaceProject.ownerId || "workspace_owner";
   const ownerLabel = workspaceProject.ownerName || workspaceProject.ownerEmail || workspaceProject.author || "Workspace Owner";
@@ -150,13 +177,13 @@ function getWorkspaceTaskAssignees(workspaceProject) {
 
 function addWorkspaceTaskFromDashboard() {
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
-  if (!workspaceProject || !refs.homeWorkspaceDashboard) return;
-  const titleInput = refs.homeWorkspaceDashboard.querySelector('[data-workspace-task-title]');
-  const descriptionInput = refs.homeWorkspaceDashboard.querySelector('[data-workspace-task-description]');
-  const projectSelect = refs.homeWorkspaceDashboard.querySelector('[data-workspace-task-project]');
-  const assigneeSelect = refs.homeWorkspaceDashboard.querySelector('[data-workspace-task-assignee]');
-  const referenceInput = refs.homeWorkspaceDashboard.querySelector('[data-workspace-task-reference]');
-  const statusSelect = refs.homeWorkspaceDashboard.querySelector('[data-workspace-task-status-new]');
+  if (!workspaceProject || !refs.workspaceDashboard) return;
+  const titleInput = refs.workspaceDashboard.querySelector('[data-workspace-task-title]');
+  const descriptionInput = refs.workspaceDashboard.querySelector('[data-workspace-task-description]');
+  const projectSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-project]');
+  const assigneeSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-assignee]');
+  const referenceInput = refs.workspaceDashboard.querySelector('[data-workspace-task-reference]');
+  const statusSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-status-new]');
   const title = titleInput?.value?.trim();
   if (!title) {
     customAlert("Enter a task title first.", "Workspace Tasks");
@@ -185,7 +212,7 @@ function addWorkspaceTaskFromDashboard() {
     tasks: [...(workspace.tasks || []), nextTask]
   }));
   persistProjects(true, { syncInputs: false });
-  renderHome();
+  renderWorkspaceView();
 }
 
 function updateWorkspaceTask(taskId, patch) {
@@ -197,26 +224,27 @@ function updateWorkspaceTask(taskId, patch) {
       : task)
   }));
   persistProjects(true, { syncInputs: false });
-  renderHome();
+  renderWorkspaceView();
 }
 
 export function bindEvents() {
   // Navigation
   refs.newProjectBtn.addEventListener("click", () => {
-    if (state.currentWorkspaceId && !refs.homeWorkspaceDashboard.hidden) {
-      createProjectInsideCurrentWorkspace();
-      return;
-    }
     launchNewCreationFlow();
+  });
+
+  refs.workspaceNewProjectBtn?.addEventListener("click", () => {
+    createProjectInsideCurrentWorkspace();
   });
 
   refs.workspaceBackBtn?.addEventListener("click", () => {
     state.currentWorkspaceId = null;
     persistProjects(false, { syncInputs: false });
+    showHome();
     renderHome();
   });
 
-  refs.homeWorkspaceDashboard?.addEventListener("click", (event) => {
+  refs.workspaceDashboard?.addEventListener("click", (event) => {
     const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
     if (!action) return;
     if (action === "new-project") {
@@ -240,7 +268,7 @@ export function bindEvents() {
     }
   });
 
-  refs.homeWorkspaceDashboard?.addEventListener("change", (event) => {
+  refs.workspaceDashboard?.addEventListener("change", (event) => {
     const statusSelect = event.target.closest("[data-workspace-task-status]");
     if (statusSelect) {
       updateWorkspaceTask(statusSelect.dataset.workspaceTaskStatus, { status: statusSelect.value });
@@ -1688,7 +1716,16 @@ function execEditorCommand(command) {
 }
 
 function saveAndGoHome() {
+  if (isDisposableUntitledDraft()) {
+    discardUntitledDraftIfNeeded().then(() => {
+      state.currentWorkspaceId = null;
+      showHome();
+      renderHome();
+    });
+    return;
+  }
   persistProjects(true);
+  state.currentWorkspaceId = null;
   showHome();
   renderHome();
 }
