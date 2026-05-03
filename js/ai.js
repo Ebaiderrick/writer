@@ -1393,6 +1393,7 @@ export const AI = (() => {
       const charDetail = memChar
         ? [
             memChar.age ? `Age: ${memChar.age}` : "",
+            memChar.sex ? `Sex: ${memChar.sex}` : "",
             memChar.outfit ? `Outfit: ${memChar.outfit}` : "",
             memChar.behaviour ? `Behaviour: ${memChar.behaviour}` : "",
             memChar.other || ""

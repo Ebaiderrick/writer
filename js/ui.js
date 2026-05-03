@@ -147,7 +147,7 @@ export function getSceneFirstLine(project, sceneIndex) {
 
 export function renderCharacterList() {
   const project = getCurrentProject();
-  if (!project) return;
+  if (!project || !refs.characterList) return;
   const characters = new Map();
 
   project.lines.forEach((line, index) => {
@@ -832,6 +832,10 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
             <input class="modal-input" id="charAge" type="text" value="${escapeHtml(existing?.age || "")}" placeholder="e.g. 35">
           </label>
           <label class="field field-wide">
+            <span>Sex</span>
+            <input class="modal-input" id="charSex" type="text" value="${escapeHtml(existing?.sex || "")}" placeholder="e.g. Male, Female, Non-binary">
+          </label>
+          <label class="field field-wide">
             <span>Outfit / Appearance</span>
             <input class="modal-input" id="charOutfit" type="text" value="${escapeHtml(existing?.outfit || "")}" placeholder="e.g. grey tailored suit, tired eyes">
           </label>
@@ -884,7 +888,6 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
         const chars = project.storyMemory?.characters || [];
         chars.splice(Number(btn.dataset.charDelete), 1);
         persistProjects(false);
-        renderCharacterList();
         renderList();
       });
     });
@@ -899,12 +902,14 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
       const name = (container.querySelector("#charName")?.value || "").trim().toUpperCase();
       if (!name) return;
       const age = (container.querySelector("#charAge")?.value || "").trim();
+      const sex = (container.querySelector("#charSex")?.value || "").trim();
       const outfit = (container.querySelector("#charOutfit")?.value || "").trim();
       const behaviour = (container.querySelector("#charBehaviour")?.value || "").trim();
       const other = (container.querySelector("#charOther")?.value || "").trim();
 
       const parts = [];
       if (age) parts.push(`Age: ${age}`);
+      if (sex) parts.push(`Sex: ${sex}`);
       if (outfit) parts.push(`Outfit: ${outfit}`);
       if (behaviour) parts.push(`Behaviour: ${behaviour}`);
       if (other) parts.push(other);
@@ -916,17 +921,16 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
       if (existing) {
         const idx = project.storyMemory.characters.findIndex((c) => c.id === existing.id);
         if (idx !== -1) {
-          project.storyMemory.characters[idx] = { ...existing, name, age, outfit, behaviour, other, description };
+          project.storyMemory.characters[idx] = { ...existing, name, age, sex, outfit, behaviour, other, description };
         }
       } else {
         project.storyMemory.characters.push({
           id: `char-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          name, age, outfit, behaviour, other, description
+          name, age, sex, outfit, behaviour, other, description
         });
       }
 
       persistProjects(false);
-      renderCharacterList();
       renderStoryMemory();
       renderList();
     });
