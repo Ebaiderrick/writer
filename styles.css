@@ -658,6 +658,10 @@ html[data-theme="rose"] .mesh-background {
   gap: 16px;
 }
 
+.workspace-home-panel-wide {
+  grid-column: 1 / -1;
+}
+
 .workspace-home-panel {
   display: grid;
   gap: 14px;
@@ -713,6 +717,70 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-empty {
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.workspace-task-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workspace-task-description {
+  grid-column: 1 / -2;
+  min-height: 76px;
+}
+
+.workspace-task-form button {
+  align-self: end;
+}
+
+.workspace-task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-task-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
+}
+
+.workspace-task-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-task-head strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.workspace-task-head span,
+.workspace-task-copy,
+.workspace-task-meta span {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.workspace-task-copy {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.workspace-task-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.workspace-task-status-select {
+  min-width: 132px;
 }
 
 .project-grid {
@@ -3846,7 +3914,9 @@ body.outline-hidden .section-scenes {
   }
 
   .home-projects-actions,
-  .workspace-home-panel-head {
+  .workspace-home-panel-head,
+  .workspace-task-head,
+  .workspace-task-meta {
     flex-direction: column;
     align-items: stretch;
   }
@@ -3862,6 +3932,7 @@ body.outline-hidden .section-scenes {
   .smart-proofread-range-grid,
   .workspace-home-hero-card,
   .workspace-home-grid,
+  .workspace-task-form,
   .project-grid {
     grid-template-columns: 1fr;
   }

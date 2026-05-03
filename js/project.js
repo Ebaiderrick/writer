@@ -209,6 +209,7 @@ export function sanitizeProject(project) {
     title: project.title || "Untitled Script",
     workType: project.workType === "prose-poetry" ? "prose-poetry" : "film-script",
     creationKind: project.creationKind === "workspace" ? "workspace" : "project",
+    isWorkspaceRoot: Boolean(project.isWorkspaceRoot),
     author: project.author || "",
     contact: project.contact || "",
     company: project.company || "",
@@ -268,10 +269,20 @@ export function createProject() {
 }
 
 export function createProjectWithOptions(options = {}) {
-  const index = state.projects.length + 1;
   const creationKind = options.creationKind === "workspace" ? "workspace" : "project";
   const workType = options.workType === "prose-poetry" ? "prose-poetry" : "film-script";
+  const isWorkspaceRoot = Boolean(options.isWorkspaceRoot);
   const workspaceSeed = options.workspace && typeof options.workspace === "object" ? options.workspace : null;
+  const peerProjects = state.projects.filter((project) => {
+    if (creationKind === "workspace" || isWorkspaceRoot) {
+      return project.isWorkspaceRoot;
+    }
+    if (workspaceSeed?.id) {
+      return !project.isWorkspaceRoot && project.workspace?.id === workspaceSeed.id;
+    }
+    return !project.isWorkspaceRoot && project.workspace?.id === project.id;
+  });
+  const index = peerProjects.length + 1;
   const defaultTitle = creationKind === "workspace"
     ? `Film Workspace ${index}`
     : `Film Script ${index}`;
@@ -280,6 +291,7 @@ export function createProjectWithOptions(options = {}) {
     title: options.title || defaultTitle,
     workType,
     creationKind,
+    isWorkspaceRoot,
     workspace: workspaceSeed ? {
       ...workspaceSeed,
       name: options.workspaceName || workspaceSeed.name || `Workspace ${index}`
@@ -295,6 +307,31 @@ export function createProjectWithOptions(options = {}) {
 
 export function getCurrentProject() {
   return state.projects.find((project) => project.id === state.currentProjectId) || null;
+}
+
+export function getWorkspaceProjects(workspaceId) {
+  return state.projects.filter((project) => project.workspace?.id === workspaceId);
+}
+
+export function getWorkspaceRootProject(workspaceId) {
+  return state.projects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot) || null;
+}
+
+export function updateWorkspaceAcrossProjects(workspaceId, updater) {
+  let changed = false;
+  state.projects = state.projects.map((project) => {
+    if (project.workspace?.id !== workspaceId) {
+      return project;
+    }
+    const nextWorkspace = updater({ ...(project.workspace || {}) }, project);
+    changed = true;
+    return sanitizeProject({
+      ...project,
+      workspace: nextWorkspace || project.workspace,
+      updatedAt: new Date().toISOString()
+    });
+  });
+  return changed;
 }
 
 export function getLine(id) {
@@ -485,7 +522,8 @@ function sanitizeWorkspace(workspace, project) {
     name: String(workspace?.name || project.title || "Team Workspace").trim() || "Team Workspace",
     inviteCode: String(workspace?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
     reminders: sanitizeWorkspaceReminders(workspace?.reminders),
-    targets: sanitizeWorkspaceTargets(workspace?.targets)
+    targets: sanitizeWorkspaceTargets(workspace?.targets),
+    tasks: sanitizeWorkspaceTasks(workspace?.tasks)
   };
 }
 
@@ -511,6 +549,27 @@ function sanitizeWorkspaceTargets(targets) {
     pages: clamp(Number(targets?.pages || 0), 0, 9999),
     lines: clamp(Number(targets?.lines || 0), 0, 99999)
   };
+}
+
+function sanitizeWorkspaceTasks(tasks) {
+  if (!Array.isArray(tasks)) {
+    return [];
+  }
+
+  return tasks.map((task, index) => ({
+    id: task?.id || uid(`task-${index}`),
+    title: String(task?.title || "").trim(),
+    description: String(task?.description || "").trim(),
+    status: ["todo", "in-progress", "done"].includes(task?.status) ? task.status : "todo",
+    assignedTo: String(task?.assignedTo || "").trim(),
+    assignedLabel: String(task?.assignedLabel || "").trim(),
+    assigneeType: task?.assigneeType === "system" ? "system" : "human",
+    projectId: String(task?.projectId || "").trim(),
+    reference: String(task?.reference || "").trim(),
+    createdAt: task?.createdAt || new Date().toISOString(),
+    updatedAt: task?.updatedAt || task?.createdAt || new Date().toISOString(),
+    createdByName: String(task?.createdByName || "").trim()
+  })).filter((task) => task.title);
 }
 
 function sanitizeCollaborators(collaborators) {

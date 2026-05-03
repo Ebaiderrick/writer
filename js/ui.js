@@ -123,7 +123,6 @@ export function showNewCreationFlow() {
 }
 
 export function renderHome() {
-  // Populate user info in home topbar
   try {
     const session = JSON.parse(localStorage.getItem('eyawriter_session') || 'null');
     if (session?.loggedIn && refs.homeUserName && refs.homeUserEmail) {
@@ -138,26 +137,36 @@ export function renderHome() {
   let workspaceLead = null;
 
   if (state.currentWorkspaceId) {
-    projects = projects.filter((project) => project.workspace?.id === state.currentWorkspaceId);
-    workspaceLead = projects.find((project) => project.creationKind === "workspace") || projects[0] || null;
-    if (!projects.length) {
+    workspaceLead = projects.find((project) => project.workspace?.id === state.currentWorkspaceId && project.isWorkspaceRoot)
+      || projects.find((project) => project.workspace?.id === state.currentWorkspaceId)
+      || null;
+    projects = projects.filter((project) => project.workspace?.id === state.currentWorkspaceId && !project.isWorkspaceRoot);
+    if (!workspaceLead) {
       state.currentWorkspaceId = null;
       refs.homeWorkspaceDashboard.hidden = true;
     }
+  } else {
+    projects = projects.filter((project) => project.isWorkspaceRoot || project.workspace?.id === project.id);
   }
 
   if (state.currentWorkspaceId && workspaceLead) {
     const memberEntries = [
-      workspaceLead.ownerName || workspaceLead.author || "Workspace Owner",
+      workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner",
       ...Object.values(workspaceLead.collaborators || {}).map((member) => member.name || member.email || "Collaborator")
     ].filter(Boolean);
     const uniqueMembers = [...new Set(memberEntries)];
     const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
+    const taskItems = [...(workspaceLead.workspace?.tasks || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    const assignees = [
+      { id: workspaceLead.ownerId || "workspace_owner", label: workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner" },
+      ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: person.name || person.email || "Collaborator" })),
+      { id: "ai_assist", label: "@AIassist" }
+    ];
 
     refs.homeHero.hidden = true;
     refs.workspaceBackBtn.hidden = false;
     refs.homeProjectsTitle.textContent = workspaceLead.workspace?.name || workspaceLead.title || "Workspace";
-    refs.homeProjectsSubtitle.textContent = "A focused studio view for projects, members, and recent movement inside this workspace.";
+    refs.homeProjectsSubtitle.textContent = "A focused studio view for projects, members, tasks, and recent movement inside this workspace.";
     refs.homeWorkspaceDashboard.hidden = false;
     refs.homeWorkspaceDashboard.innerHTML = `
       <div class="workspace-home-shell">
@@ -175,6 +184,10 @@ export function renderHome() {
             <div class="workspace-home-metric">
               <span>Members</span>
               <strong>${uniqueMembers.length}</strong>
+            </div>
+            <div class="workspace-home-metric">
+              <span>Tasks</span>
+              <strong>${taskItems.length}</strong>
             </div>
             <div class="workspace-home-metric">
               <span>Last activity</span>
@@ -200,10 +213,55 @@ export function renderHome() {
             <div class="workspace-home-activity">
               ${activityItems.length ? activityItems.map((item) => `
                 <article class="workspace-home-activity-item">
-                  <strong>${escapeHtml(item.label || "Workspace updated")}</strong>
-                  <span>${escapeHtml(formatDateTime(item.at || workspaceLead.updatedAt))}</span>
+                  <strong>${escapeHtml(item.label || item.message || "Workspace updated")}</strong>
+                  <span>${escapeHtml(formatDateTime(item.at || item.timestamp || workspaceLead.updatedAt))}</span>
                 </article>
               `).join("") : '<p class="workspace-home-empty">No activity yet. The next change here will start the trail.</p>'}
+            </div>
+          </section>
+          <section class="workspace-home-panel workspace-home-panel-wide">
+            <div class="workspace-home-panel-head">
+              <h4>Tasks & Delegation</h4>
+              <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">Add Script</button>
+            </div>
+            <div class="workspace-task-form">
+              <input class="modal-input" type="text" placeholder="Task title" data-workspace-task-title>
+              <select class="comment-filter-select" data-workspace-task-project>
+                ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
+              </select>
+              <select class="comment-filter-select" data-workspace-task-assignee>
+                ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+              </select>
+              <select class="comment-filter-select" data-workspace-task-status-new>
+                <option value="todo">To Do</option>
+                <option value="in-progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+              <input class="modal-input" type="text" placeholder="Scene / block reference (optional)" data-workspace-task-reference>
+              <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
+              <button class="primary-button btn-sm" type="button" data-workspace-home-action="add-task">Create Task</button>
+            </div>
+            <div class="workspace-task-list">
+              ${taskItems.length ? taskItems.map((task) => `
+                <article class="workspace-task-card">
+                  <div class="workspace-task-head">
+                    <div>
+                      <strong>${escapeHtml(task.title)}</strong>
+                      <span>${escapeHtml(task.assignedLabel || "Unassigned")} · ${escapeHtml(task.reference || "General workspace task")}</span>
+                    </div>
+                    <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
+                      <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
+                      <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+                      <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
+                    </select>
+                  </div>
+                  ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  <div class="workspace-task-meta">
+                    <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
+                    ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-project-id="${escapeHtml(task.projectId)}">Open Project</button>` : ""}
+                  </div>
+                </article>
+              `).join("") : '<p class="workspace-home-empty">No tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
             </div>
           </section>
         </div>
@@ -227,7 +285,13 @@ export function renderHome() {
 
     node.querySelector(".project-card-title").textContent = project.title;
     node.querySelector(".project-script-id").textContent = project.scriptId;
+    if (project.isWorkspaceRoot) {
+      node.querySelector(".project-card-title").textContent = `${project.title} · Workspace`;
+    }
     if (project.creationKind === "workspace") {
+      node.querySelector(".project-card-title").textContent = `${project.title} · Workspace`;
+    }
+    if (project.isWorkspaceRoot || project.creationKind === "workspace") {
       node.querySelector(".project-card-title").textContent = `${project.title} · Workspace`;
     }
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
