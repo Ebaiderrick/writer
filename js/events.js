@@ -376,6 +376,13 @@ export function bindEvents() {
     renderHome();
   });
 
+  refs.workspaceCloseBtn?.addEventListener("click", () => {
+    state.currentWorkspaceId = null;
+    persistProjects(false, { syncInputs: false });
+    showHome();
+    renderHome();
+  });
+
   refs.workspaceDashboard?.addEventListener("click", (event) => {
     const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
     if (!action) return;
@@ -389,6 +396,11 @@ export function bindEvents() {
     }
     if (action === "add-task") {
       addWorkspaceTaskFromDashboard();
+      return;
+    }
+    if (action === "set-task-filter") {
+      state.workspaceTaskFilter = event.target.closest("[data-task-filter]")?.dataset.taskFilter || "all";
+      renderWorkspaceView();
       return;
     }
     if (action === "edit-task") {

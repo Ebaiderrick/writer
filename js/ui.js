@@ -44,6 +44,7 @@ export function showStudio() {
 
 export function renderWorkspaceView() {
   const workspaceId = state.currentWorkspaceId;
+  state.workspaceTaskFilter = state.workspaceTaskFilter || "all";
   const allProjects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   const workspaceLead = allProjects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot)
     || allProjects.find((project) => project.workspace?.id === workspaceId)
@@ -63,7 +64,7 @@ export function renderWorkspaceView() {
   ].filter(Boolean);
   const uniqueMembers = [...new Set(memberEntries)];
   const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
-  const taskItems = [...(workspaceLead.workspace?.tasks || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  const allTaskItems = [...(workspaceLead.workspace?.tasks || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
   const assignees = [
     { id: workspaceLead.ownerId || "workspace_owner", label: workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner" },
     ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: person.name || person.email || "Collaborator" })),
@@ -76,6 +77,16 @@ export function renderWorkspaceView() {
       sceneId: line.id,
       label: `${project.title} - ${line.text.trim()}`
     })));
+  const currentUid = auth.currentUser?.uid || "";
+  const taskItems = allTaskItems.filter((task) => {
+    if (state.workspaceTaskFilter === "mine") {
+      return task.assignedTo === currentUid;
+    }
+    if (state.workspaceTaskFilter === "ai") {
+      return task.assignedTo === "ai_assist";
+    }
+    return true;
+  });
 
   if (refs.workspaceViewTitle) refs.workspaceViewTitle.textContent = workspaceLead.workspace?.name || workspaceLead.title || "Workspace";
   if (refs.workspaceViewSubtitle) refs.workspaceViewSubtitle.textContent = "Projects, members, delegation, and shared progress live here.";
@@ -91,7 +102,7 @@ export function renderWorkspaceView() {
         <div class="workspace-home-hero-metrics">
           <div class="workspace-home-metric"><span>Projects</span><strong>${projects.length}</strong></div>
           <div class="workspace-home-metric"><span>Members</span><strong>${uniqueMembers.length}</strong></div>
-          <div class="workspace-home-metric"><span>Tasks</span><strong>${taskItems.length}</strong></div>
+          <div class="workspace-home-metric"><span>Tasks</span><strong>${allTaskItems.length}</strong></div>
           <div class="workspace-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong></div>
         </div>
       </section>
@@ -124,6 +135,11 @@ export function renderWorkspaceView() {
             <h4>Tasks & Delegation</h4>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">Add Script</button>
           </div>
+          <div class="workspace-task-filters" role="tablist" aria-label="Workspace tasks filter">
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "all" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">My Tasks</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "ai" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
+          </div>
           <div class="workspace-task-form">
             <input class="modal-input" type="text" placeholder="Task title" data-workspace-task-title>
             <select class="comment-filter-select" data-workspace-task-project>
@@ -151,7 +167,7 @@ export function renderWorkspaceView() {
                   <div class="workspace-task-head">
                     <div>
                       <strong>${escapeHtml(task.title)}</strong>
-                    <span>${escapeHtml(task.assignedLabel || "Unassigned")} - ${escapeHtml(task.sceneLabel || task.reference || "General workspace task")}</span>
+                      <span>${escapeHtml(task.assignedLabel || "Unassigned")} - ${escapeHtml(task.sceneLabel || task.reference || "General workspace task")}</span>
                     </div>
                     <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
                       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
@@ -161,16 +177,16 @@ export function renderWorkspaceView() {
                   </div>
                   ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
                   <div class="workspace-task-meta">
-                  <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
-                  <div class="workspace-task-actions">
-                    <button class="ghost-button btn-sm" type="button" data-workspace-home-action="edit-task" data-task-id="${escapeHtml(task.id)}">Edit</button>
-                    <button class="ghost-button btn-sm" type="button" data-workspace-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
-                    <button class="ghost-button btn-sm" type="button" data-workspace-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
-                    ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
-                  </div>
+                    <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
+                    <div class="workspace-task-actions">
+                      <button class="ghost-button btn-sm" type="button" data-workspace-home-action="edit-task" data-task-id="${escapeHtml(task.id)}">Edit</button>
+                      <button class="ghost-button btn-sm" type="button" data-workspace-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
+                      <button class="ghost-button btn-sm" type="button" data-workspace-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
+                      ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
+                    </div>
                   </div>
                 </article>
-              `).join("") : '<p class="workspace-home-empty">No tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
+              `).join("") : '<p class="workspace-home-empty">No matching tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
           </div>
         </section>
       </div>

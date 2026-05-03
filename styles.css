@@ -578,9 +578,10 @@ html[data-theme="rose"] .mesh-background {
   z-index: 45;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: 20px;
   background: color-mix(in srgb, rgba(8, 10, 18, 0.68) 76%, transparent);
   backdrop-filter: blur(14px);
+  overflow: auto;
 }
 
 .workspace-topbar {
@@ -599,18 +600,18 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-view > * {
-  width: min(1320px, calc(100vw - 48px));
+  width: min(1188px, calc(100vw - 40px));
 }
 
 .workspace-view-body,
 .workspace-topbar {
-  max-width: min(1320px, calc(100vw - 48px));
+  max-width: min(1188px, calc(100vw - 40px));
 }
 
 .workspace-view-body {
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
   align-items: start;
-  max-height: calc(100vh - 148px);
+  max-height: calc(100vh - 132px);
   overflow: hidden;
   padding: 0;
 }
@@ -652,7 +653,7 @@ html[data-theme="rose"] .mesh-background {
 .workspace-topbar {
   border-radius: 26px 26px 0 0;
   margin-bottom: 0;
-  padding: 18px 22px;
+  padding: 14px 18px;
 }
 
 .workspace-view-body {
@@ -666,13 +667,14 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home,
 .workspace-projects {
   min-height: 0;
-  padding: 18px;
+  padding: 16px;
   overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .workspace-home-shell {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .workspace-home-hero-card,
@@ -686,8 +688,8 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-hero-card {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
-  gap: 18px;
-  padding: 20px;
+  gap: 16px;
+  padding: 16px;
 }
 
 .workspace-home-kicker {
@@ -706,12 +708,12 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-hero-copy {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .workspace-home-hero-copy h3 {
   margin: 0;
-  font-size: clamp(1.7rem, 2vw, 2.2rem);
+  font-size: clamp(1.35rem, 1.6vw, 1.78rem);
   letter-spacing: -0.03em;
 }
 
@@ -719,19 +721,20 @@ html[data-theme="rose"] .mesh-background {
   margin: 0;
   max-width: 62ch;
   color: color-mix(in srgb, var(--ink) 76%, var(--muted));
-  line-height: 1.5;
+  line-height: 1.45;
+  font-size: 0.88rem;
 }
 
 .workspace-home-hero-metrics {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   align-content: start;
 }
 
 .workspace-home-metric {
   display: grid;
   gap: 4px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-radius: 14px;
   background: color-mix(in srgb, var(--surface-strong) 85%, transparent);
 }
@@ -742,14 +745,14 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-home-metric strong {
-  font-size: 1rem;
+  font-size: 0.92rem;
   color: var(--ink);
 }
 
 .workspace-home-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 
 .workspace-home-panel-wide {
@@ -758,8 +761,8 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-panel {
   display: grid;
-  gap: 14px;
-  padding: 16px 18px;
+  gap: 12px;
+  padding: 14px 16px;
 }
 
 .workspace-home-panel-head {
@@ -771,22 +774,22 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-panel-head h4 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.92rem;
 }
 
 .workspace-home-members {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .workspace-home-member-pill {
   display: inline-flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 7px 10px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   color: var(--ink);
 }
 
@@ -798,30 +801,53 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-activity-item {
   display: grid;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 9px 11px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
 }
 
 .workspace-home-activity-item strong {
-  font-size: 0.86rem;
+  font-size: 0.8rem;
 }
 
 .workspace-home-activity-item span,
 .workspace-home-empty {
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   color: var(--muted);
+}
+
+.workspace-task-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workspace-filter-chip {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+}
+
+.workspace-filter-chip.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+  color: var(--accent-strong);
 }
 
 .workspace-task-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .workspace-task-description {
   grid-column: 1 / -2;
-  min-height: 76px;
+  min-height: 68px;
 }
 
 .workspace-task-form button {
@@ -830,7 +856,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-task-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .workspace-projects-empty {
@@ -851,8 +877,8 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-task-card {
   display: grid;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 7px;
+  padding: 11px 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
@@ -867,13 +893,13 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-task-head strong {
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
 }
 
 .workspace-task-head span,
 .workspace-task-copy,
 .workspace-task-meta span {
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   color: var(--muted);
 }
 
@@ -890,7 +916,24 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-task-status-select {
-  min-width: 132px;
+  min-width: 116px;
+}
+
+.workspace-close-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 0.92rem;
+  border-radius: 999px;
+}
+
+.workspace-view-brand strong {
+  font-size: clamp(1.32rem, 1.7vw, 1.7rem);
+}
+
+.workspace-view-brand span {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .workspace-task-comments,

@@ -19,6 +19,7 @@ export const refs = {
   get workspaceView() { return getCached("#workspaceView"); },
   get workspaceBackBtn() { return getCached("#workspaceBackBtn"); },
   get workspaceNewProjectBtn() { return getCached("#workspaceNewProjectBtn"); },
+  get workspaceCloseBtn() { return getCached("#workspaceCloseBtn"); },
   get workspaceViewTitle() { return getCached("#workspaceViewTitle"); },
   get workspaceViewSubtitle() { return getCached("#workspaceViewSubtitle"); },
   get workspaceDashboard() { return getCached("#workspaceDashboard"); },
