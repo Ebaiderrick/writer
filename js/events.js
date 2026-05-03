@@ -56,37 +56,48 @@ import {
 let studioSidebarRefreshFrame = 0;
 let hasShownReadOnlyNotice = false;
 
+function ensureDefaultWorkspaceRoot() {
+  const currentWorkspaceRoot = state.currentWorkspaceId
+    ? getWorkspaceRootProject(state.currentWorkspaceId)
+    : null;
+  if (currentWorkspaceRoot) return currentWorkspaceRoot;
+
+  const existingWorkspaceRoot = state.projects.find((project) => project.isWorkspaceRoot);
+  if (existingWorkspaceRoot) return existingWorkspaceRoot;
+
+  return createProjectWithOptions({
+    creationKind: "workspace",
+    workType: "film-script",
+    isWorkspaceRoot: true,
+    title: "My Workspace",
+    workspaceName: "My Workspace"
+  });
+}
+
 async function launchNewCreationFlow() {
   const selection = await showNewCreationFlow();
   if (!selection || selection.workType !== "film-script") {
     return;
   }
 
-  if (selection.creationKind === "workspace") {
-    const workspaceName = await customPrompt("Name this workspace before creating it.", "", "New Workspace");
-    if (!workspaceName || !workspaceName.trim()) {
-      await customAlert("A workspace name is required before creation.", "Workspace Not Created");
-      return;
-    }
-    const workspaceRoot = createProjectWithOptions({
-      creationKind: "workspace",
-      workType: selection.workType,
-      isWorkspaceRoot: true,
-      title: workspaceName.trim(),
-      workspaceName: workspaceName.trim()
-    });
-    openWorkspaceDashboard(workspaceRoot.workspace?.id || workspaceRoot.id);
-    return;
-  }
   const projectName = await customPrompt("Name this project before creating it.", "", "New Project");
   if (!projectName || !projectName.trim()) {
     await customAlert("A project name is required before creation.", "Project Not Created");
     return;
   }
+  const workspaceRoot = ensureDefaultWorkspaceRoot();
   const project = createProjectWithOptions({
-    creationKind: selection.creationKind,
+    creationKind: "project",
     workType: selection.workType,
-    title: projectName.trim()
+    title: projectName.trim(),
+    workspace: {
+      id: workspaceRoot.workspace?.id || workspaceRoot.id,
+      name: workspaceRoot.workspace?.name || workspaceRoot.title,
+      inviteCode: workspaceRoot.workspace?.inviteCode,
+      reminders: workspaceRoot.workspace?.reminders || [],
+      targets: workspaceRoot.workspace?.targets || {},
+      tasks: workspaceRoot.workspace?.tasks || []
+    }
   });
   openProject(project.id);
 }
