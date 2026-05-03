@@ -175,12 +175,30 @@ function getWorkspaceTaskAssignees(workspaceProject) {
   ];
 }
 
+function getWorkspaceTaskSceneChoices(workspaceId = state.currentWorkspaceId) {
+  return getWorkspaceProjects(workspaceId)
+    .filter((project) => !project.isWorkspaceRoot)
+    .flatMap((project) => (project.lines || [])
+      .filter((line) => line.type === "scene" && line.text.trim())
+      .map((line) => ({
+        projectId: project.id,
+        sceneId: line.id,
+        lineId: line.id,
+        label: `${project.title} - ${line.text.trim()}`
+      })));
+}
+
+function getWorkspaceTaskById(taskId) {
+  return getWorkspaceRootProject(state.currentWorkspaceId)?.workspace?.tasks?.find((task) => task.id === taskId) || null;
+}
+
 function addWorkspaceTaskFromDashboard() {
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
   if (!workspaceProject || !refs.workspaceDashboard) return;
   const titleInput = refs.workspaceDashboard.querySelector('[data-workspace-task-title]');
   const descriptionInput = refs.workspaceDashboard.querySelector('[data-workspace-task-description]');
   const projectSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-project]');
+  const sceneSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-scene]');
   const assigneeSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-assignee]');
   const referenceInput = refs.workspaceDashboard.querySelector('[data-workspace-task-reference]');
   const statusSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-status-new]');
@@ -190,6 +208,8 @@ function addWorkspaceTaskFromDashboard() {
     return;
   }
   const projectId = projectSelect?.value || "";
+  const sceneId = sceneSelect?.value || "";
+  const sceneChoice = getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
   const assignedTo = assigneeSelect?.value || "";
   const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
   const nextTask = {
@@ -200,8 +220,12 @@ function addWorkspaceTaskFromDashboard() {
     assignedTo,
     assignedLabel: assignee?.label || "Unassigned",
     assigneeType: assignee?.assigneeType || "human",
-    projectId,
+    projectId: sceneChoice?.projectId || projectId,
     reference: referenceInput?.value?.trim() || "",
+    sceneId: sceneChoice?.sceneId || "",
+    sceneLabel: sceneChoice?.label || "",
+    lineId: sceneChoice?.lineId || "",
+    comments: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
@@ -225,6 +249,108 @@ function updateWorkspaceTask(taskId, patch) {
   }));
   persistProjects(true, { syncInputs: false });
   renderWorkspaceView();
+}
+
+async function editWorkspaceTask(taskId) {
+  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const task = getWorkspaceTaskById(taskId);
+  if (!workspaceProject || !task) return;
+  const assignees = getWorkspaceTaskAssignees(workspaceProject);
+  const scenes = getWorkspaceTaskSceneChoices();
+  const container = document.createElement("div");
+  container.className = "workspace-task-form workspace-task-form-modal";
+  container.innerHTML = `
+    <input id="taskEditTitle" class="modal-input" type="text" value="${task.title}">
+    <select id="taskEditProject" class="comment-filter-select">
+      ${getWorkspaceProjects(state.currentWorkspaceId).filter((project) => !project.isWorkspaceRoot).map((project) => `<option value="${escapeHtml(project.id)}" ${project.id === task.projectId ? "selected" : ""}>${escapeHtml(project.title)}</option>`).join("")}
+    </select>
+    <select id="taskEditScene" class="comment-filter-select">
+      <option value="">General task</option>
+      ${scenes.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" ${scene.sceneId === task.sceneId ? "selected" : ""}>${escapeHtml(scene.label)}</option>`).join("")}
+    </select>
+    <select id="taskEditAssignee" class="comment-filter-select">
+      ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}" ${assignee.id === task.assignedTo ? "selected" : ""}>${escapeHtml(assignee.label)}</option>`).join("")}
+    </select>
+    <select id="taskEditStatus" class="comment-filter-select">
+      <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
+      <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+      <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
+    </select>
+    <input id="taskEditReference" class="modal-input" type="text" value="${escapeHtml(task.reference || "")}" placeholder="Scene / block reference (optional)">
+    <textarea id="taskEditDescription" class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen...">${escapeHtml(task.description || "")}</textarea>
+  `;
+  const saved = await showModal({
+    title: "Edit Task",
+    message: container,
+    confirmLabel: "Save"
+  });
+  if (!saved) return;
+  const sceneId = container.querySelector("#taskEditScene")?.value || "";
+  const sceneChoice = scenes.find((scene) => scene.sceneId === sceneId) || null;
+  const assignedTo = container.querySelector("#taskEditAssignee")?.value || "";
+  const assignee = assignees.find((entry) => entry.id === assignedTo);
+  updateWorkspaceTask(taskId, {
+    title: container.querySelector("#taskEditTitle")?.value?.trim() || task.title,
+    description: container.querySelector("#taskEditDescription")?.value?.trim() || "",
+    projectId: sceneChoice?.projectId || container.querySelector("#taskEditProject")?.value || task.projectId,
+    sceneId: sceneChoice?.sceneId || "",
+    sceneLabel: sceneChoice?.label || "",
+    lineId: sceneChoice?.lineId || "",
+    assignedTo,
+    assignedLabel: assignee?.label || "Unassigned",
+    assigneeType: assignee?.assigneeType || "human",
+    status: container.querySelector("#taskEditStatus")?.value || task.status,
+    reference: container.querySelector("#taskEditReference")?.value?.trim() || ""
+  });
+}
+
+async function deleteWorkspaceTask(taskId) {
+  const confirmed = await customConfirm("Delete this task and its comments?", "Delete Task");
+  if (!confirmed) return;
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    tasks: (workspace.tasks || []).filter((task) => task.id !== taskId)
+  }));
+  persistProjects(true, { syncInputs: false });
+  renderWorkspaceView();
+}
+
+async function commentOnWorkspaceTask(taskId) {
+  const task = getWorkspaceTaskById(taskId);
+  if (!task) return;
+  const container = document.createElement("div");
+  container.className = "workspace-task-comments";
+  container.innerHTML = `
+    <div class="workspace-task-comment-list">
+      ${task.comments?.length ? task.comments.map((comment) => `
+        <article class="workspace-task-comment">
+          <strong>${escapeHtml(comment.author || "Workspace member")}</strong>
+          <span>${escapeHtml(formatDateTime(comment.createdAt))}</span>
+          <p>${escapeHtml(comment.text)}</p>
+        </article>
+      `).join("") : '<p class="workspace-home-empty">No task comments yet.</p>'}
+    </div>
+    <textarea id="workspaceTaskCommentText" class="collab-textarea" placeholder="Add a comment..."></textarea>
+  `;
+  const shouldAdd = await showModal({
+    title: task.title,
+    message: container,
+    confirmLabel: "Add Comment"
+  });
+  if (!shouldAdd) return;
+  const text = container.querySelector("#workspaceTaskCommentText")?.value?.trim();
+  if (!text) return;
+  updateWorkspaceTask(taskId, {
+    comments: [
+      ...(task.comments || []),
+      {
+        id: uid("task-comment"),
+        text,
+        author: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member",
+        createdAt: new Date().toISOString()
+      }
+    ]
+  });
 }
 
 export function bindEvents() {
@@ -259,10 +385,28 @@ export function bindEvents() {
       addWorkspaceTaskFromDashboard();
       return;
     }
+    if (action === "edit-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) editWorkspaceTask(taskId);
+      return;
+    }
+    if (action === "delete-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) deleteWorkspaceTask(taskId);
+      return;
+    }
+    if (action === "comment-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) commentOnWorkspaceTask(taskId);
+      return;
+    }
     if (action === "open-task-project") {
-      const projectId = event.target.closest("[data-task-project-id]")?.dataset.taskProjectId;
+      const trigger = event.target.closest("[data-task-project-id]");
+      const projectId = trigger?.dataset.taskProjectId;
+      const taskId = trigger?.dataset.taskId;
+      const task = taskId ? getWorkspaceTaskById(taskId) : null;
       if (projectId) {
-        openProject(projectId);
+        openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       }
       return;
     }
@@ -845,7 +989,7 @@ export function bindEvents() {
 }
 
 // Action Handlers
-export function openProject(projectId) {
+export function openProject(projectId, options = {}) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
   if (project.isWorkspaceRoot) {
@@ -879,7 +1023,9 @@ export function openProject(projectId) {
   renderStudio();
   onStudioEnter(projectId);
   primeSpellingDictionary();
-  if (state.activeBlockId) {
+  if (options.focusLineId) {
+    focusBlock(options.focusLineId);
+  } else if (state.activeBlockId) {
     focusBlock(state.activeBlockId);
   }
 

@@ -69,6 +69,13 @@ export function renderWorkspaceView() {
     ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: person.name || person.email || "Collaborator" })),
     { id: "ai_assist", label: "@AIassist" }
   ];
+  const sceneOptions = projects.flatMap((project) => (project.lines || [])
+    .filter((line) => line.type === "scene" && line.text.trim())
+    .map((line) => ({
+      projectId: project.id,
+      sceneId: line.id,
+      label: `${project.title} - ${line.text.trim()}`
+    })));
 
   if (refs.workspaceViewTitle) refs.workspaceViewTitle.textContent = workspaceLead.workspace?.name || workspaceLead.title || "Workspace";
   if (refs.workspaceViewSubtitle) refs.workspaceViewSubtitle.textContent = "Projects, members, delegation, and shared progress live here.";
@@ -122,6 +129,10 @@ export function renderWorkspaceView() {
             <select class="comment-filter-select" data-workspace-task-project>
               ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
             </select>
+            <select class="comment-filter-select" data-workspace-task-scene>
+              <option value="">General task</option>
+              ${sceneOptions.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" data-scene-project-id="${escapeHtml(scene.projectId)}">${escapeHtml(scene.label)}</option>`).join("")}
+            </select>
             <select class="comment-filter-select" data-workspace-task-assignee>
               ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
             </select>
@@ -136,25 +147,30 @@ export function renderWorkspaceView() {
           </div>
           <div class="workspace-task-list">
             ${taskItems.length ? taskItems.map((task) => `
-              <article class="workspace-task-card">
-                <div class="workspace-task-head">
-                  <div>
-                    <strong>${escapeHtml(task.title)}</strong>
-                    <span>${escapeHtml(task.assignedLabel || "Unassigned")} - ${escapeHtml(task.reference || "General workspace task")}</span>
+                <article class="workspace-task-card">
+                  <div class="workspace-task-head">
+                    <div>
+                      <strong>${escapeHtml(task.title)}</strong>
+                    <span>${escapeHtml(task.assignedLabel || "Unassigned")} - ${escapeHtml(task.sceneLabel || task.reference || "General workspace task")}</span>
+                    </div>
+                    <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
+                      <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
+                      <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+                      <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
+                    </select>
                   </div>
-                  <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
-                    <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
-                    <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
-                    <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
-                  </select>
-                </div>
-                ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
-                <div class="workspace-task-meta">
+                  ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  <div class="workspace-task-meta">
                   <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
-                  ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-project-id="${escapeHtml(task.projectId)}">Open Project</button>` : ""}
-                </div>
-              </article>
-            `).join("") : '<p class="workspace-home-empty">No tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
+                  <div class="workspace-task-actions">
+                    <button class="ghost-button btn-sm" type="button" data-workspace-home-action="edit-task" data-task-id="${escapeHtml(task.id)}">Edit</button>
+                    <button class="ghost-button btn-sm" type="button" data-workspace-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
+                    <button class="ghost-button btn-sm" type="button" data-workspace-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
+                    ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
+                  </div>
+                  </div>
+                </article>
+              `).join("") : '<p class="workspace-home-empty">No tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
           </div>
         </section>
       </div>

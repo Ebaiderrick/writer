@@ -773,6 +773,13 @@ html[data-theme="rose"] .mesh-background {
   gap: 10px;
 }
 
+.workspace-task-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .workspace-task-card {
   display: grid;
   gap: 8px;
@@ -815,6 +822,31 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-task-status-select {
   min-width: 132px;
+}
+
+.workspace-task-comments,
+.workspace-task-comment-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-task-comment {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
+}
+
+.workspace-task-comment strong {
+  font-size: 0.82rem;
+}
+
+.workspace-task-comment span,
+.workspace-task-comment p {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0;
 }
 
 .project-grid {

@@ -566,6 +566,15 @@ function sanitizeWorkspaceTasks(tasks) {
     assigneeType: task?.assigneeType === "system" ? "system" : "human",
     projectId: String(task?.projectId || "").trim(),
     reference: String(task?.reference || "").trim(),
+    sceneId: String(task?.sceneId || "").trim(),
+    sceneLabel: String(task?.sceneLabel || "").trim(),
+    lineId: String(task?.lineId || "").trim(),
+    comments: Array.isArray(task?.comments) ? task.comments.map((comment, commentIndex) => ({
+      id: comment?.id || uid(`task-comment-${commentIndex}`),
+      text: String(comment?.text || "").trim(),
+      author: String(comment?.author || "").trim(),
+      createdAt: comment?.createdAt || new Date().toISOString()
+    })).filter((comment) => comment.text) : [],
     createdAt: task?.createdAt || new Date().toISOString(),
     updatedAt: task?.updatedAt || task?.createdAt || new Date().toISOString(),
     createdByName: String(task?.createdByName || "").trim()
