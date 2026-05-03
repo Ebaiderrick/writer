@@ -1575,23 +1575,25 @@ export async function showWorkspacePopup() {
     </section>
     <section class="workspace-popup-section">
       <h4>Roles</h4>
-      <div class="list-stack">
-        <div class="list-item"><span class="list-item-title">Owner</span><span class="list-item-meta">${escapeHtml(ownerLabel)}</span></div>
-        ${collaborators.map(([uid, person]) => `
-          <div class="list-item workspace-member-row">
-            <div>
-              <span class="list-item-title">${escapeHtml(person.name || person.email || "Collaborator")}</span>
-              <span class="list-item-meta">${escapeHtml(person.email || "")}</span>
+        <div class="list-stack">
+          <div class="list-item"><span class="list-item-title">Owner</span><span class="list-item-meta">${escapeHtml(ownerLabel)}</span></div>
+          ${collaborators.map(([uid, person]) => `
+            <div class="list-item workspace-member-row">
+              <div class="workspace-member-copy">
+                <span class="list-item-title">${escapeHtml(person.name || person.email || "Collaborator")}</span>
+                <div class="workspace-member-meta-row">
+                  <span class="list-item-meta">${escapeHtml(person.email || "")}</span>
+                  ${ownerCanManage ? `
+                    <select class="comment-filter-select workspace-role-select" data-member-role="${escapeHtml(uid)}">
+                      <option value="editor" ${(person.role || "editor") === "editor" ? "selected" : ""}>Editor</option>
+                      <option value="viewer" ${(person.role || "editor") === "viewer" ? "selected" : ""}>Viewer</option>
+                    </select>
+                  ` : `<span class="role-badge">${escapeHtml((person.role || "editor").replace(/^./, (char) => char.toUpperCase()))}</span>`}
+                </div>
+              </div>
             </div>
-            ${ownerCanManage ? `
-              <select class="comment-filter-select workspace-role-select" data-member-role="${escapeHtml(uid)}">
-                <option value="editor" ${(person.role || "editor") === "editor" ? "selected" : ""}>Editor</option>
-                <option value="viewer" ${(person.role || "editor") === "viewer" ? "selected" : ""}>Viewer</option>
-              </select>
-            ` : `<span class="role-badge">${escapeHtml((person.role || "editor").replace(/^./, (char) => char.toUpperCase()))}</span>`}
-          </div>
-        `).join("") || '<p class="collab-empty">No editors added yet.</p>'}
-      </div>
+          `).join("") || '<p class="collab-empty">No editors added yet.</p>'}
+        </div>
     </section>
     <section class="workspace-popup-section">
       <h4>Reminders</h4>

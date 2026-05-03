@@ -3590,10 +3590,22 @@ kbd {
 
 .workspace-member-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
-  align-items: center;
+  align-items: start;
   padding: 10px 12px;
+}
+
+.workspace-member-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.workspace-member-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .workspace-role-select,
