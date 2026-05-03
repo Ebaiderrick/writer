@@ -29,7 +29,7 @@ const dictionaryCache = new Map();
 const dictionaryPromiseCache = new Map();
 
 function getLanguageKey(language) {
-  return LANGUAGE_FILES[language] ? language : "en";
+  return LANGUAGE_FILES[language] ? language : null;
 }
 
 function getLocale(language) {
@@ -400,6 +400,7 @@ export async function ensureLanguageDictionary(language) {
 
 export function getSpellingSuggestions(word, options = {}) {
   const language = getLanguageKey(options.language);
+  if (!language) return [];
   const dictionary = dictionaryCache.get(language);
   if (!dictionary) {
     return [];
@@ -449,7 +450,7 @@ export function getSpellingSuggestions(word, options = {}) {
 
 export function buildSpellingIssues(text, options = {}) {
   const language = getLanguageKey(options.language);
-  if (!dictionaryCache.has(language)) {
+  if (!language || !dictionaryCache.has(language)) {
     return [];
   }
 

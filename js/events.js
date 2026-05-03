@@ -4,7 +4,7 @@ import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
-  syncProjectFromInputs, replaceWithSample as restoreSample,
+  syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
   deleteProjectFromCloud
 } from './project.js';
@@ -13,28 +13,27 @@ import {
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
   showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
 } from './editor.js';
-import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocumentBlob } from './preview.js';
+import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
+import { buildWordDocxBlob, DOCX_MIME_TYPE } from './docxExport.js';
 import { paginateScriptLines } from './pagination.js';
-import {
-  buildExportFilename,
-  buildExportSnapshot,
-  buildPreparedExportLines,
-  getExportLayout
-} from './exportFormat.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
+  showModal,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
-  renderCurrentScriptId
+  renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
+  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal,
+  showStoryMemoryPopup, showWorkspacePopup, showCharactersPopup
 } from './ui.js';
 import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
-  downloadFile, downloadBlob, selectElementText, parseTextToLines, uid,
+  slugify, downloadFile, selectElementText, parseTextToLines, uid,
   placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
+  formatLineText
 } from './utils.js';
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
 import {
@@ -47,8 +46,13 @@ import {
 } from './localSave.js';
 import {
   inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
-  hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel
+  hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel,
+  canEditProject, updateCollaboratorRole, addWorkspaceReminder,
+  toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace
 } from './collaborate.js';
+
+let studioSidebarRefreshFrame = 0;
+let hasShownReadOnlyNotice = false;
 
 export function bindEvents() {
   // Navigation
@@ -59,6 +63,14 @@ export function bindEvents() {
 
   refs.goHomeBtn.addEventListener("click", () => {
     saveAndGoHome();
+  });
+
+  document.getElementById("addStoryElementBtn")?.addEventListener("click", () => {
+    showEditStoryElementModal();
+  });
+
+  document.getElementById("smartProofreadBtn")?.addEventListener("click", () => {
+    AI.triggerSmartProofread();
   });
 
   // Meta Inputs
@@ -75,6 +87,31 @@ export function bindEvents() {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       toggleMenu(button.dataset.menuTrigger);
+    });
+    button.addEventListener("mouseenter", () => {
+      if (window.innerWidth > 900) {
+        toggleMenu(button.dataset.menuTrigger, true);
+      }
+    });
+  });
+
+  document.querySelectorAll(".nav-menu").forEach((menu) => {
+    menu.addEventListener("mouseleave", () => {
+      if (window.innerWidth > 900) {
+        closeMenus();
+      }
+    });
+    // Accordion behavior for menu groups
+    menu.addEventListener("click", (e) => {
+      const summary = e.target.closest(".menu-group-summary");
+      if (summary) {
+        const details = summary.parentElement;
+        if (!details.open) {
+          menu.querySelectorAll(".menu-group[open]").forEach((group) => {
+            if (group !== details) group.removeAttribute("open");
+          });
+        }
+      }
     });
   });
 
@@ -168,10 +205,20 @@ export function bindEvents() {
     queueSave();
   });
 
-  refs.bgAnimationToggle?.addEventListener("change", () => {
-    state.backgroundAnimation = refs.bgAnimationToggle.checked;
+  const syncBgAnim = (enabled) => {
+    state.backgroundAnimation = enabled;
+    if (refs.bgAnimationToggle) refs.bgAnimationToggle.checked = enabled;
+    if (refs.bgAnimationLandingToggle) refs.bgAnimationLandingToggle.checked = enabled;
     applyToolbarState();
     persistProjects(false);
+  };
+
+  refs.bgAnimationToggle?.addEventListener("change", () => {
+    syncBgAnim(refs.bgAnimationToggle.checked);
+  });
+
+  refs.bgAnimationLandingToggle?.addEventListener("change", () => {
+    syncBgAnim(refs.bgAnimationLandingToggle.checked);
   });
 
   refs.aiAssistToggle.addEventListener("change", () => {
@@ -234,8 +281,65 @@ export function bindEvents() {
     }
   });
 
+  window.addEventListener("workspaceInviteRequested", async (event) => {
+    const email = event.detail?.email;
+    const role = event.detail?.role || "editor";
+    if (!email) {
+      return;
+    }
+    const result = await inviteCollaborator(email, role);
+    window.dispatchEvent(new CustomEvent("workspaceInviteResult", { detail: result }));
+    if (result?.ok) {
+      await customAlert("Workspace invite sent.", "Workspace");
+    } else if (result?.reason) {
+      await customAlert(result.reason, "Workspace");
+    }
+  });
+
+  window.addEventListener("workspaceRenameRequested", async (event) => {
+    const result = await renameWorkspace(event.detail?.projectId, event.detail?.name);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Workspace name saved." : "" }
+    }));
+    if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("workspaceRoleChangeRequested", async (event) => {
+    const result = await updateCollaboratorRole(event.detail?.projectId, event.detail?.collaboratorUid, event.detail?.role);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Member role updated." : "" }
+    }));
+    if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("workspaceReminderRequested", async (event) => {
+    const result = await addWorkspaceReminder(event.detail?.projectId, {
+      text: event.detail?.text,
+      dueAt: event.detail?.dueAt
+    });
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Reminder added." : "" }
+    }));
+    if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("workspaceReminderToggleRequested", async (event) => {
+    const result = await toggleWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Reminder updated." : "" }
+    }));
+    if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("workspaceReminderDeleteRequested", async (event) => {
+    const result = await deleteWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Reminder deleted." : "" }
+    }));
+    if (result.ok) renderStudio();
+  });
+
   refs.duplicateProjectBtn.addEventListener("click", duplicateProject);
-  refs.loadSampleBtn.addEventListener("click", replaceWithSample);
   refs.deleteProjectBtn.addEventListener("click", deleteProject);
 
   initResizeHandle(refs.leftResize, "left");
@@ -381,22 +485,6 @@ export function bindEvents() {
       queueSave();
   });
 
-  refs.screenplayEditor.addEventListener("focusout", (e) => {
-    if (e.target.classList.contains("script-block")) {
-        const id = e.target.dataset.id;
-        if (id === state.activeBlockId) return;
-        const line = getLine(id);
-        const project = getCurrentProject();
-        if (line && line.secondary === undefined && !line.text.trim() && project && project.lines.length > 1) {
-            const index = getLineIndex(id);
-            project.lines.splice(index, 1);
-            project.updatedAt = new Date().toISOString();
-            renderStudio();
-            queueSave();
-        }
-    }
-  });
-
   // Project Grid (Delegated)
   refs.projectGrid.addEventListener("click", (e) => {
       const card = e.target.closest(".project-card");
@@ -520,6 +608,10 @@ export function bindEvents() {
   window.addEventListener('focusScriptLine', ({ detail }) => {
     if (detail?.lineId) focusBlock(detail.lineId);
   });
+
+  window.addEventListener('proofreadCleanupApplied', () => {
+    renderStudio();
+  });
 }
 
 // Action Handlers
@@ -527,6 +619,7 @@ export function openProject(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
   state.currentProjectId = project.id;
+  hasShownReadOnlyNotice = false;
 
   // Reset history for the new project
   state.history = [];
@@ -554,6 +647,8 @@ export function openProject(projectId) {
   if (state.activeBlockId) {
     focusBlock(state.activeBlockId);
   }
+
+  checkFirstWorkBackup();
 }
 
 export function renderStudio() {
@@ -565,6 +660,7 @@ export function renderStudio() {
   renderPreview();
   renderSceneList();
   renderCharacterList();
+  renderStoryMemory();
   renderMetrics();
   renderCurrentScriptId();
   renderRecentProjectMenus();
@@ -581,6 +677,7 @@ export function renderStudio() {
 }
 
 export function duplicateActiveBlock() {
+  if (!canEditCurrentProjectWithNotice()) return;
   const project = getCurrentProject();
   const index = getLineIndex(state.activeBlockId);
   if (!project || index < 0) {
@@ -598,7 +695,7 @@ function handleMetaInput() {
   syncProjectFromInputs();
   renderCoverPreview();
   renderPreview();
-  renderHome();
+  scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: false });
   queueSave();
 }
 
@@ -607,35 +704,89 @@ function togglePaneSection(body, button) {
   button.innerHTML = body.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;";
 }
 
+function readEditableText(element) {
+  if (!element) {
+    return "";
+  }
+
+  const raw = typeof element.innerText === "string" && element.innerText.length
+    ? element.innerText
+    : (element.textContent || "");
+
+  return raw
+    .replace(/\r/g, "")
+    .replace(/\n$/, "");
+}
+
+function canEditCurrentProjectWithNotice() {
+  const project = getCurrentProject();
+  if (canEditProject(project)) {
+    hasShownReadOnlyNotice = false;
+    return true;
+  }
+
+  if (!hasShownReadOnlyNotice) {
+    hasShownReadOnlyNotice = true;
+    customAlert("Viewer access is read-only. Ask the workspace owner to promote you to Editor if you need to make changes.", "Read-only Workspace");
+  }
+
+  return false;
+}
+
+function scheduleStudioSidebarRefresh({ includeHome = true, includeAnalytics = true } = {}) {
+  if (studioSidebarRefreshFrame) {
+    return;
+  }
+
+  studioSidebarRefreshFrame = window.requestAnimationFrame(() => {
+    studioSidebarRefreshFrame = 0;
+    renderSceneList();
+    renderCharacterList();
+    renderMetrics();
+    if (includeHome) {
+      renderHome();
+    }
+    if (includeAnalytics && document.querySelector('[data-left-pane-block="analytics"] .panel-section-body:not([hidden])')) {
+      renderAnalytics();
+    }
+  });
+}
+
 function handleBlockInput(id, element) {
+  if (!canEditCurrentProjectWithNotice()) {
+    renderStudio();
+    return;
+  }
+
   const line = getLine(id);
   const project = getCurrentProject();
   if (!line || !project) return;
 
   // Secondary (right) field of a dual row: update line.secondary only
   if (element.dataset.secondary === "true") {
-    const normalized = normalizeLineText(element.textContent || "", "dual");
+    const normalized = normalizeLineText(readEditableText(element), "dual", true);
     line.secondary = normalized;
     project.updatedAt = new Date().toISOString();
     setActiveBlock(id);
     renderPreview();
-    renderCharacterList();
+    scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: true });
     updateSuggestions();
     queueSave();
     return;
   }
 
   const offset = getCaretOffset(element);
-  const beforeText = element.textContent || "";
-  let normalized = normalizeLineText(beforeText, line.type);
+  const beforeText = readEditableText(element);
+  let normalized = normalizeLineText(beforeText, line.type, true);
   let autoCompleted = false;
 
   if (line.type === "character") {
     const completion = getCharacterAutocomplete(normalized, id);
     if (completion && completion !== normalized) {
+      const completionSuffix = completion.substring(normalized.length);
       normalized = completion;
       element.textContent = completion;
-      selectTextSuffix(element, beforeText.trim().length, completion.length);
+      selectTextSuffix(element, beforeText.length, completion.length);
       autoCompleted = true;
     }
   }
@@ -674,10 +825,7 @@ function handleBlockInput(id, element) {
 
   setActiveBlock(id);
   renderPreview();
-  renderSceneList();
-  renderCharacterList();
-  renderMetrics();
-  renderHome();
+  scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: true });
   if (line.type === "scene") {
     hideSuggestionTray(true);
   } else {
@@ -687,6 +835,36 @@ function handleBlockInput(id, element) {
 }
 
 let lastKeyDownCode = "";
+let _enterPrevBlockId = null;  // tracks block left behind when Enter creates a new one
+
+function insertSoftLineBreak(id, element) {
+  if (!element) {
+    return;
+  }
+
+  element.focus();
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) {
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+
+  const br = document.createElement("br");
+  const trailingTextNode = document.createTextNode("");
+
+  range.insertNode(trailingTextNode);
+  range.insertNode(br);
+
+  const nextRange = document.createRange();
+  nextRange.setStart(trailingTextNode, 0);
+  nextRange.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(nextRange);
+
+  handleBlockInput(id, element);
+}
 
 export function intelligentSplit(element) {
   const id = element.dataset.id;
@@ -780,11 +958,19 @@ function handleBlockKeydown(event, id) {
 
     line.text = textBefore;
     const nextType = inferNextType(index);
+    _enterPrevBlockId = id;  // protect this block from focusout deletion during render
     const newId = addBlock(nextType, textAfter || getDefaultText(nextType, index), index + 1);
 
     renderStudio();
+    _enterPrevBlockId = null;
     focusBlock(newId, !textAfter);
     queueSave();
+    return;
+  }
+
+  if (event.key === "Enter" && event.shiftKey) {
+    event.preventDefault();
+    insertSoftLineBreak(id, event.target);
     return;
   }
 
@@ -877,15 +1063,21 @@ function handleBlockKeydown(event, id) {
 function inferNextType(index) {
   const current = getCurrentProject()?.lines[index]?.type || "action";
   if (current === "scene") return "action";
+  if (current === "action") return "action";
   if (current === "character") return "dialogue";
   if (current === "parenthetical") return "dialogue";
   if (current === "dialogue") return "character";
   if (current === "transition") return "scene";
   if (current === "dual") return "dialogue";
+  if (current === "text") return "text";
+  if (current === "note") return "note";
   return "action";
 }
 
 export function addBlock(type, text = "", index) {
+  if (!canEditCurrentProjectWithNotice()) {
+    return state.activeBlockId;
+  }
   const project = getCurrentProject();
   const insertAt = Number.isInteger(index) ? index : project.lines.length;
   const line = { id: uid(), type, text: normalizeLineText(text, type) };
@@ -904,6 +1096,7 @@ function cycleBlockType(id) {
 }
 
 function changeBlockType(id, nextType) {
+  if (!canEditCurrentProjectWithNotice()) return;
   const line = getLine(id);
   const project = getCurrentProject();
   if (!line || !project) return;
@@ -1165,16 +1358,40 @@ function handleMenuAction(action) {
     case "proofread":
       showProofreadReport();
       break;
+    case "open-characters":
+      showCharactersPopup();
+      break;
     case "toggle-ai-assistant":
-      state.aiAssist = !state.aiAssist;
+      state.aiAssist = true;
       refs.aiAssistToggle.checked = state.aiAssist;
       refs.aiPanel.hidden = !state.aiAssist;
       applyToolbarState();
       updateMenuStateButtons();
+      showModal({
+        title: "AI Assistant",
+        message: "AI Assistant is ready. Use the assistant on the active block for rewrites, next beats, or dialogue help.",
+        confirmLabel: "Launch Assistant",
+        cancelLabel: "Close"
+      }).then((confirmed) => {
+        if (confirmed) {
+          AI.triggerAssistant();
+        }
+      });
       queueSave();
       break;
     case "toggle-grammar-check":
-      setGrammarCheck(!state.grammarCheck);
+      showModal({
+        title: "Grammar Check",
+        message: state.grammarCheck
+          ? "Grammar check is active for the editor. You can turn it off or keep reviewing the current script."
+          : "Turn on grammar check to review spelling and language issues across the current script.",
+        confirmLabel: state.grammarCheck ? "Turn Off" : "Turn On",
+        cancelLabel: "Close"
+      }).then((confirmed) => {
+        if (confirmed) {
+          setGrammarCheck(!state.grammarCheck);
+        }
+      });
       break;
     case "toggle-auto-number":
       refs.autoNumberToggle.checked = !refs.autoNumberToggle.checked;
@@ -1185,8 +1402,61 @@ function handleMenuAction(action) {
     case "show-work-tracking":
       showWorkTracking();
       break;
-    case "show-metrics":
-      revealMetricsPanel();
+    case "show-metrics": {
+      const container = document.createElement("div");
+      container.className = "metric-grid";
+      const project = getCurrentProject();
+      const words = serializeScript(project).match(/\b[\w'-]+\b/g) || [];
+      const characters = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase()));
+      const scenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+
+      container.innerHTML = `
+        <div><span>Words</span><strong>${words.length.toLocaleString()}</strong></div>
+        <div><span>Pages est.</span><strong>${Math.max(1, Math.round((words.length / 180) * 10) / 10).toFixed(1)}</strong></div>
+        <div><span>Characters</span><strong>${characters.size}</strong></div>
+        <div><span>Scenes</span><strong>${scenes}</strong></div>
+      `;
+      showModal({ title: "Metrics", message: container, showConfirm: false, cancelLabel: "Close" });
+      break;
+    }
+    case "open-notepad":
+      openNotepad();
+      break;
+    case "open-story-memory":
+      showStoryMemoryPopup();
+      break;
+    case "open-scenes": {
+      const container = document.createElement("div");
+      container.className = "modal-list";
+      container.appendChild(refs.sceneList.cloneNode(true));
+      showModal({ title: "Scenes", message: container, showConfirm: false, cancelLabel: "Close" });
+      break;
+    }
+    case "open-characters": {
+      const container = document.createElement("div");
+      container.className = "modal-list";
+      container.appendChild(refs.characterList.cloneNode(true));
+      showModal({ title: "Characters", message: container, showConfirm: false, cancelLabel: "Close" });
+      break;
+    }
+    case "pick-story-memory":
+      showStoryMemoryPicker();
+      break;
+    case "open-workspace":
+      showWorkspacePopup();
+      break;
+    case "open-analytics": {
+      const container = document.createElement("div");
+      container.id = "analyticsDashboardContent";
+      showModal({ title: "Writing Analytics", message: container, showConfirm: false, cancelLabel: "Close" });
+      renderAnalytics();
+      break;
+    }
+    case "smart-proofread":
+      AI.triggerSmartProofread();
+      break;
+    case "customize-active-blocks":
+      showCustomizeActiveBlocksModal();
       break;
   }
   closeMenus();
@@ -1463,14 +1733,6 @@ function duplicateProject() {
   persistProjects(true);
 }
 
-function replaceWithSample() {
-  const replacement = restoreSample();
-  if (replacement) {
-    openProject(replacement.id);
-    persistProjects(true);
-  }
-}
-
 function deleteProject() {
   const current = getCurrentProject();
   if (current) removeProject(current.id);
@@ -1590,6 +1852,7 @@ function handleGlobalKeydown(event) {
 }
 
 function insertAiAssistNote() {
+  if (!canEditCurrentProjectWithNotice()) return;
   const project = getCurrentProject();
   if (!project) return;
   const index = getLineIndex(state.activeBlockId);
@@ -1601,6 +1864,7 @@ function insertAiAssistNote() {
 }
 
 function insertMenuBlock(type, text) {
+  if (!canEditCurrentProjectWithNotice()) return;
   const index = Math.max(getLineIndex(state.activeBlockId), -1);
   const newId = addBlock(type, text, index + 1);
   renderStudio();
@@ -1657,30 +1921,38 @@ function exportTxt() {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
 
-  const preparedLines = buildPreparedExportLines(project, { autoNumberScenes: state.autoNumberScenes });
-  const pages = paginateScriptLines(preparedLines);
-  const content = [renderTxtCoverPage(project), ...pages.map(renderTxtScriptPage)].join("\f\n");
-  downloadFile(buildExportFilename(project.title, "txt"), `${content}\n`, "text/plain;charset=utf-8");
+  const preparedLines = buildPreparedExportLines(project);
+
+  const coverParts = [
+    project.title || "Untitled Script",
+    project.author ? `by ${project.author}` : "",
+    [project.contact, project.company, project.details].filter(Boolean).join("\n"),
+    project.logline || ""
+  ].filter(Boolean);
+  const cover = coverParts.join("\n\n");
+
+  const pageBreak = "\n\n" + "-".repeat(60) + "\n\n";
+  const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
+
+  const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
+  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
 }
 
 function exportJson() {
   const project = syncProjectFromInputs() || getCurrentProject();
-  if (!project) return;
-  const preparedLines = buildPreparedExportLines(project, { autoNumberScenes: state.autoNumberScenes });
-  const pages = paginateScriptLines(preparedLines);
-  const payload = buildExportSnapshot(project, pages, { autoNumberScenes: state.autoNumberScenes });
-  downloadFile(buildExportFilename(project.title, "json"), JSON.stringify(payload, null, 2), "application/json");
+  downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
 }
 
 async function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
     if (!project) return;
+
     try {
-      const blob = await buildWordDocumentBlob(project);
-      downloadBlob(buildExportFilename(project.title, "docx"), blob);
+      const blob = await buildWordDocxBlob(project);
+      downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
     } catch (error) {
-      console.error("Word export failed", error);
-      customAlert("Word export is not available right now. Please reload and try again.", "Word Export");
+      console.error("DOCX export failed", error);
+      customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
     }
 }
 
@@ -1745,114 +2017,27 @@ function printWithHiddenFrame() {
   frame.srcdoc = buildPrintableDocument(project, false);
 }
 
-function renderTxtCoverPage(project) {
-  const title = centerTxtLine(project.title || "Untitled Script");
-  const byline = centerTxtLine("by");
-  const author = centerTxtLine(project.author || "Unknown Author");
-  const meta = [project.contact, project.company, project.details].filter(Boolean).map(centerTxtLine);
-  const logline = project.logline ? wrapTxtBlock(project.logline, 61).map(centerTxtLine) : [];
+function buildPreparedExportLines(project) {
+  let sceneNumber = 0;
 
-  return [
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    title,
-    "",
-    byline,
-    "",
-    author,
-    "",
-    ...meta,
-    ...(meta.length ? [""] : []),
-    ...logline
-  ].join("\n").replace(/\n+$/, "");
-}
-
-function renderTxtScriptPage(pageLines) {
-  const rows = [];
-  pageLines.forEach((line) => {
-    const beforeLines = Math.max(0, getExportLayout(line.type).beforeLines || 0);
-    if (rows.length) {
-      for (let index = 0; index < beforeLines; index += 1) {
-        rows.push("");
-      }
-    }
-    rows.push(renderTxtLine(line));
-  });
-  return rows.join("\n");
-}
-
-function renderTxtLine(line) {
-  if (line.secondary !== undefined) {
-    const leftLines = wrapTxtBlock(line.displayText, getExportLayout("dual").widthChars);
-    const rightLines = wrapTxtBlock(line.secondary, getExportLayout("dual").widthChars);
-    const count = Math.max(leftLines.length, rightLines.length);
-    const rows = [];
-
-    for (let index = 0; index < count; index += 1) {
-      const left = (leftLines[index] || "").padEnd(getExportLayout("dual").widthChars, " ");
-      const right = rightLines[index] || "";
-      rows.push(`${left}     ${right}`.trimEnd());
+  return project.lines.reduce((accumulator, line) => {
+    const normalized = formatLineText(line.text, line.type);
+    if (!normalized) {
+      return accumulator;
     }
 
-    return rows.join("\n");
-  }
-
-  const layout = getExportLayout(line.type);
-  const indent = " ".repeat(Math.round(layout.indentIn * 10));
-  const wrapped = wrapTxtBlock(line.displayText, layout.widthChars).map((chunk) => {
-    if (layout.align === "right") {
-      return `${indent}${chunk.padStart(layout.widthChars, " ")}`.trimEnd();
-    }
-    return `${indent}${chunk}`.trimEnd();
-  });
-
-  return wrapped.join("\n");
-}
-
-function wrapTxtBlock(text, width) {
-  const normalized = String(text || "");
-  const lines = [];
-
-  normalized.split("\n").forEach((segment) => {
-    const words = segment.split(/\s+/).filter(Boolean);
-    if (!words.length) {
-      lines.push("");
-      return;
+    if (line.type === "scene") {
+      sceneNumber += 1;
     }
 
-    let current = "";
-    words.forEach((word) => {
-      if (!current) {
-        current = word;
-        return;
-      }
-      if (`${current} ${word}`.length <= width) {
-        current = `${current} ${word}`;
-      } else {
-        lines.push(current);
-        current = word;
-      }
+    accumulator.push({
+      id: line.id,
+      type: line.type,
+      displayText: state.autoNumberScenes && line.type === "scene" ? `${sceneNumber}. ${normalized}` : normalized
     });
 
-    if (current) {
-      lines.push(current);
-    }
-  });
-
-  return lines.length ? lines : [""];
-}
-
-function centerTxtLine(text, width = 61) {
-  const value = String(text || "");
-  const padding = Math.max(0, Math.floor((width - value.length) / 2));
-  return `${" ".repeat(padding)}${value}`.trimEnd();
+    return accumulator;
+  }, []);
 }
 
 function importFile(event) {
@@ -1867,8 +2052,7 @@ function importFile(event) {
 
     if (file.name.toLowerCase().endsWith(".json")) {
       try {
-        const parsed = JSON.parse(text);
-        nextProject = sanitizeProject(parsed?.project || parsed);
+        nextProject = sanitizeProject(JSON.parse(text));
       } catch (error) {
         console.error("Invalid JSON import", error);
         return;
@@ -1881,8 +2065,8 @@ function importFile(event) {
       });
     }
 
-    nextProject.id = project.id;
-    nextProject.createdAt = project.createdAt;
+    nextProject.id = uid();
+    nextProject.createdAt = new Date().toISOString();
     upsertProject(nextProject);
     openProject(nextProject.id);
     persistProjects(true);
@@ -1890,4 +2074,57 @@ function importFile(event) {
 
   reader.readAsText(file);
   refs.fileInput.value = "";
+}
+
+function openNotepad() {
+  const dialog = document.getElementById("notepadDialog");
+  const closeBtn = document.getElementById("closeNotepad");
+
+  if (!dialog) return;
+
+  // Initialize Summernote if not already done
+  if (!$( '#summernote' ).data('summernote')) {
+    $( '#summernote' ).summernote({
+      placeholder: 'Type your notes here...',
+      tabsize: 2,
+      height: 400,
+      toolbar: [
+        ['style', ['style']],
+        ['font', ['bold', 'italic', 'underline', 'clear']],
+        ['fontname', ['fontname']],
+        ['color', ['color']],
+        ['para', ['ul', 'ol', 'paragraph']],
+        ['table', ['table']],
+        ['insert', ['link']],
+        ['view', ['fullscreen', 'codeview', 'help']]
+      ]
+    });
+  }
+
+  dialog.showModal();
+
+  closeBtn.onclick = () => {
+    dialog.close();
+  };
+}
+
+async function checkFirstWorkBackup() {
+  if (state.localBackupEnabled || state.backupPrompted) return;
+
+  state.backupPrompted = true;
+  persistProjects(false);
+
+  const confirmed = await customConfirm(
+    "Would you like to enable Local Backup? This automatically saves a copy of your work to a folder on your computer for extra safety.",
+    "Enable Local Backup?"
+  );
+
+  if (confirmed) {
+    const result = await chooseLocalSaveFile();
+    if (result.ok) {
+      state.localBackupEnabled = true;
+      applySaveModeButtons();
+      persistProjects(false);
+    }
+  }
 }

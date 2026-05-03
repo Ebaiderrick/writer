@@ -28,6 +28,7 @@ const EMAILJS_TEMPLATE = 'template_6qr97mn';
 const EMAILJS_PUBLIC_KEY = 'VI5qc4g4cH9d0vpvr';
 
 const googleProvider = new GoogleAuthProvider();
+const PROFILE_BIO_PLACEHOLDER = 'About me';
 
 export const Auth = (() => {
   let tabBtns, forms, themeBtns, html;
@@ -46,6 +47,7 @@ export const Auth = (() => {
   let pendingImageBase64 = null;
   let isEditMode = false;
   let isModified = false;
+  let isSavingProfile = false;
 
   let generatedOTP = '';
   let pendingSignup = null;
@@ -399,7 +401,7 @@ export const Auth = (() => {
   }
 
   function updateBioWordCount() {
-    const text = profileBio.textContent || '';
+    const text = profileBio.classList.contains('is-placeholder') ? '' : (profileBio.textContent || '');
     const words = countWords(text);
     profileWordCount.textContent = words;
     if (words > 35) {
@@ -424,7 +426,11 @@ export const Auth = (() => {
     if (!isEditMode) {
       isEditMode = true;
       isModified = false;
-      originalBio = profileBio.textContent;
+      originalBio = profileBio.classList.contains('is-placeholder') ? '' : profileBio.textContent;
+      if (profileBio.classList.contains('is-placeholder')) {
+        profileBio.textContent = '';
+        profileBio.classList.remove('is-placeholder');
+      }
       profileBio.contentEditable = 'true';
       profileBio.focus();
       const range = document.createRange();
@@ -445,7 +451,7 @@ export const Auth = (() => {
     isModified = false;
     pendingImageBase64 = null;
     profileBio.contentEditable = 'false';
-    profileBio.textContent = originalBio;
+    setProfileBioValue(originalBio);
     setEditBtnMode('edit');
     updateBioWordCount();
   }
@@ -505,7 +511,7 @@ export const Auth = (() => {
 
     if (!user && !isDemo) return;
 
-    const text = profileBio.textContent || '';
+    const text = profileBio.classList.contains('is-placeholder') ? '' : (profileBio.textContent || '');
     if (countWords(text) > 35) {
       customAlert('Bio cannot exceed 35 words.');
       return;
@@ -513,49 +519,64 @@ export const Auth = (() => {
 
     profileBio.contentEditable = 'false';
     profileEditBtn.disabled = true;
+    isSavingProfile = true;
     const btnSpan = profileEditBtn.querySelector('span');
     const originalBtnText = btnSpan ? btnSpan.textContent : 'Save';
     if (btnSpan) btnSpan.textContent = 'Saving…';
 
     try {
-      const bio = profileBio.textContent;
-      const data = { bio };
+      const bio = text.trim();
+      const nextPhotoURL = pendingImageBase64 || user?.photoURL || session?.photoURL || '';
+      const data = {
+        bio,
+        photoURL: nextPhotoURL,
+        name: user?.displayName || session?.name || '',
+        email: user?.email || session?.email || '',
+        updatedAt: new Date().toISOString()
+      };
 
       if (isDemo) {
         // Handle Demo session locally
         session.bio = bio;
-        if (pendingImageBase64) session.photoURL = pendingImageBase64;
+        session.photoURL = nextPhotoURL;
         localStorage.setItem(SESSION_KEY, JSON.stringify(session));
         // Mock a short delay for realism
         await new Promise(r => setTimeout(r, 500));
       } else {
-        if (pendingImageBase64) {
-          data.photoURL = pendingImageBase64;
-          await updateProfile(user, { photoURL: pendingImageBase64 });
+        await setDoc(doc(db, 'users', user.uid, 'profile', 'data'), data, { merge: true });
+        if (nextPhotoURL && nextPhotoURL !== user.photoURL) {
+          await updateProfile(user, { photoURL: nextPhotoURL });
         }
-        await setDoc(doc(db, 'users', user.uid, 'profile'), data, { merge: true });
+        cacheSession({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: nextPhotoURL
+        });
       }
 
       pendingImageBase64 = null;
       originalBio = bio;
       isEditMode = false;
       isModified = false;
+      isSavingProfile = false;
       profileEditBtn.disabled = false;
       setEditBtnMode('edit');
-      profileBio.textContent = bio || 'Tell us about yourself...';
-      if (isDemo && session.photoURL) profileImg.src = session.photoURL;
-      else if (!isDemo && data.photoURL) profileImg.src = data.photoURL;
+      setProfileBioValue(bio);
+      if (nextPhotoURL) profileImg.src = nextPhotoURL;
 
       updateBioWordCount();
-      if (user) updateTriggerUI(user);
+      if (user) updateTriggerUI({ photoURL: nextPhotoURL, displayName: user.displayName });
       else if (isDemo) updateTriggerUI({ photoURL: session.photoURL, displayName: session.name });
 
     } catch (err) {
       console.error('Bio save failed', err);
+      isSavingProfile = false;
       profileEditBtn.disabled = false;
       if (btnSpan) btnSpan.textContent = originalBtnText;
       setEditBtnMode('save');
       profileBio.contentEditable = 'true';
+      customAlert('We could not save your profile right now. Please try again.');
     }
   }
 
@@ -572,6 +593,7 @@ export const Auth = (() => {
   }
 
   async function loadUserProfile(firebaseUser) {
+    if (isSavingProfile) return;
     const session = getCachedSession();
     const isDemo = session?.isDemoSession;
     const user = auth.currentUser || firebaseUser;
@@ -589,7 +611,7 @@ export const Auth = (() => {
       if (isDemo) {
         profileData = { bio: session.bio, photoURL: session.photoURL };
       } else {
-        const snap = await getDoc(doc(db, 'users', user.uid, 'profile'));
+        const snap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
         profileData = snap.exists() ? snap.data() : {};
       }
 
@@ -601,11 +623,12 @@ export const Auth = (() => {
         profileImg.src = fallbackAvatar;
       }
 
-      profileBio.textContent = profileData.bio || 'Tell us about yourself...';
+      setProfileBioValue(profileData.bio || '');
       updateBioWordCount();
     } catch (err) {
       console.error('Profile load failed', err);
       profileImg.src = fallbackAvatar;
+      setProfileBioValue('');
     }
   }
 
@@ -679,7 +702,7 @@ export const Auth = (() => {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(credential.user, { displayName: name });
-      await setDoc(doc(db, 'users', credential.user.uid, 'profile'), {
+      await setDoc(doc(db, 'users', credential.user.uid, 'profile', 'data'), {
         uid: credential.user.uid,
         name,
         email,
@@ -713,9 +736,16 @@ export const Auth = (() => {
       userId: firebaseUser.uid,
       email: firebaseUser.email,
       name: firebaseUser.displayName || firebaseUser.email,
+      photoURL: firebaseUser.photoURL || '',
       loggedIn: true,
       loggedInAt: new Date().toISOString()
     }));
+  }
+
+  function setProfileBioValue(value) {
+    const text = String(value || '').trim();
+    profileBio.textContent = text || PROFILE_BIO_PLACEHOLDER;
+    profileBio.classList.toggle('is-placeholder', !text);
   }
 
   function getCachedSession() {

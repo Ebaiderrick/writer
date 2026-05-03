@@ -1,4 +1,4 @@
-import { STORAGE_KEY, state, TYPE_LABELS, DEFAULT_VIEW_OPTIONS, DEFAULT_LEFT_PANE_BLOCKS } from './config.js';
+import { STORAGE_KEY, state, TYPE_LABELS, DEFAULT_VIEW_OPTIONS, DEFAULT_LEFT_PANE_BLOCKS, DEFAULT_STORY_MEMORY } from './config.js';
 import { uid, normalizeLineText, stripWrapperChars, clamp } from './utils.js';
 import { refs } from './dom.js';
 import { t } from './i18n.js';
@@ -43,18 +43,45 @@ async function syncCurrentProjectToFirestore() {
 
   const payload = { ...project, syncedAt: new Date().toISOString() };
   try {
+  // Record word count progress before sync
+  const currentWords = serializeScript(project).match(/\b[\w'-]+\b/g)?.length || 0;
+  const currentScenes = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+  const currentLines = project.lines.filter((line) => line.text.trim()).length;
+  const currentPages = Math.max(1, Math.round((currentWords / 180) * 10) / 10);
+  const history = project.wordCountHistory || [];
+  const lastEntry = history[history.length - 1];
+  const now = new Date().toISOString();
+
+  if (!lastEntry || lastEntry.count !== currentWords) {
+    history.push({
+      timestamp: now,
+      count: currentWords,
+      uid: userId,
+      userName: auth.currentUser?.displayName || auth.currentUser?.email || "Unknown",
+      scenes: currentScenes,
+      lines: currentLines,
+      pages: currentPages
+    });
+    // Keep last 50 entries
+    if (history.length > 50) history.shift();
+    project.wordCountHistory = history;
+  }
+
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
-        'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId'];
+      'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
+      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
       );
       await setDoc(doc(db, 'sharedProjects', project.id), {
         ...contentPayload,
         syncedAt: new Date().toISOString(),
-        updatedBy: userId
+        updatedBy: userId,
+        lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+        lastActivityAt: new Date().toISOString()
       }, { merge: true });
     }
 
@@ -146,13 +173,14 @@ export function loadProjects() {
     state.aiAssist = Boolean(parsed?.aiAssist);
       state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
       state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
-      state.backgroundAnimation = parsed?.backgroundAnimation !== false;
+      state.backgroundAnimation = Boolean(parsed?.backgroundAnimation);
       state.theme = parsed?.theme === "rose" ? "cedar" : (parsed?.theme || "cedar");
       state.language = ["en", "fr", "de"].includes(parsed?.language) ? parsed.language : "en";
       state.writingLanguage = ["en", "fr", "de"].includes(parsed?.writingLanguage) ? parsed.writingLanguage : state.language;
       state.grammarCheck = Boolean(parsed?.grammarCheck);
       state.localBackupEnabled = Boolean(parsed?.localBackupEnabled);
       state.localSaveIntervalMinutes = [5, 10, 60].includes(parsed?.localSaveIntervalMinutes) ? parsed.localSaveIntervalMinutes : 5;
+      state.backupPrompted = Boolean(parsed?.backupPrompted);
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
     state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
@@ -161,7 +189,7 @@ export function loadProjects() {
     console.error("Unable to load projects", error);
       state.projects = [cloneProject(sampleProject, true)];
       state.currentProjectId = state.projects[0].id;
-      state.backgroundAnimation = true;
+      state.backgroundAnimation = false;
       state.language = "en";
       state.writingLanguage = "en";
       state.grammarCheck = false;
@@ -184,10 +212,17 @@ export function sanitizeProject(project) {
     updatedAt: project.updatedAt || new Date().toISOString(),
     isShared: Boolean(project.isShared),
     ownerId: project.ownerId || null,
+    storyMemory: sanitizeStoryMemory(project.storyMemory),
+    activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
     ownerName: project.ownerName || "",
     ownerEmail: project.ownerEmail || "",
-    collaborators: (project.collaborators && typeof project.collaborators === 'object') ? project.collaborators : {},
+    ownerPhotoURL: project.ownerPhotoURL || "",
+    lastEditorName: project.lastEditorName || "",
+    lastActivityAt: project.lastActivityAt || project.updatedAt || new Date().toISOString(),
+    workspace: sanitizeWorkspace(project.workspace, project),
+    collaborators: sanitizeCollaborators(project.collaborators),
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
+    wordCountHistory: Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [],
     lines: Array.isArray(project.lines) && project.lines.length
       ? project.lines.map((line) => {
           const type = TYPE_LABELS[line.type] ? line.type : "action";
@@ -271,6 +306,7 @@ export function persistProjects(forceSavedBadge = false, { syncInputs = true } =
       grammarCheck: state.grammarCheck,
       localBackupEnabled: state.localBackupEnabled,
       localSaveIntervalMinutes: state.localSaveIntervalMinutes,
+      backupPrompted: state.backupPrompted,
       viewOptions: state.viewOptions,
     leftPaneBlocks: state.leftPaneBlocks,
     leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
@@ -278,6 +314,7 @@ export function persistProjects(forceSavedBadge = false, { syncInputs = true } =
   }));
   if (refs.saveBadge) {
       refs.saveBadge.textContent = forceSavedBadge ? t("save.savedLocal") : t("save.saved");
+      refs.saveBadge.classList.remove("saving");
   }
   queueFirestoreSync();
 }
@@ -285,6 +322,7 @@ export function persistProjects(forceSavedBadge = false, { syncInputs = true } =
 export function queueSave() {
   if (refs.saveBadge) {
       refs.saveBadge.textContent = t("save.saving");
+      refs.saveBadge.classList.add("saving");
   }
   clearTimeout(state.saveTimer);
   state.saveTimer = window.setTimeout(() => {
@@ -405,6 +443,63 @@ export function sanitizeLeftPaneBlocks(blocks) {
   return sanitized;
 }
 
+function sanitizeStoryMemory(storyMemory) {
+  return {
+    characters: Array.isArray(storyMemory?.characters) ? storyMemory.characters : [],
+    locations: Array.isArray(storyMemory?.locations) ? storyMemory.locations : [],
+    scenes: Array.isArray(storyMemory?.scenes) ? storyMemory.scenes : [],
+    themes: Array.isArray(storyMemory?.themes) ? storyMemory.themes : [],
+    plotPoints: Array.isArray(storyMemory?.plotPoints) ? storyMemory.plotPoints : []
+  };
+}
+
+function sanitizeWorkspace(workspace, project) {
+  return {
+    id: workspace?.id || project.id || uid("workspace"),
+    name: String(workspace?.name || project.title || "Team Workspace").trim() || "Team Workspace",
+    inviteCode: String(workspace?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
+    reminders: sanitizeWorkspaceReminders(workspace?.reminders),
+    targets: sanitizeWorkspaceTargets(workspace?.targets)
+  };
+}
+
+function sanitizeWorkspaceReminders(reminders) {
+  if (!Array.isArray(reminders)) {
+    return [];
+  }
+
+  return reminders.map((reminder, index) => ({
+    id: reminder?.id || uid(`rem-${index}`),
+    text: String(reminder?.text || "").trim(),
+    dueAt: reminder?.dueAt || "",
+    completed: Boolean(reminder?.completed),
+    createdAt: reminder?.createdAt || new Date().toISOString(),
+    updatedAt: reminder?.updatedAt || reminder?.createdAt || new Date().toISOString(),
+    createdByName: reminder?.createdByName || ""
+  })).filter((reminder) => reminder.text);
+}
+
+function sanitizeWorkspaceTargets(targets) {
+  return {
+    scenes: clamp(Number(targets?.scenes || 0), 0, 9999),
+    pages: clamp(Number(targets?.pages || 0), 0, 9999),
+    lines: clamp(Number(targets?.lines || 0), 0, 99999)
+  };
+}
+
+function sanitizeCollaborators(collaborators) {
+  if (!collaborators || typeof collaborators !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(collaborators).map(([uid, collaborator]) => [uid, {
+      ...collaborator,
+      role: collaborator?.role === "viewer" ? "viewer" : "editor"
+    }])
+  );
+}
+
 export function serializeScript(project) {
   return project.lines.map((line) => normalizeLineText(line.text, line.type)).filter(Boolean).join("\n\n");
 }
@@ -451,12 +546,3 @@ export function getSuggestedNextSpeaker(contextIndex) {
   return last;
 }
 
-export function replaceWithSample() {
-  const current = getCurrentProject();
-  if (!current) return null;
-  const replacement = cloneProject(sampleProject, false);
-  replacement.id = current.id;
-  replacement.createdAt = current.createdAt;
-  upsertProject(replacement);
-  return replacement;
-}

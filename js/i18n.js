@@ -73,7 +73,7 @@ const TRANSLATIONS = {
     "menu.clearFilter": "Clear Filter",
     "menu.pageNumbering": "Page numbering",
     "menu.fullScreen": "Full Screen",
-    "menu.proofread": "Screenplay Proofread",
+    "menu.proofread": "Simple Proofread",
     "menu.spellingCheck": "Spelling Check",
     "menu.grammarCheck": "Grammar Check",
     "menu.aiAssistant": "AI Assistant",
@@ -134,7 +134,6 @@ const TRANSLATIONS = {
     "field.details": "Other details",
     "field.logline": "Logline",
 
-    "projectTool.loadSample": "Load sample",
     "projectTool.import": "Import",
     "projectTool.save": "Save",
     "projectTool.exportTxt": "Export TXT",
@@ -147,7 +146,7 @@ const TRANSLATIONS = {
     "metric.words": "Words",
     "metric.pagesEst": "Pages est.",
     "metric.characters": "Characters",
-    "metric.notes": "Notes",
+"metric.notes": "Scenes",
 
     "ai.bannerTitle": "AI assisted writing is on.",
     "ai.bannerDesc": "Hover or focus a script block, then click the AI button on that line for rewrites, next beats, or dialogue help.",
@@ -196,7 +195,7 @@ const TRANSLATIONS = {
     "character.noScenesBody": "{name} doesn't have any dialogue scenes yet.",
     "character.scenesFeaturing": "Scenes featuring {name}",
 
-    "proofread.title": "Proofread Report",
+    "proofread.title": "Simple Proofread",
     "proofread.none": "No obvious screenplay-format issues were found in the current draft.",
     "proofread.highlights": "Proofread highlights:\n- {items}",
     "proofread.emptyScenesOne": "{count} empty scene heading",
@@ -309,7 +308,7 @@ const TRANSLATIONS = {
     "menu.clearFilter": "Effacer le filtre",
     "menu.pageNumbering": "Numérotation des pages",
     "menu.fullScreen": "Plein écran",
-    "menu.proofread": "Relecture du scénario",
+    "menu.proofread": "Relecture simple",
     "menu.spellingCheck": "Vérification orthographique",
     "menu.grammarCheck": "Vérification grammaticale",
     "menu.aiAssistant": "Assistant IA",
@@ -370,7 +369,6 @@ const TRANSLATIONS = {
     "field.details": "Autres détails",
     "field.logline": "Pitch",
 
-    "projectTool.loadSample": "Charger un exemple",
     "projectTool.import": "Importer",
     "projectTool.save": "Enregistrer",
     "projectTool.exportTxt": "Exporter TXT",
@@ -383,7 +381,7 @@ const TRANSLATIONS = {
     "metric.words": "Mots",
     "metric.pagesEst": "Pages est.",
     "metric.characters": "Personnages",
-    "metric.notes": "Notes",
+"metric.notes": "Scènes",
 
     "ai.bannerTitle": "L’écriture assistée par IA est activée.",
     "ai.bannerDesc": "Survolez ou activez un bloc du script, puis cliquez sur le bouton IA de cette ligne pour des réécritures, la suite des idées ou de l’aide au dialogue.",
@@ -432,7 +430,7 @@ const TRANSLATIONS = {
     "character.noScenesBody": "{name} n’a encore aucune scène de dialogue.",
     "character.scenesFeaturing": "Scenes avec {name}",
 
-    "proofread.title": "Rapport de relecture",
+    "proofread.title": "Relecture simple",
     "proofread.none": "Aucun problème évident de format de scénario n’a été trouvé dans le brouillon actuel.",
     "proofread.highlights": "Points de relecture :\n- {items}",
     "proofread.emptyScenesOne": "{count} en-tête de scène vide",
@@ -545,7 +543,7 @@ const TRANSLATIONS = {
     "menu.clearFilter": "Filter löschen",
     "menu.pageNumbering": "Seitennummerierung",
     "menu.fullScreen": "Vollbild",
-    "menu.proofread": "Drehbuchprüfung",
+    "menu.proofread": "Einfache Prüfung",
     "menu.spellingCheck": "Rechtschreibprüfung",
     "menu.grammarCheck": "Grammatikprüfung",
     "menu.aiAssistant": "KI-Assistent",
@@ -606,7 +604,6 @@ const TRANSLATIONS = {
     "field.details": "Weitere Details",
     "field.logline": "Logline",
 
-    "projectTool.loadSample": "Beispiel laden",
     "projectTool.import": "Importieren",
     "projectTool.save": "Speichern",
     "projectTool.exportTxt": "TXT exportieren",
@@ -619,7 +616,7 @@ const TRANSLATIONS = {
     "metric.words": "Wörter",
     "metric.pagesEst": "Seiten ca.",
     "metric.characters": "Charaktere",
-    "metric.notes": "Notizen",
+"metric.notes": "Szenen",
 
     "ai.bannerTitle": "KI-gestütztes Schreiben ist aktiv.",
     "ai.bannerDesc": "Bewegen Sie den Mauszeiger über einen Skriptblock oder fokussieren Sie ihn und klicken Sie dann auf die KI-Schaltfläche dieser Zeile für Überarbeitungen, nächste Beats oder Dialoghilfe.",
@@ -668,7 +665,7 @@ const TRANSLATIONS = {
     "character.noScenesBody": "{name} hat noch keine Dialogszenen.",
     "character.scenesFeaturing": "Szenen mit {name}",
 
-    "proofread.title": "Prüfbericht",
+    "proofread.title": "Einfache Prüfung",
     "proofread.none": "Im aktuellen Entwurf wurden keine offensichtlichen Formatprobleme gefunden.",
     "proofread.highlights": "Prüfhinweise:\n- {items}",
     "proofread.emptyScenesOne": "{count} leere Szenenüberschrift",
@@ -793,7 +790,6 @@ const SELECTOR_BINDINGS = [
   [".field-grid label:nth-of-type(4) span", "field.company"],
   [".field-grid label:nth-of-type(5) span", "field.details"],
   [".field-grid label:nth-of-type(6) span", "field.logline"],
-  ["#loadSampleBtn", "projectTool.loadSample"],
   [".import-button-label", "projectTool.import"],
   ["#saveBtn", "projectTool.save"],
   ["#exportTxtBtn", "projectTool.exportTxt"],

@@ -30,6 +30,7 @@ service cloud.firestore {
         // Collaborators can update content fields but NOT ownership or membership.
         (
           request.auth.uid in resource.data.collaborators &&
+          resource.data.collaborators[request.auth.uid].role != 'viewer' &&
           !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['ownerId', 'ownerName', 'ownerEmail', 'collaborators'])
         ) ||
@@ -47,14 +48,24 @@ service cloud.firestore {
 
     // Comments — readable/writable by project members
     match /sharedProjects/{projectId}/comments/{commentId} {
-      allow read, create: if request.auth != null && (
+      allow read: if request.auth != null && (
         get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
         request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators
+      );
+      allow create: if request.auth != null && (
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
+        (
+          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators &&
+          get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators[request.auth.uid].role != 'viewer'
+        )
       );
       allow update: if request.auth != null && (
         resource.data.uid == request.auth.uid ||
         get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
-        request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators
+        (
+          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators &&
+          get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators[request.auth.uid].role != 'viewer'
+        )
       );
     }
 

@@ -14,10 +14,24 @@ import {
   buildProjectLexicon, buildSpellingIssues, buildGrammarIssues, clearSpellingHighlights,
   hasLanguageDictionary, renderSpellingIssues
 } from './spelling.js';
+import { canEditProject } from './collaborate.js';
+
+let _renderingEditor = false;
 
 export function renderEditor() {
+  if (_renderingEditor) return;
+  _renderingEditor = true;
+  try {
+    _renderEditorInner();
+  } finally {
+    _renderingEditor = false;
+  }
+}
+
+function _renderEditorInner() {
   const project = getCurrentProject();
   if (!project) return;
+  const editable = canEditProject(project);
   refs.screenplayEditor.innerHTML = "";
   const template = document.querySelector("#blockTemplate");
   const filterSet = buildVisibleFilterSet(project);
@@ -59,6 +73,7 @@ export function renderEditor() {
     tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
     block.dataset.id = line.id;
     block.dataset.type = line.type;
+    block.contentEditable = editable ? "true" : "false";
     block.spellcheck = state.grammarCheck;
     block.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
     block.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");
@@ -71,7 +86,7 @@ export function renderEditor() {
 
       const secBlock = document.createElement("div");
       secBlock.className = "script-block dual-secondary";
-      secBlock.contentEditable = "true";
+      secBlock.contentEditable = editable ? "true" : "false";
       secBlock.spellcheck = state.grammarCheck;
       secBlock.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
       secBlock.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");
@@ -333,7 +348,10 @@ export function refreshEditableBlockDisplay(block, line = getLine(block?.dataset
 function renderBlockContent(block, line, project, spellingLexicon = null) {
   const text = block.dataset.secondary === "true" ? line.secondary : line.text;
   if (!state.grammarCheck || !hasLanguageDictionary(state.writingLanguage)) {
-    block.textContent = text;
+    const display = formatLineText(text, line.type, true);
+    if (block.textContent !== display) {
+      block.textContent = display;
+    }
     return;
   }
 

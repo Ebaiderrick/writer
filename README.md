@@ -17,3 +17,6 @@ The frontend can be opened separately, but the AI assistant needs the backend ru
 - Turn on `AI Assistance`.
 - Hover or focus a script block and click the `AI` button on that row.
 - Pick an action, optionally add an instruction, then submit.
+
+---
+Last updated: 2026-04-30

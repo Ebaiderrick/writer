@@ -9,6 +9,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
 </head>
 <body>
   <div id="liquid-bg-container" class="mesh-background"></div>
@@ -31,6 +34,12 @@
           <div class="auth-header">
             <h1>Eya<span>Writer</span></h1>
             <p class="tagline">Where stories take flight.</p>
+            <div class="auth-bg-control" style="margin-top: 10px; font-size: 0.8rem; opacity: 0.7;">
+              <label style="display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
+                <input id="bgAnimationLandingToggle" type="checkbox">
+                <span>Bg Anim</span>
+              </label>
+            </div>
           </div>
 
           <!-- Toggle Tabs -->
@@ -177,7 +186,15 @@
                 </div>
               </div>
             </details>
-            <details class="menu-group">
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Activity Log</summary>
+              <div class="menu-group-body">
+                <div id="studioActivityLog" class="collaborator-list">
+                  <p class="collab-empty">No activity yet.</p>
+                </div>
+              </div>
+            </details>
+            <details class="menu-group" open>
               <summary class="menu-group-summary">Sent Invites</summary>
               <div class="menu-group-body">
                 <div id="studioSentInvites" class="collab-requests-list">
@@ -230,7 +247,7 @@
             <button class="nav-link" type="button" data-menu-trigger="studioFormatMenu">Format</button>
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
             <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tools</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tool</button>
             <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate</button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
@@ -258,6 +275,24 @@
                   <button class="nav-menu-button" type="button" data-menu-action="rename-project">Rename</button>
                   <button class="nav-menu-button" type="button" data-menu-action="duplicate-project">Duplicate</button>
                   <button class="nav-menu-button nav-menu-button-danger" type="button" data-menu-action="delete-project">Delete</button>
+
+                  <div class="menu-divider"></div>
+                  <label class="menu-row toggle-row local-backup-toggle-row">
+                    <span>Local Backup</span>
+                    <input type="checkbox" id="localBackupToggle">
+                  </label>
+                  <div id="localSaveControls" class="local-save-controls" hidden>
+                    <label class="menu-row" for="localSaveInterval">
+                      <span>Every</span>
+                      <select id="localSaveInterval">
+                        <option value="5">5m</option>
+                        <option value="10">10m</option>
+                        <option value="60">1h</option>
+                      </select>
+                    </label>
+                    <button id="chooseLocalSaveFileBtn" class="nav-menu-button btn-sm" type="button">Choose folder/file…</button>
+                    <p id="localSaveFileLabel" class="local-save-file-label">No file selected</p>
+                  </div>
                 </div>
               </details>
               <details class="menu-group">
@@ -288,19 +323,19 @@
                 <button class="nav-menu-button" type="button" data-menu-action="select-all">Select All</button>
               </div>
             </details>
+            <details class="menu-group">
+              <summary class="menu-group-summary">Capitalization</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="text-caps-sentence">Sentence Case</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-caps-each">Title Case</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-caps-all">UPPERCASE</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-caps-low">lowercase</button>
+                <button class="nav-menu-button" type="button" data-menu-action="text-caps-random">Random Case</button>
+              </div>
+            </details>
             <details class="menu-group" open>
               <summary class="menu-group-summary">Text</summary>
               <div class="menu-group-body">
-                <details class="menu-group">
-                  <summary class="menu-group-summary">Capitalization</summary>
-                  <div class="menu-group-body">
-                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-sentence">Sentence Case</button>
-                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-each">Title Case</button>
-                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-all">UPPERCASE</button>
-                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-low">lowercase</button>
-                    <button class="nav-menu-button" type="button" data-menu-action="text-caps-random">Random Case</button>
-                  </div>
-                </details>
                 <button class="nav-menu-button" type="button" data-menu-action="text-copy">Copy</button>
                 <button class="nav-menu-button" type="button" data-menu-action="text-cut">Cut</button>
                 <button class="nav-menu-button" type="button" data-menu-action="text-paste">Paste</button>
@@ -357,6 +392,10 @@
               </div>
             </details>
             <div class="nav-menu-section">
+              <label class="menu-row toggle-row">
+                <span>Bg Annim</span>
+                <input id="bgAnimationToggle" type="checkbox">
+              </label>
               <button class="nav-menu-button" type="button" data-view-toggle="pageNumbers">Page numbering</button>
               <button class="nav-menu-button" type="button" data-menu-action="fullscreen">Full Screen</button>
             </div>
@@ -377,25 +416,43 @@
             <details class="menu-group" open>
               <summary class="menu-group-summary">Tools</summary>
               <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofread</button>
-                <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
-                <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Workspace</button>
               </div>
             </details>
-            <details class="menu-group">
-              <summary class="menu-group-summary">Revision</summary>
-              <div class="menu-group-body">
-                <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
-                <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
-              </div>
-            </details>
+
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Customize Active Blocks</summary>
-              <div id="leftPaneBlockControls" class="menu-group-body block-customizer-list"></div>
+              <summary class="menu-group-summary">Writing</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-scenes">Scenes</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-characters">Characters</button>
+              </div>
+            </details>
+
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">AI</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-story-memory">Story Memory</button>
+                <button class="nav-menu-button" type="button" data-menu-action="pick-story-memory">Insert Story Element</button>
+                <button class="nav-menu-button" type="button" data-menu-action="smart-proofread">Smart Proofreading</button>
+              </div>
+            </details>
+
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Revision &amp; Insight</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
+                <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
+                <button class="nav-menu-button" type="button" data-menu-action="proofread">Screenplay Proofreading</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-analytics">Analytics Dashboard</button>
+              </div>
             </details>
           </div>
 
           <div id="studioCollabMenu" class="nav-menu nav-menu-wide" hidden>
+            <div class="nav-menu-label">Workspace</div>
             <details class="menu-group" open>
               <summary class="menu-group-summary">Invite Collaborator</summary>
               <div class="menu-group-body">
@@ -449,6 +506,7 @@
               <summary class="menu-group-summary">Editor</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-auto-number">Auto Number Scenes</button>
+                <button class="nav-menu-button" type="button" data-menu-action="customize-active-blocks">Customize Active Blocks</button>
               </div>
             </details>
             <details class="menu-group">
@@ -471,36 +529,15 @@
                 </div>
               </div>
             </details>
-            <details class="menu-group">
-              <summary class="menu-group-summary">Local Backup</summary>
-              <div class="menu-group-body">
-                <label class="menu-row toggle-row">
-                  <span>Enable local backup</span>
-                  <input type="checkbox" id="localBackupToggle">
-                </label>
-                <div id="localSaveControls" class="local-save-controls" hidden>
-                  <label class="menu-row" for="localSaveInterval">
-                    <span>Backup every</span>
-                    <select id="localSaveInterval">
-                      <option value="5">5 minutes</option>
-                      <option value="10">10 minutes</option>
-                      <option value="60">1 hour</option>
-                    </select>
-                  </label>
-                  <button id="chooseLocalSaveFileBtn" class="ghost-button" type="button">Choose file…</button>
-                  <p id="localSaveFileLabel" class="local-save-file-label">No file selected</p>
-                </div>
-              </div>
-            </details>
           </div>
         </div>
 
         <div class="topbar-actions">
-          <span id="saveBadge" class="save-badge">Saved</span>
-          <div class="save-home-stack">
-            <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
+          <div class="save-status-stack">
+            <span id="saveBadge" class="save-badge">Saved</span>
             <span id="currentScriptIdFlag" class="script-id-flag" hidden></span>
           </div>
+          <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
           <button class="user-trigger open-profile-btn" aria-label="Open profile">
             <div class="user-avatar-circle">
               <img src="" alt="" class="user-avatar-img" hidden>
@@ -514,10 +551,6 @@
         <div class="tool-strip-row">
           <div class="strip-start-controls">
             <button id="leftRailToggle" class="collapse-arrow" type="button" aria-label="Collapse left pane">◀</button>
-            <label class="mini-radio-option" for="bgAnimationToggle">
-              <input id="bgAnimationToggle" type="checkbox" checked>
-              <span id="bgAnimationToggleLabel">Bg Annim</span>
-            </label>
           </div>
 
           <div class="tool-groups">
@@ -672,6 +705,19 @@
                 </div>
               </section>
 
+              <section class="panel section-workspace" data-left-pane-block="workspace" data-left-pane-label="Team Workspace" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Team Workspace</h3>
+                    <p>Shared access, roles, comments, and activity</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Team Workspace">â–¼</button>
+                </div>
+                <div class="panel-section-body">
+                  <button class="ghost-button btn-sm" data-menu-action="open-workspace">Open Workspace</button>
+                </div>
+              </section>
+
               <section class="panel list-panel section-tools" data-left-pane-block="tools" data-left-pane-label="Project Tools">
                 <div class="panel-head">
                   <div>
@@ -682,7 +728,6 @@
                 </div>
                 <div class="panel-section-body">
                 <div class="project-tools-actions">
-                  <button id="loadSampleBtn" class="ghost-button project-tool-button" type="button">Load sample</button>
                   <label class="ghost-button import-button project-tool-button">
                     <span class="import-button-label">Import</span>
                     <input id="fileInput" type="file" accept=".txt,.fountain,.md,.json">
@@ -717,12 +762,12 @@
                 <div class="panel-head">
                   <div>
                     <h3>Characters</h3>
-                    <p>Suggested again when needed</p>
+                    <p id="characterSummary">Open saved character entries</p>
                   </div>
                   <button class="panel-toggle" type="button" data-left-pane-section-toggle="characters" aria-label="Collapse Characters">▼</button>
                 </div>
                 <div class="panel-section-body">
-                <div id="characterList" class="list-stack"></div>
+                  <button class="ghost-button btn-sm" type="button" data-menu-action="open-characters">Open Characters</button>
                 </div>
               </section>
 
@@ -754,6 +799,130 @@
                 </div>
               </section>
 
+              <section class="panel story-memory-panel section-story-memory" data-left-pane-block="story-memory" data-left-pane-label="Story Memory" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Story Memory</h3>
+                    <p>Key characters, locations, and traits</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="story-memory" aria-label="Collapse Story Memory">▼</button>
+                </div>
+                <div class="panel-section-body">
+                  <div class="story-memory-controls">
+                    <button class="ghost-button btn-sm" id="addStoryElementBtn">+ Add Element</button>
+                  </div>
+                  <div id="storyMemoryList" class="list-stack"></div>
+                </div>
+              </section>
+
+              <section class="panel section-insert-story-element" data-left-pane-block="insert-story-element" data-left-pane-label="Insert Story Element" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Insert Story Element</h3>
+                    <p>Place saved characters, locations, and themes</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="insert-story-element" aria-label="Collapse Insert Story Element">â–¼</button>
+                </div>
+                <div class="panel-section-body">
+                  <button class="ghost-button btn-sm" data-menu-action="pick-story-memory">Insert Into Active Block</button>
+                </div>
+              </section>
+
+              <section class="panel analytics-panel section-analytics" data-left-pane-block="analytics" data-left-pane-label="Writing Analytics" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Writing Analytics</h3>
+                    <p>Insights into your style</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="analytics" aria-label="Collapse Analytics">▼</button>
+                </div>
+                <div class="panel-section-body">
+                  <div id="analyticsDashboardContent"></div>
+                </div>
+              </section>
+
+              <section class="panel notepad-panel section-notepad" data-left-pane-block="notepad" data-left-pane-label="Notepad" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Notepad</h3>
+                    <p>Scratchpad notes</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="notepad" aria-label="Collapse Notepad">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="open-notepad">Open Notepad</button>
+                </div>
+              </section>
+
+              <section class="panel ai-assistant-panel section-ai-assistant" data-left-pane-block="ai-assistant" data-left-pane-label="AI Assistant" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>AI Assistant</h3>
+                    <p>AI writing tools</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="ai-assistant" aria-label="Collapse AI Assistant">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="toggle-ai-assistant">Launch Assistant</button>
+                </div>
+              </section>
+
+              <section class="panel grammar-check-panel section-grammar-check" data-left-pane-block="grammar-check" data-left-pane-label="Grammar Check" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Grammar Check</h3>
+                    <p>Language tools</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="grammar-check" aria-label="Collapse Grammar Check">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="toggle-grammar-check">Grammar Tools</button>
+                </div>
+              </section>
+
+              <section class="panel smart-proofread-panel section-smart-proofread" data-left-pane-block="smart-proofread" data-left-pane-label="Smart Proofread" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Smart Proofread</h3>
+                    <p>Refine your writing with AI</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="smart-proofread" aria-label="Collapse Smart Proofread">▼</button>
+                </div>
+                <div class="panel-section-body">
+                  <p class="smart-proofread-panel-copy">Choose manual line mode or automatic scene-range proofreading, then review clean accept/reject suggestions in a compact list.</p>
+                  <button class="ghost-button btn-sm smart-proofread-open-btn" id="smartProofreadBtn" type="button">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:middle"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    Open Proofreader
+                  </button>
+                </div>
+              </section>
+
+              <section class="panel work-tracking-panel section-work-tracking" data-left-pane-block="work-tracking" data-left-pane-label="Work Tracking" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Work Tracking</h3>
+                    <p>Project milestones</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="work-tracking" aria-label="Collapse Work Tracking">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="show-work-tracking">View Tracking</button>
+                </div>
+              </section>
+
+              <section class="panel proofread-panel section-proofread" data-left-pane-block="proofread" data-left-pane-label="Simple Proofread" hidden>
+                <div class="panel-head">
+                  <div>
+                    <h3>Simple Proofread</h3>
+                    <p>Script analysis</p>
+                  </div>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="proofread" aria-label="Collapse Simple Proofread">▼</button>
+                </div>
+                <div class="panel-section-body">
+                   <button class="ghost-button btn-sm" data-menu-action="proofread">Open Simple Proofread</button>
+                </div>
+              </section>
+
               <section class="panel metrics-panel section-metrics" data-left-pane-block="metrics" data-left-pane-label="Metrics">
                 <div class="panel-head">
                   <div>
@@ -767,11 +936,15 @@
                   <div><span>Words</span><strong id="wordCount">0</strong></div>
                   <div><span>Pages est.</span><strong id="pageCount">0</strong></div>
                   <div><span>Characters</span><strong id="characterCount">0</strong></div>
-                  <div><span>Notes</span><strong id="noteCount">0</strong></div>
+                  <div><span>Scenes</span><strong id="sceneMetricCount">0</strong></div>
+                </div>
+                <div class="metrics-graph-container">
+                  <span class="metrics-graph-label">Progress over time</span>
+                  <div id="metricsGraph" class="metrics-graph"></div>
                 </div>
                 </div>
               </section>
-              <p id="leftPaneEmptyState" class="pane-empty-state" hidden>No active blocks selected. Use Tools to customize this pane.</p>
+              <p id="leftPaneEmptyState" class="pane-empty-state" hidden>No active blocks selected. Use Settings to customize this pane.</p>
             </div>
           </div>
         </aside>
@@ -976,6 +1149,39 @@
     </form>
   </dialog>
 
+  <!-- Notepad Modal -->
+  <dialog id="notepadDialog" class="notepad-modal">
+    <div class="notepad-content">
+      <div class="notepad-header">
+        <h3>Notepad</h3>
+        <button id="closeNotepad" class="ghost-button btn-sm" type="button">✕</button>
+      </div>
+      <div id="summernote"></div>
+    </div>
+  </dialog>
+
+  <!-- Collaborator Profile Popup -->
+  <div class="popup-overlay" id="collab-profile-popup">
+    <div class="popup-card collab-profile-card">
+      <button class="popup-close" id="close-collab-profile" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+      <div class="profile-header">
+        <div class="avatar-wrapper">
+          <img src="" alt="Profile" class="avatar" id="collab-profile-img">
+        </div>
+        <h2 class="profile-name" id="collab-profile-name"></h2>
+        <p class="profile-email" id="collab-profile-email"></p>
+      </div>
+      <div class="profile-bio-container">
+        <label class="bio-label">About me</label>
+        <p class="bio-text" id="collab-profile-bio">—</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Profile Popup Overlay -->
   <div class="popup-overlay" id="profile-popup">
     <div class="popup-card">
@@ -1003,10 +1209,10 @@
 
       <!-- Profile Writeup -->
       <div class="profile-bio-container">
-        <label class="bio-label">About</label>
-        <p class="bio-text" id="profile-bio">Tell us about yourself...</p>
+        <label class="bio-label">About me</label>
+        <p class="bio-text is-placeholder" id="profile-bio">About me</p>
         <div class="bio-meta">
-          <span id="word-count">0</span>/100 words
+          <span id="word-count">0</span>/35 words
         </div>
       </div>
 

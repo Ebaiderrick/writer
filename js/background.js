@@ -354,47 +354,47 @@ class LiquidApp {
 
     this.palettes = {
       cedar: {
-        background: 0xf0f9ff,
-        base: hexToVector3(0xf0f9ff),
+        background: 0xfff1f2, // Rose 50
+        base: hexToVector3(0xfff1f2),
         colors: [
-          hexToVector3(0x0ea5e9), // Sky Blue
-          hexToVector3(0x38bdf8), // Light Sky Blue
-          hexToVector3(0xffffff), // Cloud White
-          hexToVector3(0x7dd3fc), // Sky Blue 300
-          hexToVector3(0xe0f2fe), // Sky Blue 100
-          hexToVector3(0xbae6fd)  // Sky Blue 200
+          hexToVector3(0xf43f5e), // Rose 500
+          hexToVector3(0xfbbf24), // Amber 400
+          hexToVector3(0xec4899), // Pink 500
+          hexToVector3(0xfff1f2), // Rose 50
+          hexToVector3(0xf43f5e), // Rose 500
+          hexToVector3(0xfb7185)  // Rose 400
         ],
         settings: {
-          speed: 0.4,
-          intensity: 1.4,
-          grainIntensity: 0.01,
-          gradientSize: 0.8,
+          speed: 0.8,
+          intensity: 2.0,
+          grainIntensity: 0.04,
+          gradientSize: 0.6,
           gradientCount: 12.0,
-          color1Weight: 1.2,
-          color2Weight: 1.0,
-          touchStrength: 0.4
+          color1Weight: 0.7,
+          color2Weight: 1.5,
+          touchStrength: 0.6
         }
       },
       white: {
-        background: 0xfafafa,
-        base: hexToVector3(0xfafafa),
+        background: 0xffffff,
+        base: hexToVector3(0xffffff),
         colors: [
-          hexToVector3(0x00ffff), // Cyan
-          hexToVector3(0x7b68ee), // Medium Slate Blue
-          hexToVector3(0x9400d3), // Dark Violet
-          hexToVector3(0x0000ff), // Blue
-          hexToVector3(0x1e90ff), // Dodger Blue
-          hexToVector3(0xff00ff)  // Magenta
+          hexToVector3(0x38bdf8), // Sky 400
+          hexToVector3(0x818cf8), // Indigo 400
+          hexToVector3(0x34d399), // Emerald 400
+          hexToVector3(0xffffff), // White
+          hexToVector3(0xf472b6), // Pink 400
+          hexToVector3(0x2dd4bf)  // Teal 400
         ],
         settings: {
           speed: 1.0,
           intensity: 1.8,
-          grainIntensity: 0.02,
+          grainIntensity: 0.03,
           gradientSize: 0.5,
           gradientCount: 12.0,
-          color1Weight: 0.9,
-          color2Weight: 0.9,
-          touchStrength: 0.6
+          color1Weight: 0.8,
+          color2Weight: 1.4,
+          touchStrength: 0.7
         }
       },
       dark: {

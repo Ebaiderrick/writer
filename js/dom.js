@@ -32,6 +32,7 @@ export const refs = {
   get autoCapsToggle() { return getCached("#autoCapsToggle"); },
   get autoNumberToggle() { return getCached("#autoNumberToggle"); },
   get bgAnimationToggle() { return getCached("#bgAnimationToggle"); },
+  get bgAnimationLandingToggle() { return getCached("#bgAnimationLandingToggle"); },
   get typewriterToggle() { return getCached("#typewriterToggle"); },
   get aiAssistToggle() { return getCached("#aiAssistToggle"); },
   get grammarCheckToggle() { return getCached("#grammarCheckToggle"); },
@@ -63,13 +64,13 @@ export const refs = {
   get preview() { return getCached("#preview"); },
   get sceneList() { return getCached("#sceneList"); },
   get characterList() { return getCached("#characterList"); },
+  get characterSummary() { return getCached("#characterSummary"); },
   get sceneCount() { return getCached("#sceneCount"); },
   get wordCount() { return getCached("#wordCount"); },
   get pageCount() { return getCached("#pageCount"); },
   get characterCount() { return getCached("#characterCount"); },
-  get noteCount() { return getCached("#noteCount"); },
+  get sceneMetricCount() { return getCached("#sceneMetricCount"); },
   get duplicateProjectBtn() { return getCached("#duplicateProjectBtn"); },
-  get loadSampleBtn() { return getCached("#loadSampleBtn"); },
   get deleteProjectBtn() { return getCached("#deleteProjectBtn"); },
   get homeRecentProjects() { return getCached("#homeRecentProjects"); },
   get homeSignOutBtn() { return getCached("#homeSignOutBtn"); },
@@ -84,5 +85,6 @@ export const refs = {
   get localSaveControls() { return getCached("#localSaveControls"); },
   get localSaveInterval() { return getCached("#localSaveInterval"); },
   get chooseLocalSaveFileBtn() { return getCached("#chooseLocalSaveFileBtn"); },
-  get localSaveFileLabel() { return getCached("#localSaveFileLabel"); }
+  get localSaveFileLabel() { return getCached("#localSaveFileLabel"); },
+  get metricsGraph() { return getCached("#metricsGraph"); }
   };
