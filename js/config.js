@@ -44,7 +44,7 @@ export const LEFT_PANE_BLOCK_DEFS = [
   { key: "grammar-check", label: "Grammar Check" },
   { key: "smart-proofread", label: "Smart Proofreading" },
   { key: "work-tracking", label: "Work Tracking" },
-  { key: "proofread", label: "Screenplay Proofread" },
+  { key: "proofread", label: "Simple Proofread" },
   { key: "tools", label: "Project Tools" }
 ];
 const DEFAULT_VISIBLE_BLOCK_KEYS = new Set(['current', 'scenes', 'characters', 'comments', 'metrics', 'tools']);

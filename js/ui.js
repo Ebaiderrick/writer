@@ -268,7 +268,7 @@ function getLeftPaneBlockLabel(key) {
     "grammar-check": "Grammar Check",
     "smart-proofread": "Smart Proofread",
     "work-tracking": "Work Tracking",
-    proofread: "Proofread Report"
+    proofread: "Simple Proofread"
   };
 
   return t(translationKeys[key] || "") || meta?.label || key;
@@ -1301,8 +1301,9 @@ export async function showProofreadReport() {
   const uncapitalizedCharacters = project.lines
     .map((line, index) => ({ line, index }))
     .filter(({ line }) => isUncapitalizedCharacterCue(line));
+  const narrativeCharacterCapsIssues = findNarrativeCharacterCapsIssues(project);
 
-  if (!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !uncapitalizedCharacters.length && !emptyLineCount) {
+  if (!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !uncapitalizedCharacters.length && !narrativeCharacterCapsIssues.length && !emptyLineCount) {
     await customAlert(t("proofread.none"), t("proofread.title"));
     return;
   }
@@ -1313,7 +1314,7 @@ export async function showProofreadReport() {
     <div class="proofread-report-toolbar">
       <button class="ghost-button btn-sm" type="button" data-proofread-clean-empty-lines="true">Clean Empty Lines${emptyLineCount ? ` (${emptyLineCount})` : ""}</button>
     </div>
-    ${!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !uncapitalizedCharacters.length ? '<p class="collab-empty">No screenplay issues found. You can still clean out empty lines.</p>' : ""}
+    ${!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !uncapitalizedCharacters.length && !narrativeCharacterCapsIssues.length ? '<p class="collab-empty">No screenplay issues found. You can still clean out empty lines.</p>' : ""}
     ${buildProofreadSection("Scene Heading Issues", weakSceneLines, ({ line }) => ({
       title: normalizeLineText(line.text, "scene") || "Scene heading needs attention",
       note: "Scene heading should start with INT., EXT., INT./EXT., or EST.",
@@ -1337,6 +1338,12 @@ export async function showProofreadReport() {
       note: "Character cues should be fully capitalized for standard screenplay formatting.",
       ref: buildProofreadReference(project, line.id),
       tags: ["Character cue", "Capitalization"]
+    }))}
+    ${buildProofreadSection("Character Names In Action", narrativeCharacterCapsIssues, ({ line, name, matchedText }) => ({
+      title: normalizeLineText(line.text, line.type) || "Character name should be capitalized",
+      note: `Use ${name} in caps here instead of "${matchedText}".`,
+      ref: buildProofreadReference(project, line.id),
+      tags: ["Action", "Character name", "Capitalization"]
     }))}
   `;
 
@@ -1674,6 +1681,65 @@ function isUncapitalizedCharacterCue(line) {
   }
 
   return normalized !== normalized.toUpperCase();
+}
+
+function findNarrativeCharacterCapsIssues(project) {
+  const characterNames = getCharacterNamesForCaps(project);
+  if (!characterNames.length) {
+    return [];
+  }
+
+  const issues = [];
+  project.lines.forEach((line, index) => {
+    if (!line || ["character", "dual", "dialogue", "parenthetical", "image"].includes(line.type)) {
+      return;
+    }
+
+    const text = String(line.text || "");
+    characterNames.forEach((name) => {
+      const issue = findCharacterNameCaseIssue(text, name);
+      if (issue) {
+        issues.push({
+          line,
+          index,
+          name,
+          matchedText: issue
+        });
+      }
+    });
+  });
+
+  return issues;
+}
+
+function getCharacterNamesForCaps(project) {
+  return [...new Set(project.lines
+    .filter((line) => ["character", "dual"].includes(line.type) && String(line.text || "").trim())
+    .map((line) => normalizeLineText(line.text, "character"))
+    .filter((name) => /[A-Z]/.test(name))
+    .map((name) => name.toUpperCase())
+  )];
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function findCharacterNameCaseIssue(text, characterName) {
+  const parts = String(characterName || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return "";
+  }
+
+  const pattern = new RegExp(`\\b${parts.map((part) => escapeRegExp(part)).join("\\s+")}\\b`, "gi");
+  let match;
+  while ((match = pattern.exec(String(text || "")))) {
+    if (match[0] !== match[0].toUpperCase()) {
+      return match[0];
+    }
+  }
+
+  return "";
 }
 
 function findSceneIndexForLine(project, lineIndex) {
