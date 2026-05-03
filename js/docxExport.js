@@ -7,9 +7,14 @@ const LINE_SPACING = 360;
 const PARAGRAPH_AFTER = 80;
 const LETTER_WIDTH = 12240;
 const LETTER_HEIGHT = 15840;
+const PAGE_MARGIN = centimeters(2);
 
 function inches(value) {
   return Math.round(value * 1440);
+}
+
+function centimeters(value) {
+  return Math.round((value / 2.54) * 1440);
 }
 
 function buildExportLines(project) {
@@ -110,10 +115,59 @@ function createParagraph(docxLib, text, type, extra = {}) {
   }
 }
 
+function createDualParagraph(docxLib, text, type) {
+  const { Paragraph, TextRun, AlignmentType } = docxLib;
+  const base = {
+    spacing: { line: LINE_SPACING, after: 40 },
+    children: createRuns(TextRun, text)
+  };
+
+  switch (type) {
+    case "scene":
+    case "shot":
+      return new Paragraph({
+        ...base,
+        children: createRuns(TextRun, String(text || "").toUpperCase(), { bold: true })
+      });
+    case "transition":
+      return new Paragraph({
+        ...base,
+        alignment: AlignmentType.RIGHT,
+        children: createRuns(TextRun, String(text || "").toUpperCase(), { bold: true })
+      });
+    case "character":
+    case "dual":
+      return new Paragraph({
+        ...base,
+        indent: { left: inches(0.65) },
+        children: createRuns(TextRun, String(text || "").toUpperCase(), { bold: true })
+      });
+    case "dialogue":
+      return new Paragraph({
+        ...base,
+        indent: {
+          left: inches(0.2),
+          right: inches(0.2)
+        }
+      });
+    case "parenthetical":
+      return new Paragraph({
+        ...base,
+        indent: {
+          left: inches(0.45),
+          right: inches(0.25)
+        },
+        children: createRuns(TextRun, text, { italics: true })
+      });
+    default:
+      return new Paragraph(base);
+  }
+}
+
 function createDualDialogueTable(docxLib, line) {
   const { Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign } = docxLib;
-  const childrenLeft = line.displayText ? [createParagraph(docxLib, line.displayText, line.type)] : [];
-  const childrenRight = line.secondary ? [createParagraph(docxLib, line.secondary, line.type)] : [];
+  const childrenLeft = line.displayText ? [createDualParagraph(docxLib, line.displayText, line.type)] : [];
+  const childrenRight = line.secondary ? [createDualParagraph(docxLib, line.secondary, line.type)] : [];
 
   return new Table({
     width: {
@@ -137,10 +191,10 @@ function createDualDialogueTable(docxLib, line) {
             margins: {
               top: 0,
               bottom: 0,
-              left: 0,
-              right: inches(0.08)
+              left: inches(0.05),
+              right: inches(0.12)
             },
-            children: childrenLeft.length ? childrenLeft : [createParagraph(docxLib, "", "action")]
+            children: childrenLeft.length ? childrenLeft : [createDualParagraph(docxLib, "", "action")]
           }),
           new TableCell({
             verticalAlign: VerticalAlign.TOP,
@@ -148,10 +202,10 @@ function createDualDialogueTable(docxLib, line) {
             margins: {
               top: 0,
               bottom: 0,
-              left: inches(0.08),
-              right: 0
+              left: inches(0.12),
+              right: inches(0.05)
             },
-            children: childrenRight.length ? childrenRight : [createParagraph(docxLib, "", "action")]
+            children: childrenRight.length ? childrenRight : [createDualParagraph(docxLib, "", "action")]
           })
         ]
       })
@@ -223,12 +277,12 @@ function buildCoverSection(docxLib, project) {
           height: LETTER_HEIGHT
         },
         margin: {
-          top: inches(1),
-          right: inches(1),
-          bottom: inches(1),
-          left: inches(1),
-          header: inches(0.4),
-          footer: inches(0.4)
+          top: PAGE_MARGIN,
+          right: PAGE_MARGIN,
+          bottom: PAGE_MARGIN,
+          left: PAGE_MARGIN,
+          header: centimeters(1),
+          footer: centimeters(1)
         }
       }
     },
@@ -275,12 +329,12 @@ function buildScriptSection(docxLib, project) {
           height: LETTER_HEIGHT
         },
         margin: {
-          top: inches(1),
-          right: inches(1),
-          bottom: inches(1),
-          left: inches(1.5),
-          header: inches(0.35),
-          footer: inches(0.35)
+          top: PAGE_MARGIN,
+          right: PAGE_MARGIN,
+          bottom: PAGE_MARGIN,
+          left: PAGE_MARGIN,
+          header: centimeters(0.9),
+          footer: centimeters(0.9)
         },
         pageNumbers: {
           start: 1
