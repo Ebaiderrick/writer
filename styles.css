@@ -2631,6 +2631,11 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   width: min(1180px, calc(100vw - 36px));
 }
 
+.modal-content-proofread {
+  width: min(1650px, calc(100vw - 24px));
+  max-height: min(90vh, 960px);
+}
+
 .notepad-content {
   width: min(800px, calc(100vw - 48px));
   border: none;
@@ -3286,6 +3291,8 @@ kbd {
 .proofread-report-toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .work-tracking-report {
@@ -3323,6 +3330,27 @@ kbd {
   gap: 8px;
   padding: 12px 14px;
   border-radius: 16px;
+}
+
+.proofread-report-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.proofread-report-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.proofread-report-item.is-accepted {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 18%, var(--panel));
 }
 
 .work-tracking-graph-wrap {

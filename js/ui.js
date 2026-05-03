@@ -1314,6 +1314,7 @@ export async function showProofreadReport() {
       to: name
     }))
   ];
+  const correctionKeyMap = new Map(fixableCorrections.map((correction, index) => [buildProofreadCorrectionKey(correction), index]));
 
   if (!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !uncapitalizedCharacters.length && !narrativeCharacterCapsIssues.length && !emptyLineCount) {
     await customAlert(t("proofread.none"), t("proofread.title"));
@@ -1325,6 +1326,7 @@ export async function showProofreadReport() {
   container.innerHTML = `
     <div class="proofread-report-toolbar">
       <button class="ghost-button btn-sm" type="button" data-proofread-clean-empty-lines="true">Clean Empty Lines${emptyLineCount ? ` (${emptyLineCount})` : ""}</button>
+      <button class="ghost-button btn-sm" type="button" data-proofread-apply-selected="true" ${fixableCorrections.length ? "" : "disabled"}>Apply Selected Corrections</button>
       <button class="ghost-button btn-sm" type="button" data-proofread-accept-all-corrections="true" ${fixableCorrections.length ? "" : "disabled"}>Accept All Corrections${fixableCorrections.length ? ` (${fixableCorrections.length})` : ""}</button>
     </div>
     ${!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !uncapitalizedCharacters.length && !narrativeCharacterCapsIssues.length ? '<p class="collab-empty">No screenplay issues found. You can still clean out empty lines.</p>' : ""}
@@ -1351,22 +1353,22 @@ export async function showProofreadReport() {
       note: "Character cues should be fully capitalized for standard screenplay formatting.",
       ref: buildProofreadReference(project, line.id),
       tags: ["Character cue", "Capitalization"],
-      correction: {
+      correctionIndex: correctionKeyMap.get(buildProofreadCorrectionKey({
         mode: "character-cue-caps",
         lineId: line.id
-      }
+      }))
     }))}
     ${buildProofreadSection("Character Names In Action", narrativeCharacterCapsIssues, ({ line, name, matchedText }) => ({
       title: normalizeLineText(line.text, line.type) || "Character name should be capitalized",
       note: `Use ${name} in caps here instead of "${matchedText}".`,
       ref: buildProofreadReference(project, line.id),
       tags: ["Action", "Character name", "Capitalization"],
-      correction: {
+      correctionIndex: correctionKeyMap.get(buildProofreadCorrectionKey({
         mode: "narrative-character-caps",
         lineId: line.id,
         from: matchedText,
         to: name
-      }
+      }))
     }))}
   `;
 
@@ -1388,16 +1390,32 @@ export async function showProofreadReport() {
       await customAlert("There were no automatic corrections left to apply.", "Simple Proofread");
       return;
     }
+    markProofreadCorrectionsApplied(container, fixableCorrections, correctionKeyMap);
     modalRefs.dialog.close();
     persistProjects(false);
     window.dispatchEvent(new CustomEvent("proofreadCleanupApplied", { detail: { removedCount: 0 } }));
     await customAlert(`Applied ${applied} correction${applied === 1 ? "" : "s"}.`, "Simple Proofread");
   });
 
-  container.querySelectorAll("[data-proofread-correction]").forEach((button) => {
+  container.querySelector('[data-proofread-apply-selected="true"]')?.addEventListener("click", async () => {
+    const selectedCorrections = [...container.querySelectorAll("[data-proofread-select]:checked")]
+      .map((input) => fixableCorrections[Number(input.dataset.proofreadSelect)])
+      .filter(Boolean);
+    const applied = applyProofreadCorrections(project, selectedCorrections);
+    if (!applied) {
+      await customAlert("Select at least one automatic correction to apply.", "Simple Proofread");
+      return;
+    }
+    markProofreadCorrectionsApplied(container, selectedCorrections, correctionKeyMap);
+    persistProjects(false);
+    window.dispatchEvent(new CustomEvent("proofreadCleanupApplied", { detail: { removedCount: 0 } }));
+    await customAlert(`Applied ${applied} selected correction${applied === 1 ? "" : "s"}.`, "Simple Proofread");
+  });
+
+  container.querySelectorAll("[data-proofread-correction-index]").forEach((button) => {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
-      const correction = parseProofreadCorrection(button.dataset.proofreadCorrection);
+      const correction = fixableCorrections[Number(button.dataset.proofreadCorrectionIndex)];
       if (!correction) {
         return;
       }
@@ -1406,9 +1424,7 @@ export async function showProofreadReport() {
         await customAlert("That correction could not be applied.", "Simple Proofread");
         return;
       }
-      button.disabled = true;
-      const card = button.closest(".proofread-report-item");
-      card?.classList.add("is-accepted");
+      markProofreadCorrectionsApplied(container, [correction], correctionKeyMap);
       persistProjects(false);
       window.dispatchEvent(new CustomEvent("proofreadCleanupApplied", { detail: { removedCount: 0 } }));
     });
@@ -1438,6 +1454,7 @@ export async function showProofreadReport() {
   await showModal({
     title: t("proofread.title"),
     message: container,
+    contentClass: "modal-content-proofread",
     showConfirm: false,
     cancelLabel: "Close"
   });
@@ -1697,7 +1714,7 @@ function buildProofreadSection(title, items, formatter) {
                 </span>
               ` : ""}
               <span class="list-item-meta">${escapeHtml(formatted.note)}</span>
-              ${formatted.correction ? `<span class="proofread-report-actions"><button class="ghost-button btn-sm" type="button" data-proofread-correction-action="true" data-proofread-correction="${escapeHtml(JSON.stringify(formatted.correction))}">Accept Correction</button></span>` : ""}
+              ${Number.isInteger(formatted.correctionIndex) ? `<span class="proofread-report-actions"><label class="proofread-report-select"><input type="checkbox" data-proofread-select="${formatted.correctionIndex}" checked><span>Select</span></label><button class="ghost-button btn-sm" type="button" data-proofread-correction-action="true" data-proofread-correction-index="${formatted.correctionIndex}">Accept Correction</button></span>` : ""}
             </div>
           `;
         }).join("")}
@@ -1812,17 +1829,6 @@ function findCharacterNameCaseIssue(text, characterName) {
   return "";
 }
 
-function parseProofreadCorrection(raw) {
-  if (!raw) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
 function applyProofreadCorrections(project, corrections) {
   let applied = 0;
   corrections.forEach((correction) => {
@@ -1852,6 +1858,36 @@ function applyProofreadCorrections(project, corrections) {
   });
 
   return applied;
+}
+
+function buildProofreadCorrectionKey(correction) {
+  return JSON.stringify({
+    mode: correction?.mode || "",
+    lineId: correction?.lineId || "",
+    from: correction?.from || "",
+    to: correction?.to || ""
+  });
+}
+
+function markProofreadCorrectionsApplied(container, corrections, correctionKeyMap) {
+  corrections.forEach((correction) => {
+    const index = correctionKeyMap.get(buildProofreadCorrectionKey(correction));
+    if (!Number.isInteger(index)) {
+      return;
+    }
+    const actionButton = container.querySelector(`[data-proofread-correction-index="${index}"]`);
+    if (actionButton) {
+      actionButton.textContent = "Corrected";
+      actionButton.disabled = true;
+    }
+    const checkbox = container.querySelector(`[data-proofread-select="${index}"]`);
+    if (checkbox) {
+      checkbox.checked = false;
+      checkbox.disabled = true;
+    }
+    const card = actionButton?.closest(".proofread-report-item") || checkbox?.closest(".proofread-report-item");
+    card?.classList.add("is-accepted");
+  });
 }
 
 function findSceneIndexForLine(project, lineIndex) {
