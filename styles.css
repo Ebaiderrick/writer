@@ -244,6 +244,10 @@ html[data-theme="rose"] .mesh-background {
   overflow-x: hidden;
 }
 
+.home-view[hidden] {
+  display: none !important;
+}
+
 .home-topbar,
 .studio-topbar,
 .nav-stack,
@@ -732,6 +736,10 @@ html[data-theme="rose"] .mesh-background {
   display: grid;
   grid-template-rows: var(--topbar-height) auto minmax(0, 1fr);
   background: transparent;
+}
+
+.studio-view[hidden] {
+  display: none !important;
 }
 
 .studio-topbar {
