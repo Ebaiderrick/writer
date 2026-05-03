@@ -1544,16 +1544,12 @@ export async function showWorkspacePopup() {
         ${ownerCanManage ? '<button class="ghost-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
       </div>
       <div class="workspace-metric-columns">
-        <div class="workspace-metric-stack">
-          <div class="workspace-metric-row"><span>Owner</span><strong>${escapeHtml(ownerLabel)}</strong></div>
-          <div class="workspace-metric-row"><span>Members</span><strong>${collaborators.length}</strong></div>
-          <div class="workspace-metric-row"><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
-        </div>
-        <div class="workspace-metric-stack">
-          <div class="workspace-metric-row"><span>Last Edited By</span><strong>${escapeHtml(lastEditedBy)}</strong></div>
-          <div class="workspace-metric-row"><span>Last Activity</span><strong>${escapeHtml(formatDateTime(lastActivity))}</strong></div>
-          <div class="workspace-metric-row"><span>Workspace Code</span><strong>${escapeHtml(workspace.inviteCode || project.scriptId || "")}</strong></div>
-        </div>
+        <div class="workspace-metric-row"><span>Owner</span><strong>${escapeHtml(ownerLabel)}</strong></div>
+        <div class="workspace-metric-row"><span>Members</span><strong>${collaborators.length}</strong></div>
+        <div class="workspace-metric-row"><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
+        <div class="workspace-metric-row"><span>Last Edited By</span><strong>${escapeHtml(lastEditedBy)}</strong></div>
+        <div class="workspace-metric-row"><span>Last Activity</span><strong>${escapeHtml(formatDateTime(lastActivity))}</strong></div>
+        <div class="workspace-metric-row"><span>Workspace Code</span><strong>${escapeHtml(workspace.inviteCode || project.scriptId || "")}</strong></div>
       </div>
     </section>
     <section class="workspace-popup-section">
