@@ -32,6 +32,96 @@ export function showStudio() {
   refs.studioView.hidden = false;
 }
 
+export function showNewCreationFlow() {
+  return new Promise((resolve) => {
+    const container = document.createElement("div");
+    container.className = "creation-flow";
+
+    const state = {
+      creationKind: "project"
+    };
+
+    function finish(result = null) {
+      modalRefs.dialog?.close();
+      resolve(result);
+    }
+
+    function renderTypeStep() {
+      container.innerHTML = `
+        <div class="creation-flow-header">
+          <span class="creation-flow-step">Step 2 of 2</span>
+          <h4>Choose your writing type</h4>
+          <p>Film Scripts is live now. Prose / Poetry is reserved for the next phase.</p>
+        </div>
+        <div class="creation-flow-grid">
+          <button class="creation-option-card is-primary" type="button" data-create-work-type="film-script">
+            <span class="creation-option-icon">FILM</span>
+            <strong>Film Scripts</strong>
+            <small>Scene-driven workspace with screenplay tools, collaboration, and story memory.</small>
+          </button>
+          <button class="creation-option-card is-disabled" type="button" disabled>
+            <span class="creation-option-icon">TEXT</span>
+            <strong>Prose / Poetry</strong>
+            <small>Coming soon. We’ll open this once the film path is fully polished.</small>
+            <span class="creation-option-badge">Soon</span>
+          </button>
+        </div>
+        <div class="creation-flow-actions">
+          <button class="ghost-button btn-sm" type="button" data-create-back="true">Back</button>
+        </div>
+      `;
+
+      container.querySelector('[data-create-back="true"]')?.addEventListener("click", renderKindStep);
+      container.querySelector('[data-create-work-type="film-script"]')?.addEventListener("click", () => {
+        finish({
+          creationKind: state.creationKind,
+          workType: "film-script"
+        });
+      });
+    }
+
+    function renderKindStep() {
+      container.innerHTML = `
+        <div class="creation-flow-header">
+          <span class="creation-flow-step">Step 1 of 2</span>
+          <h4>What do you want to create?</h4>
+          <p>Choose the container first. Projects stay focused. Workspaces prepare for team writing and shared tools.</p>
+        </div>
+        <div class="creation-flow-grid">
+          <button class="creation-option-card" type="button" data-create-kind="project">
+            <span class="creation-option-icon">PRJ</span>
+            <strong>Project</strong>
+            <small>Create a focused writing file and move straight into the editor.</small>
+          </button>
+          <button class="creation-option-card" type="button" data-create-kind="workspace">
+            <span class="creation-option-icon">WS</span>
+            <strong>Workspace</strong>
+            <small>Create a collaborative writing environment that can grow into a team hub.</small>
+          </button>
+        </div>
+      `;
+
+      container.querySelectorAll("[data-create-kind]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.creationKind = button.dataset.createKind === "workspace" ? "workspace" : "project";
+          renderTypeStep();
+        });
+      });
+    }
+
+    renderKindStep();
+
+    showModal({
+      title: "Create New",
+      message: container,
+      showConfirm: false,
+      showCancel: true,
+      cancelLabel: "Close",
+      contentClass: "modal-content-create-new"
+    }).then(() => resolve(null));
+  });
+}
+
 export function renderHome() {
   // Populate user info in home topbar
   try {

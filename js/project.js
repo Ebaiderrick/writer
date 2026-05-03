@@ -203,6 +203,8 @@ export function sanitizeProject(project) {
     id: project.id || uid("project"),
     scriptId: normalizeScriptId(project.scriptId),
     title: project.title || "Untitled Script",
+    workType: project.workType === "prose-poetry" ? "prose-poetry" : "film-script",
+    creationKind: project.creationKind === "workspace" ? "workspace" : "project",
     author: project.author || "",
     contact: project.contact || "",
     company: project.company || "",
@@ -258,9 +260,24 @@ export function cloneProject(project, withNewId) {
 }
 
 export function createProject() {
+  return createProjectWithOptions();
+}
+
+export function createProjectWithOptions(options = {}) {
+  const index = state.projects.length + 1;
+  const creationKind = options.creationKind === "workspace" ? "workspace" : "project";
+  const workType = options.workType === "prose-poetry" ? "prose-poetry" : "film-script";
+  const defaultTitle = creationKind === "workspace"
+    ? `Film Workspace ${index}`
+    : `Film Script ${index}`;
   const project = sanitizeProject({
     id: uid("project"),
-    title: `Script Name ${state.projects.length + 1}`,
+    title: options.title || defaultTitle,
+    workType,
+    creationKind,
+    workspace: {
+      name: options.workspaceName || (creationKind === "workspace" ? defaultTitle : `Workspace ${index}`)
+    },
     lines: [{ id: uid(), type: "action", text: "" }]
   });
   upsertProject(project);

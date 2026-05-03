@@ -3,7 +3,7 @@ import { refs } from './dom.js';
 import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
-  createProject, upsertProject, sanitizeProject, cloneProject,
+  createProject, createProjectWithOptions, upsertProject, sanitizeProject, cloneProject,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
   deleteProjectFromCloud
@@ -26,7 +26,7 @@ import {
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal,
-  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder
+  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -54,11 +54,23 @@ import {
 let studioSidebarRefreshFrame = 0;
 let hasShownReadOnlyNotice = false;
 
+async function launchNewCreationFlow() {
+  const selection = await showNewCreationFlow();
+  if (!selection || selection.workType !== "film-script") {
+    return;
+  }
+
+  const project = createProjectWithOptions({
+    creationKind: selection.creationKind,
+    workType: selection.workType
+  });
+  openProject(project.id);
+}
+
 export function bindEvents() {
   // Navigation
   refs.newProjectBtn.addEventListener("click", () => {
-    const project = createProject();
-    openProject(project.id);
+    launchNewCreationFlow();
   });
 
   refs.goHomeBtn.addEventListener("click", () => {
@@ -1240,7 +1252,7 @@ function initResizeHandle(handle, side) {
 function handleMenuAction(action) {
   switch (action) {
     case "new-project":
-      openProject(createProject().id);
+      launchNewCreationFlow();
       break;
     case "open-projects":
       persistProjects(true);
