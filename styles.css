@@ -4582,7 +4582,7 @@ html[data-theme="white"] .user-trigger {
 .char-panel-btns {
   display: flex;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .char-card-clickable {

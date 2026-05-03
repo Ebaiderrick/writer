@@ -827,21 +827,21 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
             <span>Name</span>
             <input class="modal-input" id="charName" type="text" value="${escapeHtml(existing?.name || prefillName)}" placeholder="e.g. JOHN" ${isEdit ? "readonly" : ""}>
           </label>
-          <label class="field field-wide">
+          <label class="field">
             <span>Age</span>
             <input class="modal-input" id="charAge" type="text" value="${escapeHtml(existing?.age || "")}" placeholder="e.g. 35">
           </label>
-          <label class="field field-wide">
+          <label class="field">
             <span>Sex</span>
-            <input class="modal-input" id="charSex" type="text" value="${escapeHtml(existing?.sex || "")}" placeholder="e.g. Male, Female, Non-binary">
+            <input class="modal-input" id="charSex" type="text" value="${escapeHtml(existing?.sex || "")}" placeholder="e.g. Male">
           </label>
           <label class="field field-wide">
             <span>Outfit / Appearance</span>
-            <input class="modal-input" id="charOutfit" type="text" value="${escapeHtml(existing?.outfit || "")}" placeholder="e.g. grey tailored suit, tired eyes">
+            <textarea class="modal-input" id="charOutfit" placeholder="e.g. grey tailored suit, tired eyes">${escapeHtml(existing?.outfit || "")}</textarea>
           </label>
           <label class="field field-wide">
             <span>Behaviour / Personality</span>
-            <input class="modal-input" id="charBehaviour" type="text" value="${escapeHtml(existing?.behaviour || "")}" placeholder="e.g. calculated, speaks rarely">
+            <textarea class="modal-input" id="charBehaviour" placeholder="e.g. calculated, speaks rarely but precisely">${escapeHtml(existing?.behaviour || "")}</textarea>
           </label>
           <label class="field field-wide">
             <span>Other Notes</span>
