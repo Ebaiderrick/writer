@@ -146,7 +146,13 @@ export function renderHome() {
       refs.homeWorkspaceDashboard.hidden = true;
     }
   } else {
-    projects = projects.filter((project) => project.isWorkspaceRoot || project.workspace?.id === project.id);
+    projects = projects.filter((project, index, all) => {
+      if (project.isWorkspaceRoot || project.workspace?.id === project.id) {
+        return true;
+      }
+      const workspaceId = project.workspace?.id;
+      return all.findIndex((item) => item.workspace?.id === workspaceId) === index;
+    });
   }
 
   if (state.currentWorkspaceId && workspaceLead) {

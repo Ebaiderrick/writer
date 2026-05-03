@@ -680,7 +680,11 @@ export function bindEvents() {
 
       if (e.target.closest(".project-delete")) {
           removeProject(projectId);
-      } else if (project?.isWorkspaceRoot || (project?.creationKind === "workspace" && !state.currentWorkspaceId)) {
+      } else if (
+        project?.isWorkspaceRoot ||
+        (project?.creationKind === "workspace" && !state.currentWorkspaceId) ||
+        (!state.currentWorkspaceId && project?.workspace?.id && project.workspace.id !== project.id)
+      ) {
           openWorkspaceDashboard(project.workspace?.id || project.id);
       } else {
           openProject(projectId);
@@ -694,7 +698,11 @@ export function bindEvents() {
         const btn = e.target.closest(".recent-project-button");
         if (btn) {
             const project = state.projects.find((item) => item.id === btn.dataset.projectId);
-            if (project?.isWorkspaceRoot || project?.creationKind === "workspace") {
+            if (
+              project?.isWorkspaceRoot ||
+              project?.creationKind === "workspace" ||
+              (project?.workspace?.id && project.workspace.id !== project.id)
+            ) {
               openWorkspaceDashboard(project.workspace?.id || project.id);
             } else {
               openProject(btn.dataset.projectId);
