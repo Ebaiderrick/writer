@@ -9,6 +9,8 @@ const LETTER_WIDTH = 12240;
 const LETTER_HEIGHT = 15840;
 const PAGE_MARGIN_TOP_BOTTOM = centimeters(2);
 const PAGE_MARGIN_LEFT_RIGHT = centimeters(2.5);
+const CHARACTER_BLOCK_SIDE_MARGIN = centimeters(5.4);
+const DUAL_CHARACTER_BLOCK_SIDE_MARGIN = centimeters(1.15);
 
 function inches(value) {
   return Math.round(value * 1440);
@@ -86,7 +88,10 @@ function createParagraph(docxLib, text, type, extra = {}) {
     case "dual":
       return new Paragraph({
         ...base,
-        alignment: AlignmentType.CENTER,
+        indent: {
+          left: CHARACTER_BLOCK_SIDE_MARGIN,
+          right: CHARACTER_BLOCK_SIDE_MARGIN
+        },
         children: createRuns(TextRun, String(text || "").toUpperCase(), { bold: true })
       });
     case "dialogue":
@@ -140,7 +145,10 @@ function createDualParagraph(docxLib, text, type) {
     case "dual":
       return new Paragraph({
         ...base,
-        alignment: AlignmentType.CENTER,
+        indent: {
+          left: DUAL_CHARACTER_BLOCK_SIDE_MARGIN,
+          right: DUAL_CHARACTER_BLOCK_SIDE_MARGIN
+        },
         children: createRuns(TextRun, String(text || "").toUpperCase(), { bold: true })
       });
     case "dialogue":
