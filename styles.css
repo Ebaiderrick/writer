@@ -573,17 +573,46 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-view {
-  min-height: 100vh;
-  padding: 18px 24px 40px;
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, rgba(8, 10, 18, 0.68) 76%, transparent);
+  backdrop-filter: blur(14px);
 }
 
 .workspace-topbar {
-  margin-bottom: 28px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
 }
 
 .workspace-view-brand {
   display: grid;
   gap: 6px;
+}
+
+.workspace-view[hidden] {
+  display: none !important;
+}
+
+.workspace-view > * {
+  width: min(1320px, calc(100vw - 48px));
+}
+
+.workspace-view-body,
+.workspace-topbar {
+  max-width: min(1320px, calc(100vw - 48px));
+}
+
+.workspace-view-body {
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
+  align-items: start;
+  max-height: calc(100vh - 148px);
+  overflow: hidden;
+  padding: 0;
 }
 
 .workspace-view-brand strong {
@@ -596,18 +625,49 @@ html[data-theme="rose"] .mesh-background {
   font-size: 0.92rem;
 }
 
-.workspace-view-body,
 .workspace-projects {
   display: grid;
   gap: 24px;
+}
+
+.workspace-view::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.workspace-topbar,
+.workspace-view-body {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-topbar,
+.workspace-view-body {
+  background: color-mix(in srgb, var(--panel) 90%, rgba(255, 255, 255, 0.08));
+  border: 1px solid color-mix(in srgb, var(--line) 88%, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 26px 70px rgba(3, 7, 18, 0.22);
+}
+
+.workspace-topbar {
+  border-radius: 26px 26px 0 0;
+  margin-bottom: 0;
+  padding: 18px 22px;
+}
+
+.workspace-view-body {
+  border-radius: 0 0 26px 26px;
 }
 
 .workspace-projects-head {
   margin-bottom: 0;
 }
 
-.workspace-home {
-  margin-bottom: 24px;
+.workspace-home,
+.workspace-projects {
+  min-height: 0;
+  padding: 18px;
+  overflow: auto;
 }
 
 .workspace-home-shell {
@@ -771,6 +831,15 @@ html[data-theme="rose"] .mesh-background {
 .workspace-task-list {
   display: grid;
   gap: 10px;
+}
+
+.workspace-projects-empty {
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-strong) 58%, transparent);
+  color: var(--muted);
+  font-size: 0.86rem;
 }
 
 .workspace-task-actions {

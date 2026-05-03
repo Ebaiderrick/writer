@@ -31,7 +31,7 @@ export function showHome() {
 
 export function showWorkspaceView() {
   refs.authView.hidden = true;
-  refs.homeView.hidden = true;
+  refs.homeView.hidden = false;
   refs.workspaceView.hidden = false;
   refs.studioView.hidden = true;
 }
@@ -179,20 +179,24 @@ export function renderWorkspaceView() {
 
   refs.workspaceProjectGrid.innerHTML = "";
   const template = document.querySelector("#projectCardTemplate");
-  projects.forEach((project) => {
-    const node = template.content.firstElementChild.cloneNode(true);
-    const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
-    const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
-    node.querySelector(".project-card-title").textContent = project.title;
-    node.querySelector(".project-script-id").textContent = project.scriptId;
-    node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
-    node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
-    node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-    node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
-    node.dataset.projectId = project.id;
-    node.querySelector(".project-card-open").dataset.projectId = project.id;
-    refs.workspaceProjectGrid.appendChild(node);
-  });
+  if (!projects.length) {
+    refs.workspaceProjectGrid.innerHTML = '<article class="workspace-projects-empty">No projects yet. Create the first project in this workspace to start writing.</article>';
+  } else {
+    projects.forEach((project) => {
+      const node = template.content.firstElementChild.cloneNode(true);
+      const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+      const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+      node.querySelector(".project-card-title").textContent = project.title;
+      node.querySelector(".project-script-id").textContent = project.scriptId;
+      node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
+      node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
+      node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
+      node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
+      node.dataset.projectId = project.id;
+      node.querySelector(".project-card-open").dataset.projectId = project.id;
+      refs.workspaceProjectGrid.appendChild(node);
+    });
+  }
 
   applyTranslations();
 }

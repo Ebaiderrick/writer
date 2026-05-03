@@ -63,29 +63,30 @@ async function launchNewCreationFlow() {
   }
 
   if (selection.creationKind === "workspace") {
+    const workspaceName = await customPrompt("Name this workspace before creating it.", "", "New Workspace");
+    if (!workspaceName || !workspaceName.trim()) {
+      await customAlert("A workspace name is required before creation.", "Workspace Not Created");
+      return;
+    }
     const workspaceRoot = createProjectWithOptions({
       creationKind: "workspace",
       workType: selection.workType,
-      isWorkspaceRoot: true
-    });
-    createProjectWithOptions({
-      creationKind: "project",
-      workType: selection.workType,
-      workspace: {
-        id: workspaceRoot.workspace?.id || workspaceRoot.id,
-        name: workspaceRoot.workspace?.name || workspaceRoot.title,
-        inviteCode: workspaceRoot.workspace?.inviteCode,
-        reminders: workspaceRoot.workspace?.reminders || [],
-        targets: workspaceRoot.workspace?.targets || {},
-        tasks: workspaceRoot.workspace?.tasks || []
-      }
+      isWorkspaceRoot: true,
+      title: workspaceName.trim(),
+      workspaceName: workspaceName.trim()
     });
     openWorkspaceDashboard(workspaceRoot.workspace?.id || workspaceRoot.id);
     return;
   }
+  const projectName = await customPrompt("Name this project before creating it.", "", "New Project");
+  if (!projectName || !projectName.trim()) {
+    await customAlert("A project name is required before creation.", "Project Not Created");
+    return;
+  }
   const project = createProjectWithOptions({
     creationKind: selection.creationKind,
-    workType: selection.workType
+    workType: selection.workType,
+    title: projectName.trim()
   });
   openProject(project.id);
 }
@@ -102,16 +103,21 @@ function openWorkspaceDashboard(workspaceId) {
   renderWorkspaceView();
 }
 
-function createProjectInsideCurrentWorkspace() {
+async function createProjectInsideCurrentWorkspace() {
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId) || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId);
   if (!workspaceProject) {
     launchNewCreationFlow();
     return;
   }
-
+  const projectName = await customPrompt("Name this project before creating it.", "", "New Project");
+  if (!projectName || !projectName.trim()) {
+    await customAlert("A project name is required before creation.", "Project Not Created");
+    return;
+  }
   const project = createProjectWithOptions({
     creationKind: "project",
     workType: "film-script",
+    title: projectName.trim(),
     isShared: workspaceProject.isShared,
     ownerId: workspaceProject.ownerId,
     ownerName: workspaceProject.ownerName,
