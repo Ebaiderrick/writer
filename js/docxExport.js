@@ -7,7 +7,8 @@ const LINE_SPACING = 360;
 const PARAGRAPH_AFTER = 80;
 const LETTER_WIDTH = 12240;
 const LETTER_HEIGHT = 15840;
-const PAGE_MARGIN = centimeters(2);
+const PAGE_MARGIN_TOP_BOTTOM = centimeters(2);
+const PAGE_MARGIN_LEFT_RIGHT = centimeters(2.5);
 
 function inches(value) {
   return Math.round(value * 1440);
@@ -85,7 +86,7 @@ function createParagraph(docxLib, text, type, extra = {}) {
     case "dual":
       return new Paragraph({
         ...base,
-        indent: { left: inches(2.0) },
+        alignment: AlignmentType.CENTER,
         children: createRuns(TextRun, String(text || "").toUpperCase(), { bold: true })
       });
     case "dialogue":
@@ -139,7 +140,7 @@ function createDualParagraph(docxLib, text, type) {
     case "dual":
       return new Paragraph({
         ...base,
-        indent: { left: inches(0.65) },
+        alignment: AlignmentType.CENTER,
         children: createRuns(TextRun, String(text || "").toUpperCase(), { bold: true })
       });
     case "dialogue":
@@ -277,10 +278,10 @@ function buildCoverSection(docxLib, project) {
           height: LETTER_HEIGHT
         },
         margin: {
-          top: PAGE_MARGIN,
-          right: PAGE_MARGIN,
-          bottom: PAGE_MARGIN,
-          left: PAGE_MARGIN,
+          top: PAGE_MARGIN_TOP_BOTTOM,
+          right: PAGE_MARGIN_LEFT_RIGHT,
+          bottom: PAGE_MARGIN_TOP_BOTTOM,
+          left: PAGE_MARGIN_LEFT_RIGHT,
           header: centimeters(1),
           footer: centimeters(1)
         }
@@ -329,10 +330,10 @@ function buildScriptSection(docxLib, project) {
           height: LETTER_HEIGHT
         },
         margin: {
-          top: PAGE_MARGIN,
-          right: PAGE_MARGIN,
-          bottom: PAGE_MARGIN,
-          left: PAGE_MARGIN,
+          top: PAGE_MARGIN_TOP_BOTTOM,
+          right: PAGE_MARGIN_LEFT_RIGHT,
+          bottom: PAGE_MARGIN_TOP_BOTTOM,
+          left: PAGE_MARGIN_LEFT_RIGHT,
           header: centimeters(0.9),
           footer: centimeters(0.9)
         },
