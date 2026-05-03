@@ -1298,8 +1298,11 @@ export async function showProofreadReport() {
   const loneCharacters = project.lines
     .map((line, index) => ({ line, index }))
     .filter(({ line, index }) => line.type === "character" && !project.lines[index + 1]?.text?.trim());
+  const uncapitalizedCharacters = project.lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => isUncapitalizedCharacterCue(line));
 
-  if (!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !emptyLineCount) {
+  if (!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !uncapitalizedCharacters.length && !emptyLineCount) {
     await customAlert(t("proofread.none"), t("proofread.title"));
     return;
   }
@@ -1310,7 +1313,7 @@ export async function showProofreadReport() {
     <div class="proofread-report-toolbar">
       <button class="ghost-button btn-sm" type="button" data-proofread-clean-empty-lines="true">Clean Empty Lines${emptyLineCount ? ` (${emptyLineCount})` : ""}</button>
     </div>
-    ${!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length ? '<p class="collab-empty">No screenplay issues found. You can still clean out empty lines.</p>' : ""}
+    ${!emptyScenes.length && !weakSceneLines.length && !loneCharacters.length && !uncapitalizedCharacters.length ? '<p class="collab-empty">No screenplay issues found. You can still clean out empty lines.</p>' : ""}
     ${buildProofreadSection("Scene Heading Issues", weakSceneLines, ({ line }) => ({
       title: normalizeLineText(line.text, "scene") || "Scene heading needs attention",
       note: "Scene heading should start with INT., EXT., INT./EXT., or EST.",
@@ -1328,6 +1331,12 @@ export async function showProofreadReport() {
       note: "This character cue is not followed by dialogue or an action beat.",
       ref: buildProofreadReference(project, line.id),
       tags: ["Character cue", "Dialogue"]
+    }))}
+    ${buildProofreadSection("Uncapitalized Character Names", uncapitalizedCharacters, ({ line, index }) => ({
+      title: normalizeLineText(line.text, "character") || `Character cue ${index + 1}`,
+      note: "Character cues should be fully capitalized for standard screenplay formatting.",
+      ref: buildProofreadReference(project, line.id),
+      tags: ["Character cue", "Capitalization"]
     }))}
   `;
 
@@ -1652,6 +1661,19 @@ function cleanEmptyLinesFromProject(project) {
   }
 
   return Math.max(0, originalLength - project.lines.length);
+}
+
+function isUncapitalizedCharacterCue(line) {
+  if (!line || line.type !== "character" || !String(line.text || "").trim()) {
+    return false;
+  }
+
+  const normalized = normalizeLineText(line.text, "character");
+  if (!/[A-Za-z]/.test(normalized)) {
+    return false;
+  }
+
+  return normalized !== normalized.toUpperCase();
 }
 
 function findSceneIndexForLine(project, lineIndex) {

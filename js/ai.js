@@ -936,6 +936,7 @@ export const AI = (() => {
     if (!suggestions.length) {
       suggestions = await buildAutomaticProofreadSuggestionsFallback(targets, onProgress);
     }
+    suggestions.push(...await buildUndescribedCharacterSuggestions(project, targets, onProgress));
 
     if (!suggestions.length) {
       await customAlert("No changes were suggested for the selected scene range.", "Smart Proofreading");
@@ -948,8 +949,10 @@ export const AI = (() => {
     const sceneMarkers = getProofreadScenes(project);
     if (!sceneMarkers.length || sceneMarkers[0].id === "__all__") {
       return project.lines
-        .filter((line) => isProofreadableLine(line))
-        .map((line) => ({
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => isProofreadableLine(line))
+        .map(({ line, index }) => ({
+          lineNumber: index + 1,
           lineId: line.id,
           type: line.type,
           original: line.text,
@@ -977,6 +980,7 @@ export const AI = (() => {
         return list;
       }
       list.push({
+        lineNumber: index + 1,
         lineId: line.id,
         type: line.type,
         original: line.text,
@@ -997,6 +1001,7 @@ export const AI = (() => {
       const payload = batch.map((target) => {
         const line = getLine(target.lineId);
         return {
+          lineNumber: target.lineNumber,
           lineId: target.lineId,
           type: line?.type || target.type,
           scene: target.sceneLabel,
@@ -1008,8 +1013,8 @@ export const AI = (() => {
         type: "script",
         action: "Improve",
         current: JSON.stringify(payload),
-        instruction: "You are proofreading screenplay lines in bulk. Return valid JSON as an array. Each item must be {\"lineId\":\"...\",\"improved\":\"...\",\"reason\":\"...\"}. Include every line that needs a correction. Preserve screenplay formatting, character cue capitalization, and scene heading style. If you cannot keep the response perfectly strict, still include the same fields clearly for each fix.",
-        context: `${memoryContext}${formatScenesForAI(scenes)}\n\nLINES TO REVIEW:\n${payload.map((item) => `[${item.lineId}] [${item.type.toUpperCase()}] ${item.text}`).join("\n")}`
+        instruction: "You are proofreading screenplay lines in bulk. Return valid JSON as an array. Each item must include lineId or lineNumber, improved, and reason. Preserve screenplay formatting, character cue capitalization, and scene heading style. Only include lines that should change. If strict JSON fails, still clearly label each fix with lineId or lineNumber, improved, and reason.",
+        context: `${memoryContext}${formatScenesForAI(scenes)}\n\nLINES TO REVIEW:\n${payload.map((item) => `[${item.lineNumber}] [${item.lineId}] [${item.type.toUpperCase()}] ${item.text}`).join("\n")}`
       });
 
       const parsed = parseAutomaticProofreadPayload(output, payload);
@@ -1021,17 +1026,17 @@ export const AI = (() => {
       }
 
       suggestions.push(...parsed.map((item) => {
-        const target = batch.find((entry) => entry.lineId === item.lineId);
+        const target = resolveAutomaticProofreadTarget(batch, item);
         if (!target) {
           return null;
         }
-        const line = getLine(item.lineId);
+        const line = getLine(target.lineId);
         const improved = String(item.improved || "").trim();
-        if (!line || !improved || improved === line.text.trim()) {
+        if (!line || !improved || normalizeProofreadComparable(improved) === normalizeProofreadComparable(line.text)) {
           return null;
         }
         return {
-          lineId: item.lineId,
+          lineId: target.lineId,
           type: line.type,
           original: line.text,
           improved,
@@ -1118,12 +1123,19 @@ export const AI = (() => {
     chunks.forEach((chunk) => {
       const lineId = chunk.match(/lineId\s*[:=]\s*["']?([A-Za-z0-9_-]+)["']?/i)?.[1]
         || chunk.match(/^\[([A-Za-z0-9_-]+)\]/)?.[1];
+      const lineNumber = Number(
+        chunk.match(/lineNumber\s*[:=]\s*["']?(\d+)["']?/i)?.[1]
+        || chunk.match(/^(\d+)[.)-]/)?.[1]
+        || chunk.match(/^\[(\d+)\]/)?.[1]
+        || 0
+      ) || undefined;
       const improved = chunk.match(/improved\s*[:=]\s*([\s\S]*?)(?:\n(?:reason|lineId)\s*[:=]|$)/i)?.[1]?.trim()
-        || chunk.match(/suggested\s*[:=]\s*([\s\S]*?)(?:\n(?:reason|lineId)\s*[:=]|$)/i)?.[1]?.trim();
+        || chunk.match(/suggested\s*[:=]\s*([\s\S]*?)(?:\n(?:reason|lineId|lineNumber)\s*[:=]|$)/i)?.[1]?.trim();
       const reason = chunk.match(/reason\s*[:=]\s*([\s\S]*?)$/i)?.[1]?.trim() || "";
-      if (lineId && improved) {
+      if ((lineId || lineNumber) && improved) {
         fixes.push({
           lineId,
+          lineNumber,
           improved: improved.replace(/^["']|["']$/g, "").trim(),
           reason: reason.replace(/^["']|["']$/g, "").trim()
         });
@@ -1140,7 +1152,7 @@ export const AI = (() => {
   function parseAutomaticProofreadLineMatches(raw, payload) {
     return payload.reduce((matches, item) => {
       const escapedId = item.lineId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const pattern = new RegExp(`\\[${escapedId}\\][^\\n]*\\n([\\s\\S]*?)(?=\\n\\[[A-Za-z0-9_-]+\\]|$)`, "i");
+      const pattern = new RegExp(`\\[(?:${item.lineNumber}|${escapedId})\\][^\\n]*\\n([\\s\\S]*?)(?=\\n\\[(?:\\d+|[A-Za-z0-9_-]+)\\]|$)`, "i");
       const match = raw.match(pattern);
       if (!match) {
         return matches;
@@ -1154,6 +1166,7 @@ export const AI = (() => {
       }
       matches.push({
         lineId: item.lineId,
+        lineNumber: item.lineNumber,
         improved,
         reason: ""
       });
@@ -1177,7 +1190,7 @@ export const AI = (() => {
         contextLineId: line.id
       });
 
-      if (improved !== line.text.trim()) {
+      if (normalizeProofreadComparable(improved) !== normalizeProofreadComparable(line.text)) {
         suggestions.push({
           lineId: line.id,
           type: line.type,
@@ -1233,11 +1246,9 @@ export const AI = (() => {
     `;
 
     const applySuggestion = (item, card, { rerender = true } = {}) => {
-      const line = getLine(item.lineId);
-      if (!line) {
+      if (!applyAutomaticProofreadSuggestion(item)) {
         return;
       }
-      line.text = item.improved;
       card?.classList.add("is-accepted");
       card?.querySelectorAll("button").forEach((button) => {
         button.disabled = true;
@@ -1286,13 +1297,143 @@ export const AI = (() => {
   function dedupeAutomaticProofreadSuggestions(suggestions) {
     const seen = new Set();
     return suggestions.filter((item) => {
-      const key = `${item.lineId}:${item.improved}`;
+      const key = `${item.applyMode || "replace"}:${item.lineId}:${item.improved}`;
       if (seen.has(key)) {
         return false;
       }
       seen.add(key);
       return true;
     });
+  }
+
+  function resolveAutomaticProofreadTarget(batch, item) {
+    if (item?.lineId) {
+      const byId = batch.find((entry) => entry.lineId === item.lineId);
+      if (byId) {
+        return byId;
+      }
+    }
+    if (item?.lineNumber) {
+      const byNumber = batch.find((entry) => entry.lineNumber === Number(item.lineNumber));
+      if (byNumber) {
+        return byNumber;
+      }
+    }
+    if (item?.original) {
+      const byOriginal = batch.find((entry) => normalizeProofreadComparable(entry.original) === normalizeProofreadComparable(item.original));
+      if (byOriginal) {
+        return byOriginal;
+      }
+    }
+    return null;
+  }
+
+  function normalizeProofreadComparable(value) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function getSceneStartIndex(project, lineIndex) {
+    for (let index = lineIndex; index >= 0; index -= 1) {
+      if (project.lines[index]?.type === "scene") {
+        return index;
+      }
+    }
+    return 0;
+  }
+
+  function hasCharacterIntroduction(project, lineIndex, characterName) {
+    const sceneStart = getSceneStartIndex(project, lineIndex);
+    const compactName = String(characterName || "").trim().toUpperCase();
+    for (let index = sceneStart; index < lineIndex; index += 1) {
+      const line = project.lines[index];
+      if (!line || !["action", "shot", "scene"].includes(line.type)) {
+        continue;
+      }
+      if (String(line.text || "").toUpperCase().includes(compactName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async function buildUndescribedCharacterSuggestions(project, targets, onProgress) {
+    const sceneMarkers = getProofreadScenes(project);
+    const targetIds = new Set(targets.map((target) => target.lineId));
+    const seenCharacters = new Set();
+    const pending = [];
+
+    project.lines.forEach((line, index) => {
+      if (line?.type !== "character" || !String(line.text || "").trim()) {
+        return;
+      }
+      const name = String(line.text || "").trim().toUpperCase();
+      if (seenCharacters.has(name)) {
+        return;
+      }
+      seenCharacters.add(name);
+      if (!targetIds.has(line.id) || hasCharacterIntroduction(project, index, name)) {
+        return;
+      }
+      pending.push({ line, index, name });
+    });
+
+    const suggestions = [];
+    for (let index = 0; index < pending.length; index += 1) {
+      const entry = pending[index];
+      onProgress?.(`Checking first appearance for ${entry.name} (${index + 1} of ${pending.length})...`);
+      const sceneLabel = [...sceneMarkers]
+        .reverse()
+        .find((scene) => scene.index <= entry.index)?.label || "Selected Scene";
+      let improved = "";
+      try {
+        improved = await requestAiText({
+          type: "action",
+          action: "Improve",
+          current: "",
+          instruction: `Write one concise screenplay action line that visually introduces the character ${entry.name} before their first line of dialogue. Return only the action line.`,
+          context: `${buildStoryMemoryContext(project)}${formatScenesForAI(getLastScenes(entry.line.id))}`
+        });
+      } catch (error) {
+        console.warn("Unable to auto-suggest a character introduction.", error);
+      }
+      const suggestionText = String(improved || "").trim() || `${entry.name} is introduced visually before speaking.`;
+      suggestions.push({
+        lineId: entry.line.id,
+        type: "action",
+        original: entry.line.text,
+        improved: suggestionText,
+        sceneLabel,
+        reason: `${entry.name} speaks before the script visually introduces them.`,
+        applyMode: "insert-before"
+      });
+    }
+
+    return suggestions;
+  }
+
+  function applyAutomaticProofreadSuggestion(item) {
+    const line = getLine(item.lineId);
+    if (!line) {
+      return false;
+    }
+    if (item.applyMode === "insert-before") {
+      const project = getCurrentProject();
+      const index = getLineIndex(item.lineId);
+      if (!project || index === -1) {
+        return false;
+      }
+      project.lines.splice(index, 0, {
+        id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: "action",
+        text: item.improved
+      });
+      return true;
+    }
+    line.text = item.improved;
+    return true;
   }
 
   function triggerAssistant() {
