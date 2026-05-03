@@ -620,76 +620,248 @@ export async function showCustomizeActiveBlocksModal() {
   });
 }
 
-export async function showStoryMemoryPopup() {
-  const project = getCurrentProject();
-  if (!project) {
-    return;
+const SM_TYPE_CONFIGS = {
+  characters: {
+    label: "Character",
+    namePlaceholder: "e.g. SARAH, DETECTIVE MILLS",
+    directive: null
+  },
+  locations: {
+    label: "Location",
+    namePlaceholder: "e.g. The Warehouse, Maria's Kitchen",
+    directive: "Paint it fully — light quality, sounds, smells, temperature. What does this space reveal about the characters who inhabit it? What mood or memory does it carry through the story?"
+  },
+  scenes: {
+    label: "Story Beat",
+    namePlaceholder: "e.g. The Confrontation, Act Two Turning Point",
+    directive: "What changes in this moment? Name the tension, the dramatic question, and the emotional tone. Note any visual motifs, symbolic weight, or thematic echoes it carries."
+  },
+  themes: {
+    label: "Theme",
+    namePlaceholder: "e.g. Redemption, The Cost of Ambition",
+    directive: "What is the central truth or question your story wrestles with? How does it live in your characters' choices and the script's events? What does your story ultimately say about this?"
   }
+};
 
-  const memory = project.storyMemory || { characters: [], locations: [], scenes: [], themes: [] };
-  const sections = [
-    { key: "characters", label: "Characters" },
-    { key: "locations", label: "Locations" },
-    { key: "scenes", label: "Scenes" },
-    { key: "themes", label: "Themes" }
-  ];
+export async function showStoryMemoryBuilder(element = null, onNavigate = null) {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  const isEdit = Boolean(element);
+  const initialBucket = element
+    ? (element.type === "Character" ? "characters" : element.type === "Location" ? "locations" : element.type === "Scene" ? "scenes" : "themes")
+    : "locations";
 
   const container = document.createElement("div");
-  container.className = "modal-list story-memory-popup";
-  container.innerHTML = `
-    <div class="story-memory-popup-actions">
-      <button class="ghost-button btn-sm" type="button" data-story-memory-action="add">Add Element</button>
-      <button class="ghost-button btn-sm" type="button" data-story-memory-action="insert">Insert Into Active Block</button>
-    </div>
-    ${sections.map(({ key, label }) => `
-      <section class="story-memory-popup-group">
-        <h4>${escapeHtml(label)}</h4>
-        <div class="list-stack">
-          ${(memory[key] || []).map((item) => `
-            <button class="list-item" type="button" data-story-memory-edit="${escapeHtml(item.id)}">
-              <span class="list-item-title">${escapeHtml(item.name)}</span>
-              <span class="list-item-meta">${escapeHtml(item.description || "No description yet")}</span>
-            </button>
-          `).join("") || '<p class="collab-empty">Nothing added yet.</p>'}
-        </div>
-      </section>
-    `).join("")}
-  `;
+  container.className = "character-interface";
 
-  container.addEventListener("click", (event) => {
-    const action = event.target.closest("[data-story-memory-action]")?.dataset.storyMemoryAction;
-    if (action === "add") {
-      modalRefs.dialog.close();
-      showEditStoryElementModal();
-      return;
-    }
-    if (action === "insert") {
-      modalRefs.dialog.close();
-      showStoryMemoryPicker();
-      return;
-    }
+  function renderForm(bucket) {
+    const config = SM_TYPE_CONFIGS[bucket];
+    container.innerHTML = `
+      <div class="char-form">
+        <h4 class="char-form-title">${isEdit ? `Edit ${config.label}` : "Add Story Element"}</h4>
+        ${!isEdit ? `
+          <div class="sm-type-tabs">
+            ${Object.entries(SM_TYPE_CONFIGS).map(([key, cfg]) => `
+              <button class="ghost-button btn-sm sm-type-tab${key === bucket ? " is-active" : ""}" type="button" data-sm-type="${key}">${cfg.label}</button>
+            `).join("")}
+          </div>
+        ` : ""}
+        ${bucket === "characters" && !isEdit ? `
+          <p class="modal-copy">Characters have a dedicated profile builder with fields for age, sex, outfit, behaviour, and more — giving the AI a richer picture of who they are.</p>
+          <div class="char-form-actions">
+            <button class="ghost-button" type="button" data-sm-action="goto-character">Open Character Builder →</button>
+          </div>
+        ` : `
+          <div class="field-grid">
+            <label class="field field-wide">
+              <span>Name</span>
+              <input class="modal-input" id="smName" type="text" value="${escapeHtml(element?.name || "")}" placeholder="${escapeHtml(config.namePlaceholder)}">
+            </label>
+            ${config.directive ? `<p class="sm-directive">${escapeHtml(config.directive)}</p>` : ""}
+            <label class="field field-wide">
+              <span>Description</span>
+              <textarea class="modal-input sm-textarea" id="smDesc" placeholder="Write freely...">${escapeHtml(element?.description || "")}</textarea>
+            </label>
+          </div>
+          <div class="char-form-actions">
+            <button class="ghost-button" type="button" data-sm-action="save">${isEdit ? "Save" : "Add to Memory"}</button>
+          </div>
+        `}
+      </div>
+    `;
 
-    const editId = event.target.closest("[data-story-memory-edit]")?.dataset.storyMemoryEdit;
-    if (!editId) {
-      return;
-    }
-    const allItems = sections.flatMap(({ key }) => (memory[key] || []).map((item) => ({ ...item, bucket: key })));
-    const selected = allItems.find((item) => item.id === editId);
-    if (selected) {
+    container.querySelectorAll("[data-sm-type]").forEach((btn) => {
+      btn.addEventListener("click", () => renderForm(btn.dataset.smType));
+    });
+
+    container.querySelector('[data-sm-action="goto-character"]')?.addEventListener("click", () => {
       modalRefs.dialog.close();
-      showEditStoryElementModal({
-        ...selected,
-        type: selected.bucket.slice(0, -1).replace(/^./, (char) => char.toUpperCase())
-      });
-    }
-  });
+      showCharactersInterface(true, onNavigate);
+    });
+
+    container.querySelector('[data-sm-action="save"]')?.addEventListener("click", () => {
+      const name = (container.querySelector("#smName")?.value || "").trim();
+      if (!name) return;
+      const description = (container.querySelector("#smDesc")?.value || "").trim();
+
+      if (!project.storyMemory) project.storyMemory = { characters: [], locations: [], scenes: [], themes: [], plotPoints: [] };
+      if (!Array.isArray(project.storyMemory[bucket])) project.storyMemory[bucket] = [];
+
+      if (isEdit) {
+        const buckets = ["characters", "locations", "scenes", "themes"];
+        buckets.forEach((b) => {
+          const idx = (project.storyMemory[b] || []).findIndex((el) => el.id === element.id);
+          if (idx !== -1) {
+            if (b === bucket) {
+              project.storyMemory[b][idx] = { ...project.storyMemory[b][idx], name, description };
+            } else {
+              project.storyMemory[b].splice(idx, 1);
+              project.storyMemory[bucket].push({ id: element.id, name, description });
+            }
+          }
+        });
+      } else {
+        project.storyMemory[bucket].push({
+          id: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name,
+          description
+        });
+      }
+
+      persistProjects(false);
+      renderStoryMemory();
+      modalRefs.dialog.close();
+    });
+  }
+
+  renderForm(initialBucket);
 
   await showModal({
-    title: "Story Memory",
+    title: isEdit ? "Edit Memory Element" : "Add to Story Memory",
     message: container,
     showConfirm: false,
-    cancelLabel: "Close"
+    cancelLabel: "Cancel"
   });
+}
+
+export async function showStoryMemoryPopup() {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  const container = document.createElement("div");
+  container.className = "character-interface";
+
+  const BUCKET_LABELS = { characters: "Characters", locations: "Locations", scenes: "Story Beats", themes: "Themes" };
+  const DIRECTIVES = {
+    locations: "Paint it fully — light quality, sounds, smells, temperature. What does this space reveal about the characters who inhabit it?",
+    scenes: "What changes in this moment? Name the tension, the dramatic question, and the emotional tone.",
+    themes: "What is the central truth or question? How does it live in your characters' choices and the script's events?"
+  };
+
+  function renderList() {
+    const memory = project.storyMemory || {};
+    const hasAny = ["characters", "locations", "scenes", "themes"].some((k) => (memory[k] || []).length > 0);
+
+    if (!hasAny) {
+      container.innerHTML = `<p class="collab-empty">No story elements in memory yet. Use Add Element to start building.</p>`;
+      return;
+    }
+
+    container.innerHTML = ["characters", "locations", "scenes", "themes"].map((bucket) => {
+      const items = memory[bucket] || [];
+      if (!items.length) return "";
+      return `
+        <div class="char-section">
+          <h4 class="char-section-label">${BUCKET_LABELS[bucket]}</h4>
+          <div class="char-list">
+            ${items.map((item, i) => `
+              <div class="char-card">
+                <div class="char-card-info">
+                  <strong>${escapeHtml(item.name)}</strong>
+                  <span>${escapeHtml(item.description || "No description yet")}</span>
+                </div>
+                <div class="char-card-actions">
+                  <button class="ghost-button btn-sm" type="button" data-sm-edit="${bucket}:${i}">Edit</button>
+                  <button class="ghost-button btn-sm" type="button" data-sm-delete="${bucket}:${i}">Delete</button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    attachListHandlers();
+  }
+
+  function renderEditForm(bucket, idx) {
+    const item = (project.storyMemory?.[bucket] || [])[idx];
+    if (!item) { renderList(); return; }
+
+    if (bucket === "characters") {
+      modalRefs.dialog.close();
+      showCharactersInterface(false);
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="char-form">
+        <button class="ghost-button btn-sm" type="button" data-sm-action="back">← Back</button>
+        <h4 class="char-form-title">Edit ${SM_TYPE_CONFIGS[bucket]?.label || bucket}</h4>
+        <div class="field-grid">
+          <label class="field field-wide">
+            <span>Name</span>
+            <input class="modal-input" id="smEditName" type="text" value="${escapeHtml(item.name || "")}">
+          </label>
+          ${DIRECTIVES[bucket] ? `<p class="sm-directive">${escapeHtml(DIRECTIVES[bucket])}</p>` : ""}
+          <label class="field field-wide">
+            <span>Description</span>
+            <textarea class="modal-input sm-textarea" id="smEditDesc">${escapeHtml(item.description || "")}</textarea>
+          </label>
+        </div>
+        <div class="char-form-actions">
+          <button class="ghost-button" type="button" data-sm-action="save-edit">Save</button>
+        </div>
+      </div>
+    `;
+
+    container.querySelector('[data-sm-action="back"]')?.addEventListener("click", renderList);
+    container.querySelector('[data-sm-action="save-edit"]')?.addEventListener("click", () => {
+      const name = (container.querySelector("#smEditName")?.value || "").trim();
+      if (!name) return;
+      const description = (container.querySelector("#smEditDesc")?.value || "").trim();
+      const items = project.storyMemory[bucket];
+      if (items?.[idx]) {
+        items[idx] = { ...items[idx], name, description };
+        persistProjects(false);
+        renderStoryMemory();
+        renderList();
+      }
+    });
+  }
+
+  function attachListHandlers() {
+    container.querySelectorAll("[data-sm-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const [bucket, idx] = btn.dataset.smEdit.split(":");
+        renderEditForm(bucket, Number(idx));
+      });
+    });
+    container.querySelectorAll("[data-sm-delete]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const [bucket, idx] = btn.dataset.smDelete.split(":");
+        (project.storyMemory[bucket] || []).splice(Number(idx), 1);
+        persistProjects(false);
+        renderStoryMemory();
+        renderList();
+      });
+    });
+  }
+
+  renderList();
+
+  await showModal({ title: "Memory Bank", message: container, showConfirm: false, cancelLabel: "Close" });
 }
 
 export async function showCharactersInterface(startWithForm = false, onNavigate = null) {

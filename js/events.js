@@ -26,7 +26,7 @@ import {
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal,
-  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface
+  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -66,7 +66,7 @@ export function bindEvents() {
   });
 
   document.getElementById("addStoryElementBtn")?.addEventListener("click", () => {
-    showEditStoryElementModal();
+    showStoryMemoryBuilder();
   });
 
   document.getElementById("smartProofreadBtn")?.addEventListener("click", () => {
@@ -1421,6 +1421,9 @@ function handleMenuAction(action) {
       break;
     case "open-story-memory":
       showStoryMemoryPopup();
+      break;
+    case "add-story-element":
+      showStoryMemoryBuilder();
       break;
     case "open-scenes": {
       const container = document.createElement("div");

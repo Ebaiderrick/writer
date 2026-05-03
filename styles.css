@@ -4615,3 +4615,32 @@ html[data-theme="white"] .user-trigger {
 .char-scene-item {
   width: 100%;
 }
+
+/* Story Memory Builder */
+.sm-type-tabs {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.sm-type-tab.is-active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.sm-directive {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-3);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 60%, var(--line));
+  border-radius: 8px;
+  border-left: 3px solid color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+.sm-textarea {
+  min-height: 90px;
+  resize: vertical;
+}
