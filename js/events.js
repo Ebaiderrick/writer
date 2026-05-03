@@ -26,7 +26,7 @@ import {
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal,
-  showStoryMemoryPopup, showWorkspacePopup, showCharactersPopup
+  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -66,7 +66,7 @@ export function bindEvents() {
   });
 
   document.getElementById("addStoryElementBtn")?.addEventListener("click", () => {
-    showEditStoryElementModal();
+    showStoryMemoryBuilder();
   });
 
   document.getElementById("smartProofreadBtn")?.addEventListener("click", () => {
@@ -526,7 +526,7 @@ export function bindEvents() {
       if (item) focusBlock(item.dataset.lineId);
   });
 
-  refs.characterList.addEventListener("click", (e) => {
+  refs.characterList?.addEventListener("click", (e) => {
       const item = e.target.closest(".list-item");
       if (!item) return;
 
@@ -927,6 +927,11 @@ function handleBlockKeydown(event, id) {
   lastKeyDownCode = code;
 
   if (event.key === "Delete") {
+    const isEmpty = !activeEl.textContent.trim();
+    if (!isEmpty) {
+      // Let the browser delete one character forward — do not touch the line
+      return;
+    }
     event.preventDefault();
     project.updatedAt = new Date().toISOString();
     if (project.lines.length === 1) {
@@ -1425,6 +1430,9 @@ function handleMenuAction(action) {
     case "open-story-memory":
       showStoryMemoryPopup();
       break;
+    case "add-story-element":
+      showStoryMemoryBuilder();
+      break;
     case "open-scenes": {
       const container = document.createElement("div");
       container.className = "modal-list";
@@ -1432,13 +1440,12 @@ function handleMenuAction(action) {
       showModal({ title: "Scenes", message: container, showConfirm: false, cancelLabel: "Close" });
       break;
     }
-    case "open-characters": {
-      const container = document.createElement("div");
-      container.className = "modal-list";
-      container.appendChild(refs.characterList.cloneNode(true));
-      showModal({ title: "Characters", message: container, showConfirm: false, cancelLabel: "Close" });
+    case "open-characters":
+      showCharactersInterface(false, (id) => focusBlock(id));
       break;
-    }
+    case "add-character":
+      showCharactersInterface(true, (id) => focusBlock(id));
+      break;
     case "pick-story-memory":
       showStoryMemoryPicker();
       break;

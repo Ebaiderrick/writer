@@ -73,7 +73,7 @@ const TRANSLATIONS = {
     "menu.clearFilter": "Clear Filter",
     "menu.pageNumbering": "Page numbering",
     "menu.fullScreen": "Full Screen",
-    "menu.proofread": "Simple Proofread",
+    "menu.proofread": "Style Proofread",
     "menu.spellingCheck": "Spelling Check",
     "menu.grammarCheck": "Grammar Check",
     "menu.aiAssistant": "AI Assistant",
@@ -195,7 +195,7 @@ const TRANSLATIONS = {
     "character.noScenesBody": "{name} doesn't have any dialogue scenes yet.",
     "character.scenesFeaturing": "Scenes featuring {name}",
 
-    "proofread.title": "Simple Proofread",
+    "proofread.title": "Style Proofread",
     "proofread.none": "No obvious screenplay-format issues were found in the current draft.",
     "proofread.highlights": "Proofread highlights:\n- {items}",
     "proofread.emptyScenesOne": "{count} empty scene heading",

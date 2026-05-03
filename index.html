@@ -767,7 +767,10 @@
                   <button class="panel-toggle" type="button" data-left-pane-section-toggle="characters" aria-label="Collapse Characters">▼</button>
                 </div>
                 <div class="panel-section-body">
-                  <button class="ghost-button btn-sm" type="button" data-menu-action="open-characters">Open Characters</button>
+                  <div class="char-panel-btns">
+                    <button class="ghost-button btn-sm" data-menu-action="add-character">+ Add Character</button>
+                    <button class="ghost-button btn-sm" data-menu-action="open-characters">Character Profiles</button>
+                  </div>
                 </div>
               </section>
 
@@ -808,10 +811,10 @@
                   <button class="panel-toggle" type="button" data-left-pane-section-toggle="story-memory" aria-label="Collapse Story Memory">▼</button>
                 </div>
                 <div class="panel-section-body">
-                  <div class="story-memory-controls">
-                    <button class="ghost-button btn-sm" id="addStoryElementBtn">+ Add Element</button>
+                  <div class="char-panel-btns">
+                    <button class="ghost-button btn-sm" data-menu-action="add-story-element">+ Add Element</button>
+                    <button class="ghost-button btn-sm" data-menu-action="open-story-memory">Memory Bank</button>
                   </div>
-                  <div id="storyMemoryList" class="list-stack"></div>
                 </div>
               </section>
 
@@ -910,13 +913,13 @@
                 </div>
               </section>
 
-              <section class="panel proofread-panel section-proofread" data-left-pane-block="proofread" data-left-pane-label="Simple Proofread" hidden>
+              <section class="panel proofread-panel section-proofread" data-left-pane-block="proofread" data-left-pane-label="Style Proofread" hidden>
                 <div class="panel-head">
                   <div>
-                    <h3>Simple Proofread</h3>
+                    <h3>Style Proofread</h3>
                     <p>Script analysis</p>
                   </div>
-                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="proofread" aria-label="Collapse Simple Proofread">▼</button>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="proofread" aria-label="Collapse Style Proofread">▼</button>
                 </div>
                 <div class="panel-section-body">
                    <button class="ghost-button btn-sm" data-menu-action="proofread">Open Simple Proofread</button>

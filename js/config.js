@@ -43,10 +43,10 @@ export const LEFT_PANE_BLOCK_DEFS = [
   { key: "ai-assistant", label: "AI Assistant" },
   { key: "smart-proofread", label: "Smart Proofreading" },
   { key: "work-tracking", label: "Work Tracking" },
-  { key: "proofread", label: "Simple Proofread" },
+  { key: "proofread", label: "Style Proofread" },
   { key: "tools", label: "Project Tools" }
 ];
-const DEFAULT_VISIBLE_BLOCK_KEYS = new Set(['current', 'scenes', 'characters', 'metrics', 'story-memory', 'comments', 'tools']);
+const DEFAULT_VISIBLE_BLOCK_KEYS = new Set(['current', 'scenes', 'characters', 'comments', 'metrics', 'story-memory', 'tools']);
 export const DEFAULT_LEFT_PANE_BLOCKS = LEFT_PANE_BLOCK_DEFS.map(({ key }) => ({
   key,
   visible: DEFAULT_VISIBLE_BLOCK_KEYS.has(key),

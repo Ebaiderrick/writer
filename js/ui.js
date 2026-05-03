@@ -147,7 +147,7 @@ export function getSceneFirstLine(project, sceneIndex) {
 
 export function renderCharacterList() {
   const project = getCurrentProject();
-  if (!project) return;
+  if (!project || !refs.characterList) return;
   const characters = new Map();
 
   project.lines.forEach((line, index) => {
@@ -325,10 +325,9 @@ function getLeftPaneBlockLabel(key) {
     analytics: "Writing Analytics",
     notepad: "Notepad",
     "ai-assistant": "AI Assistant",
-    "grammar-check": "Grammar Check",
     "smart-proofread": "Smart Proofread",
     "work-tracking": "Work Tracking",
-    proofread: "Simple Proofread"
+    proofread: "Style Proofread"
   };
 
   return t(translationKeys[key] || "") || meta?.label || key;
@@ -681,76 +680,501 @@ export async function showCustomizeActiveBlocksModal() {
   });
 }
 
-export async function showStoryMemoryPopup() {
-  const project = getCurrentProject();
-  if (!project) {
-    return;
+const SM_TYPE_CONFIGS = {
+  characters: {
+    label: "Character",
+    namePlaceholder: "e.g. SARAH, DETECTIVE MILLS",
+    directive: null
+  },
+  locations: {
+    label: "Location",
+    namePlaceholder: "e.g. The Warehouse, Maria's Kitchen",
+    directive: "Paint it fully — light quality, sounds, smells, temperature. What does this space reveal about the characters who inhabit it? What mood or memory does it carry through the story?"
+  },
+  scenes: {
+    label: "Story Beat",
+    namePlaceholder: "e.g. The Confrontation, Act Two Turning Point",
+    directive: "What changes in this moment? Name the tension, the dramatic question, and the emotional tone. Note any visual motifs, symbolic weight, or thematic echoes it carries."
+  },
+  themes: {
+    label: "Theme",
+    namePlaceholder: "e.g. Redemption, The Cost of Ambition",
+    directive: "What is the central truth or question your story wrestles with? How does it live in your characters' choices and the script's events? What does your story ultimately say about this?"
   }
+};
 
-  const memory = project.storyMemory || { characters: [], locations: [], scenes: [], themes: [] };
-  const sections = [
-    { key: "characters", label: "Characters" },
-    { key: "locations", label: "Locations" },
-    { key: "scenes", label: "Scenes" },
-    { key: "themes", label: "Themes" }
-  ];
+export async function showStoryMemoryBuilder(element = null, onNavigate = null) {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  const isEdit = Boolean(element);
+  const initialBucket = element
+    ? (element.type === "Character" ? "characters" : element.type === "Location" ? "locations" : element.type === "Scene" ? "scenes" : "themes")
+    : "locations";
 
   const container = document.createElement("div");
-  container.className = "modal-list story-memory-popup";
-  container.innerHTML = `
-    <div class="story-memory-popup-actions">
-      <button class="ghost-button btn-sm" type="button" data-story-memory-action="add">Add Element</button>
-      <button class="ghost-button btn-sm" type="button" data-story-memory-action="insert">Insert Into Active Block</button>
-    </div>
-    ${sections.map(({ key, label }) => `
-      <section class="story-memory-popup-group">
-        <h4>${escapeHtml(label)}</h4>
-        <div class="list-stack">
-          ${(memory[key] || []).map((item) => `
-            <button class="list-item" type="button" data-story-memory-edit="${escapeHtml(item.id)}">
-              <span class="list-item-title">${escapeHtml(item.name)}</span>
-              <span class="list-item-meta">${escapeHtml(item.description || "No description yet")}</span>
-            </button>
-          `).join("") || '<p class="collab-empty">Nothing added yet.</p>'}
-        </div>
-      </section>
-    `).join("")}
-  `;
+  container.className = "character-interface";
 
-  container.addEventListener("click", (event) => {
-    const action = event.target.closest("[data-story-memory-action]")?.dataset.storyMemoryAction;
-    if (action === "add") {
-      modalRefs.dialog.close();
-      showEditStoryElementModal();
-      return;
-    }
-    if (action === "insert") {
-      modalRefs.dialog.close();
-      showStoryMemoryPicker();
-      return;
-    }
+  function renderForm(bucket) {
+    const config = SM_TYPE_CONFIGS[bucket];
+    container.innerHTML = `
+      <div class="char-form">
+        <h4 class="char-form-title">${isEdit ? `Edit ${config.label}` : "Add Story Element"}</h4>
+        ${!isEdit ? `
+          <div class="sm-type-tabs">
+            ${Object.entries(SM_TYPE_CONFIGS).map(([key, cfg]) => `
+              <button class="ghost-button btn-sm sm-type-tab${key === bucket ? " is-active" : ""}" type="button" data-sm-type="${key}">${cfg.label}</button>
+            `).join("")}
+          </div>
+        ` : ""}
+        ${bucket === "characters" && !isEdit ? `
+          <p class="modal-copy">Characters have a dedicated profile builder with fields for age, sex, outfit, behaviour, and more — giving the AI a richer picture of who they are.</p>
+          <div class="char-form-actions">
+            <button class="ghost-button" type="button" data-sm-action="goto-character">Open Character Builder →</button>
+          </div>
+        ` : `
+          <div class="field-grid">
+            <label class="field field-wide">
+              <span>Name</span>
+              <input class="modal-input" id="smName" type="text" value="${escapeHtml(element?.name || "")}" placeholder="${escapeHtml(config.namePlaceholder)}">
+            </label>
+            ${config.directive ? `<p class="sm-directive">${escapeHtml(config.directive)}</p>` : ""}
+            <label class="field field-wide">
+              <span>Description</span>
+              <textarea class="modal-input sm-textarea" id="smDesc" placeholder="Write freely...">${escapeHtml(element?.description || "")}</textarea>
+            </label>
+          </div>
+          <div class="char-form-actions">
+            <button class="ghost-button" type="button" data-sm-action="save">${isEdit ? "Save" : "Add to Memory"}</button>
+          </div>
+        `}
+      </div>
+    `;
 
-    const editId = event.target.closest("[data-story-memory-edit]")?.dataset.storyMemoryEdit;
-    if (!editId) {
-      return;
-    }
-    const allItems = sections.flatMap(({ key }) => (memory[key] || []).map((item) => ({ ...item, bucket: key })));
-    const selected = allItems.find((item) => item.id === editId);
-    if (selected) {
+    container.querySelectorAll("[data-sm-type]").forEach((btn) => {
+      btn.addEventListener("click", () => renderForm(btn.dataset.smType));
+    });
+
+    container.querySelector('[data-sm-action="goto-character"]')?.addEventListener("click", () => {
       modalRefs.dialog.close();
-      showEditStoryElementModal({
-        ...selected,
-        type: selected.bucket.slice(0, -1).replace(/^./, (char) => char.toUpperCase())
-      });
-    }
-  });
+      showCharactersInterface(true, onNavigate);
+    });
+
+    container.querySelector('[data-sm-action="save"]')?.addEventListener("click", () => {
+      const name = (container.querySelector("#smName")?.value || "").trim();
+      if (!name) return;
+      const description = (container.querySelector("#smDesc")?.value || "").trim();
+
+      if (!project.storyMemory) project.storyMemory = { characters: [], locations: [], scenes: [], themes: [], plotPoints: [] };
+      if (!Array.isArray(project.storyMemory[bucket])) project.storyMemory[bucket] = [];
+
+      if (isEdit) {
+        const buckets = ["characters", "locations", "scenes", "themes"];
+        buckets.forEach((b) => {
+          const idx = (project.storyMemory[b] || []).findIndex((el) => el.id === element.id);
+          if (idx !== -1) {
+            if (b === bucket) {
+              project.storyMemory[b][idx] = { ...project.storyMemory[b][idx], name, description };
+            } else {
+              project.storyMemory[b].splice(idx, 1);
+              project.storyMemory[bucket].push({ id: element.id, name, description });
+            }
+          }
+        });
+      } else {
+        project.storyMemory[bucket].push({
+          id: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name,
+          description
+        });
+      }
+
+      persistProjects(false);
+      renderStoryMemory();
+      modalRefs.dialog.close();
+    });
+  }
+
+  renderForm(initialBucket);
 
   await showModal({
-    title: "Story Memory",
+    title: isEdit ? "Edit Memory Element" : "Add to Story Memory",
     message: container,
     showConfirm: false,
-    cancelLabel: "Close"
+    cancelLabel: "Cancel"
   });
+}
+
+export async function showStoryMemoryPopup() {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  const container = document.createElement("div");
+  container.className = "character-interface";
+
+  const BUCKET_LABELS = { characters: "Characters", locations: "Locations", scenes: "Story Beats", themes: "Themes" };
+  const DIRECTIVES = {
+    locations: "Paint it fully — light quality, sounds, smells, temperature. What does this space reveal about the characters who inhabit it?",
+    scenes: "What changes in this moment? Name the tension, the dramatic question, and the emotional tone.",
+    themes: "What is the central truth or question? How does it live in your characters' choices and the script's events?"
+  };
+
+  function renderList() {
+    const memory = project.storyMemory || {};
+    const hasAny = ["characters", "locations", "scenes", "themes"].some((k) => (memory[k] || []).length > 0);
+
+    if (!hasAny) {
+      container.innerHTML = `<p class="collab-empty">No story elements in memory yet. Use Add Element to start building.</p>`;
+      return;
+    }
+
+    container.innerHTML = ["characters", "locations", "scenes", "themes"].map((bucket) => {
+      const items = memory[bucket] || [];
+      if (!items.length) return "";
+      return `
+        <div class="char-section">
+          <h4 class="char-section-label">${BUCKET_LABELS[bucket]}</h4>
+          <div class="char-list">
+            ${items.map((item, i) => `
+              <div class="char-card">
+                <div class="char-card-info">
+                  <strong>${escapeHtml(item.name)}</strong>
+                  <span>${escapeHtml(item.description || "No description yet")}</span>
+                </div>
+                <div class="char-card-actions">
+                  <button class="ghost-button btn-sm" type="button" data-sm-edit="${bucket}:${i}">Edit</button>
+                  <button class="ghost-button btn-sm" type="button" data-sm-delete="${bucket}:${i}">Delete</button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    attachListHandlers();
+  }
+
+  function renderEditForm(bucket, idx) {
+    const item = (project.storyMemory?.[bucket] || [])[idx];
+    if (!item) { renderList(); return; }
+
+    if (bucket === "characters") {
+      modalRefs.dialog.close();
+      showCharactersInterface(false);
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="char-form">
+        <button class="ghost-button btn-sm" type="button" data-sm-action="back">← Back</button>
+        <h4 class="char-form-title">Edit ${SM_TYPE_CONFIGS[bucket]?.label || bucket}</h4>
+        <div class="field-grid">
+          <label class="field field-wide">
+            <span>Name</span>
+            <input class="modal-input" id="smEditName" type="text" value="${escapeHtml(item.name || "")}">
+          </label>
+          ${DIRECTIVES[bucket] ? `<p class="sm-directive">${escapeHtml(DIRECTIVES[bucket])}</p>` : ""}
+          <label class="field field-wide">
+            <span>Description</span>
+            <textarea class="modal-input sm-textarea" id="smEditDesc">${escapeHtml(item.description || "")}</textarea>
+          </label>
+        </div>
+        <div class="char-form-actions">
+          <button class="ghost-button" type="button" data-sm-action="save-edit">Save</button>
+        </div>
+      </div>
+    `;
+
+    container.querySelector('[data-sm-action="back"]')?.addEventListener("click", renderList);
+    container.querySelector('[data-sm-action="save-edit"]')?.addEventListener("click", () => {
+      const name = (container.querySelector("#smEditName")?.value || "").trim();
+      if (!name) return;
+      const description = (container.querySelector("#smEditDesc")?.value || "").trim();
+      const items = project.storyMemory[bucket];
+      if (items?.[idx]) {
+        items[idx] = { ...items[idx], name, description };
+        persistProjects(false);
+        renderStoryMemory();
+        renderList();
+      }
+    });
+  }
+
+  function attachListHandlers() {
+    container.querySelectorAll("[data-sm-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const [bucket, idx] = btn.dataset.smEdit.split(":");
+        renderEditForm(bucket, Number(idx));
+      });
+    });
+    container.querySelectorAll("[data-sm-delete]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const [bucket, idx] = btn.dataset.smDelete.split(":");
+        (project.storyMemory[bucket] || []).splice(Number(idx), 1);
+        persistProjects(false);
+        renderStoryMemory();
+        renderList();
+      });
+    });
+  }
+
+  renderList();
+
+  await showModal({ title: "Memory Bank", message: container, showConfirm: false, cancelLabel: "Close" });
+}
+
+export async function showCharactersInterface(startWithForm = false, onNavigate = null) {
+  const project = getCurrentProject();
+  if (!project) return;
+
+  const container = document.createElement("div");
+  container.className = "character-interface";
+
+  function getScriptCharacters() {
+    const map = new Map();
+    (project.lines || []).forEach((line) => {
+      if ((line.type === "character" || line.type === "dual") && line.text?.trim()) {
+        const name = line.text.trim().toUpperCase();
+        const entry = map.get(name) || { name, count: 0, firstId: line.id };
+        entry.count++;
+        map.set(name, entry);
+      }
+    });
+    return [...map.values()];
+  }
+
+  function renderScenes(characterName) {
+    const targetName = characterName.trim().toUpperCase();
+    const sceneIds = new Set();
+    const lineIdToIndex = new Map(project.lines.map((l, i) => [l.id, i]));
+
+    project.lines.forEach((line, index) => {
+      if ((line.type === "character" || line.type === "dual") && normalizeLineText(line.text, line.type).trim().toUpperCase() === targetName) {
+        const sceneId = getSceneIdForIndex(index, project);
+        if (sceneId) sceneIds.add(sceneId);
+      }
+    });
+
+    const sortedSceneIds = [...sceneIds].sort((a, b) => (lineIdToIndex.get(a) ?? 0) - (lineIdToIndex.get(b) ?? 0));
+
+    container.innerHTML = `
+      <div class="char-interface-head">
+        <button class="ghost-button btn-sm" type="button" data-char-action="back">← Back</button>
+        <h4 class="char-form-title">Scenes featuring ${escapeHtml(characterName)}</h4>
+      </div>
+      <div class="char-list">
+        ${sortedSceneIds.map((sceneId) => {
+          const sceneLine = project.lines.find((l) => l.id === sceneId);
+          if (!sceneLine) return "";
+          const sceneIndex = project.lines.findIndex((l) => l.id === sceneId);
+          const sceneNumber = project.lines.slice(0, sceneIndex + 1).filter((l) => l.type === "scene").length;
+          const heading = formatLineText(sceneLine.text, "scene");
+          const displayHeading = state.autoNumberScenes ? `${sceneNumber}. ${heading}` : heading;
+          const subtext = getSceneFirstLine(project, sceneIndex);
+          return `
+            <button class="modal-list-item char-scene-item" type="button" data-scene-id="${escapeHtml(sceneId)}">
+              <strong>${escapeHtml(displayHeading)}</strong>
+              <small>${escapeHtml(subtext)}</small>
+            </button>`;
+        }).join("")}
+        ${sortedSceneIds.length === 0 ? `<p class="collab-empty">${escapeHtml(t("character.noScenesBody", { name: characterName }))}</p>` : ""}
+      </div>
+    `;
+
+    container.querySelector('[data-char-action="back"]')?.addEventListener("click", renderList);
+    container.querySelectorAll(".char-scene-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        modalRefs.dialog.close();
+        onNavigate?.(btn.dataset.sceneId);
+      });
+    });
+  }
+
+  function renderList() {
+    const memChars = project.storyMemory?.characters || [];
+    const scriptMap = new Map(getScriptCharacters().map((c) => [c.name, c]));
+    const memNames = new Set(memChars.map((c) => String(c.name || "").trim().toUpperCase()));
+    const unregistered = getScriptCharacters().filter((c) => !memNames.has(c.name));
+
+    container.innerHTML = `
+      <div class="char-interface-head">
+        <button class="ghost-button btn-sm" type="button" data-char-action="new">+ New Character</button>
+      </div>
+      ${memChars.length ? `
+        <div class="char-section">
+          <h4 class="char-section-label">Registered Characters</h4>
+          <div class="char-list">
+            ${memChars.map((char, i) => {
+              const scriptEntry = scriptMap.get(char.name);
+              const meta = scriptEntry
+                ? `${scriptEntry.count} line${scriptEntry.count !== 1 ? "s" : ""} in script`
+                : "Not yet in script";
+              return `
+              <div class="char-card">
+                <button class="char-card-info char-card-clickable" type="button" data-char-nav="${escapeHtml(char.name)}" data-first-id="${escapeHtml(scriptEntry?.firstId || "")}">
+                  <strong>${escapeHtml(char.name)}</strong>
+                  <span class="char-card-desc">${escapeHtml(char.description || "No details yet")}</span>
+                  <span class="char-card-meta">${escapeHtml(meta)}</span>
+                </button>
+                <div class="char-card-actions">
+                  <button class="ghost-button btn-sm" type="button" data-char-refine="${i}">Refine</button>
+                  <button class="ghost-button btn-sm" type="button" data-char-delete="${i}">Delete</button>
+                </div>
+              </div>`;
+            }).join("")}
+          </div>
+        </div>
+      ` : `<p class="collab-empty">No characters registered yet. Add one so Smart Proofread can write precise introductions.</p>`}
+      ${unregistered.length ? `
+        <div class="char-section">
+          <h4 class="char-section-label">In Script — Not Yet Registered</h4>
+          <div class="char-list">
+            ${unregistered.map((char) => `
+              <div class="char-card char-card-script">
+                <button class="char-card-info char-card-clickable" type="button" data-char-nav="${escapeHtml(char.name)}" data-first-id="${escapeHtml(char.firstId)}">
+                  <strong>${escapeHtml(char.name)}</strong>
+                  <span class="char-card-meta">${char.count} line${char.count !== 1 ? "s" : ""} in script</span>
+                </button>
+                <div class="char-card-actions">
+                  <button class="ghost-button btn-sm" type="button" data-char-register="${escapeHtml(char.name)}">+ Add Details</button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      ` : ""}
+    `;
+    attachListHandlers();
+  }
+
+  function renderForm(existing = null, prefillName = "") {
+    const isEdit = Boolean(existing);
+    container.innerHTML = `
+      <div class="char-form">
+        <button class="ghost-button btn-sm" type="button" data-char-action="back">← Back</button>
+        <h4 class="char-form-title">${isEdit ? "Refine Character" : "New Character"}</h4>
+        <div class="field-grid">
+          <label class="field field-wide">
+            <span>Name</span>
+            <input class="modal-input" id="charName" type="text" value="${escapeHtml(existing?.name || prefillName)}" placeholder="e.g. JOHN" ${isEdit ? "readonly" : ""}>
+          </label>
+          <label class="field">
+            <span>Age</span>
+            <input class="modal-input" id="charAge" type="text" value="${escapeHtml(existing?.age || "")}" placeholder="e.g. 35">
+          </label>
+          <label class="field">
+            <span>Sex</span>
+            <input class="modal-input" id="charSex" type="text" value="${escapeHtml(existing?.sex || "")}" placeholder="e.g. Male">
+          </label>
+          <label class="field field-wide">
+            <span>Outfit / Appearance</span>
+            <textarea class="modal-input" id="charOutfit" placeholder="e.g. grey tailored suit, tired eyes">${escapeHtml(existing?.outfit || "")}</textarea>
+          </label>
+          <label class="field field-wide">
+            <span>Behaviour / Personality</span>
+            <textarea class="modal-input" id="charBehaviour" placeholder="e.g. calculated, speaks rarely but precisely">${escapeHtml(existing?.behaviour || "")}</textarea>
+          </label>
+          <label class="field field-wide">
+            <span>Other Notes</span>
+            <textarea class="modal-input" id="charOther" placeholder="Backstory, role, or anything else...">${escapeHtml(existing?.other || "")}</textarea>
+          </label>
+        </div>
+        <div class="char-form-actions">
+          <button class="ghost-button" type="button" data-char-action="save">${isEdit ? "Save Changes" : "Add Character"}</button>
+        </div>
+      </div>
+    `;
+    attachFormHandlers(existing);
+  }
+
+  function attachListHandlers() {
+    container.querySelector('[data-char-action="new"]')?.addEventListener("click", () => renderForm());
+
+    container.querySelectorAll("[data-char-nav]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const name = btn.dataset.charNav;
+        const firstId = btn.dataset.firstId;
+        // If there are scenes to show, display them inline; otherwise navigate directly
+        const hasScenes = project.lines.some(
+          (l) => (l.type === "character" || l.type === "dual") &&
+                  normalizeLineText(l.text, l.type).trim().toUpperCase() === name.toUpperCase()
+        );
+        if (hasScenes) {
+          renderScenes(name);
+        } else if (firstId && onNavigate) {
+          modalRefs.dialog.close();
+          onNavigate(firstId);
+        }
+      });
+    });
+
+    container.querySelectorAll("[data-char-refine]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const char = (project.storyMemory?.characters || [])[Number(btn.dataset.charRefine)];
+        if (char) renderForm(char);
+      });
+    });
+    container.querySelectorAll("[data-char-delete]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const chars = project.storyMemory?.characters || [];
+        chars.splice(Number(btn.dataset.charDelete), 1);
+        persistProjects(false);
+        renderList();
+      });
+    });
+    container.querySelectorAll("[data-char-register]").forEach((btn) => {
+      btn.addEventListener("click", () => renderForm(null, btn.dataset.charRegister));
+    });
+  }
+
+  function attachFormHandlers(existing) {
+    container.querySelector('[data-char-action="back"]')?.addEventListener("click", renderList);
+    container.querySelector('[data-char-action="save"]')?.addEventListener("click", () => {
+      const name = (container.querySelector("#charName")?.value || "").trim().toUpperCase();
+      if (!name) return;
+      const age = (container.querySelector("#charAge")?.value || "").trim();
+      const sex = (container.querySelector("#charSex")?.value || "").trim();
+      const outfit = (container.querySelector("#charOutfit")?.value || "").trim();
+      const behaviour = (container.querySelector("#charBehaviour")?.value || "").trim();
+      const other = (container.querySelector("#charOther")?.value || "").trim();
+
+      const parts = [];
+      if (age) parts.push(`Age: ${age}`);
+      if (sex) parts.push(`Sex: ${sex}`);
+      if (outfit) parts.push(`Outfit: ${outfit}`);
+      if (behaviour) parts.push(`Behaviour: ${behaviour}`);
+      if (other) parts.push(other);
+      const description = parts.join(". ");
+
+      if (!project.storyMemory) project.storyMemory = { characters: [], locations: [], scenes: [], themes: [], plotPoints: [] };
+      if (!Array.isArray(project.storyMemory.characters)) project.storyMemory.characters = [];
+
+      if (existing) {
+        const idx = project.storyMemory.characters.findIndex((c) => c.id === existing.id);
+        if (idx !== -1) {
+          project.storyMemory.characters[idx] = { ...existing, name, age, sex, outfit, behaviour, other, description };
+        }
+      } else {
+        project.storyMemory.characters.push({
+          id: `char-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name, age, sex, outfit, behaviour, other, description
+        });
+      }
+
+      persistProjects(false);
+      renderStoryMemory();
+      renderList();
+    });
+  }
+
+  if (startWithForm) {
+    renderForm();
+  } else {
+    renderList();
+  }
+
+  await showModal({ title: "Characters", message: container, showConfirm: false, cancelLabel: "Close" });
 }
 
 export async function showWorkspacePopup() {
@@ -1447,14 +1871,14 @@ export async function showProofreadReport() {
   container.querySelector('[data-proofread-accept-all-corrections="true"]')?.addEventListener("click", async () => {
     const applied = applyProofreadCorrections(project, fixableCorrections);
     if (!applied) {
-      await customAlert("There were no automatic corrections left to apply.", "Simple Proofread");
+      await customAlert("There were no automatic corrections left to apply.", "Style Proofread");
       return;
     }
     markProofreadCorrectionsApplied(container, fixableCorrections, correctionKeyMap);
     modalRefs.dialog.close();
     persistProjects(false);
     window.dispatchEvent(new CustomEvent("proofreadCleanupApplied", { detail: { removedCount: 0 } }));
-    await customAlert(`Applied ${applied} correction${applied === 1 ? "" : "s"}.`, "Simple Proofread");
+    await customAlert(`Applied ${applied} correction${applied === 1 ? "" : "s"}.`, "Style Proofread");
   });
 
   container.querySelector('[data-proofread-apply-selected="true"]')?.addEventListener("click", async () => {
@@ -1463,13 +1887,13 @@ export async function showProofreadReport() {
       .filter(Boolean);
     const applied = applyProofreadCorrections(project, selectedCorrections);
     if (!applied) {
-      await customAlert("Select at least one automatic correction to apply.", "Simple Proofread");
+      await customAlert("Select at least one automatic correction to apply.", "Style Proofread");
       return;
     }
     markProofreadCorrectionsApplied(container, selectedCorrections, correctionKeyMap);
     persistProjects(false);
     window.dispatchEvent(new CustomEvent("proofreadCleanupApplied", { detail: { removedCount: 0 } }));
-    await customAlert(`Applied ${applied} selected correction${applied === 1 ? "" : "s"}.`, "Simple Proofread");
+    await customAlert(`Applied ${applied} selected correction${applied === 1 ? "" : "s"}.`, "Style Proofread");
   });
 
   container.querySelectorAll("[data-proofread-correction-index]").forEach((button) => {
@@ -1481,7 +1905,7 @@ export async function showProofreadReport() {
       }
       const applied = applyProofreadCorrections(project, [correction]);
       if (!applied) {
-        await customAlert("That correction could not be applied.", "Simple Proofread");
+        await customAlert("That correction could not be applied.", "Style Proofread");
         return;
       }
       markProofreadCorrectionsApplied(container, [correction], correctionKeyMap);
@@ -2066,6 +2490,8 @@ const modalRefs = {
     get confirmBtn() { return document.querySelector("#modalConfirmBtn"); }
 };
 
+let _modalEpoch = 0;
+
 export function showModal({
     title,
     message,
@@ -2078,6 +2504,8 @@ export function showModal({
     contentClass = ""
 }) {
     return new Promise((resolve) => {
+        const myEpoch = ++_modalEpoch;
+
         modalRefs.title.textContent = title;
         const content = modalRefs.dialog?.querySelector(".modal-content");
         if (content) {
@@ -2096,7 +2524,9 @@ export function showModal({
         modalRefs.cancelBtn.textContent = cancelLabel;
         modalRefs.cancelBtn.hidden = !showCancel;
 
+        let closeListenerTimer;
         const cleanup = () => {
+            clearTimeout(closeListenerTimer);
             if (content) {
                 content.className = "modal-content";
             }
@@ -2113,14 +2543,32 @@ export function showModal({
         };
 
         const onCancel = () => {
+            // The dialog's close event fires as an async task. If a new modal was
+            // opened between the close() call and this handler firing, this is a
+            // stale event — clean up stale listeners but don't close the new modal.
+            if (myEpoch !== _modalEpoch) {
+                cleanup();
+                resolve(showInput ? null : false);
+                return;
+            }
             cleanup();
-            modalRefs.dialog.close();
+            if (modalRefs.dialog.open) {
+                modalRefs.dialog.close();
+            }
             resolve(showInput ? null : false);
         };
 
         modalRefs.confirmBtn.addEventListener("click", onConfirm);
         modalRefs.cancelBtn.addEventListener("click", onCancel);
-        modalRefs.dialog.addEventListener("close", onCancel, { once: true });
+
+        // Register the close listener in the next task so stale close events
+        // queued by a previous dialog.close() call are already dispatched and
+        // handled before our listener is attached.
+        closeListenerTimer = setTimeout(() => {
+            if (myEpoch === _modalEpoch) {
+                modalRefs.dialog.addEventListener("close", onCancel, { once: true });
+            }
+        }, 0);
 
         modalRefs.dialog.showModal();
         if (showInput) {
