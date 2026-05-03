@@ -1543,29 +1543,33 @@ export async function showWorkspacePopup() {
         <input id="workspaceNameInput" class="modal-input" type="text" value="${escapeHtml(workspace.name || project.title || 'Team Workspace')}" ${ownerCanManage ? '' : 'readonly'}>
         ${ownerCanManage ? '<button class="ghost-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
       </div>
-      <div class="metric-grid workspace-metric-grid">
-        <div><span>Owner</span><strong>${escapeHtml(ownerLabel)}</strong></div>
-        <div><span>Members</span><strong>${collaborators.length}</strong></div>
-        <div><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
-        <div><span>Last Edited By</span><strong>${escapeHtml(lastEditedBy)}</strong></div>
-        <div><span>Last Activity</span><strong>${escapeHtml(formatDateTime(lastActivity))}</strong></div>
-        <div><span>Workspace Code</span><strong>${escapeHtml(workspace.inviteCode || project.scriptId || "")}</strong></div>
+      <div class="workspace-metric-columns">
+        <div class="workspace-metric-stack">
+          <div class="workspace-metric-row"><span>Owner</span><strong>${escapeHtml(ownerLabel)}</strong></div>
+          <div class="workspace-metric-row"><span>Members</span><strong>${collaborators.length}</strong></div>
+          <div class="workspace-metric-row"><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
+        </div>
+        <div class="workspace-metric-stack">
+          <div class="workspace-metric-row"><span>Last Edited By</span><strong>${escapeHtml(lastEditedBy)}</strong></div>
+          <div class="workspace-metric-row"><span>Last Activity</span><strong>${escapeHtml(formatDateTime(lastActivity))}</strong></div>
+          <div class="workspace-metric-row"><span>Workspace Code</span><strong>${escapeHtml(workspace.inviteCode || project.scriptId || "")}</strong></div>
+        </div>
       </div>
     </section>
     <section class="workspace-popup-section">
       <h4>Sharing</h4>
       <p>Invite collaborators by email or share a workspace link, then assign Editor or Viewer access.</p>
       <div class="workspace-share-row">
-        <input class="modal-input" type="text" value="${escapeHtml(inviteLink)}" readonly>
-        <button class="ghost-button" type="button" data-workspace-action="copy-link">Copy Link</button>
+        <input class="modal-input workspace-link-input" type="text" value="${escapeHtml(inviteLink)}" readonly>
+        <button class="ghost-button workspace-inline-button" type="button" data-workspace-action="copy-link">Copy Link</button>
       </div>
-      <div class="workspace-share-row">
+      <div class="workspace-share-row workspace-share-row-compact">
         <input id="workspaceInviteEmail" class="modal-input" type="email" placeholder="collaborator@email.com">
-        <select id="workspaceInviteRole" class="comment-filter-select">
+        <select id="workspaceInviteRole" class="comment-filter-select workspace-inline-role">
           <option value="editor">Editor</option>
           <option value="viewer">Viewer</option>
         </select>
-        <button class="ghost-button" type="button" data-workspace-action="invite">Invite by Email</button>
+        <button class="ghost-button workspace-inline-button" type="button" data-workspace-action="invite">Invite by Email</button>
       </div>
       <p class="collab-status-msg" data-workspace-status></p>
     </section>
