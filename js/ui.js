@@ -290,13 +290,7 @@ export function renderHome() {
       refs.homeWorkspaceDashboard.hidden = true;
     }
   } else {
-    projects = projects.filter((project, index, all) => {
-      if (project.isWorkspaceRoot || project.workspace?.id === project.id) {
-        return true;
-      }
-      const workspaceId = project.workspace?.id;
-      return all.findIndex((item) => item.workspace?.id === workspaceId) === index;
-    });
+    projects = projects.filter((project) => !project.isWorkspaceRoot);
   }
 
   if (state.currentWorkspaceId && workspaceLead) {
@@ -420,30 +414,45 @@ export function renderHome() {
   } else {
     refs.homeHero.hidden = false;
     refs.workspaceBackBtn.hidden = true;
-    refs.homeProjectsTitle.textContent = "Scripts:";
-    refs.homeProjectsSubtitle.textContent = "Start a new screenplay or reopen one already in motion.";
-    refs.homeWorkspaceDashboard.hidden = true;
-    refs.homeWorkspaceDashboard.innerHTML = "";
+    refs.homeProjectsTitle.textContent = "Projects";
+    refs.homeProjectsSubtitle.textContent = "Open a script, switch workspaces, or start a new draft without losing the bigger picture.";
+    refs.homeWorkspaceDashboard.hidden = false;
+    refs.homeWorkspaceDashboard.innerHTML = `
+      <section class="project-dashboard-summary">
+        <div class="project-dashboard-copy">
+          <span class="workspace-home-kicker">Film Projects</span>
+          <h3>Everything you are writing, in one clear library.</h3>
+          <p>Projects come first here. Workspaces stay available whenever you need team context.</p>
+        </div>
+        <div class="project-summary-grid">
+          <article class="project-summary-card">
+            <span>Total projects</span>
+            <strong>${projects.length}</strong>
+          </article>
+          <article class="project-summary-card">
+            <span>Workspaces</span>
+            <strong>${new Set(projects.map((project) => project.workspace?.id || project.id)).size}</strong>
+          </article>
+          <article class="project-summary-card">
+            <span>Format</span>
+            <strong>Film Script</strong>
+          </article>
+          <article class="project-summary-card">
+            <span>Latest activity</span>
+            <strong>${projects[0]?.updatedAt ? escapeHtml(formatDateTime(projects[0].updatedAt)) : "No drafts yet"}</strong>
+          </article>
+        </div>
+      </section>
+    `;
   }
 
   projects.forEach((project) => {
     const node = template.content.firstElementChild.cloneNode(true);
-    const openButton = node.querySelector(".project-card-open");
-    const deleteButton = node.querySelector(".project-delete");
     const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
     const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
 
     node.querySelector(".project-card-title").textContent = project.title;
     node.querySelector(".project-script-id").textContent = project.scriptId;
-    if (project.isWorkspaceRoot) {
-      node.querySelector(".project-card-title").textContent = `${project.title} · Workspace`;
-    }
-    if (project.creationKind === "workspace") {
-      node.querySelector(".project-card-title").textContent = `${project.title} · Workspace`;
-    }
-    if (project.isWorkspaceRoot || project.creationKind === "workspace") {
-      node.querySelector(".project-card-title").textContent = `${project.title} · Workspace`;
-    }
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
     node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
@@ -467,6 +476,7 @@ export function renderRecentProjectMenus() {
   }
 
   const projects = [...state.projects]
+    .filter((project) => !project.isWorkspaceRoot)
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
     .slice(0, 5);
 

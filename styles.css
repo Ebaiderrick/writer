@@ -961,6 +961,60 @@ html[data-theme="rose"] .mesh-background {
   margin: 0;
 }
 
+.project-dashboard-summary {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.04);
+}
+
+.project-dashboard-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.project-dashboard-copy h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+}
+
+.project-dashboard-copy p {
+  margin: 0;
+  max-width: 62ch;
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.project-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-summary-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-strong) 82%, transparent);
+}
+
+.project-summary-card span {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.project-summary-card strong {
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
 .project-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
