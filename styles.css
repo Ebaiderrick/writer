@@ -2623,16 +2623,11 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .modal-content-work-tracking,
-.modal-content-workspace,
-.modal-content-proofread {
+.modal-content-workspace {
   max-height: min(88vh, 900px);
 }
 
 .modal-content-work-tracking {
-  width: min(1180px, calc(100vw - 36px));
-}
-
-.modal-content-proofread {
   width: min(1180px, calc(100vw - 36px));
 }
 
@@ -3290,20 +3285,7 @@ kbd {
 
 .proofread-report-toolbar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.proofread-report {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-}
-
-.proofread-report-toolbar,
-.proofread-report > .collab-empty {
-  grid-column: 1 / -1;
+  justify-content: flex-end;
 }
 
 .work-tracking-report {
@@ -3341,19 +3323,6 @@ kbd {
   gap: 8px;
   padding: 12px 14px;
   border-radius: 16px;
-  cursor: pointer;
-}
-
-.proofread-problem-factor {
-  font-weight: 700;
-}
-
-.proofread-report-line {
-  display: block;
-  font-size: 0.9rem;
-  font-weight: 400;
-  color: var(--ink);
-  opacity: 0.9;
 }
 
 .work-tracking-graph-wrap {
@@ -3472,33 +3441,6 @@ kbd {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.proofread-report-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.proofread-report-select {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
-.proofread-report-item.is-accepted {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 18%, var(--panel));
-}
-
-@media (max-width: 900px) {
-  .proofread-report {
-    grid-template-columns: 1fr;
-  }
 }
 
 .proofread-report-tag {
