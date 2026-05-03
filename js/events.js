@@ -13,7 +13,8 @@ import {
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
   showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
 } from './editor.js';
-import { renderPreview, renderCoverPreview, buildPrintableDocument, buildWordDocument } from './preview.js';
+import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
+import { buildWordDocxBlob, DOCX_MIME_TYPE } from './docxExport.js';
 import { paginateScriptLines } from './pagination.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
@@ -1939,11 +1940,17 @@ function exportJson() {
   downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
 }
 
-function exportWord() {
+async function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
     if (!project) return;
-    const content = `\uFEFF${buildWordDocument(project)}`;
-    downloadFile(`${slugify(project.title)}.doc`, content, "application/msword;charset=utf-8");
+
+    try {
+      const blob = await buildWordDocxBlob(project);
+      downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
+    } catch (error) {
+      console.error("DOCX export failed", error);
+      customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
+    }
 }
 
 function exportPdf() { printWithHiddenFrame(); }
