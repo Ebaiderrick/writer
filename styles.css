@@ -4584,3 +4584,34 @@ html[data-theme="white"] .user-trigger {
   gap: var(--space-2);
   flex-wrap: wrap;
 }
+
+.char-card-clickable {
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.char-card-clickable:hover strong {
+  text-decoration: underline;
+}
+
+.char-card-desc {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.char-card-meta {
+  font-size: 0.74rem;
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+}
+
+.char-scene-item {
+  width: 100%;
+}

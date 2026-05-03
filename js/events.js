@@ -1430,10 +1430,10 @@ function handleMenuAction(action) {
       break;
     }
     case "open-characters":
-      showCharactersInterface();
+      showCharactersInterface(false, (id) => focusBlock(id));
       break;
     case "add-character":
-      showCharactersInterface(true);
+      showCharactersInterface(true, (id) => focusBlock(id));
       break;
     case "pick-story-memory":
       showStoryMemoryPicker();

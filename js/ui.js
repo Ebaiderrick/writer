@@ -692,7 +692,7 @@ export async function showStoryMemoryPopup() {
   });
 }
 
-export async function showCharactersInterface(startWithForm = false) {
+export async function showCharactersInterface(startWithForm = false, onNavigate = null) {
   const project = getCurrentProject();
   if (!project) return;
 
@@ -704,7 +704,7 @@ export async function showCharactersInterface(startWithForm = false) {
     (project.lines || []).forEach((line) => {
       if ((line.type === "character" || line.type === "dual") && line.text?.trim()) {
         const name = line.text.trim().toUpperCase();
-        const entry = map.get(name) || { name, count: 0 };
+        const entry = map.get(name) || { name, count: 0, firstId: line.id };
         entry.count++;
         map.set(name, entry);
       }
@@ -712,8 +712,56 @@ export async function showCharactersInterface(startWithForm = false) {
     return [...map.values()];
   }
 
+  function renderScenes(characterName) {
+    const targetName = characterName.trim().toUpperCase();
+    const sceneIds = new Set();
+    const lineIdToIndex = new Map(project.lines.map((l, i) => [l.id, i]));
+
+    project.lines.forEach((line, index) => {
+      if ((line.type === "character" || line.type === "dual") && normalizeLineText(line.text, line.type).trim().toUpperCase() === targetName) {
+        const sceneId = getSceneIdForIndex(index, project);
+        if (sceneId) sceneIds.add(sceneId);
+      }
+    });
+
+    const sortedSceneIds = [...sceneIds].sort((a, b) => (lineIdToIndex.get(a) ?? 0) - (lineIdToIndex.get(b) ?? 0));
+
+    container.innerHTML = `
+      <div class="char-interface-head">
+        <button class="ghost-button btn-sm" type="button" data-char-action="back">← Back</button>
+        <h4 class="char-form-title">Scenes featuring ${escapeHtml(characterName)}</h4>
+      </div>
+      <div class="char-list">
+        ${sortedSceneIds.map((sceneId) => {
+          const sceneLine = project.lines.find((l) => l.id === sceneId);
+          if (!sceneLine) return "";
+          const sceneIndex = project.lines.findIndex((l) => l.id === sceneId);
+          const sceneNumber = project.lines.slice(0, sceneIndex + 1).filter((l) => l.type === "scene").length;
+          const heading = formatLineText(sceneLine.text, "scene");
+          const displayHeading = state.autoNumberScenes ? `${sceneNumber}. ${heading}` : heading;
+          const subtext = getSceneFirstLine(project, sceneIndex);
+          return `
+            <button class="modal-list-item char-scene-item" type="button" data-scene-id="${escapeHtml(sceneId)}">
+              <strong>${escapeHtml(displayHeading)}</strong>
+              <small>${escapeHtml(subtext)}</small>
+            </button>`;
+        }).join("")}
+        ${sortedSceneIds.length === 0 ? `<p class="collab-empty">${escapeHtml(t("character.noScenesBody", { name: characterName }))}</p>` : ""}
+      </div>
+    `;
+
+    container.querySelector('[data-char-action="back"]')?.addEventListener("click", renderList);
+    container.querySelectorAll(".char-scene-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        modalRefs.dialog.close();
+        onNavigate?.(btn.dataset.sceneId);
+      });
+    });
+  }
+
   function renderList() {
     const memChars = project.storyMemory?.characters || [];
+    const scriptMap = new Map(getScriptCharacters().map((c) => [c.name, c]));
     const memNames = new Set(memChars.map((c) => String(c.name || "").trim().toUpperCase()));
     const unregistered = getScriptCharacters().filter((c) => !memNames.has(c.name));
 
@@ -725,18 +773,24 @@ export async function showCharactersInterface(startWithForm = false) {
         <div class="char-section">
           <h4 class="char-section-label">Registered Characters</h4>
           <div class="char-list">
-            ${memChars.map((char, i) => `
+            ${memChars.map((char, i) => {
+              const scriptEntry = scriptMap.get(char.name);
+              const meta = scriptEntry
+                ? `${scriptEntry.count} line${scriptEntry.count !== 1 ? "s" : ""} in script`
+                : "Not yet in script";
+              return `
               <div class="char-card">
-                <div class="char-card-info">
+                <button class="char-card-info char-card-clickable" type="button" data-char-nav="${escapeHtml(char.name)}" data-first-id="${escapeHtml(scriptEntry?.firstId || "")}">
                   <strong>${escapeHtml(char.name)}</strong>
-                  <span>${escapeHtml(char.description || "No details yet")}</span>
-                </div>
+                  <span class="char-card-desc">${escapeHtml(char.description || "No details yet")}</span>
+                  <span class="char-card-meta">${escapeHtml(meta)}</span>
+                </button>
                 <div class="char-card-actions">
                   <button class="ghost-button btn-sm" type="button" data-char-refine="${i}">Refine</button>
                   <button class="ghost-button btn-sm" type="button" data-char-delete="${i}">Delete</button>
                 </div>
-              </div>
-            `).join("")}
+              </div>`;
+            }).join("")}
           </div>
         </div>
       ` : `<p class="collab-empty">No characters registered yet. Add one so Smart Proofread can write precise introductions.</p>`}
@@ -746,10 +800,10 @@ export async function showCharactersInterface(startWithForm = false) {
           <div class="char-list">
             ${unregistered.map((char) => `
               <div class="char-card char-card-script">
-                <div class="char-card-info">
+                <button class="char-card-info char-card-clickable" type="button" data-char-nav="${escapeHtml(char.name)}" data-first-id="${escapeHtml(char.firstId)}">
                   <strong>${escapeHtml(char.name)}</strong>
-                  <span>${char.count} line${char.count !== 1 ? "s" : ""} in script</span>
-                </div>
+                  <span class="char-card-meta">${char.count} line${char.count !== 1 ? "s" : ""} in script</span>
+                </button>
                 <div class="char-card-actions">
                   <button class="ghost-button btn-sm" type="button" data-char-register="${escapeHtml(char.name)}">+ Add Details</button>
                 </div>
@@ -800,6 +854,25 @@ export async function showCharactersInterface(startWithForm = false) {
 
   function attachListHandlers() {
     container.querySelector('[data-char-action="new"]')?.addEventListener("click", () => renderForm());
+
+    container.querySelectorAll("[data-char-nav]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const name = btn.dataset.charNav;
+        const firstId = btn.dataset.firstId;
+        // If there are scenes to show, display them inline; otherwise navigate directly
+        const hasScenes = project.lines.some(
+          (l) => (l.type === "character" || l.type === "dual") &&
+                  normalizeLineText(l.text, l.type).trim().toUpperCase() === name.toUpperCase()
+        );
+        if (hasScenes) {
+          renderScenes(name);
+        } else if (firstId && onNavigate) {
+          modalRefs.dialog.close();
+          onNavigate(firstId);
+        }
+      });
+    });
+
     container.querySelectorAll("[data-char-refine]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const char = (project.storyMemory?.characters || [])[Number(btn.dataset.charRefine)];
