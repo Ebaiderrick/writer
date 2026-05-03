@@ -265,7 +265,6 @@ function getLeftPaneBlockLabel(key) {
     analytics: "Writing Analytics",
     notepad: "Notepad",
     "ai-assistant": "AI Assistant",
-    "grammar-check": "Grammar Check",
     "smart-proofread": "Smart Proofread",
     "work-tracking": "Work Tracking",
     proofread: "Simple Proofread"
@@ -278,7 +277,7 @@ function getCustomizerGroupLabel(key) {
   if (key === "current") return "Core";
   if (["workspace", "comments"].includes(key)) return "Workspace";
   if (["notepad"].includes(key)) return "Tools";
-  if (["grammar-check", "scenes", "characters"].includes(key)) return "Writing";
+  if (["scenes", "characters"].includes(key)) return "Writing";
   if (["ai-assistant", "story-memory", "smart-proofread"].includes(key)) return "AI";
   if (["metrics", "work-tracking", "proofread", "analytics"].includes(key)) return "Revision & Insight";
   return "Editor";
