@@ -1432,7 +1432,7 @@ export async function showProofreadReport() {
 
   container.querySelectorAll("[data-proofread-line-id]").forEach((button) => {
     button.addEventListener("click", (event) => {
-      if (event.target.closest("[data-proofread-correction-action='true']")) {
+      if (event.target.closest("[data-proofread-correction-action='true']") || event.target.closest("[data-proofread-select]")) {
         return;
       }
       modalRefs.dialog.close();
@@ -1442,7 +1442,7 @@ export async function showProofreadReport() {
       if (event.key !== "Enter" && event.key !== " ") {
         return;
       }
-      if (event.target.closest("[data-proofread-correction-action='true']")) {
+      if (event.target.closest("[data-proofread-correction-action='true']") || event.target.closest("[data-proofread-select]")) {
         return;
       }
       event.preventDefault();

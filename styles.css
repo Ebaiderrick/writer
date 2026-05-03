@@ -3293,6 +3293,13 @@ kbd {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 8px 0 10px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
 }
 
 .work-tracking-report {
