@@ -26,7 +26,7 @@ import {
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal,
-  showStoryMemoryPopup, showWorkspacePopup
+  showStoryMemoryPopup, showWorkspacePopup, showCharactersPopup
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -1357,6 +1357,9 @@ function handleMenuAction(action) {
       break;
     case "proofread":
       showProofreadReport();
+      break;
+    case "open-characters":
+      showCharactersPopup();
       break;
     case "toggle-ai-assistant":
       state.aiAssist = true;

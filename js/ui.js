@@ -161,6 +161,16 @@ export function renderCharacterList() {
     characters.set(key, current);
   });
 
+  if (refs.characterSummary) {
+    refs.characterSummary.textContent = characters.size
+      ? t("project.characters", { count: characters.size })
+      : t("character.empty");
+  }
+
+  if (!refs.characterList) {
+    return;
+  }
+
   refs.characterList.innerHTML = "";
   if (!characters.size) {
     refs.characterList.appendChild(createTextNode(t("character.empty")));
@@ -178,6 +188,56 @@ export function renderCharacterList() {
         node.dataset.characterName = character.name;
         refs.characterList.appendChild(node);
     });
+}
+
+export function showCharactersPopup() {
+  const project = getCurrentProject();
+  if (!project) {
+    return;
+  }
+
+  const characters = new Map();
+  project.lines.forEach((line, index) => {
+    if ((line.type !== "character" && line.type !== "dual") || !line.text.trim()) {
+      return;
+    }
+
+    const name = formatLineText(line.text, line.type);
+    const key = name.trim().toUpperCase();
+    const current = characters.get(key) || { name: name.trim(), count: 0, firstId: line.id, firstIndex: index };
+    current.count += 1;
+    characters.set(key, current);
+  });
+
+  if (!characters.size) {
+    customAlert(t("character.empty"), "Characters");
+    return;
+  }
+
+  const container = document.createElement("div");
+  container.className = "modal-list";
+
+  const template = document.querySelector("#listItemTemplate");
+  [...characters.values()]
+    .sort((a, b) => b.count - a.count || a.firstIndex - b.firstIndex)
+    .forEach((character) => {
+      const node = template.content.firstElementChild.cloneNode(true);
+      node.querySelector(".list-item-title").textContent = character.name;
+      node.querySelector(".list-item-meta").textContent = t("character.entries", { count: character.count });
+      node.onclick = () => {
+        modalRefs.dialog?.close();
+        showCharacterScenes(character.name, (id) => focusBlock(id));
+      };
+      container.appendChild(node);
+    });
+
+  showModal({
+    title: "Characters",
+    message: container,
+    showCancel: true,
+    cancelLabel: t("help.close"),
+    showConfirm: false
+  });
 }
 
 export function showCharacterScenes(characterName, onSelect) {
@@ -278,7 +338,7 @@ function getCustomizerGroupLabel(key) {
   if (key === "current") return "Core";
   if (["workspace", "comments"].includes(key)) return "Workspace";
   if (["notepad"].includes(key)) return "Tools";
-  if (["grammar-check", "scenes", "characters"].includes(key)) return "Writing";
+  if (["scenes", "characters"].includes(key)) return "Writing";
   if (["ai-assistant", "story-memory", "smart-proofread"].includes(key)) return "AI";
   if (["metrics", "work-tracking", "proofread", "analytics"].includes(key)) return "Revision & Insight";
   return "Editor";

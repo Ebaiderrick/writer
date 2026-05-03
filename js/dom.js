@@ -64,6 +64,7 @@ export const refs = {
   get preview() { return getCached("#preview"); },
   get sceneList() { return getCached("#sceneList"); },
   get characterList() { return getCached("#characterList"); },
+  get characterSummary() { return getCached("#characterSummary"); },
   get sceneCount() { return getCached("#sceneCount"); },
   get wordCount() { return getCached("#wordCount"); },
   get pageCount() { return getCached("#pageCount"); },
