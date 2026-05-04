@@ -1637,8 +1637,8 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-format-select {
-  width: 78px;
-  min-width: 78px;
+  width: 80px;
+  min-width: 80px;
   flex: 0 0 auto;
   min-height: 26px;
   border-radius: 8px;
@@ -1653,8 +1653,8 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-sort-select {
-  width: 74px;
-  min-width: 74px;
+  width: 80px;
+  min-width: 80px;
 }
 
 .primary-button,

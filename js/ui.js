@@ -829,7 +829,7 @@ export function renderHome() {
     projects = projects.filter((project) => project.workspace?.id === state.currentWorkspaceId && !project.isWorkspaceRoot);
     if (!workspaceLead) {
       state.currentWorkspaceId = null;
-      refs.homeWorkspaceDashboard.hidden = true;
+      if (refs.homeWorkspaceDashboard) refs.homeWorkspaceDashboard.hidden = true;
     }
   } else {
     projects = projects.filter((project) => !project.isWorkspaceRoot);
@@ -865,8 +865,9 @@ export function renderHome() {
     refs.workspaceBackBtn.hidden = false;
     refs.homeProjectsTitle.textContent = workspaceLead.workspace?.name || workspaceLead.title || "Workspace";
     refs.homeProjectsSubtitle.textContent = "A focused studio view for projects, members, tasks, and recent movement inside this workspace.";
-    refs.homeWorkspaceDashboard.hidden = false;
-    refs.homeWorkspaceDashboard.innerHTML = `
+    if (refs.homeWorkspaceDashboard) {
+      refs.homeWorkspaceDashboard.hidden = false;
+      refs.homeWorkspaceDashboard.innerHTML = `
       <div class="workspace-home-shell">
         <section class="workspace-home-hero-card">
           <div class="workspace-home-hero-copy">
@@ -972,6 +973,7 @@ export function renderHome() {
         </div>
       </div>
     `;
+    }
   } else {
     refs.homeHero.hidden = false;
     refs.workspaceBackBtn.hidden = true;
@@ -992,9 +994,11 @@ export function renderHome() {
           <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Scenes</option>
         </select>
       </div>
-    `;
-    refs.homeWorkspaceDashboard.hidden = false;
-    refs.homeWorkspaceDashboard.innerHTML = "";
+      `;
+    if (refs.homeWorkspaceDashboard) {
+      refs.homeWorkspaceDashboard.hidden = false;
+      refs.homeWorkspaceDashboard.innerHTML = "";
+    }
   }
 
   if (!state.currentWorkspaceId) {
