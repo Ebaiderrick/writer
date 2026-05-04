@@ -1369,6 +1369,7 @@ html[data-theme="rose"] .mesh-background {
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .project-filter-chip.is-active {
@@ -1636,8 +1637,8 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-format-select {
-  width: 92px;
-  min-width: 92px;
+  width: 78px;
+  min-width: 78px;
   flex: 0 0 auto;
   min-height: 26px;
   border-radius: 8px;
@@ -1646,12 +1647,14 @@ html[data-theme="rose"] .mesh-background {
   color: var(--muted);
   font-size: 0.7rem;
   font-weight: 600;
-  padding: 4px 8px;
+  padding: 4px 20px 4px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .project-sort-select {
-  width: 82px;
-  min-width: 82px;
+  width: 74px;
+  min-width: 74px;
 }
 
 .primary-button,
