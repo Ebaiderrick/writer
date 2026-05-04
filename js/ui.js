@@ -78,6 +78,11 @@ export function renderWorkspaceView() {
       label: `${project.title} - ${line.text.trim()}`
     })));
   const currentUid = auth.currentUser?.uid || "";
+  const taskSummary = {
+    todo: allTaskItems.filter((task) => task.status === "todo").length,
+    inProgress: allTaskItems.filter((task) => task.status === "in-progress").length,
+    done: allTaskItems.filter((task) => task.status === "done").length
+  };
   const taskItems = allTaskItems.filter((task) => {
     if (state.workspaceTaskFilter === "mine") {
       return task.assignedTo === currentUid;
@@ -140,6 +145,11 @@ export function renderWorkspaceView() {
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">My Tasks</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "ai" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
           </div>
+          <div class="workspace-task-summary">
+            <span class="workspace-task-summary-chip">To Do ${taskSummary.todo}</span>
+            <span class="workspace-task-summary-chip">In Progress ${taskSummary.inProgress}</span>
+            <span class="workspace-task-summary-chip">Done ${taskSummary.done}</span>
+          </div>
           <div class="workspace-task-form">
             <input class="modal-input" type="text" placeholder="Task title" data-workspace-task-title>
             <select class="comment-filter-select" data-workspace-task-project>
@@ -176,6 +186,7 @@ export function renderWorkspaceView() {
                     </select>
                   </div>
                   ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  ${task.comments?.length ? `<p class="workspace-task-comment-preview">Latest comment: ${escapeHtml(task.comments[task.comments.length - 1].text)}</p>` : ""}
                   <div class="workspace-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
                     <div class="workspace-task-actions">
@@ -279,6 +290,7 @@ export function renderHome() {
   const template = document.querySelector("#projectCardTemplate");
   let projects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   let workspaceLead = null;
+  const currentUid = auth.currentUser?.uid || "";
 
   if (state.currentWorkspaceId) {
     workspaceLead = projects.find((project) => project.workspace?.id === state.currentWorkspaceId && project.isWorkspaceRoot)
@@ -291,6 +303,14 @@ export function renderHome() {
     }
   } else {
     projects = projects.filter((project) => !project.isWorkspaceRoot);
+    if (state.homeProjectFilter === "mine") {
+      projects = projects.filter((project) => {
+        const ownerId = project.ownerId || "";
+        return !project.isShared || (ownerId && ownerId === currentUid);
+      });
+    } else if (state.homeProjectFilter === "shared") {
+      projects = projects.filter((project) => project.isShared || Object.keys(project.collaborators || {}).length > 0);
+    }
   }
 
   if (state.currentWorkspaceId && workspaceLead) {
@@ -424,6 +444,11 @@ export function renderHome() {
           <h3>Everything you are writing, in one clear library.</h3>
           <p>Projects come first here. Workspaces stay available whenever you need team context.</p>
         </div>
+        <div class="project-filter-row" role="tablist" aria-label="Project filters">
+          <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
+          <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
+          <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+        </div>
         <div class="project-summary-grid">
           <article class="project-summary-card">
             <span>Total projects</span>
@@ -450,9 +475,14 @@ export function renderHome() {
     const node = template.content.firstElementChild.cloneNode(true);
     const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
     const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+    const workspaceLabel = project.workspace?.name || "Personal Workspace";
+    const collaborationLabel = project.isShared || Object.keys(project.collaborators || {}).length
+      ? "Shared"
+      : "Private";
 
     node.querySelector(".project-card-title").textContent = project.title;
     node.querySelector(".project-script-id").textContent = project.scriptId;
+    node.querySelector(".project-card-context").textContent = `${workspaceLabel} · ${collaborationLabel}`;
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
     node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
@@ -492,6 +522,23 @@ export function renderRecentProjectMenus() {
       container.appendChild(button);
     });
   });
+}
+
+export function renderStudioProjectContext() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const workspaceLabel = project.workspace?.name || "Personal Workspace";
+  const collaborationLabel = project.isShared || Object.keys(project.collaborators || {}).length
+    ? "Shared"
+    : "Private";
+  const lastEdited = project.lastEditorName || project.ownerName || project.ownerEmail || project.author || "You";
+
+  if (refs.studioProjectTitle) {
+    refs.studioProjectTitle.textContent = project.title || "Untitled Project";
+  }
+  if (refs.studioProjectMeta) {
+    refs.studioProjectMeta.textContent = `Film Script · ${workspaceLabel} · ${collaborationLabel} · Last edited by ${lastEdited}`;
+  }
 }
 
 export function renderSceneList() {

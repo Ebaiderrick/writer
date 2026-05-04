@@ -86,6 +86,7 @@ export const state = {
   viewOptions: { ...DEFAULT_VIEW_OPTIONS },
   leftPaneBlocks: DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block })),
   filterQuery: "",
+  homeProjectFilter: "all",
   backupPrompted: false,
   history: [],
   historyIndex: -1

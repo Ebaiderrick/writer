@@ -27,7 +27,7 @@ import {
   showModal,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
-  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView,
+  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView, renderStudioProjectContext,
   showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow
 } from './ui.js';
 import { AI } from './ai.js';
@@ -392,6 +392,14 @@ export function bindEvents() {
     persistProjects(false, { syncInputs: false });
     showHome();
     renderHome();
+  });
+
+  refs.homeWorkspaceDashboard?.addEventListener("click", (event) => {
+    const filterTrigger = event.target.closest("[data-home-project-filter]");
+    if (filterTrigger) {
+      state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
+      renderHome();
+    }
   });
 
   refs.workspaceDashboard?.addEventListener("click", (event) => {
@@ -874,6 +882,12 @@ export function bindEvents() {
 
   // Project Grid (Delegated)
   refs.projectGrid.addEventListener("click", (e) => {
+      const filterTrigger = e.target.closest("[data-home-project-filter]");
+      if (filterTrigger) {
+          state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
+          renderHome();
+          return;
+      }
       const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
       if (workspaceTrigger) {
           openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
@@ -885,6 +899,10 @@ export function bindEvents() {
 
       if (e.target.closest(".project-delete")) {
           removeProject(projectId);
+      } else if (e.target.closest('[data-project-action="rename"]')) {
+          renameProjectById(projectId);
+      } else if (e.target.closest('[data-project-action="duplicate"]')) {
+          duplicateProjectById(projectId);
       } else {
           openProject(projectId);
       }
@@ -1054,6 +1072,7 @@ export function renderStudio() {
   const project = getCurrentProject();
   if (!project) return;
   syncInputsFromProject(project);
+  renderStudioProjectContext();
   renderEditor();
   renderCoverPreview();
   renderPreview();
@@ -2143,6 +2162,30 @@ function duplicateProject() {
   upsertProject(copy);
   openProject(copy.id);
   persistProjects(true);
+}
+
+async function renameProjectById(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
+  if (!nextTitle || !nextTitle.trim()) return;
+  project.title = nextTitle.trim();
+  project.updatedAt = new Date().toISOString();
+  upsertProject(project);
+  persistProjects(true, { syncInputs: false });
+  renderHome();
+  if (state.currentProjectId === project.id) {
+    renderStudio();
+  }
+}
+
+function duplicateProjectById(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  const copy = cloneProject({ ...project, title: `${project.title} Copy` }, true);
+  upsertProject(copy);
+  persistProjects(true, { syncInputs: false });
+  renderHome();
 }
 
 function deleteProject() {

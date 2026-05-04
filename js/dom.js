@@ -25,6 +25,8 @@ export const refs = {
   get workspaceDashboard() { return getCached("#workspaceDashboard"); },
   get workspaceProjectGrid() { return getCached("#workspaceProjectGrid"); },
   get studioView() { return getCached("#studioView"); },
+  get studioProjectTitle() { return getCached("#studioProjectTitle"); },
+  get studioProjectMeta() { return getCached("#studioProjectMeta"); },
   get toolStrip() { return getCached("#toolStrip"); },
   get studioLayout() { return getCached("#studioLayout"); },
   get projectGrid() { return getCached("#projectGrid"); },
