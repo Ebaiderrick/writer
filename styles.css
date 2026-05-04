@@ -777,6 +777,11 @@ html[data-theme="rose"] .mesh-background {
   font-size: 0.92rem;
 }
 
+.workspace-home-panel-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
 .workspace-home-members {
   display: flex;
   flex-wrap: wrap;
@@ -796,6 +801,57 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-activity {
   display: grid;
   gap: 10px;
+}
+
+.workspace-notification-list,
+.workspace-inbox-list {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-notification-item,
+.workspace-inbox-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
+}
+
+.workspace-notification-item.is-unread {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-strong));
+}
+
+.workspace-notification-copy,
+.workspace-inbox-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.workspace-notification-copy strong,
+.workspace-inbox-copy strong {
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+.workspace-notification-copy span,
+.workspace-inbox-copy span,
+.workspace-notification-copy small,
+.workspace-inbox-copy small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.workspace-notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .workspace-home-activity-item {

@@ -193,6 +193,9 @@ export function renderWorkspaceView() {
   const uniqueMembers = [...new Set(memberEntries)];
   const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
   const allTaskItems = sortWorkspaceTasks(workspaceLead.workspace?.tasks || []);
+  const notifications = [...(workspaceLead.workspace?.notifications || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const unreadNotifications = notifications.filter((notification) => !notification.read);
+  const inboxItems = allTaskItems.filter((task) => task.status === "done" || task.aiState === "review" || task.aiState === "failed").slice(0, 6);
   const assignees = [
     { id: workspaceLead.ownerId || "workspace_owner", label: ownerLabel },
     ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
@@ -276,6 +279,53 @@ export function renderWorkspaceView() {
                 <span>${escapeHtml(formatDateTime(item.at || item.timestamp || workspaceLead.updatedAt))}</span>
               </article>
             `).join("") : '<p class="workspace-home-empty">No activity yet. The next change here will start the trail.</p>'}
+          </div>
+        </section>
+        <section class="workspace-home-panel">
+          <div class="workspace-home-panel-head">
+            <h4>Notifications</h4>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-all-notifications-read">Mark all read</button>
+          </div>
+          <div class="workspace-task-summary">
+            <span class="workspace-task-summary-chip">Unread ${unreadNotifications.length}</span>
+            <span class="workspace-task-summary-chip">Total ${notifications.length}</span>
+          </div>
+          <div class="workspace-notification-list">
+            ${notifications.slice(0, 6).map((notification) => `
+              <article class="workspace-notification-item${notification.read ? "" : " is-unread"}">
+                <div class="workspace-notification-copy">
+                  <strong>${escapeHtml(notification.title)}</strong>
+                  <span>${escapeHtml(notification.message || notification.actor || "Workspace update")}</span>
+                  <small>${escapeHtml(formatDateTime(notification.createdAt))}</small>
+                </div>
+                <div class="workspace-notification-actions">
+                  ${notification.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-notification" data-notification-id="${escapeHtml(notification.id)}" data-task-project-id="${escapeHtml(notification.projectId)}">Open</button>` : ""}
+                  ${!notification.read ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-notification-read" data-notification-id="${escapeHtml(notification.id)}">Read</button>` : ""}
+                </div>
+              </article>
+            `).join("") || '<p class="workspace-home-empty">No notifications yet.</p>'}
+          </div>
+        </section>
+        <section class="workspace-home-panel">
+          <div class="workspace-home-panel-head">
+            <h4>Completed & Review</h4>
+            <span class="workspace-home-panel-meta">${inboxItems.length} item${inboxItems.length === 1 ? "" : "s"}</span>
+          </div>
+          <div class="workspace-inbox-list">
+            ${inboxItems.map((task) => `
+              <article class="workspace-inbox-item">
+                <div class="workspace-inbox-copy">
+                  <strong>${escapeHtml(task.title)}</strong>
+                  <span>${escapeHtml(task.aiState === "review" ? "Waiting for AI review" : task.aiState === "failed" ? "Needs retry" : "Completed task")}</span>
+                  <small>${escapeHtml(task.assignedLabel || "Workspace")}</small>
+                </div>
+                <div class="workspace-notification-actions">
+                  ${task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
+                  ${task.aiState === "failed" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">Retry</button>` : ""}
+                  ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
+                </div>
+              </article>
+            `).join("") || '<p class="workspace-home-empty">Completed work and AI review items will collect here.</p>'}
           </div>
         </section>
         <section class="workspace-home-panel workspace-home-panel-wide">

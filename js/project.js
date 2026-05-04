@@ -523,7 +523,8 @@ function sanitizeWorkspace(workspace, project) {
     inviteCode: String(workspace?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
     reminders: sanitizeWorkspaceReminders(workspace?.reminders),
     targets: sanitizeWorkspaceTargets(workspace?.targets),
-    tasks: sanitizeWorkspaceTasks(workspace?.tasks)
+    tasks: sanitizeWorkspaceTasks(workspace?.tasks),
+    notifications: sanitizeWorkspaceNotifications(workspace?.notifications)
   };
 }
 
@@ -586,6 +587,24 @@ function sanitizeWorkspaceTasks(tasks) {
     updatedAt: task?.updatedAt || task?.createdAt || new Date().toISOString(),
     createdByName: String(task?.createdByName || "").trim()
   })).filter((task) => task.title);
+}
+
+function sanitizeWorkspaceNotifications(notifications) {
+  if (!Array.isArray(notifications)) {
+    return [];
+  }
+
+  return notifications.map((notification, index) => ({
+    id: notification?.id || uid(`note-${index}`),
+    taskId: String(notification?.taskId || "").trim(),
+    projectId: String(notification?.projectId || "").trim(),
+    category: String(notification?.category || "update").trim() || "update",
+    title: String(notification?.title || "").trim(),
+    message: String(notification?.message || "").trim(),
+    actor: String(notification?.actor || "").trim(),
+    createdAt: notification?.createdAt || new Date().toISOString(),
+    read: Boolean(notification?.read)
+  })).filter((notification) => notification.title || notification.message);
 }
 
 function sanitizeCollaborators(collaborators) {

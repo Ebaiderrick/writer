@@ -246,6 +246,54 @@ function getWorkspaceTaskById(taskId) {
   return getWorkspaceRootProject(state.currentWorkspaceId)?.workspace?.tasks?.find((task) => task.id === taskId) || null;
 }
 
+function getWorkspaceNotifications(workspaceId = state.currentWorkspaceId) {
+  return [...(getWorkspaceRootProject(workspaceId)?.workspace?.notifications || [])]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function createWorkspaceNotification({ workspaceId = state.currentWorkspaceId, task = null, category = "update", title = "", message = "", actor = "" } = {}) {
+  if (!workspaceId || !title) return;
+  updateWorkspaceAcrossProjects(workspaceId, (workspace) => ({
+    ...workspace,
+    notifications: [
+      {
+        id: uid("notif"),
+        taskId: task?.id || "",
+        projectId: task?.projectId || "",
+        category,
+        title,
+        message,
+        actor,
+        createdAt: new Date().toISOString(),
+        read: false
+      },
+      ...(workspace.notifications || [])
+    ].slice(0, 40)
+  }));
+}
+
+function markWorkspaceNotificationRead(notificationId, read = true) {
+  if (!state.currentWorkspaceId || !notificationId) return;
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    notifications: (workspace.notifications || []).map((notification) => notification.id === notificationId
+      ? { ...notification, read }
+      : notification)
+  }));
+  persistProjects(true, { syncInputs: false });
+  renderWorkspaceView();
+}
+
+function markAllWorkspaceNotificationsRead() {
+  if (!state.currentWorkspaceId) return;
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    notifications: (workspace.notifications || []).map((notification) => ({ ...notification, read: true }))
+  }));
+  persistProjects(true, { syncInputs: false });
+  renderWorkspaceView();
+}
+
 function resolveAiTaskStart(choice, manualValue = "") {
   const now = Date.now();
   if (choice === "in-3m") return new Date(now + (3 * 60 * 1000)).toISOString();
@@ -370,6 +418,13 @@ function addWorkspaceTaskFromDashboard() {
     ...workspace,
     tasks: [...(workspace.tasks || []), nextTask]
   }));
+  createWorkspaceNotification({
+    task: nextTask,
+    category: assignee?.assigneeType === "system" ? "ai" : "task",
+    title: assignee?.assigneeType === "system" ? "AI task queued" : "New task created",
+    message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the workspace"}.`}`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  });
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
   renderWorkspaceView();
@@ -377,6 +432,7 @@ function addWorkspaceTaskFromDashboard() {
 
 function updateWorkspaceTask(taskId, patch) {
   if (!state.currentWorkspaceId || !taskId) return;
+  const previousTask = getWorkspaceTaskById(taskId);
   updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
     ...workspace,
     tasks: (workspace.tasks || []).map((task) => task.id === taskId
@@ -385,6 +441,26 @@ function updateWorkspaceTask(taskId, patch) {
   }));
   persistProjects(true, { syncInputs: false });
   const task = getWorkspaceTaskById(taskId);
+  if (task && previousTask) {
+    if (patch.status && patch.status !== previousTask.status) {
+      createWorkspaceNotification({
+        task,
+        category: patch.status === "done" ? "completed" : "task",
+        title: patch.status === "done" ? "Task completed" : "Task status updated",
+        message: `${task.title} is now ${patch.status === "in-progress" ? "in progress" : patch.status.replace("-", " ")}.`,
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+      });
+    }
+    if (patch.assignedTo && patch.assignedTo !== previousTask.assignedTo) {
+      createWorkspaceNotification({
+        task,
+        category: task.assigneeType === "system" ? "ai" : "task",
+        title: "Task reassigned",
+        message: `${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`,
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+      });
+    }
+  }
   if (task) scheduleAiTaskRun(task);
   renderWorkspaceView();
 }
@@ -414,10 +490,24 @@ async function runAiTask(taskId) {
       aiResultSummary: task.title,
       aiError: ""
     });
+    createWorkspaceNotification({
+      task: { ...task, aiResultText: resultText },
+      category: "review",
+      title: "AI result ready for review",
+      message: `${task.title} has a suggested result ready to review.`,
+      actor: "@AIassist"
+    });
   } catch (error) {
     updateWorkspaceTask(taskId, {
       aiState: "failed",
       aiError: error instanceof Error ? error.message : "AI task failed."
+    });
+    createWorkspaceNotification({
+      task,
+      category: "ai",
+      title: "AI task failed",
+      message: `${task.title} needs attention before it can run successfully again.`,
+      actor: "@AIassist"
     });
   }
 }
@@ -452,6 +542,13 @@ async function applyAiTaskResult(taskId) {
     return;
   }
   updateWorkspaceTask(taskId, { aiState: "applied", status: "done" });
+  createWorkspaceNotification({
+    task,
+    category: "completed",
+    title: "AI result applied",
+    message: `${task.title} was applied to the script.`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  });
   openProject(task.projectId, { focusLineId: task.lineId || task.sceneId || "" });
 }
 
@@ -459,6 +556,13 @@ function dismissAiTaskResult(taskId) {
   const task = getWorkspaceTaskById(taskId);
   if (!task) return;
   updateWorkspaceTask(taskId, { aiState: "dismissed" });
+  createWorkspaceNotification({
+    task,
+    category: "review",
+    title: "AI result dismissed",
+    message: `${task.title} was reviewed and dismissed.`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  });
 }
 
 async function editWorkspaceTask(taskId) {
@@ -591,6 +695,13 @@ async function commentOnWorkspaceTask(taskId) {
       }
     ]
   });
+  createWorkspaceNotification({
+    task,
+    category: "comment",
+    title: "New task comment",
+    message: `${task.title} has a new comment.`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  });
 }
 
 export function bindEvents() {
@@ -664,6 +775,15 @@ export function bindEvents() {
       addWorkspaceTaskFromDashboard();
       return;
     }
+    if (action === "mark-all-notifications-read") {
+      markAllWorkspaceNotificationsRead();
+      return;
+    }
+    if (action === "mark-notification-read") {
+      const notificationId = event.target.closest("[data-notification-id]")?.dataset.notificationId;
+      if (notificationId) markWorkspaceNotificationRead(notificationId, true);
+      return;
+    }
     if (action === "set-task-filter") {
       state.workspaceTaskFilter = event.target.closest("[data-task-filter]")?.dataset.taskFilter || "all";
       renderWorkspaceView();
@@ -690,6 +810,18 @@ export function bindEvents() {
       const taskId = trigger?.dataset.taskId;
       const task = taskId ? getWorkspaceTaskById(taskId) : null;
       if (projectId) {
+        openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+      }
+      return;
+    }
+    if (action === "open-notification") {
+      const trigger = event.target.closest("[data-notification-id]");
+      const projectId = trigger?.dataset.taskProjectId;
+      const notificationId = trigger?.dataset.notificationId;
+      if (notificationId) markWorkspaceNotificationRead(notificationId, true);
+      if (projectId) {
+        const notification = getWorkspaceNotifications().find((item) => item.id === notificationId);
+        const task = notification?.taskId ? getWorkspaceTaskById(notification.taskId) : null;
         openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       }
       return;
