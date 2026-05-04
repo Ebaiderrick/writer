@@ -282,8 +282,8 @@ export function renderWorkspaceView() {
         <div class="workspace-home-hero-metrics">
           <div class="workspace-home-metric"><span>Projects</span><strong>${projects.length}</strong></div>
           <div class="workspace-home-metric"><span>Members</span><strong>${uniqueMembers.length}</strong></div>
-          <div class="workspace-home-metric"><span>My tasks</span><strong>${myAssignedTasks.length}</strong></div>
-          <div class="workspace-home-metric"><span>Due soon</span><strong>${dueSoonCount}</strong></div>
+          <div class="workspace-home-metric"><span>Tasks</span><strong>${allTaskItems.length}</strong></div>
+          <div class="workspace-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong></div>
         </div>
       </section>
       <div class="workspace-home-grid">
