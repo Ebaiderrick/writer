@@ -96,6 +96,11 @@ function getTaskStatusCountLabel(tasks) {
   return { openCount, doneCount };
 }
 
+function formatTaskDueLabel(task) {
+  if (!task?.dueAt) return "";
+  return `Due ${formatDateTime(task.dueAt)}`;
+}
+
 function formatRelativeTaskTime(task) {
   if (!task.aiStartAt) return "";
   const diffMs = new Date(task.aiStartAt).getTime() - Date.now();
@@ -209,6 +214,38 @@ export function renderWorkspaceView() {
       label: `${project.title} - ${line.text.trim()}`
     })));
   const currentUid = auth.currentUser?.uid || "";
+  const myAssignedTasks = allTaskItems.filter((task) => task.assignedTo === currentUid);
+  const dueSoonCount = allTaskItems.filter((task) => task.dueAt && task.status !== "done" && (new Date(task.dueAt).getTime() - Date.now()) <= (48 * 60 * 60 * 1000)).length;
+  const memberTaskSummary = assignees
+    .filter((assignee) => assignee.id !== "ai_assist")
+    .map((assignee) => {
+      const memberTasks = allTaskItems.filter((task) => task.assignedTo === assignee.id);
+      return {
+        ...assignee,
+        openCount: memberTasks.filter((task) => task.status !== "done").length,
+        doneCount: memberTasks.filter((task) => task.status === "done").length
+      };
+    })
+    .filter((entry) => entry.openCount || entry.doneCount);
+  const projectWorkload = projects.map((project) => {
+    const projectTasks = allTaskItems.filter((task) => task.projectId === project.id);
+    return {
+      id: project.id,
+      title: project.title,
+      openCount: projectTasks.filter((task) => task.status !== "done").length,
+      doneCount: projectTasks.filter((task) => task.status === "done").length,
+      dueSoonCount: projectTasks.filter((task) => task.dueAt && task.status !== "done" && (new Date(task.dueAt).getTime() - Date.now()) <= (48 * 60 * 60 * 1000)).length
+    };
+  }).filter((entry) => entry.openCount || entry.doneCount);
+  const storyMemoryLinks = projects.flatMap((project) => Object.entries(project.storyMemory || {})
+    .filter(([, items]) => Array.isArray(items) && items.length)
+    .flatMap(([bucket, items]) => items.map((item) => ({
+      projectId: project.id,
+      bucket,
+      id: item.id,
+      name: item.name || "Untitled",
+      label: `${project.title} · ${bucket.replace(/^./, (value) => value.toUpperCase())}`
+    }))));
   const taskSummary = {
     todo: allTaskItems.filter((task) => task.status === "todo").length,
     inProgress: allTaskItems.filter((task) => task.status === "in-progress").length,
@@ -245,8 +282,8 @@ export function renderWorkspaceView() {
         <div class="workspace-home-hero-metrics">
           <div class="workspace-home-metric"><span>Projects</span><strong>${projects.length}</strong></div>
           <div class="workspace-home-metric"><span>Members</span><strong>${uniqueMembers.length}</strong></div>
-          <div class="workspace-home-metric"><span>Tasks</span><strong>${allTaskItems.length}</strong></div>
-          <div class="workspace-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong></div>
+          <div class="workspace-home-metric"><span>My tasks</span><strong>${myAssignedTasks.length}</strong></div>
+          <div class="workspace-home-metric"><span>Due soon</span><strong>${dueSoonCount}</strong></div>
         </div>
       </section>
       <div class="workspace-home-grid">
@@ -272,13 +309,29 @@ export function renderWorkspaceView() {
             <h4>Recent activity</h4>
             <button class="primary-button btn-sm" type="button" data-workspace-home-action="new-project">New Project</button>
           </div>
-          <div class="workspace-home-activity">
+          <div class="workspace-home-activity workspace-home-activity-timeline">
             ${activityItems.length ? activityItems.map((item) => `
               <article class="workspace-home-activity-item">
                 <strong>${escapeHtml(item.label || item.message || "Workspace updated")}</strong>
-                <span>${escapeHtml(formatDateTime(item.at || item.timestamp || workspaceLead.updatedAt))}</span>
+                <span>${escapeHtml(item.actor || "Workspace")}</span>
+                <small>${escapeHtml(formatDateTime(item.at || item.timestamp || workspaceLead.updatedAt))}</small>
               </article>
             `).join("") : '<p class="workspace-home-empty">No activity yet. The next change here will start the trail.</p>'}
+          </div>
+        </section>
+        <section class="workspace-home-panel">
+          <div class="workspace-home-panel-head">
+            <h4>Team progress</h4>
+            <span class="workspace-home-panel-meta">${memberTaskSummary.length} active</span>
+          </div>
+          <div class="workspace-summary-list">
+            ${memberTaskSummary.map((entry) => `
+              <article class="workspace-summary-item">
+                <strong>${escapeHtml(entry.label)}</strong>
+                <span>Open ${entry.openCount}</span>
+                <span>Done ${entry.doneCount}</span>
+              </article>
+            `).join("") || '<p class="workspace-home-empty">Assign tasks to teammates to see progress here.</p>'}
           </div>
         </section>
         <section class="workspace-home-panel">
@@ -350,6 +403,7 @@ export function renderWorkspaceView() {
             <span class="workspace-task-summary-chip">In Progress ${taskSummary.inProgress}</span>
             <span class="workspace-task-summary-chip">Done ${taskSummary.done}</span>
             <span class="workspace-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
+            <span class="workspace-task-summary-chip">Assigned to me ${myAssignedTasks.length}</span>
           </div>
           <div class="workspace-task-form">
             <select class="comment-filter-select" data-workspace-task-template>
@@ -376,6 +430,7 @@ export function renderWorkspaceView() {
               <option value="high">Priority: High</option>
               <option value="low">Priority: Low</option>
             </select>
+            <input class="modal-input" type="datetime-local" data-workspace-task-due>
             <select class="comment-filter-select" data-workspace-task-ai-start>
               <option value="now">AI: Run now</option>
               <option value="in-3m">AI: In 3 mins</option>
@@ -384,9 +439,47 @@ export function renderWorkspaceView() {
             </select>
             <input class="modal-input" type="datetime-local" data-workspace-task-ai-start-manual>
             <input class="modal-input" type="text" placeholder="Scene / block reference (optional)" data-workspace-task-reference>
+            <select class="comment-filter-select" data-workspace-task-memory>
+              <option value="">Story memory link (optional)</option>
+              ${storyMemoryLinks.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)} · ${escapeHtml(item.name)}</option>`).join("")}
+            </select>
+            <input class="modal-input" type="text" placeholder="Handoff cue or @mention note (optional)" data-workspace-task-handoff>
             <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
             <p class="workspace-task-template-hint" data-workspace-task-template-hint>${escapeHtml(getWorkspaceTaskTemplate("custom").aiInstruction)}</p>
             <button class="primary-button btn-sm" type="button" data-workspace-home-action="add-task">Create Task</button>
+          </div>
+          <div class="workspace-home-subgrid">
+            <section class="workspace-home-panel workspace-home-panel-soft">
+              <div class="workspace-home-panel-head">
+                <h4>Project workload</h4>
+                <span class="workspace-home-panel-meta">${projectWorkload.length} tracked</span>
+              </div>
+              <div class="workspace-summary-list">
+                ${projectWorkload.map((entry) => `
+                  <article class="workspace-summary-item">
+                    <strong>${escapeHtml(entry.title)}</strong>
+                    <span>Open ${entry.openCount}</span>
+                    <span>Done ${entry.doneCount}</span>
+                    <span>Due soon ${entry.dueSoonCount}</span>
+                  </article>
+                `).join("") || '<p class="workspace-home-empty">Create linked tasks to see workload by project.</p>'}
+              </div>
+            </section>
+            <section class="workspace-home-panel workspace-home-panel-soft">
+              <div class="workspace-home-panel-head">
+                <h4>Story links</h4>
+                <span class="workspace-home-panel-meta">${storyMemoryLinks.length} memory links</span>
+              </div>
+              <div class="workspace-summary-list">
+                ${storyMemoryLinks.slice(0, 6).map((item) => `
+                  <article class="workspace-summary-item workspace-summary-item-action">
+                    <strong>${escapeHtml(item.name)}</strong>
+                    <span>${escapeHtml(item.label)}</span>
+                    <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-memory" data-memory-id="${escapeHtml(item.id)}" data-memory-project-id="${escapeHtml(item.projectId)}">Open Memory</button>
+                  </article>
+                `).join("") || '<p class="workspace-home-empty">Add story memory to scripts and link tasks back to those elements.</p>'}
+              </div>
+            </section>
           </div>
           <div class="workspace-task-list">
             ${taskItems.length ? taskItems.map((task) => `
@@ -406,14 +499,18 @@ export function renderWorkspaceView() {
                   <div class="workspace-task-chip-row">
                     <span class="workspace-task-tag">${escapeHtml(getWorkspaceTaskTemplate(task.templateKey).label)}</span>
                     <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
+                    ${task.assignedTo === currentUid ? '<span class="workspace-task-tag workspace-task-tag-focus">Assigned to me</span>' : ""}
                     <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
                     <span class="workspace-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
                     ${task.assigneeType === "system" ? `<span class="workspace-task-tag workspace-task-tag-ai">${escapeHtml(getAiTaskStateLabel(task))}</span>` : ""}
                     ${task.projectId ? `<span class="workspace-task-tag">${escapeHtml(projects.find((project) => project.id === task.projectId)?.title || "Linked Project")}</span>` : ""}
+                    ${task.dueAt ? `<span class="workspace-task-tag">${escapeHtml(formatTaskDueLabel(task))}</span>` : ""}
+                    ${task.memoryLinkName ? `<span class="workspace-task-tag">${escapeHtml(task.memoryLinkName)}</span>` : ""}
                     ${task.comments?.length ? `<span class="workspace-task-tag">${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}</span>` : ""}
                   </div>
                   ${task.aiResultText ? `<p class="workspace-task-comment-preview">AI suggestion ready. Review before applying it to the script.</p>` : ""}
                   ${task.assigneeType === "system" && task.aiError ? `<p class="workspace-task-comment-preview">Last AI run: ${escapeHtml(task.aiError)}</p>` : ""}
+                  ${task.handoffNote ? `<p class="workspace-task-comment-preview">Handoff: ${escapeHtml(task.handoffNote)}</p>` : ""}
                   ${task.comments?.length ? `<p class="workspace-task-comment-preview">Latest comment by ${escapeHtml(task.comments[task.comments.length - 1].author || "Workspace member")}: ${escapeHtml(task.comments[task.comments.length - 1].text)}</p>` : ""}
                   <div class="workspace-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
@@ -424,6 +521,7 @@ export function renderWorkspaceView() {
                       ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="dismiss-ai-task" data-task-id="${escapeHtml(task.id)}">Dismiss</button>` : ""}
                       <button class="ghost-button btn-sm" type="button" data-workspace-home-action="edit-task" data-task-id="${escapeHtml(task.id)}">Edit</button>
                       <button class="ghost-button btn-sm" type="button" data-workspace-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
+                      ${task.memoryLinkId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-memory" data-task-id="${escapeHtml(task.id)}" data-memory-id="${escapeHtml(task.memoryLinkId)}" data-memory-project-id="${escapeHtml(task.memoryProjectId || task.projectId)}">Open Memory</button>` : ""}
                       <button class="ghost-button btn-sm" type="button" data-workspace-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
                       ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
                     </div>

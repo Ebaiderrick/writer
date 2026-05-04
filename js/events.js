@@ -242,6 +242,26 @@ function getWorkspaceTaskSceneChoices(workspaceId = state.currentWorkspaceId) {
       })));
 }
 
+function getWorkspaceStoryMemoryChoices(workspaceId = state.currentWorkspaceId) {
+  const bucketLabels = {
+    characters: "Character",
+    locations: "Location",
+    scenes: "Scene",
+    themes: "Theme"
+  };
+  return getWorkspaceProjects(workspaceId)
+    .filter((project) => !project.isWorkspaceRoot)
+    .flatMap((project) => Object.entries(project.storyMemory || {})
+      .filter(([bucket]) => bucketLabels[bucket])
+      .flatMap(([bucket, items]) => (Array.isArray(items) ? items : []).map((item) => ({
+        projectId: project.id,
+        type: bucket,
+        id: item.id,
+        name: item.name || bucketLabels[bucket],
+        label: `${project.title} · ${bucketLabels[bucket]} · ${item.name || "Untitled"}`
+      }))));
+}
+
 function getWorkspaceTaskById(taskId) {
   return getWorkspaceRootProject(state.currentWorkspaceId)?.workspace?.tasks?.find((task) => task.id === taskId) || null;
 }
@@ -461,6 +481,9 @@ function addWorkspaceTaskFromDashboard() {
   const referenceInput = refs.workspaceDashboard.querySelector('[data-workspace-task-reference]');
   const statusSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-status-new]');
   const prioritySelect = refs.workspaceDashboard.querySelector('[data-workspace-task-priority]');
+  const dueInput = refs.workspaceDashboard.querySelector('[data-workspace-task-due]');
+  const handoffInput = refs.workspaceDashboard.querySelector('[data-workspace-task-handoff]');
+  const memorySelect = refs.workspaceDashboard.querySelector('[data-workspace-task-memory]');
   const aiStartSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start]');
   const aiStartManual = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start-manual]');
   const templateKey = templateSelect?.value || "custom";
@@ -474,6 +497,7 @@ function addWorkspaceTaskFromDashboard() {
   const sceneChoice = getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
   const assignedTo = assigneeSelect?.value || "";
   const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
+  const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
   const aiStartChoice = aiStartSelect?.value || "now";
   const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
   const initialAiState = assignee?.assigneeType === "system"
@@ -486,14 +510,20 @@ function addWorkspaceTaskFromDashboard() {
     title,
     description: descriptionInput?.value?.trim() || "",
     status: statusSelect?.value || "todo",
+    dueAt: dueInput?.value ? new Date(dueInput.value).toISOString() : "",
     assignedTo,
     assignedLabel: assignee?.label || "Unassigned",
     assigneeType: assignee?.assigneeType || "human",
+    handoffNote: handoffInput?.value?.trim() || "",
     projectId: sceneChoice?.projectId || projectId,
     reference: referenceInput?.value?.trim() || "",
     sceneId: sceneChoice?.sceneId || "",
     sceneLabel: sceneChoice?.label || "",
     lineId: sceneChoice?.lineId || "",
+    memoryLinkType: memoryChoice?.type || "",
+    memoryLinkId: memoryChoice?.id || "",
+    memoryLinkName: memoryChoice?.name || "",
+    memoryProjectId: memoryChoice?.projectId || "",
     comments: [],
     aiState: initialAiState,
     aiStartAt,
@@ -549,6 +579,15 @@ function updateWorkspaceTask(taskId, patch) {
         category: task.assigneeType === "system" ? "ai" : "task",
         title: "Task reassigned",
         message: `${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`,
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+      });
+    }
+    if (patch.dueAt && patch.dueAt !== previousTask.dueAt) {
+      createWorkspaceNotification({
+        task,
+        category: "task",
+        title: "Task due date updated",
+        message: `${task.title} is due ${new Date(task.dueAt).toLocaleString()}.`,
         actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
       });
     }
@@ -697,6 +736,7 @@ async function editWorkspaceTask(taskId) {
   if (!workspaceProject || !task) return;
   const assignees = getWorkspaceTaskAssignees(workspaceProject);
   const scenes = getWorkspaceTaskSceneChoices();
+  const memoryChoices = getWorkspaceStoryMemoryChoices();
   const selectedTemplate = getWorkspaceTaskTemplate(task.templateKey);
   const container = document.createElement("div");
   container.className = "workspace-task-form workspace-task-form-modal";
@@ -725,6 +765,7 @@ async function editWorkspaceTask(taskId) {
       <option value="high" ${(task.priority || "normal") === "high" ? "selected" : ""}>Priority: High</option>
       <option value="low" ${(task.priority || "normal") === "low" ? "selected" : ""}>Priority: Low</option>
     </select>
+    <input id="taskEditDueAt" class="modal-input" type="datetime-local" value="${task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : ""}">
     <select id="taskEditAiStart" class="comment-filter-select">
       <option value="now" ${!task.aiStartAt ? "selected" : ""}>Run now</option>
       <option value="in-3m">In 3 mins</option>
@@ -733,6 +774,11 @@ async function editWorkspaceTask(taskId) {
     </select>
     <input id="taskEditAiStartManual" class="modal-input" type="datetime-local" value="${task.aiStartAt ? new Date(task.aiStartAt).toISOString().slice(0, 16) : ""}">
     <input id="taskEditReference" class="modal-input" type="text" value="${escapeHtml(task.reference || "")}" placeholder="Scene / block reference (optional)">
+    <select id="taskEditMemory" class="comment-filter-select">
+      <option value="">Story memory link (optional)</option>
+      ${memoryChoices.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === task.memoryLinkId ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+    </select>
+    <input id="taskEditHandoff" class="modal-input" type="text" value="${escapeHtml(task.handoffNote || "")}" placeholder="Handoff cue or mention (optional)">
     <textarea id="taskEditDescription" class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen...">${escapeHtml(task.description || "")}</textarea>
     <p id="taskEditTemplateHint" class="modal-copy">${escapeHtml(selectedTemplate.aiInstruction)}</p>
   `;
@@ -750,6 +796,8 @@ async function editWorkspaceTask(taskId) {
   const sceneChoice = scenes.find((scene) => scene.sceneId === sceneId) || null;
   const assignedTo = container.querySelector("#taskEditAssignee")?.value || "";
   const assignee = assignees.find((entry) => entry.id === assignedTo);
+  const memoryId = container.querySelector("#taskEditMemory")?.value || "";
+  const memoryChoice = memoryChoices.find((entry) => entry.id === memoryId) || null;
   const aiStartAt = assignee?.assigneeType === "system"
     ? resolveAiTaskStart(
         container.querySelector("#taskEditAiStart")?.value || "now",
@@ -761,6 +809,7 @@ async function editWorkspaceTask(taskId) {
     priority: container.querySelector("#taskEditPriority")?.value || task.priority || "normal",
     title: container.querySelector("#taskEditTitle")?.value?.trim() || task.title,
     description: container.querySelector("#taskEditDescription")?.value?.trim() || "",
+    dueAt: container.querySelector("#taskEditDueAt")?.value ? new Date(container.querySelector("#taskEditDueAt").value).toISOString() : "",
     projectId: sceneChoice?.projectId || container.querySelector("#taskEditProject")?.value || task.projectId,
     sceneId: sceneChoice?.sceneId || "",
     sceneLabel: sceneChoice?.label || "",
@@ -768,6 +817,11 @@ async function editWorkspaceTask(taskId) {
     assignedTo,
     assignedLabel: assignee?.label || "Unassigned",
     assigneeType: assignee?.assigneeType || "human",
+    handoffNote: container.querySelector("#taskEditHandoff")?.value?.trim() || "",
+    memoryLinkType: memoryChoice?.type || "",
+    memoryLinkId: memoryChoice?.id || "",
+    memoryLinkName: memoryChoice?.name || "",
+    memoryProjectId: memoryChoice?.projectId || "",
     aiStartAt,
     aiState: assignee?.assigneeType === "system"
       ? (task.aiState === "review" || task.aiState === "applied" || task.aiState === "dismissed"
@@ -794,18 +848,27 @@ async function deleteWorkspaceTask(taskId) {
 async function commentOnWorkspaceTask(taskId) {
   const task = getWorkspaceTaskById(taskId);
   if (!task) return;
+  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const assignees = workspaceProject ? getWorkspaceTaskAssignees(workspaceProject).filter((entry) => entry.assigneeType === "human") : [];
   const container = document.createElement("div");
   container.className = "workspace-task-comments";
   container.innerHTML = `
     <div class="workspace-task-comment-list">
-      ${task.comments?.length ? task.comments.map((comment) => `
+      ${task.comments?.length ? [...task.comments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map((comment) => `
         <article class="workspace-task-comment">
-          <strong>${escapeHtml(comment.author || "Workspace member")}</strong>
-          <span>${escapeHtml(formatDateTime(comment.createdAt))}</span>
+          <div class="workspace-task-comment-head">
+            <strong>${escapeHtml(comment.author || "Workspace member")}</strong>
+            <span>${escapeHtml(formatDateTime(comment.createdAt))}</span>
+          </div>
+          ${comment.mentionLabel ? `<span class="workspace-task-comment-mention">Mentioned ${escapeHtml(comment.mentionLabel)}</span>` : ""}
           <p>${escapeHtml(comment.text)}</p>
         </article>
       `).join("") : '<p class="workspace-home-empty">No task comments yet.</p>'}
     </div>
+    <select id="workspaceTaskCommentMention" class="comment-filter-select">
+      <option value="">Mention teammate (optional)</option>
+      ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+    </select>
     <textarea id="workspaceTaskCommentText" class="collab-textarea" placeholder="Add a comment..."></textarea>
   `;
   const shouldAdd = await showModal({
@@ -816,6 +879,8 @@ async function commentOnWorkspaceTask(taskId) {
   if (!shouldAdd) return;
   const text = container.querySelector("#workspaceTaskCommentText")?.value?.trim();
   if (!text) return;
+  const mentionId = container.querySelector("#workspaceTaskCommentMention")?.value || "";
+  const mention = assignees.find((entry) => entry.id === mentionId);
   updateWorkspaceTask(taskId, {
     comments: [
       ...(task.comments || []),
@@ -823,6 +888,8 @@ async function commentOnWorkspaceTask(taskId) {
         id: uid("task-comment"),
         text,
         author: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member",
+        mentionId,
+        mentionLabel: mention?.label || "",
         createdAt: new Date().toISOString()
       }
     ]
@@ -834,6 +901,15 @@ async function commentOnWorkspaceTask(taskId) {
     message: `${task.title} has a new comment.`,
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
+  if (mention) {
+    createWorkspaceNotification({
+      task,
+      category: "comment",
+      title: "Task mention",
+      message: `${task.title} mentioned ${mention.label}.`,
+      actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+    });
+  }
 }
 
 export function bindEvents() {
@@ -944,6 +1020,17 @@ export function bindEvents() {
       if (projectId) {
         openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       }
+      return;
+    }
+    if (action === "open-task-memory") {
+      const trigger = event.target.closest("[data-memory-project-id]");
+      const projectId = trigger?.dataset.memoryProjectId;
+      if (projectId) {
+        openProject(projectId);
+      }
+      setTimeout(() => {
+        showStoryMemoryPopup();
+      }, 60);
       return;
     }
     if (action === "open-notification") {

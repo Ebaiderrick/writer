@@ -803,6 +803,22 @@ html[data-theme="rose"] .mesh-background {
   gap: 10px;
 }
 
+.workspace-home-activity-timeline .workspace-home-activity-item {
+  position: relative;
+  padding-left: 16px;
+}
+
+.workspace-home-activity-timeline .workspace-home-activity-item::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
 .workspace-notification-list,
 .workspace-inbox-list {
   display: grid;
@@ -870,6 +886,48 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-empty {
   font-size: 0.74rem;
   color: var(--muted);
+}
+
+.workspace-home-activity-item small {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.workspace-home-subgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-home-panel-soft {
+  background: color-mix(in srgb, var(--surface-strong) 68%, transparent);
+}
+
+.workspace-summary-list {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-summary-item {
+  display: grid;
+  gap: 3px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
+}
+
+.workspace-summary-item strong {
+  font-size: 0.8rem;
+}
+
+.workspace-summary-item span {
+  font-size: 0.73rem;
+  color: var(--muted);
+}
+
+.workspace-summary-item-action {
+  align-items: start;
 }
 
 .workspace-task-filters {
@@ -1017,6 +1075,12 @@ html[data-theme="rose"] .mesh-background {
   color: var(--accent-strong);
 }
 
+.workspace-task-tag-focus {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 42%, var(--surface-strong));
+  color: var(--accent-strong);
+}
+
 .workspace-task-tag-priority-high {
   border-color: color-mix(in srgb, #f59e0b 40%, var(--line));
   background: color-mix(in srgb, #f59e0b 16%, var(--surface-strong));
@@ -1142,6 +1206,13 @@ html[data-theme="rose"] .mesh-background {
   background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
 }
 
+.workspace-task-comment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .workspace-task-comment strong {
   font-size: 0.82rem;
 }
@@ -1151,6 +1222,17 @@ html[data-theme="rose"] .mesh-background {
   font-size: 0.78rem;
   color: var(--muted);
   margin: 0;
+}
+
+.workspace-task-comment-mention {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent-soft) 26%, var(--surface-strong));
+  color: var(--accent-strong);
 }
 
 .project-dashboard-summary {
@@ -4559,6 +4641,10 @@ body.outline-hidden .section-scenes {
   }
 
   .workspace-ai-review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-home-subgrid {
     grid-template-columns: 1fr;
   }
 
