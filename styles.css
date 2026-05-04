@@ -1800,8 +1800,11 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .tool-strip-row {
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto minmax(48px, 1fr);
+  align-items: start;
+  justify-content: stretch;
+  width: 100%;
 }
 
 .strip-start-controls {
@@ -1836,10 +1839,12 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .tool-groups {
-  flex: 1;
   min-width: 0;
   display: grid;
   justify-items: center;
+  justify-self: center;
+  width: max-content;
+  max-width: 100%;
 }
 
 .tool-buttons {
@@ -1852,6 +1857,7 @@ html[data-theme="rose"] .mesh-background {
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-self: end;
 }
 
 .quick-display {
@@ -4820,11 +4826,21 @@ body.outline-hidden .section-scenes {
 
   .home-projects-head,
   .studio-topbar,
-  .tool-strip-row,
   .tool-strip-foot,
   .ai-panel {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .tool-strip-row {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+
+  .tool-groups,
+  .strip-end-controls {
+    justify-self: stretch;
+    width: 100%;
   }
 
   .home-projects-actions,
