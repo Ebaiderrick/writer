@@ -1806,17 +1806,17 @@ html[data-theme="rose"] .mesh-background {
 
 .strip-start-controls {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   gap: 4px;
   min-width: 260px;
-  text-align: center;
+  text-align: left;
 }
 
 .studio-inline-project {
   display: grid;
   gap: 2px;
-  align-items: center;
-  justify-items: center;
+  align-items: start;
+  justify-items: start;
   min-width: 100%;
 }
 
@@ -1824,12 +1824,6 @@ html[data-theme="rose"] .mesh-background {
   font-size: 0.88rem;
   line-height: 1.15;
   letter-spacing: -0.02em;
-}
-
-#studioProjectMeta {
-  color: var(--muted);
-  font-size: 0.68rem;
-  line-height: 1.25;
 }
 
 .tool-strip.is-collapsed .tool-groups,
