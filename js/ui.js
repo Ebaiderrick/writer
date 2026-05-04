@@ -985,18 +985,6 @@ export function renderHome() {
           <h3>Projects</h3>
           <p>Everything you are writing lives here, with shared workspace context ready when you need it.</p>
         </div>
-        <div class="project-dashboard-controls">
-          <div class="project-filter-row" role="tablist" aria-label="Project filters">
-            <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
-            <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
-            <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
-            <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
-              <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>All</option>
-              <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film Script</option>
-              <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose / Poetry</option>
-            </select>
-          </div>
-        </div>
         <div class="project-summary-grid">
           <article class="project-summary-card">
             <span>Total projects</span>
