@@ -1403,15 +1403,16 @@ html[data-theme="rose"] .mesh-background {
 .project-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
+  gap: 8px;
 }
 
 .project-card {
   border: 1px solid var(--line);
   background: var(--panel);
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  min-height: 188px;
 }
 
 .project-card:hover {
@@ -1452,7 +1453,7 @@ html[data-theme="rose"] .mesh-background {
 .project-group-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
+  gap: 8px;
 }
 
 .project-library-empty {
@@ -1481,6 +1482,7 @@ html[data-theme="rose"] .mesh-background {
   padding: 14px;
   text-align: left;
   cursor: pointer;
+  min-height: 148px;
 }
 
 .project-card-top {
