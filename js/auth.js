@@ -29,6 +29,7 @@ const EMAILJS_PUBLIC_KEY = 'VI5qc4g4cH9d0vpvr';
 
 const googleProvider = new GoogleAuthProvider();
 const PROFILE_BIO_PLACEHOLDER = 'About me';
+const USERNAME_CHANGE_MS = 90 * 24 * 60 * 60 * 1000;
 
 export const Auth = (() => {
   let tabBtns, forms, themeBtns, html;
@@ -43,11 +44,14 @@ export const Auth = (() => {
   let profileImg, profileName, profileEmail, profileBio, profileWordCount;
   let profileEditBtn, profileSignOutBtn;
   let profileUpload, profileUploadBtn;
+  let profileUsernameInput, profileUsernameHint;
   let originalBio = '';
+  let originalUsername = '';
   let pendingImageBase64 = null;
   let isEditMode = false;
   let isModified = false;
   let isSavingProfile = false;
+  let cachedProfileMeta = {};
 
   let generatedOTP = '';
   let pendingSignup = null;
@@ -88,6 +92,8 @@ export const Auth = (() => {
     profileImg = document.getElementById('profile-img');
     profileName = document.getElementById('profile-name');
     profileEmail = document.getElementById('profile-email');
+    profileUsernameInput = document.getElementById('profile-username');
+    profileUsernameHint = document.getElementById('profile-username-hint');
     profileBio = document.getElementById('profile-bio');
     profileWordCount = document.getElementById('word-count');
     profileEditBtn = document.getElementById('edit-profile');
@@ -203,6 +209,12 @@ export const Auth = (() => {
         setEditBtnMode('save');
       }
     });
+    profileUsernameInput?.addEventListener('input', () => {
+      if (isEditMode && !isModified) {
+        isModified = true;
+        setEditBtnMode('save');
+      }
+    });
     profileBio?.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
 
     document.addEventListener('keydown', e => {
@@ -243,13 +255,11 @@ export const Auth = (() => {
   async function ensureUsersByEmail(firebaseUser) {
     const emailKey = firebaseUser.email.toLowerCase();
     const ref = doc(db, 'usersByEmail', emailKey);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      await setDoc(ref, {
-        uid: firebaseUser.uid,
-        name: firebaseUser.displayName || firebaseUser.email
-      });
-    }
+    await setDoc(ref, {
+      uid: firebaseUser.uid,
+      name: firebaseUser.displayName || firebaseUser.email,
+      username: sanitizeUsername(firebaseUser.displayName || firebaseUser.email)
+    }, { merge: true });
   }
 
   async function syncProjectsOnLogin(uid) {
@@ -353,13 +363,19 @@ export const Auth = (() => {
   }
 
   function handleDemoLogin() {
+    const username = generateRandomUsername('demo');
+    const timestamp = new Date().toISOString();
     localStorage.setItem(SESSION_KEY, JSON.stringify({
       userId: 'user_demo123',
       email: 'demo@eyawriter.com',
-      name: 'Demo Writer',
+      fullName: 'Demo Writer',
+      name: username,
+      username,
+      usernameCreatedAt: timestamp,
+      usernameUpdatedAt: timestamp,
       loggedIn: true,
       isDemoSession: true,
-      loggedInAt: new Date().toISOString()
+      loggedInAt: timestamp
     }));
     showHome();
     renderHome();
@@ -427,10 +443,12 @@ export const Auth = (() => {
       isEditMode = true;
       isModified = false;
       originalBio = profileBio.classList.contains('is-placeholder') ? '' : profileBio.textContent;
+      originalUsername = sanitizeUsername(profileUsernameInput?.value || originalUsername);
       if (profileBio.classList.contains('is-placeholder')) {
         profileBio.textContent = '';
         profileBio.classList.remove('is-placeholder');
       }
+      if (profileUsernameInput) profileUsernameInput.disabled = false;
       profileBio.contentEditable = 'true';
       profileBio.focus();
       const range = document.createRange();
@@ -451,9 +469,14 @@ export const Auth = (() => {
     isModified = false;
     pendingImageBase64 = null;
     profileBio.contentEditable = 'false';
+    if (profileUsernameInput) {
+      profileUsernameInput.disabled = true;
+      profileUsernameInput.value = originalUsername;
+    }
     setProfileBioValue(originalBio);
     setEditBtnMode('edit');
     updateBioWordCount();
+    updateUsernameHint();
   }
 
   async function handleImageUpload(e) {
@@ -512,9 +535,21 @@ export const Auth = (() => {
     if (!user && !isDemo) return;
 
     const text = profileBio.classList.contains('is-placeholder') ? '' : (profileBio.textContent || '');
+    const requestedUsername = sanitizeUsername(profileUsernameInput?.value || '');
     if (countWords(text) > 35) {
       customAlert('Bio cannot exceed 35 words.');
       return;
+    }
+    if (requestedUsername.length < 4) {
+      customAlert('Username must be at least 4 characters.', 'Username');
+      return;
+    }
+    if (requestedUsername !== originalUsername) {
+      const nextAllowed = getNextUsernameChangeDate(cachedProfileMeta.usernameUpdatedAt || cachedProfileMeta.usernameCreatedAt || '');
+      if (nextAllowed && nextAllowed.getTime() > Date.now()) {
+        customAlert(`You can change your username again after ${nextAllowed.toLocaleDateString()}.`, 'Username Locked');
+        return;
+      }
     }
 
     profileBio.contentEditable = 'false';
@@ -530,7 +565,12 @@ export const Auth = (() => {
       const data = {
         bio,
         photoURL: nextPhotoURL,
-        name: user?.displayName || session?.name || '',
+        name: cachedProfileMeta.name || session?.fullName || user?.displayName || session?.name || '',
+        username: requestedUsername,
+        usernameCreatedAt: cachedProfileMeta.usernameCreatedAt || new Date().toISOString(),
+        usernameUpdatedAt: requestedUsername !== originalUsername
+          ? new Date().toISOString()
+          : (cachedProfileMeta.usernameUpdatedAt || cachedProfileMeta.usernameCreatedAt || new Date().toISOString()),
         email: user?.email || session?.email || '',
         updatedAt: new Date().toISOString()
       };
@@ -539,35 +579,50 @@ export const Auth = (() => {
         // Handle Demo session locally
         session.bio = bio;
         session.photoURL = nextPhotoURL;
+        session.name = requestedUsername;
+        session.username = requestedUsername;
+        session.usernameCreatedAt = data.usernameCreatedAt;
+        session.usernameUpdatedAt = data.usernameUpdatedAt;
         localStorage.setItem(SESSION_KEY, JSON.stringify(session));
         // Mock a short delay for realism
         await new Promise(r => setTimeout(r, 500));
       } else {
         await setDoc(doc(db, 'users', user.uid, 'profile', 'data'), data, { merge: true });
-        if (nextPhotoURL && nextPhotoURL !== user.photoURL) {
-          await updateProfile(user, { photoURL: nextPhotoURL });
-        }
+        await updateProfile(user, { photoURL: nextPhotoURL, displayName: requestedUsername });
+        await setDoc(doc(db, 'usersByEmail', user.email.toLowerCase()), {
+          uid: user.uid,
+          name: requestedUsername,
+          username: requestedUsername
+        }, { merge: true });
         cacheSession({
           uid: user.uid,
           email: user.email,
-          displayName: user.displayName,
+          displayName: requestedUsername,
           photoURL: nextPhotoURL
         });
       }
 
       pendingImageBase64 = null;
       originalBio = bio;
+      originalUsername = requestedUsername;
+      cachedProfileMeta = { ...cachedProfileMeta, ...data };
       isEditMode = false;
       isModified = false;
       isSavingProfile = false;
       profileEditBtn.disabled = false;
       setEditBtnMode('edit');
       setProfileBioValue(bio);
+      if (profileUsernameInput) {
+        profileUsernameInput.disabled = true;
+        profileUsernameInput.value = requestedUsername;
+      }
       if (nextPhotoURL) profileImg.src = nextPhotoURL;
 
       updateBioWordCount();
-      if (user) updateTriggerUI({ photoURL: nextPhotoURL, displayName: user.displayName });
-      else if (isDemo) updateTriggerUI({ photoURL: session.photoURL, displayName: session.name });
+      updateUsernameHint();
+      profileName.textContent = formatUsernameForDisplay(requestedUsername);
+      if (user) updateTriggerUI({ photoURL: nextPhotoURL, displayName: requestedUsername });
+      else if (isDemo) updateTriggerUI({ photoURL: session.photoURL, displayName: requestedUsername });
 
     } catch (err) {
       console.error('Bio save failed', err);
@@ -600,20 +655,42 @@ export const Auth = (() => {
 
     if (!user && !isDemo) return;
 
-    const displayName = isDemo ? session.name : (user.displayName || 'User');
-    profileName.textContent = displayName;
-    profileEmail.textContent = isDemo ? session.email : user.email;
+    const displayName = isDemo ? (session.username || session.name) : (user.displayName || 'User');
+    profileEmail.hidden = true;
 
     const fallbackAvatar = generateInitialsAvatar(displayName);
 
     try {
       let profileData = {};
       if (isDemo) {
-        profileData = { bio: session.bio, photoURL: session.photoURL };
+        profileData = {
+          bio: session.bio,
+          photoURL: session.photoURL,
+          username: session.username || session.name,
+          name: session.fullName || session.name,
+          usernameCreatedAt: session.usernameCreatedAt || session.loggedInAt,
+          usernameUpdatedAt: session.usernameUpdatedAt || session.loggedInAt
+        };
       } else {
         const snap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
         profileData = snap.exists() ? snap.data() : {};
       }
+      const username = profileData.username || sanitizeUsername(displayName) || generateRandomUsername();
+      const fullName = profileData.name || (isDemo ? (session.fullName || session.name) : username);
+      cachedProfileMeta = {
+        ...profileData,
+        username,
+        name: fullName,
+        usernameCreatedAt: profileData.usernameCreatedAt || profileData.createdAt || new Date().toISOString(),
+        usernameUpdatedAt: profileData.usernameUpdatedAt || profileData.createdAt || new Date().toISOString()
+      };
+      originalUsername = username;
+      profileName.textContent = formatUsernameForDisplay(username);
+      if (profileUsernameInput) {
+        profileUsernameInput.value = username;
+        profileUsernameInput.disabled = true;
+      }
+      updateUsernameHint();
 
       const photo = profileData.photoURL || (!isDemo ? user.photoURL : null);
       if (photo) {
@@ -625,6 +702,30 @@ export const Auth = (() => {
 
       setProfileBioValue(profileData.bio || '');
       updateBioWordCount();
+      if (!profileData.username) {
+        if (isDemo) {
+          session.username = username;
+          session.name = username;
+          session.fullName = fullName;
+          session.usernameCreatedAt = cachedProfileMeta.usernameCreatedAt;
+          session.usernameUpdatedAt = cachedProfileMeta.usernameUpdatedAt;
+          localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        } else {
+          await setDoc(doc(db, 'users', user.uid, 'profile', 'data'), cachedProfileMeta, { merge: true });
+          await updateProfile(user, { displayName: username });
+          await setDoc(doc(db, 'usersByEmail', user.email.toLowerCase()), {
+            uid: user.uid,
+            name: username,
+            username
+          }, { merge: true });
+          cacheSession({
+            uid: user.uid,
+            email: user.email,
+            displayName: username,
+            photoURL: photo || user.photoURL || ''
+          });
+        }
+      }
     } catch (err) {
       console.error('Profile load failed', err);
       profileImg.src = fallbackAvatar;
@@ -646,7 +747,7 @@ export const Auth = (() => {
     });
 
     const homeName = document.getElementById('homeUserNameDisplay');
-    if (homeName) homeName.textContent = name;
+    if (homeName) homeName.textContent = formatUsernameForDisplay(name);
   }
 
   async function sendOTP(email, name) {
@@ -701,16 +802,22 @@ export const Auth = (() => {
 
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(credential.user, { displayName: name });
+      const username = generateRandomUsername(name);
+      const createdAt = new Date().toISOString();
+      await updateProfile(credential.user, { displayName: username });
       await setDoc(doc(db, 'users', credential.user.uid, 'profile', 'data'), {
         uid: credential.user.uid,
         name,
+        username,
         email,
-        createdAt: new Date().toISOString()
+        createdAt,
+        usernameCreatedAt: createdAt,
+        usernameUpdatedAt: createdAt
       });
       await setDoc(doc(db, 'usersByEmail', email.toLowerCase()), {
         uid: credential.user.uid,
-        name
+        name: username,
+        username
       });
       signupForm.reset();
     } catch (err) {
@@ -736,10 +843,41 @@ export const Auth = (() => {
       userId: firebaseUser.uid,
       email: firebaseUser.email,
       name: firebaseUser.displayName || firebaseUser.email,
+      username: firebaseUser.displayName || firebaseUser.email,
       photoURL: firebaseUser.photoURL || '',
       loggedIn: true,
       loggedInAt: new Date().toISOString()
     }));
+  }
+
+  function sanitizeUsername(value) {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+  }
+
+  function formatUsernameForDisplay(value) {
+    const username = sanitizeUsername(value) || 'user';
+    return `@${username}`;
+  }
+
+  function generateRandomUsername(seed = '') {
+    const base = sanitizeUsername(seed).slice(0, 10) || 'writer';
+    return `${base}${Math.floor(1000 + Math.random() * 9000)}`;
+  }
+
+  function getNextUsernameChangeDate(value) {
+    const parsed = value ? new Date(value) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) return null;
+    return new Date(parsed.getTime() + USERNAME_CHANGE_MS);
+  }
+
+  function updateUsernameHint() {
+    if (!profileUsernameHint) return;
+    const nextAllowed = getNextUsernameChangeDate(cachedProfileMeta.usernameUpdatedAt || cachedProfileMeta.usernameCreatedAt || '');
+    if (nextAllowed && nextAllowed.getTime() > Date.now()) {
+      profileUsernameHint.textContent = `At least 4 characters. Username changes unlock again on ${nextAllowed.toLocaleDateString()}.`;
+      return;
+    }
+    profileUsernameHint.textContent = 'At least 4 characters. You can change it once every 3 months.';
   }
 
   function setProfileBioValue(value) {

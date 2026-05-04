@@ -50,7 +50,8 @@ import {
   inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
   hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel,
   canEditProject, updateCollaboratorRole, addWorkspaceReminder,
-  toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace
+  toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace,
+  showCollabProfile
 } from './collaborate.js';
 
 let studioSidebarRefreshFrame = 0;
@@ -578,6 +579,12 @@ export function bindEvents() {
   });
 
   refs.homeWorkspaceDashboard?.addEventListener("change", (event) => {
+    const formatSelect = event.target.closest("[data-home-project-format]");
+    if (formatSelect) {
+      state.homeProjectFormat = formatSelect.value || "all";
+      renderHome();
+      return;
+    }
     const sortSelect = event.target.closest("[data-home-project-sort]");
     if (!sortSelect) return;
     state.homeProjectSort = sortSelect.value || "latest";
@@ -585,6 +592,15 @@ export function bindEvents() {
   });
 
   refs.workspaceDashboard?.addEventListener("click", (event) => {
+    const profileTrigger = event.target.closest("[data-profile-uid]");
+    if (profileTrigger) {
+      showCollabProfile({
+        uid: profileTrigger.dataset.profileUid || "",
+        name: profileTrigger.dataset.profileName || "",
+        photoURL: profileTrigger.dataset.profilePhotourl || ""
+      });
+      return;
+    }
     const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
     if (!action) return;
     if (action === "new-project") {
@@ -942,6 +958,14 @@ export function bindEvents() {
     if (result.ok) renderStudio();
   });
 
+  window.addEventListener("workspaceMemberProfileRequested", (event) => {
+    showCollabProfile({
+      uid: event.detail?.uid || "",
+      name: event.detail?.name || "",
+      photoURL: event.detail?.photoURL || ""
+    });
+  });
+
   refs.duplicateProjectBtn.addEventListener("click", duplicateProject);
   refs.deleteProjectBtn.addEventListener("click", deleteProject);
 
@@ -1093,6 +1117,12 @@ export function bindEvents() {
       const filterTrigger = e.target.closest("[data-home-project-filter]");
       if (filterTrigger) {
           state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
+          renderHome();
+          return;
+      }
+      const formatSelect = e.target.closest("[data-home-project-format]");
+      if (formatSelect) {
+          state.homeProjectFormat = formatSelect.value || "all";
           renderHome();
           return;
       }

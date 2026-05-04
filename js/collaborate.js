@@ -718,7 +718,7 @@ export function renderCollaboratorList() {
         })}
         <div class="collaborator-info">
           <span class="collaborator-name">${esc(ownerDisplay)} <span class="owner-badge">Owner</span></span>
-          <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(project.ownerId || '')}" data-name="${esc(project.ownerName || '')}" data-email="${esc(project.ownerEmail || '')}" data-photourl="${esc(project.ownerPhotoURL || '')}">${esc(project.ownerEmail || '')}</button>
+          <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(project.ownerId || '')}" data-name="${esc(project.ownerName || '')}" data-email="${esc(project.ownerEmail || '')}" data-photourl="${esc(project.ownerPhotoURL || '')}">${esc(project.ownerName || project.ownerEmail || 'Owner')}</button>
         </div>
       </div>`
     : '';
@@ -734,7 +734,7 @@ export function renderCollaboratorList() {
       ${buildCollaboratorAvatarMarkup({ uid, name: c.name || c.email, email: c.email || '', photoURL: c.photoURL || '' })}
       <div class="collaborator-info">
         <span class="collaborator-name">${esc(c.name || c.email)} <span class="role-badge">${esc((c.role || WORKSPACE_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))}</span></span>
-        <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(uid)}" data-name="${esc(c.name || '')}" data-email="${esc(c.email || '')}" data-photourl="${esc(c.photoURL || '')}">${esc(c.email)}</button>
+        <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(uid)}" data-name="${esc(c.name || '')}" data-email="${esc(c.email || '')}" data-photourl="${esc(c.photoURL || '')}">${esc(c.name || c.email || 'Collaborator')}</button>
         ${isOwner ? `<label class="collab-role-field"><span>Role</span><select class="collab-role-select" data-uid="${esc(uid)}">
           <option value="editor" ${(c.role || WORKSPACE_ROLES.editor) === WORKSPACE_ROLES.editor ? 'selected' : ''}>Editor</option>
           <option value="viewer" ${(c.role || WORKSPACE_ROLES.editor) === WORKSPACE_ROLES.viewer ? 'selected' : ''}>Viewer</option>
@@ -781,7 +781,12 @@ function attachCollabProfileTriggers(list) {
   });
 }
 
-async function showCollabProfile({ uid, name, email, photoURL }) {
+function formatCollaboratorHandle(value) {
+  const raw = String(value || '').trim().replace(/^@/, '');
+  return `@${raw || 'user'}`;
+}
+
+export async function showCollabProfile({ uid, name, email, photoURL }) {
   const popup = document.getElementById('collab-profile-popup');
   const imgEl = document.getElementById('collab-profile-img');
   const nameEl = document.getElementById('collab-profile-name');
@@ -791,8 +796,11 @@ async function showCollabProfile({ uid, name, email, photoURL }) {
   if (!popup) return;
 
   const displayName = name || email || 'User';
-  nameEl.textContent = displayName;
-  emailEl.textContent = email || '';
+  nameEl.textContent = formatCollaboratorHandle(displayName);
+  if (emailEl) {
+    emailEl.textContent = '';
+    emailEl.hidden = true;
+  }
   bioEl.textContent = '—';
   imgEl.src = photoURL || generateCollabAvatar(displayName);
 
@@ -815,6 +823,8 @@ async function showCollabProfile({ uid, name, email, photoURL }) {
       const snap = await getDoc(doc(db, 'users', uid, 'profile', 'data'));
       if (snap.exists()) {
         const data = snap.data();
+        const username = data.username || name || email || 'user';
+        nameEl.textContent = formatCollaboratorHandle(username);
         if (data.bio) bioEl.textContent = data.bio;
         if (data.photoURL) {
           imgEl.src = data.photoURL;

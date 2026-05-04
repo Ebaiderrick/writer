@@ -21,6 +21,33 @@ function getProjectCollaborationLabel(project) {
     : "Private";
 }
 
+function getProjectFormatValue(project) {
+  return project.type || project.workType || "film-script";
+}
+
+function getProjectFormatLabel(project) {
+  const format = getProjectFormatValue(project);
+  if (format === "prose-poetry" || format === "prose" || format === "poetry") {
+    return "Prose / Poetry";
+  }
+  return "Film Script";
+}
+
+function getUserHandle(value, fallback = "user") {
+  const raw = String(value || "").trim();
+  const base = raw.replace(/^@/, "") || fallback;
+  return `@${base}`;
+}
+
+function getMemberDisplayName(member = {}, fallback = "Collaborator") {
+  return member.username || member.name || member.email || fallback;
+}
+
+function buildProfileTriggerMarkup({ uid = "", name = "", photoURL = "", className = "" } = {}) {
+  const classes = ["workspace-profile-trigger", className].filter(Boolean).join(" ");
+  return `<button class="${escapeHtml(classes)}" type="button" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(photoURL)}">${escapeHtml(getUserHandle(name, "user"))}</button>`;
+}
+
 function sortProjectsForHome(projects) {
   const sorted = [...projects];
   if (state.homeProjectSort === "title") {
@@ -154,16 +181,17 @@ export function renderWorkspaceView() {
   }
 
   const projects = allProjects.filter((project) => project.workspace?.id === workspaceId && !project.isWorkspaceRoot);
+  const ownerLabel = getMemberDisplayName({ name: workspaceLead.ownerName, email: workspaceLead.ownerEmail }, "Workspace Owner");
   const memberEntries = [
-    workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner",
-    ...Object.values(workspaceLead.collaborators || {}).map((member) => member.name || member.email || "Collaborator")
+    ownerLabel,
+    ...Object.values(workspaceLead.collaborators || {}).map((member) => getMemberDisplayName(member))
   ].filter(Boolean);
   const uniqueMembers = [...new Set(memberEntries)];
   const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
   const allTaskItems = sortWorkspaceTasks(workspaceLead.workspace?.tasks || []);
   const assignees = [
-    { id: workspaceLead.ownerId || "workspace_owner", label: workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner" },
-    ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: person.name || person.email || "Collaborator" })),
+    { id: workspaceLead.ownerId || "workspace_owner", label: ownerLabel },
+    ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
     { id: "ai_assist", label: "@AIassist" }
   ];
   const sceneOptions = projects.flatMap((project) => (project.lines || [])
@@ -221,7 +249,15 @@ export function renderWorkspaceView() {
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
           </div>
           <div class="workspace-home-members">
-            ${uniqueMembers.map((name) => `<span class="workspace-home-member-pill">${escapeHtml(name)}</span>`).join("")}
+            ${[
+              buildProfileTriggerMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
+              ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => buildProfileTriggerMarkup({
+                uid,
+                name: getMemberDisplayName(person),
+                photoURL: person.photoURL || "",
+                className: "workspace-home-member-pill"
+              }))
+            ].join("")}
           </div>
         </section>
         <section class="workspace-home-panel">
@@ -419,6 +455,7 @@ export function renderHome() {
   refs.projectGrid.innerHTML = "";
   const template = document.querySelector("#projectCardTemplate");
   state.homeProjectSort = state.homeProjectSort || "latest";
+  state.homeProjectFormat = state.homeProjectFormat || "all";
   let projects = sortProjectsForHome(state.projects);
   let workspaceLead = null;
   const currentUid = auth.currentUser?.uid || "";
@@ -442,19 +479,23 @@ export function renderHome() {
     } else if (state.homeProjectFilter === "shared") {
       projects = projects.filter((project) => project.isShared || Object.keys(project.collaborators || {}).length > 0);
     }
+    if (state.homeProjectFormat !== "all") {
+      projects = projects.filter((project) => getProjectFormatValue(project) === state.homeProjectFormat);
+    }
   }
 
   if (state.currentWorkspaceId && workspaceLead) {
+    const ownerLabel = getMemberDisplayName({ name: workspaceLead.ownerName, email: workspaceLead.ownerEmail }, "Workspace Owner");
     const memberEntries = [
-      workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner",
-      ...Object.values(workspaceLead.collaborators || {}).map((member) => member.name || member.email || "Collaborator")
+      ownerLabel,
+      ...Object.values(workspaceLead.collaborators || {}).map((member) => getMemberDisplayName(member))
     ].filter(Boolean);
     const uniqueMembers = [...new Set(memberEntries)];
     const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
     const taskItems = [...(workspaceLead.workspace?.tasks || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
     const assignees = [
-      { id: workspaceLead.ownerId || "workspace_owner", label: workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner" },
-      ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: person.name || person.email || "Collaborator" })),
+      { id: workspaceLead.ownerId || "workspace_owner", label: ownerLabel },
+      ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
       { id: "ai_assist", label: "@AIassist" }
     ];
 
@@ -497,7 +538,15 @@ export function renderHome() {
               <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
             </div>
             <div class="workspace-home-members">
-              ${uniqueMembers.map((name) => `<span class="workspace-home-member-pill">${escapeHtml(name)}</span>`).join("")}
+              ${[
+                buildProfileTriggerMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
+                ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => buildProfileTriggerMarkup({
+                  uid,
+                  name: getMemberDisplayName(person),
+                  photoURL: person.photoURL || "",
+                  className: "workspace-home-member-pill"
+                }))
+              ].join("")}
             </div>
           </section>
           <section class="workspace-home-panel">
@@ -566,27 +615,26 @@ export function renderHome() {
     refs.homeHero.hidden = false;
     refs.workspaceBackBtn.hidden = true;
     refs.homeProjectsTitle.textContent = "Projects";
-    refs.homeProjectsSubtitle.textContent = "Open a script, switch workspaces, or start a new draft without losing the bigger picture.";
+    refs.homeProjectsSubtitle.textContent = "Open a script, switch contexts, or start a new draft from one clean project library.";
     refs.homeWorkspaceDashboard.hidden = false;
     const sharedCount = projects.filter((project) => getProjectCollaborationLabel(project) === "Shared").length;
     refs.homeWorkspaceDashboard.innerHTML = `
       <section class="project-dashboard-summary">
         <div class="project-dashboard-copy">
-          <span class="workspace-home-kicker">Film Projects</span>
-          <h3>Everything you are writing, in one clear library.</h3>
-          <p>Projects come first here. Workspaces stay available whenever you need team context.</p>
+          <h3>Projects</h3>
+          <p>Everything you are writing lives here, with shared workspace context ready when you need it.</p>
         </div>
         <div class="project-dashboard-controls">
           <div class="project-filter-row" role="tablist" aria-label="Project filters">
             <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
             <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
             <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+            <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
+              <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>All</option>
+              <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film Script</option>
+              <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose / Poetry</option>
+            </select>
           </div>
-          <select class="comment-filter-select project-sort-select" data-home-project-sort aria-label="Sort projects">
-            <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
-            <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
-            <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Most Scenes</option>
-          </select>
         </div>
         <div class="project-summary-grid">
           <article class="project-summary-card">
@@ -599,7 +647,7 @@ export function renderHome() {
           </article>
           <article class="project-summary-card">
             <span>Format</span>
-            <strong>Film Script</strong>
+            <strong>${state.homeProjectFormat === "all" ? "All" : (state.homeProjectFormat === "prose-poetry" ? "Prose / Poetry" : "Film Script")}</strong>
           </article>
           <article class="project-summary-card">
             <span>Latest activity</span>
@@ -1764,9 +1812,9 @@ export async function showWorkspacePopup() {
     return;
   }
 
-  const ownerLabel = project.ownerName || project.ownerEmail || project.author || "Workspace owner";
+  const ownerLabel = getMemberDisplayName({ name: project.ownerName, email: project.ownerEmail }, "Workspace owner");
   const collaborators = Object.entries(project.collaborators || {});
-  const activeUsers = [ownerLabel, ...collaborators.map(([, person]) => person.name || person.email)].filter(Boolean);
+  const activeUsers = [ownerLabel, ...collaborators.map(([, person]) => getMemberDisplayName(person))].filter(Boolean);
   const inviteLink = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(project.id)}&script=${encodeURIComponent(project.scriptId || "")}`;
   const lastEditedBy = project.lastEditorName || ownerLabel;
   const workspace = project.workspace || { name: project.title || "Team Workspace", reminders: [] };
@@ -1786,10 +1834,10 @@ export async function showWorkspacePopup() {
         ${ownerCanManage ? '<button class="ghost-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
       </div>
       <div class="workspace-metric-columns">
-        <div class="workspace-metric-row"><span>Owner</span><strong>${escapeHtml(ownerLabel)}</strong></div>
+        <div class="workspace-metric-row"><span>Owner</span><strong>${escapeHtml(getUserHandle(ownerLabel, "owner"))}</strong></div>
         <div class="workspace-metric-row"><span>Members</span><strong>${collaborators.length}</strong></div>
         <div class="workspace-metric-row"><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
-        <div class="workspace-metric-row"><span>Last Edited By</span><strong>${escapeHtml(lastEditedBy)}</strong></div>
+        <div class="workspace-metric-row"><span>Last Edited By</span><strong>${escapeHtml(getUserHandle(lastEditedBy, "editor"))}</strong></div>
         <div class="workspace-metric-row"><span>Last Activity</span><strong>${escapeHtml(formatDateTime(lastActivity))}</strong></div>
         <div class="workspace-metric-row"><span>Workspace Code</span><strong>${escapeHtml(workspace.inviteCode || project.scriptId || "")}</strong></div>
       </div>
@@ -1814,13 +1862,21 @@ export async function showWorkspacePopup() {
     <section class="workspace-popup-section">
       <h4>Roles</h4>
         <div class="list-stack">
-          <div class="list-item"><span class="list-item-title">Owner</span><span class="list-item-meta">${escapeHtml(ownerLabel)}</span></div>
+          <div class="list-item workspace-member-row">
+            <div class="workspace-member-copy">
+              <span class="list-item-title">Owner</span>
+              <div class="workspace-member-meta-row">
+                ${buildProfileTriggerMarkup({ uid: project.ownerId || "", name: ownerLabel, photoURL: project.ownerPhotoURL || "", className: "workspace-member-button" })}
+                <span class="role-badge">Owner</span>
+              </div>
+            </div>
+          </div>
           ${collaborators.map(([uid, person]) => `
             <div class="list-item workspace-member-row">
               <div class="workspace-member-copy">
-                <span class="list-item-title">${escapeHtml(person.name || person.email || "Collaborator")}</span>
+                <span class="list-item-title">${escapeHtml(getUserHandle(getMemberDisplayName(person), "user"))}</span>
                 <div class="workspace-member-meta-row">
-                  <span class="list-item-meta">${escapeHtml(person.email || "")}</span>
+                  ${buildProfileTriggerMarkup({ uid, name: getMemberDisplayName(person), photoURL: person.photoURL || "", className: "workspace-member-button" })}
                   ${ownerCanManage ? `
                     <select class="comment-filter-select workspace-role-select" data-member-role="${escapeHtml(uid)}">
                       <option value="editor" ${(person.role || "editor") === "editor" ? "selected" : ""}>Editor</option>
@@ -1874,6 +1930,17 @@ export async function showWorkspacePopup() {
   container.addEventListener("click", async (event) => {
     const action = event.target.closest("[data-workspace-action]")?.dataset.workspaceAction;
     const status = container.querySelector("[data-workspace-status]");
+    const profileTrigger = event.target.closest("[data-profile-uid]");
+    if (profileTrigger) {
+      window.dispatchEvent(new CustomEvent("workspaceMemberProfileRequested", {
+        detail: {
+          uid: profileTrigger.dataset.profileUid || "",
+          name: profileTrigger.dataset.profileName || "",
+          photoURL: profileTrigger.dataset.profilePhotourl || ""
+        }
+      }));
+      return;
+    }
     if (!action) {
       return;
     }

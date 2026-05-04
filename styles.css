@@ -1039,38 +1039,46 @@ html[data-theme="rose"] .mesh-background {
 
 .project-dashboard-summary {
   display: grid;
-  gap: 14px;
-  margin-bottom: 18px;
-  padding: 16px 18px;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.035);
 }
 
 .project-dashboard-copy {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .project-dashboard-copy h3 {
   margin: 0;
-  font-size: 1.2rem;
-  letter-spacing: -0.02em;
+  font-size: 1rem;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
 }
 
 .project-dashboard-copy p {
   margin: 0;
-  max-width: 62ch;
   color: color-mix(in srgb, var(--ink) 72%, var(--muted));
-  font-size: 0.88rem;
-  line-height: 1.45;
+  font-size: 0.82rem;
+  line-height: 1.3;
 }
 
 .project-filter-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
+  align-items: center;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.project-filter-row::-webkit-scrollbar {
+  display: none;
 }
 
 .project-filter-chip {
@@ -1078,8 +1086,9 @@ html[data-theme="rose"] .mesh-background {
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   color: var(--muted);
   border-radius: 999px;
-  padding: 7px 12px;
-  font-size: 0.74rem;
+  padding: 6px 11px;
+  font-size: 0.72rem;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -1092,14 +1101,14 @@ html[data-theme="rose"] .mesh-background {
 .project-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .project-summary-card {
   display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 14px;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--surface-strong) 82%, transparent);
 }
 
@@ -1109,40 +1118,40 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-summary-card strong {
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   color: var(--ink);
 }
 
 .project-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 32px;
+  gap: 18px;
 }
 
 .project-card {
   border: 1px solid var(--line);
   background: var(--panel);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 10px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.03);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .project-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.05);
 }
 
 .project-dashboard-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: nowrap;
 }
 
 .project-group-section {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .project-group-head {
@@ -1154,19 +1163,21 @@ html[data-theme="rose"] .mesh-background {
 
 .project-group-head h4 {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
+  line-height: 1.15;
 }
 
 .project-group-head p {
-  margin: 4px 0 0;
-  font-size: 0.76rem;
+  margin: 2px 0 0;
+  font-size: 0.72rem;
   color: var(--muted);
+  line-height: 1.2;
 }
 
 .project-group-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
+  gap: 16px;
 }
 
 .project-library-empty {
@@ -1192,7 +1203,7 @@ html[data-theme="rose"] .mesh-background {
   width: 100%;
   border: 0;
   background: transparent;
-  padding: 16px;
+  padding: 14px;
   text-align: left;
   cursor: pointer;
 }
@@ -1201,13 +1212,13 @@ html[data-theme="rose"] .mesh-background {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 12px 16px 0;
+  padding: 10px 14px 0;
 }
 
 .project-card-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .project-quick-action {
@@ -1215,14 +1226,14 @@ html[data-theme="rose"] .mesh-background {
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   color: var(--muted);
   border-radius: 999px;
-  padding: 5px 9px;
-  font-size: 0.7rem;
+  padding: 4px 8px;
+  font-size: 0.68rem;
   cursor: pointer;
 }
 
 .project-card-heading {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -1230,15 +1241,17 @@ html[data-theme="rose"] .mesh-background {
 .project-card h3,
 .panel-head h3 {
   margin: 0;
-  font-size: var(--font-size-title);
+  font-size: 0.98rem;
   font-weight: 600;
   letter-spacing: -0.01em;
+  line-height: 1.12;
 }
 
 .project-card-context {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
+  line-height: 1.2;
 }
 
 .project-delete {
@@ -1265,10 +1278,10 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-meta-row {
-  margin: 8px 0;
-  gap: 16px;
+  margin: 6px 0;
+  gap: 12px;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.78rem;
 }
 
 .script-id-flag {
@@ -1291,9 +1304,9 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-card-logline {
-  margin: 0 0 16px;
-  line-height: 1.4;
-  font-size: 0.9rem;
+  margin: 0 0 12px;
+  line-height: 1.28;
+  font-size: 0.83rem;
   color: color-mix(in srgb, var(--ink) 70%, var(--muted));
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1303,18 +1316,24 @@ html[data-theme="rose"] .mesh-background {
 
 .project-card-updated {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--muted);
+  line-height: 1.2;
 }
 
 .project-card-open {
     display: block;
     width: 100%;
-    padding: 16px;
+    padding: 14px;
     border: none;
     background: transparent;
     text-align: left;
     cursor: pointer;
+}
+
+.project-format-select {
+  min-width: 150px;
+  flex: 0 0 auto;
 }
 
 .primary-button,
@@ -3800,6 +3819,26 @@ kbd {
   flex-wrap: wrap;
 }
 
+.workspace-member-button,
+.workspace-home-member-pill {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.74rem;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.workspace-member-button:hover,
+.workspace-home-member-pill:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 68%, transparent);
+  color: var(--accent-strong);
+}
+
 .workspace-role-select,
 .collab-role-select {
   min-width: 112px;
@@ -5127,6 +5166,24 @@ html[data-theme="white"] .user-trigger {
 .profile-bio-container {
   margin-bottom: 24px;
   text-align: left;
+}
+
+.profile-identity-row {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.profile-username-input {
+  width: 100%;
+}
+
+.profile-username-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
 }
 
 .bio-label {

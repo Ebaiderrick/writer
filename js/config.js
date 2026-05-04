@@ -88,6 +88,7 @@ export const state = {
   filterQuery: "",
   homeProjectFilter: "all",
   homeProjectSort: "latest",
+  homeProjectFormat: "all",
   workspaceTaskFilter: "all",
   workspaceTaskSort: "latest",
   backupPrompted: false,

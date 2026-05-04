@@ -1220,7 +1220,7 @@
           <img src="" alt="Profile" class="avatar" id="collab-profile-img">
         </div>
         <h2 class="profile-name" id="collab-profile-name"></h2>
-        <p class="profile-email" id="collab-profile-email"></p>
+        <p class="profile-email" id="collab-profile-email" hidden></p>
       </div>
       <div class="profile-bio-container">
         <label class="bio-label">About me</label>
@@ -1251,7 +1251,13 @@
           <input type="file" id="profile-upload" accept="image/*" hidden>
         </div>
         <h2 class="profile-name" id="profile-name">Jane Doe</h2>
-        <p class="profile-email" id="profile-email">jane@example.com</p>
+        <p class="profile-email" id="profile-email" hidden>jane@example.com</p>
+      </div>
+
+      <div class="profile-identity-row">
+        <label class="bio-label" for="profile-username">Username</label>
+        <input id="profile-username" class="modal-input profile-username-input" type="text" minlength="4" maxlength="20" spellcheck="false" disabled>
+        <p class="profile-username-hint" id="profile-username-hint">At least 4 characters. You can change it once every 3 months.</p>
       </div>
 
       <!-- Profile Writeup -->
