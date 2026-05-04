@@ -378,6 +378,7 @@ export function persistProjects(forceSavedBadge = false, { syncInputs = true } =
   if (refs.saveBadge) {
       refs.saveBadge.textContent = forceSavedBadge ? t("save.savedLocal") : t("save.saved");
       refs.saveBadge.classList.remove("saving");
+      refs.saveBadge.classList.add("is-saved");
   }
   queueFirestoreSync();
 }
@@ -386,6 +387,7 @@ export function queueSave() {
   if (refs.saveBadge) {
       refs.saveBadge.textContent = t("save.saving");
       refs.saveBadge.classList.add("saving");
+      refs.saveBadge.classList.remove("is-saved");
   }
   clearTimeout(state.saveTimer);
   state.saveTimer = window.setTimeout(() => {

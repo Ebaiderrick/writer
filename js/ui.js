@@ -403,7 +403,6 @@ export function renderWorkspaceView() {
     <div class="workspace-home-shell">
       <section class="workspace-home-hero-card">
         <div class="workspace-home-hero-copy">
-          <span class="workspace-home-kicker">Film Workspace</span>
           <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
           <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
         </div>
@@ -871,10 +870,9 @@ export function renderHome() {
       <div class="workspace-home-shell">
         <section class="workspace-home-hero-card">
           <div class="workspace-home-hero-copy">
-            <span class="workspace-home-kicker">Film Workspace</span>
-            <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
-            <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
-          </div>
+          <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
+          <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
+        </div>
           <div class="workspace-home-hero-metrics">
             <div class="workspace-home-metric">
               <span>Projects</span>
@@ -1144,7 +1142,7 @@ export function renderStudioProjectContext() {
     refs.studioProjectTitle.textContent = project.title || "Untitled Project";
   }
   if (refs.studioProjectMeta) {
-    refs.studioProjectMeta.textContent = `Film Script · ${workspaceLabel} · ${collaborationLabel} · Last edited by ${lastEdited}`;
+    refs.studioProjectMeta.textContent = `${workspaceLabel} · ${project.scriptId || "Draft"} · ${collaborationLabel} · Last edited by ${lastEdited}`;
   }
 }
 
