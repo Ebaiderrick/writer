@@ -668,9 +668,10 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home,
 .workspace-projects {
   min-height: 0;
+  height: 100%;
   padding: 12px;
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -1740,6 +1741,7 @@ html[data-theme="rose"] .mesh-background {
 
 .topbar-actions {
   justify-content: flex-end;
+  gap: 10px;
 }
 
 .save-status-stack {
@@ -1748,6 +1750,16 @@ html[data-theme="rose"] .mesh-background {
   align-items: flex-end;
   gap: 2px;
   margin-left: 8px;
+}
+
+.save-status-stack-inline {
+  align-items: flex-start;
+  gap: 3px;
+  margin-left: 0;
+}
+
+#lastEditorFlag {
+  display: none !important;
 }
 
 .topbar-bg-anim {
@@ -1804,9 +1816,21 @@ html[data-theme="rose"] .mesh-background {
 
 .strip-start-controls {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   gap: 6px;
-  min-width: 64px;
+  min-width: 220px;
+}
+
+.studio-inline-project {
+  display: grid;
+  gap: 3px;
+  align-items: start;
+}
+
+.studio-inline-project strong {
+  font-size: 0.9rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 .tool-strip.is-collapsed .tool-groups,
@@ -1835,6 +1859,54 @@ html[data-theme="rose"] .mesh-background {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.quick-display {
+  position: relative;
+}
+
+.quick-display[open] summary {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-strong));
+}
+
+.quick-display-button {
+  list-style: none;
+}
+
+.quick-display-button::-webkit-details-marker {
+  display: none;
+}
+
+.quick-display-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 220px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 0 16px 40px rgba(3, 7, 18, 0.12);
+  display: grid;
+  gap: 8px;
+  z-index: 35;
+}
+
+.quick-display-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
+}
+
+.quick-display-row input {
+  width: 34px;
+  height: 18px;
+  accent-color: var(--accent);
 }
 
 .tool-button {

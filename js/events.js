@@ -1294,11 +1294,11 @@ export function bindEvents() {
   refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);
 
   // Layout Toggles
-  refs.leftRailToggle.addEventListener("click", () => {
+  refs.leftRailToggle?.addEventListener("click", () => {
     togglePane("left");
     setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
   });
-  refs.rightRailToggle.addEventListener("click", () => {
+  refs.rightRailToggle?.addEventListener("click", () => {
     togglePane("right");
     setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
   });
@@ -1308,6 +1308,38 @@ export function bindEvents() {
         setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "&#9660;" : "&#9650;");
         persistProjects(false);
     });
+
+  refs.quickDisplayBg?.addEventListener("change", () => {
+    state.backgroundAnimation = refs.quickDisplayBg.checked;
+    applyToolbarState();
+    persistProjects(false);
+  });
+  refs.quickDisplayActiveBlock?.addEventListener("change", () => {
+    const shouldShow = refs.quickDisplayActiveBlock.checked;
+    refs.leftPane.classList.toggle("is-hidden", !shouldShow);
+    refs.leftResize?.classList.toggle("is-hidden", !shouldShow);
+    refs.studioLayout.classList.toggle("left-pane-hidden", !shouldShow);
+    applyViewState();
+    persistProjects(false);
+  });
+  refs.quickDisplayPreview?.addEventListener("change", () => {
+    const shouldShow = refs.quickDisplayPreview.checked;
+    refs.rightPane.classList.toggle("is-hidden", !shouldShow);
+    refs.rightResize?.classList.toggle("is-hidden", !shouldShow);
+    refs.studioLayout.classList.toggle("right-pane-hidden", !shouldShow);
+    applyViewState();
+    persistProjects(false);
+  });
+  refs.quickDisplayFullscreen?.addEventListener("change", () => {
+    if (refs.quickDisplayFullscreen.checked) {
+      document.documentElement.requestFullscreen?.();
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+    }
+  });
+  document.addEventListener("fullscreenchange", () => {
+    applyViewState();
+  });
 
   refs.leftPaneSectionToggle.addEventListener("click", () => {
     togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle);
@@ -1770,8 +1802,12 @@ export function renderStudio() {
   renderLeftPaneLayout();
   applyViewState();
   applyToolbarState();
-  setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
-  setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+  if (refs.leftRailToggle) {
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
+  }
+  if (refs.rightRailToggle) {
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+  }
   setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   applyTranslations();

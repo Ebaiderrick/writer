@@ -435,7 +435,6 @@ export function renderWorkspaceView() {
         <section class="workspace-home-panel">
           <div class="workspace-home-panel-head">
             <h4>Recent activity</h4>
-            <button class="primary-button btn-sm" type="button" data-workspace-home-action="new-project">New Project</button>
           </div>
           <div class="workspace-home-activity workspace-home-activity-timeline">
             ${activityItems.length ? activityItems.map((item) => `
@@ -532,7 +531,6 @@ export function renderWorkspaceView() {
         <section class="workspace-home-panel workspace-home-panel-wide">
           <div class="workspace-home-panel-head">
             <h4>Tasks & Delegation</h4>
-            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">Add Script</button>
           </div>
           <div class="workspace-task-filters" role="tablist" aria-label="Workspace tasks filter">
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "all" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
@@ -1529,6 +1527,10 @@ export function applyViewState() {
   document.body.classList.remove("outline-hidden");
   document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
   refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+  if (refs.quickDisplayBg) refs.quickDisplayBg.checked = Boolean(state.backgroundAnimation);
+  if (refs.quickDisplayActiveBlock) refs.quickDisplayActiveBlock.checked = !refs.leftPane?.classList.contains("is-hidden");
+  if (refs.quickDisplayPreview) refs.quickDisplayPreview.checked = !refs.rightPane?.classList.contains("is-hidden");
+  if (refs.quickDisplayFullscreen) refs.quickDisplayFullscreen.checked = Boolean(document.fullscreenElement);
   updateMenuStateButtons();
 }
 
@@ -3481,7 +3483,7 @@ export function revealMetricsPanel() {
     // This needs togglePane from events.js, but ui.js shouldn't depend on events.js
     // We can just manipulate the classes directly here or emit an event.
     refs.leftPane.classList.remove("is-hidden");
-    refs.leftRailToggle.innerHTML = MENU_GLYPHS.left;
+    if (refs.leftRailToggle) refs.leftRailToggle.innerHTML = MENU_GLYPHS.left;
     refs.studioLayout.classList.remove("left-pane-hidden");
     if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
   }
