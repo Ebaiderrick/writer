@@ -558,6 +558,7 @@ function sanitizeWorkspaceTasks(tasks) {
 
   return tasks.map((task, index) => ({
     id: task?.id || uid(`task-${index}`),
+    templateKey: String(task?.templateKey || "custom").trim() || "custom",
     title: String(task?.title || "").trim(),
     description: String(task?.description || "").trim(),
     status: ["todo", "in-progress", "done"].includes(task?.status) ? task.status : "todo",

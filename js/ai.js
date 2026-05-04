@@ -1,4 +1,4 @@
-import { state } from "./config.js";
+import { state, WORKSPACE_TASK_TEMPLATES } from "./config.js";
 import { refs } from "./dom.js";
 import { getCurrentProject, getLine, getLineIndex, queueSave } from "./project.js";
 import { renderStudio, addBlock } from "./events.js";
@@ -1478,6 +1478,10 @@ export const AI = (() => {
     }
   }
 
+  function getWorkspaceTaskTemplate(templateKey) {
+    return WORKSPACE_TASK_TEMPLATES.find((template) => template.key === templateKey) || WORKSPACE_TASK_TEMPLATES[0];
+  }
+
   async function runWorkspaceTaskAssistant(task, project) {
     const projectContext = project?.lines?.map((line) => `[${line.type.toUpperCase()}] ${line.text}`).join("\n") || "";
     const sceneContext = task.sceneId
@@ -1495,17 +1499,20 @@ export const AI = (() => {
       : "";
     const storyMemory = buildStoryMemoryContext(project);
     const context = sceneContext || projectContext;
+    const template = getWorkspaceTaskTemplate(task.templateKey);
     const instruction = [
       "You are @AIassist inside a screenplay workspace.",
       "Complete the assigned writing task and return screenplay-ready text only.",
       "Do not explain your answer. Do not include markdown fences.",
       "Preserve screenplay formatting with sensible line breaks.",
-      task.sceneId ? "Focus on the linked scene context first." : "Use the broader script context where helpful."
+      task.sceneId ? "Focus on the linked scene context first." : "Use the broader script context where helpful.",
+      `Template: ${template.label}.`,
+      template.aiInstruction
     ].join(" ");
     return requestAiText({
       action: "Improve",
       instruction: `${storyMemory}${instruction}`,
-      input: `TASK TITLE: ${task.title}\nTASK DESCRIPTION: ${task.description || "No extra description provided."}\nREFERENCE: ${task.reference || "None"}\n\nSCRIPT CONTEXT:\n${context}`.trim()
+      input: `TASK TEMPLATE: ${template.label}\nTASK TITLE: ${task.title}\nTASK DESCRIPTION: ${task.description || template.description || "No extra description provided."}\nREFERENCE: ${task.reference || "None"}\n\nSCRIPT CONTEXT:\n${context}`.trim()
     });
   }
 

@@ -1,4 +1,4 @@
-import { state, TYPE_SEQUENCE, TYPE_LABELS } from './config.js';
+import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { ContextMenu } from './contextMenu.js';
 import {
@@ -57,6 +57,41 @@ import {
 let studioSidebarRefreshFrame = 0;
 let hasShownReadOnlyNotice = false;
 const aiTaskTimers = new Map();
+
+function getWorkspaceTaskTemplate(templateKey) {
+  return WORKSPACE_TASK_TEMPLATES.find((template) => template.key === templateKey) || WORKSPACE_TASK_TEMPLATES[0];
+}
+
+function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = false } = {}) {
+  if (!container) return;
+  const template = getWorkspaceTaskTemplate(templateKey);
+  const titleInput = container.querySelector('[data-workspace-task-title], #taskEditTitle');
+  const descriptionInput = container.querySelector('[data-workspace-task-description], #taskEditDescription');
+  const templateInput = container.querySelector('[data-workspace-task-template], #taskEditTemplate');
+  const hint = container.querySelector('[data-workspace-task-template-hint], #taskEditTemplateHint');
+  const previousKey = container.dataset.workspaceTemplateApplied || "custom";
+  const previousTemplate = getWorkspaceTaskTemplate(previousKey);
+
+  if (templateInput) {
+    templateInput.value = template.key;
+  }
+  if (titleInput) {
+    const currentTitle = titleInput.value.trim();
+    if (force || !currentTitle || currentTitle === previousTemplate.title) {
+      titleInput.value = template.title;
+    }
+  }
+  if (descriptionInput) {
+    const currentDescription = descriptionInput.value.trim();
+    if (force || !currentDescription || currentDescription === previousTemplate.description) {
+      descriptionInput.value = template.description;
+    }
+  }
+  if (hint) {
+    hint.textContent = template.aiInstruction;
+  }
+  container.dataset.workspaceTemplateApplied = template.key;
+}
 
 function ensureDefaultWorkspaceRoot() {
   const currentWorkspaceRoot = state.currentWorkspaceId
@@ -279,6 +314,7 @@ function insertAiTaskResultIntoProject(task, resultText) {
 function addWorkspaceTaskFromDashboard() {
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
   if (!workspaceProject || !refs.workspaceDashboard) return;
+  const templateSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-template]');
   const titleInput = refs.workspaceDashboard.querySelector('[data-workspace-task-title]');
   const descriptionInput = refs.workspaceDashboard.querySelector('[data-workspace-task-description]');
   const projectSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-project]');
@@ -288,6 +324,7 @@ function addWorkspaceTaskFromDashboard() {
   const statusSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-status-new]');
   const aiStartSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start]');
   const aiStartManual = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start-manual]');
+  const templateKey = templateSelect?.value || "custom";
   const title = titleInput?.value?.trim();
   if (!title) {
     customAlert("Enter a task title first.", "Workspace Tasks");
@@ -305,6 +342,7 @@ function addWorkspaceTaskFromDashboard() {
     : "idle";
   const nextTask = {
     id: uid("task"),
+    templateKey,
     title,
     description: descriptionInput?.value?.trim() || "",
     status: statusSelect?.value || "todo",
@@ -429,9 +467,13 @@ async function editWorkspaceTask(taskId) {
   if (!workspaceProject || !task) return;
   const assignees = getWorkspaceTaskAssignees(workspaceProject);
   const scenes = getWorkspaceTaskSceneChoices();
+  const selectedTemplate = getWorkspaceTaskTemplate(task.templateKey);
   const container = document.createElement("div");
   container.className = "workspace-task-form workspace-task-form-modal";
   container.innerHTML = `
+    <select id="taskEditTemplate" class="comment-filter-select">
+      ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}" ${template.key === (task.templateKey || "custom") ? "selected" : ""}>${escapeHtml(template.label)}</option>`).join("")}
+    </select>
     <input id="taskEditTitle" class="modal-input" type="text" value="${task.title}">
     <select id="taskEditProject" class="comment-filter-select">
       ${getWorkspaceProjects(state.currentWorkspaceId).filter((project) => !project.isWorkspaceRoot).map((project) => `<option value="${escapeHtml(project.id)}" ${project.id === task.projectId ? "selected" : ""}>${escapeHtml(project.title)}</option>`).join("")}
@@ -457,7 +499,12 @@ async function editWorkspaceTask(taskId) {
     <input id="taskEditAiStartManual" class="modal-input" type="datetime-local" value="${task.aiStartAt ? new Date(task.aiStartAt).toISOString().slice(0, 16) : ""}">
     <input id="taskEditReference" class="modal-input" type="text" value="${escapeHtml(task.reference || "")}" placeholder="Scene / block reference (optional)">
     <textarea id="taskEditDescription" class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen...">${escapeHtml(task.description || "")}</textarea>
+    <p id="taskEditTemplateHint" class="modal-copy">${escapeHtml(selectedTemplate.aiInstruction)}</p>
   `;
+  container.dataset.workspaceTemplateApplied = task.templateKey || "custom";
+  container.querySelector("#taskEditTemplate")?.addEventListener("change", (event) => {
+    applyWorkspaceTaskTemplateToForm(container, event.target.value);
+  });
   const saved = await showModal({
     title: "Edit Task",
     message: container,
@@ -475,6 +522,7 @@ async function editWorkspaceTask(taskId) {
       )
     : "";
   updateWorkspaceTask(taskId, {
+    templateKey: container.querySelector("#taskEditTemplate")?.value || "custom",
     title: container.querySelector("#taskEditTitle")?.value?.trim() || task.title,
     description: container.querySelector("#taskEditDescription")?.value?.trim() || "",
     projectId: sceneChoice?.projectId || container.querySelector("#taskEditProject")?.value || task.projectId,
@@ -547,6 +595,7 @@ async function commentOnWorkspaceTask(taskId) {
 
 export function bindEvents() {
   syncAiTaskSchedules();
+  applyWorkspaceTaskTemplateToForm(refs.workspaceDashboard, "custom", { force: true });
   // Navigation
   refs.newProjectBtn.addEventListener("click", () => {
     launchNewCreationFlow();
@@ -668,6 +717,11 @@ export function bindEvents() {
   });
 
   refs.workspaceDashboard?.addEventListener("change", (event) => {
+    const templateSelect = event.target.closest("[data-workspace-task-template]");
+    if (templateSelect) {
+      applyWorkspaceTaskTemplateToForm(refs.workspaceDashboard, templateSelect.value);
+      return;
+    }
     const taskSortSelect = event.target.closest("[data-workspace-home-action='set-task-sort']");
     if (taskSortSelect) {
       state.workspaceTaskSort = taskSortSelect.value || "latest";

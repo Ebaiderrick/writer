@@ -855,6 +855,14 @@ html[data-theme="rose"] .mesh-background {
   min-height: 68px;
 }
 
+.workspace-task-template-hint {
+  grid-column: 1 / -2;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .workspace-task-form button {
   align-self: end;
 }

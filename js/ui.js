@@ -1,4 +1,4 @@
-import { state, LEFT_PANE_BLOCK_DEFS } from './config.js';
+import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
@@ -116,6 +116,10 @@ function getAiTaskStateLabel(task) {
   if (stateLabel === "dismissed") return "Dismissed";
   if (stateLabel === "failed") return task.aiError || "AI failed";
   return "AI task";
+}
+
+function getWorkspaceTaskTemplate(templateKey) {
+  return WORKSPACE_TASK_TEMPLATES.find((template) => template.key === templateKey) || WORKSPACE_TASK_TEMPLATES[0];
 }
 
 function sortWorkspaceTasks(tasks) {
@@ -298,6 +302,9 @@ export function renderWorkspaceView() {
             <span class="workspace-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
           </div>
           <div class="workspace-task-form">
+            <select class="comment-filter-select" data-workspace-task-template>
+              ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.label)}</option>`).join("")}
+            </select>
             <input class="modal-input" type="text" placeholder="Task title" data-workspace-task-title>
             <select class="comment-filter-select" data-workspace-task-project>
               ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
@@ -323,6 +330,7 @@ export function renderWorkspaceView() {
             <input class="modal-input" type="datetime-local" data-workspace-task-ai-start-manual>
             <input class="modal-input" type="text" placeholder="Scene / block reference (optional)" data-workspace-task-reference>
             <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
+            <p class="workspace-task-template-hint" data-workspace-task-template-hint>${escapeHtml(getWorkspaceTaskTemplate("custom").aiInstruction)}</p>
             <button class="primary-button btn-sm" type="button" data-workspace-home-action="add-task">Create Task</button>
           </div>
           <div class="workspace-task-list">
@@ -341,6 +349,7 @@ export function renderWorkspaceView() {
                   </div>
                   ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
                   <div class="workspace-task-chip-row">
+                    <span class="workspace-task-tag">${escapeHtml(getWorkspaceTaskTemplate(task.templateKey).label)}</span>
                     <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
                     <span class="workspace-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
                     ${task.assigneeType === "system" ? `<span class="workspace-task-tag workspace-task-tag-ai">${escapeHtml(getAiTaskStateLabel(task))}</span>` : ""}

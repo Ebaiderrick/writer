@@ -62,6 +62,65 @@ export const DEFAULT_STORY_MEMORY = {
   plotPoints: []
 };
 
+export const WORKSPACE_TASK_TEMPLATES = [
+  {
+    key: "custom",
+    label: "Custom Task",
+    title: "",
+    description: "",
+    aiInstruction: "Complete the assigned writing task using the user's exact title and description."
+  },
+  {
+    key: "rewrite-dialogue",
+    label: "Rewrite Dialogue",
+    title: "Rewrite dialogue",
+    description: "Rewrite the dialogue so it feels sharper, more natural, and emotionally precise while preserving the scene intention.",
+    aiInstruction: "Focus on dialogue lines. Strengthen voice, subtext, and rhythm without changing the scene objective."
+  },
+  {
+    key: "expand-scene",
+    label: "Expand Scene",
+    title: "Expand scene",
+    description: "Expand the linked scene with stronger beats, richer turns, and more cinematic development while keeping screenplay formatting tight.",
+    aiInstruction: "Expand the scene with additional screenplay-ready beats, action, and dialogue where helpful."
+  },
+  {
+    key: "improve-clarity",
+    label: "Improve Clarity",
+    title: "Improve clarity",
+    description: "Clarify confusing writing, smooth awkward phrasing, and make the scene easier to read without flattening the voice.",
+    aiInstruction: "Improve readability, precision, and clarity while preserving intent and tone."
+  },
+  {
+    key: "character-voice",
+    label: "Strengthen Character Voice",
+    title: "Strengthen character voice",
+    description: "Refine the character voice so the lines feel more distinct, specific, and true to the character on the page.",
+    aiInstruction: "Sharpen character-specific language, cadence, and attitude so the speaker feels more distinct."
+  },
+  {
+    key: "tighten-action",
+    label: "Tighten Action",
+    title: "Tighten action",
+    description: "Trim and sharpen action lines so the writing feels leaner, more visual, and more cinematic.",
+    aiInstruction: "Condense action writing, remove drag, and keep the page visually readable and cinematic."
+  },
+  {
+    key: "add-description",
+    label: "Add Description",
+    title: "Add description",
+    description: "Add concise visual description that helps the scene feel grounded, specific, and filmable.",
+    aiInstruction: "Add economical but vivid description that supports the scene visually without over-writing."
+  },
+  {
+    key: "check-continuity",
+    label: "Check Continuity",
+    title: "Check continuity",
+    description: "Review the linked material for continuity issues, then provide corrected screenplay-ready text if changes are needed.",
+    aiInstruction: "Look for continuity inconsistencies in action, dialogue, and story flow, then propose corrected script text."
+  }
+];
+
 export const state = {
   projects: [],
   currentProjectId: null,
