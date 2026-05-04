@@ -1033,6 +1033,7 @@ export function renderHome() {
 
       node.querySelector(".project-card-title").textContent = project.title;
       node.querySelector(".project-script-id").textContent = project.scriptId;
+      node.querySelector(".project-card-context-action").dataset.openWorkspaceId = project.workspace?.id || project.id;
       node.querySelector(".project-card-context").textContent = `${workspaceLabel} · ${collaborationLabel}`;
       node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
       node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
@@ -1060,7 +1061,6 @@ export function renderHome() {
               <h4>${escapeHtml(group.workspaceName)}</h4>
               <p>${escapeHtml(group.collaborationLabel)} · ${group.projects.length} project${group.projects.length === 1 ? "" : "s"}</p>
             </div>
-            <button class="ghost-button btn-sm" type="button" data-open-workspace-id="${escapeHtml(group.workspaceId)}">Open Workspace</button>
           </div>
         `;
         const groupGrid = document.createElement("div");
@@ -1087,6 +1087,7 @@ export function renderHome() {
 
     node.querySelector(".project-card-title").textContent = project.title;
     node.querySelector(".project-script-id").textContent = project.scriptId;
+    node.querySelector(".project-card-context-action").dataset.openWorkspaceId = project.workspace?.id || project.id;
     node.querySelector(".project-card-context").textContent = `${workspaceLabel} · ${collaborationLabel}`;
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
