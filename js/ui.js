@@ -2424,6 +2424,10 @@ export function renderCurrentScriptId() {
   } else {
     editorFlag.hidden = true;
   }
+
+  if (refs.saveBadge && state.lastSavedAt && !refs.saveBadge.classList.contains("saving")) {
+    refs.saveBadge.title = `Last saved ${new Date(state.lastSavedAt).toLocaleString()}`;
+  }
 }
 
 export function renderStoryMemory() {
@@ -3470,6 +3474,96 @@ const modalRefs = {
 };
 
 let _modalEpoch = 0;
+const toastTimers = new Map();
+
+function ensureToastHost() {
+    let host = document.querySelector("#toastHost");
+    if (host) return host;
+    host = document.createElement("div");
+    host.id = "toastHost";
+    host.className = "toast-host";
+    document.body.appendChild(host);
+    return host;
+}
+
+export function showToast(message, type = "success", { duration = 2600, id = uid("toast") } = {}) {
+    if (!message) return id;
+    const host = ensureToastHost();
+    let toast = host.querySelector(`[data-toast-id="${id}"]`);
+    if (!toast) {
+        toast = document.createElement("article");
+        toast.dataset.toastId = id;
+        toast.className = "app-toast";
+        toast.innerHTML = `
+          <div class="app-toast-copy">
+            <strong class="app-toast-title"></strong>
+            <span class="app-toast-message"></span>
+          </div>
+          <button class="app-toast-close" type="button" aria-label="Dismiss notification">×</button>
+        `;
+        host.appendChild(toast);
+        toast.querySelector(".app-toast-close")?.addEventListener("click", () => dismissToast(id));
+    }
+    toast.className = `app-toast is-${type}`;
+    toast.querySelector(".app-toast-title").textContent = type === "error"
+      ? "Something went wrong"
+      : type === "loading"
+        ? "Working"
+        : "Done";
+    toast.querySelector(".app-toast-message").textContent = message;
+
+    const existingTimer = toastTimers.get(id);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+        toastTimers.delete(id);
+    }
+    if (duration > 0) {
+        toastTimers.set(id, window.setTimeout(() => dismissToast(id), duration));
+    }
+    return id;
+}
+
+export function dismissToast(id) {
+    const host = document.querySelector("#toastHost");
+    const toast = host?.querySelector(`[data-toast-id="${id}"]`);
+    const timer = toastTimers.get(id);
+    if (timer) {
+        clearTimeout(timer);
+        toastTimers.delete(id);
+    }
+    toast?.remove();
+}
+
+export function updateToast(id, message, type = "success", options = {}) {
+    return showToast(message, type, { ...options, id });
+}
+
+export function setButtonBusy(button, busy, {
+    label = "Working...",
+    restoreLabel = "",
+    minWidth = ""
+} = {}) {
+    if (!button) return;
+    if (busy) {
+        if (!button.dataset.busyOriginalLabel) {
+            button.dataset.busyOriginalLabel = button.textContent || "";
+        }
+        if (minWidth) {
+            button.style.minWidth = minWidth;
+        }
+        button.disabled = true;
+        button.classList.add("is-busy");
+        button.textContent = label;
+        return;
+    }
+    button.disabled = false;
+    button.classList.remove("is-busy");
+    button.textContent = restoreLabel || button.dataset.busyOriginalLabel || button.textContent;
+    delete button.dataset.busyOriginalLabel;
+    if (minWidth) {
+        button.style.minWidth = "";
+    }
+}
 
 export function showModal({
     title,

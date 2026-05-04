@@ -7,6 +7,7 @@ import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic
 
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const RECOVERY_KEY = `${STORAGE_KEY}:recovery`;
 
 function generateScriptId() {
   const bytes = new Uint8Array(6);
@@ -28,6 +29,74 @@ function normalizeScriptId(scriptId) {
 function queueFirestoreSync() {
   clearTimeout(firestoreSyncTimer);
   firestoreSyncTimer = setTimeout(syncCurrentProjectToFirestore, 1500);
+}
+
+function buildPersistencePayload(savedAt = new Date().toISOString()) {
+  return {
+    savedAt,
+    currentProjectId: state.currentProjectId,
+    currentWorkspaceId: state.currentWorkspaceId,
+    projects: state.projects,
+    aiAssist: state.aiAssist,
+    toolStripCollapsed: state.toolStripCollapsed,
+    autoNumberScenes: state.autoNumberScenes,
+    backgroundAnimation: state.backgroundAnimation,
+    theme: state.theme,
+    language: state.language,
+    writingLanguage: state.writingLanguage,
+    grammarCheck: state.grammarCheck,
+    localBackupEnabled: state.localBackupEnabled,
+    localSaveIntervalMinutes: state.localSaveIntervalMinutes,
+    backupPrompted: state.backupPrompted,
+    viewOptions: state.viewOptions,
+    leftPaneBlocks: state.leftPaneBlocks,
+    leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
+    rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
+  };
+}
+
+function parseStoredPayload(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.error(`Unable to parse storage payload for ${key}`, error);
+    return null;
+  }
+}
+
+function chooseLatestPayload(primary, recovery) {
+  const primaryAt = new Date(primary?.savedAt || 0).getTime() || 0;
+  const recoveryAt = new Date(recovery?.savedAt || 0).getTime() || 0;
+  if (recoveryAt > primaryAt) {
+    state.pendingRecoveryNotice = true;
+    return recovery;
+  }
+  state.pendingRecoveryNotice = false;
+  return primary;
+}
+
+function updateSaveBadge(mode = "saved", savedAt = state.lastSavedAt) {
+  if (!refs.saveBadge) return;
+  refs.saveBadge.classList.remove("saving", "is-saved", "is-local");
+  if (mode === "saving") {
+    refs.saveBadge.textContent = t("save.saving");
+    refs.saveBadge.classList.add("saving");
+  } else {
+    refs.saveBadge.textContent = mode === "local" ? t("save.savedLocal") : t("save.saved");
+    refs.saveBadge.classList.add("is-saved");
+    if (mode === "local") refs.saveBadge.classList.add("is-local");
+  }
+  refs.saveBadge.title = savedAt
+    ? `Last saved ${new Date(savedAt).toLocaleString()}`
+    : "";
+}
+
+function writeRecoverySnapshot({ syncInputs = false } = {}) {
+  if (syncInputs) syncProjectFromInputs();
+  const savedAt = new Date().toISOString();
+  localStorage.setItem(RECOVERY_KEY, JSON.stringify(buildPersistencePayload(savedAt)));
+  state.lastSavedAt = savedAt;
 }
 
 async function syncCurrentProjectToFirestore() {
@@ -92,6 +161,8 @@ async function syncCurrentProjectToFirestore() {
       parsed.projects = state.projects;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
+    state.lastSaveSource = "remote";
+    updateSaveBadge("saved", state.lastSavedAt || now);
     window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
 
   } catch (err) {
@@ -127,14 +198,13 @@ export function setProjectsFromCloud(cloudProjects) {
   state.projects = cloudProjects.length > 0 ? cloudProjects : [cloneProject(sampleProject, true)];
   state.currentProjectId = state.projects[0].id;
   state.currentWorkspaceId = null;
+  const savedAt = new Date().toISOString();
+  state.lastSavedAt = savedAt;
+  state.lastSaveSource = "remote";
   try {
-    const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      ...existing,
-      currentProjectId: state.currentProjectId,
-      currentWorkspaceId: state.currentWorkspaceId,
-      projects: state.projects
-    }));
+    const payload = buildPersistencePayload(savedAt);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload));
   } catch (err) {
     console.error('Failed to cache cloud projects locally', err);
   }
@@ -166,8 +236,7 @@ export const sampleProject = {
 
 export function loadProjects() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
+    const parsed = chooseLatestPayload(parseStoredPayload(STORAGE_KEY), parseStoredPayload(RECOVERY_KEY));
     state.projects = Array.isArray(parsed?.projects) && parsed.projects.length
       ? parsed.projects.map(sanitizeProject)
       : [cloneProject(sampleProject, true)];
@@ -185,6 +254,8 @@ export function loadProjects() {
       state.localSaveIntervalMinutes = [5, 10, 60].includes(parsed?.localSaveIntervalMinutes) ? parsed.localSaveIntervalMinutes : 5;
       state.backupPrompted = Boolean(parsed?.backupPrompted);
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
+    state.lastSavedAt = parsed?.savedAt || "";
+    state.lastSaveSource = state.localBackupEnabled ? "local" : "remote";
     state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
     document.documentElement.style.setProperty("--right-pane-width", `${clamp(parsed?.rightWidth || 324, 260, 520)}px`);
@@ -355,45 +426,24 @@ export function upsertProject(project) {
 
 export function persistProjects(forceSavedBadge = false, { syncInputs = true } = {}) {
   if (syncInputs) syncProjectFromInputs();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    currentProjectId: state.currentProjectId,
-    currentWorkspaceId: state.currentWorkspaceId,
-    projects: state.projects,
-    aiAssist: state.aiAssist,
-    toolStripCollapsed: state.toolStripCollapsed,
-      autoNumberScenes: state.autoNumberScenes,
-      backgroundAnimation: state.backgroundAnimation,
-      theme: state.theme,
-      language: state.language,
-      writingLanguage: state.writingLanguage,
-      grammarCheck: state.grammarCheck,
-      localBackupEnabled: state.localBackupEnabled,
-      localSaveIntervalMinutes: state.localSaveIntervalMinutes,
-      backupPrompted: state.backupPrompted,
-      viewOptions: state.viewOptions,
-    leftPaneBlocks: state.leftPaneBlocks,
-    leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
-    rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
-  }));
-  if (refs.saveBadge) {
-      refs.saveBadge.textContent = forceSavedBadge ? t("save.savedLocal") : t("save.saved");
-      refs.saveBadge.classList.remove("saving");
-      refs.saveBadge.classList.add("is-saved");
-  }
+  const savedAt = new Date().toISOString();
+  const payload = buildPersistencePayload(savedAt);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload));
+  state.lastSavedAt = savedAt;
+  state.lastSaveSource = "local";
+  updateSaveBadge("local", savedAt);
   queueFirestoreSync();
 }
 
 export function queueSave() {
-  if (refs.saveBadge) {
-      refs.saveBadge.textContent = t("save.saving");
-      refs.saveBadge.classList.add("saving");
-      refs.saveBadge.classList.remove("is-saved");
-  }
+  updateSaveBadge("saving");
+  writeRecoverySnapshot();
   clearTimeout(state.saveTimer);
   state.saveTimer = window.setTimeout(() => {
     persistProjects(false);
     pushHistory();
-  }, 200);
+  }, 1200);
 }
 
 export function pushHistory() {

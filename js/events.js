@@ -24,7 +24,7 @@ import {
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
-  showModal,
+  showModal, showToast, updateToast,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView, renderStudioProjectContext,
@@ -136,7 +136,8 @@ async function launchNewCreationFlow() {
       tasks: workspaceRoot.workspace?.tasks || []
     }
   });
-  openProject(project.id);
+  openProject(project.id, { silentLoadToast: true });
+  showToast("Project created.", "success");
 }
 
 function openWorkspaceDashboard(workspaceId) {
@@ -184,7 +185,8 @@ async function createProjectInsideCurrentWorkspace() {
       tasks: workspaceProject.workspace?.tasks || []
     }
   });
-  openProject(project.id);
+  openProject(project.id, { silentLoadToast: true });
+  showToast("Project created.", "success");
 }
 
 function isDisposableUntitledDraft(project = getCurrentProject()) {
@@ -623,9 +625,11 @@ function updateWorkspaceTask(taskId, patch) {
 async function runAiTask(taskId) {
   const task = getWorkspaceTaskById(taskId);
   if (!task || task.assigneeType !== "system" || task.aiState === "running") return;
+  const taskToastId = `ai-task-${taskId}`;
   const project = state.projects.find((item) => item.id === task.projectId) || getCurrentProject();
   if (!project) {
     updateWorkspaceTask(taskId, { aiState: "failed", aiError: "The linked project could not be found." });
+    updateToast(taskToastId, "AI task could not find its linked project.", "error", { duration: 4200 });
     createWorkspaceNotification({
       task,
       category: "ai",
@@ -641,6 +645,7 @@ async function runAiTask(taskId) {
     status: task.status === "done" ? "done" : "in-progress",
     aiLastRunAt: new Date().toISOString()
   });
+  updateToast(taskToastId, `${task.title} is processing...`, "loading", { duration: 0 });
   try {
     const resultText = String(await AI.runWorkspaceTaskAssistant(task, project) || "").trim();
     if (!resultText) {
@@ -652,6 +657,7 @@ async function runAiTask(taskId) {
       aiResultSummary: task.title,
       aiError: ""
     });
+    updateToast(taskToastId, "AI task finished.", "success");
     createWorkspaceNotification({
       task: { ...task, aiResultText: resultText },
       category: "review",
@@ -664,6 +670,7 @@ async function runAiTask(taskId) {
       aiState: "failed",
       aiError: error instanceof Error ? error.message : "AI task failed."
     });
+    updateToast(taskToastId, "AI task failed.", "error", { duration: 4200 });
     createWorkspaceNotification({
       task,
       category: "ai",
@@ -1763,13 +1770,14 @@ export function bindEvents() {
 
 // Action Handlers
 export function openProject(projectId, options = {}) {
-  const project = state.projects.find((item) => item.id === projectId);
-  if (!project) return;
-  if (project.isWorkspaceRoot) {
-    openWorkspaceDashboard(project.workspace?.id || project.id);
-    return;
-  }
-  state.currentProjectId = project.id;
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!project) return;
+    if (project.isWorkspaceRoot) {
+      openWorkspaceDashboard(project.workspace?.id || project.id);
+      return;
+    }
+    const projectLoadToast = options.silentLoadToast ? null : showToast("Opening project...", "loading", { duration: 0 });
+    state.currentProjectId = project.id;
   state.currentWorkspaceId = project.workspace?.id !== project.id ? project.workspace?.id || null : null;
   hasShownReadOnlyNotice = false;
 
@@ -1795,14 +1803,17 @@ export function openProject(projectId, options = {}) {
   showStudio();
   renderStudio();
   onStudioEnter(projectId);
-  primeSpellingDictionary();
-  if (options.focusLineId) {
-    focusBlock(options.focusLineId);
-  } else if (state.activeBlockId) {
-    focusBlock(state.activeBlockId);
-  }
+    primeSpellingDictionary();
+    if (options.focusLineId) {
+      focusBlock(options.focusLineId);
+    } else if (state.activeBlockId) {
+      focusBlock(state.activeBlockId);
+    }
 
-  checkFirstWorkBackup();
+    checkFirstWorkBackup();
+    if (projectLoadToast) {
+      updateToast(projectLoadToast, "Project opened.", "success", { duration: 1200 });
+    }
 }
 
 export function renderStudio() {
@@ -3125,8 +3136,8 @@ function clearScriptFilter() {
 }
 
 function exportTxt() {
-  const project = syncProjectFromInputs() || getCurrentProject();
-  if (!project) return;
+    const project = syncProjectFromInputs() || getCurrentProject();
+    if (!project) return;
 
   const preparedLines = buildPreparedExportLines(project);
 
@@ -3139,31 +3150,38 @@ function exportTxt() {
   const cover = coverParts.join("\n\n");
 
   const pageBreak = "\n\n" + "-".repeat(60) + "\n\n";
-  const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
+    const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
 
-  const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
-  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+    const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
+    downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+    showToast("Export complete.", "success");
 }
 
 function exportJson() {
-  const project = syncProjectFromInputs() || getCurrentProject();
-  downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+    const project = syncProjectFromInputs() || getCurrentProject();
+    downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+    showToast("Export complete.", "success");
 }
 
 async function exportWord() {
-    const project = syncProjectFromInputs() || getCurrentProject();
-    if (!project) return;
+      const project = syncProjectFromInputs() || getCurrentProject();
+      if (!project) return;
+      const exportToast = showToast("Preparing Word export...", "loading", { duration: 0 });
 
-    try {
-      const blob = await buildWordDocxBlob(project);
-      downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
-    } catch (error) {
-      console.error("DOCX export failed", error);
-      customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
-    }
+      try {
+        const blob = await buildWordDocxBlob(project);
+        downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
+        updateToast(exportToast, "Export complete.", "success");
+      } catch (error) {
+        console.error("DOCX export failed", error);
+        updateToast(exportToast, "Word export failed.", "error", { duration: 4200 });
+        customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
+      }
 }
 
-function exportPdf() { printWithHiddenFrame(); }
+function exportPdf() {
+  printWithHiddenFrame();
+}
 
 function openPreviewWindow(autoPrint) {
   const project = syncProjectFromInputs() || getCurrentProject();
@@ -3182,6 +3200,7 @@ function openPreviewWindow(autoPrint) {
 function printWithHiddenFrame() {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
+  const exportToast = showToast("Preparing PDF export...", "loading", { duration: 0 });
 
   const existingFrame = document.querySelector("#printExportFrame");
   if (existingFrame) {
@@ -3202,21 +3221,24 @@ function printWithHiddenFrame() {
   const cleanup = () => window.setTimeout(() => frame.remove(), 1500);
   frame.onload = () => {
     const frameWindow = frame.contentWindow;
-    if (!frameWindow) {
-      cleanup();
-      customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
-      return;
-    }
+      if (!frameWindow) {
+        cleanup();
+        updateToast(exportToast, "PDF export failed.", "error", { duration: 4200 });
+        customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+        return;
+      }
 
     frameWindow.focus();
-    window.setTimeout(() => {
-      try {
-        frameWindow.print();
-      } catch (error) {
-        console.error("Unable to start PDF print flow", error);
-        customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
-      } finally {
-        cleanup();
+      window.setTimeout(() => {
+        try {
+          frameWindow.print();
+          updateToast(exportToast, "Print dialog opened.", "success", { duration: 2400 });
+        } catch (error) {
+          console.error("Unable to start PDF print flow", error);
+          updateToast(exportToast, "PDF export failed.", "error", { duration: 4200 });
+          customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+        } finally {
+          cleanup();
       }
     }, 350);
   };
