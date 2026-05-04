@@ -400,24 +400,26 @@ export function renderWorkspaceView() {
   if (refs.workspaceViewSubtitle) refs.workspaceViewSubtitle.textContent = "Projects, members, delegation, and shared progress live here.";
 
   refs.workspaceDashboard.innerHTML = `
-    <div class="workspace-home-shell">
-      <section class="workspace-home-hero-card">
+    <div class="workspace-home-shell workspace-popup">
+      <section class="workspace-home-hero-card workspace-popup-section">
         <div class="workspace-home-hero-copy">
-          <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
+          <h4>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h4>
           <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
         </div>
-        <div class="workspace-home-hero-metrics">
-          <div class="workspace-home-metric"><span>Projects</span><strong>${projects.length}</strong></div>
-          <div class="workspace-home-metric"><span>Members</span><strong>${uniqueMembers.length}</strong></div>
-          <div class="workspace-home-metric"><span>Tasks</span><strong>${allTaskItems.length}</strong></div>
-          <div class="workspace-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong></div>
+        <div class="workspace-home-hero-metrics workspace-metric-columns">
+          <div class="workspace-home-metric workspace-metric-row"><span>Owner</span><strong>${escapeHtml(getUserHandle(ownerLabel, "owner"))}</strong></div>
+          <div class="workspace-home-metric workspace-metric-row"><span>Members</span><strong>${uniqueMembers.length}</strong></div>
+          <div class="workspace-home-metric workspace-metric-row"><span>Projects</span><strong>${projects.length}</strong></div>
+          <div class="workspace-home-metric workspace-metric-row"><span>Tasks</span><strong>${allTaskItems.length}</strong></div>
+          <div class="workspace-home-metric workspace-metric-row"><span>Last Activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong></div>
+          <div class="workspace-home-metric workspace-metric-row"><span>Workspace Code</span><strong>${escapeHtml(workspaceLead.workspace?.inviteCode || workspaceLead.scriptId || "")}</strong></div>
         </div>
       </section>
       <div class="workspace-home-grid">
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-popup-section">
           <div class="workspace-home-panel-head">
             <h4>Members</h4>
-            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Manage Members</button>
           </div>
           <div class="workspace-home-members">
             ${[
@@ -431,9 +433,9 @@ export function renderWorkspaceView() {
             ].join("")}
           </div>
         </section>
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-popup-section">
           <div class="workspace-home-panel-head">
-            <h4>Recent activity</h4>
+            <h4>Recent Activity</h4>
           </div>
           <div class="workspace-home-activity workspace-home-activity-timeline">
             ${activityItems.length ? activityItems.map((item) => `
@@ -445,9 +447,9 @@ export function renderWorkspaceView() {
             `).join("") : '<p class="workspace-home-empty">No activity yet. The next change here will start the trail.</p>'}
           </div>
         </section>
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-popup-section">
           <div class="workspace-home-panel-head">
-            <h4>Team progress</h4>
+            <h4>Team Progress</h4>
             <span class="workspace-home-panel-meta">${memberTaskSummary.length} active</span>
           </div>
           <div class="workspace-summary-list">
@@ -460,7 +462,7 @@ export function renderWorkspaceView() {
             `).join("") || '<p class="workspace-home-empty">Assign tasks to teammates to see progress here.</p>'}
           </div>
         </section>
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-popup-section">
           <div class="workspace-home-panel-head">
             <h4>My Inbox</h4>
             <span class="workspace-home-panel-meta">${personalInboxItems.length} active</span>
@@ -480,7 +482,7 @@ export function renderWorkspaceView() {
             `).join("") || '<p class="workspace-home-empty">Assignments, mentions, and review items for you will collect here.</p>'}
           </div>
         </section>
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-popup-section">
           <div class="workspace-home-panel-head">
             <h4>Notifications</h4>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-all-notifications-read">Mark all read</button>
@@ -505,7 +507,7 @@ export function renderWorkspaceView() {
             `).join("") || '<p class="workspace-home-empty">No notifications yet.</p>'}
           </div>
         </section>
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-popup-section">
           <div class="workspace-home-panel-head">
             <h4>Completed & Review</h4>
             <span class="workspace-home-panel-meta">${inboxItems.length} item${inboxItems.length === 1 ? "" : "s"}</span>
@@ -894,7 +896,7 @@ export function renderHome() {
           </div>
         </section>
         <div class="workspace-home-grid">
-          <section class="workspace-home-panel">
+          <section class="workspace-home-panel workspace-popup-section">
             <div class="workspace-home-panel-head">
               <h4>Members</h4>
               <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
@@ -911,9 +913,9 @@ export function renderHome() {
               ].join("")}
             </div>
           </section>
-          <section class="workspace-home-panel">
+          <section class="workspace-home-panel workspace-popup-section">
             <div class="workspace-home-panel-head">
-              <h4>Recent activity</h4>
+              <h4>Recent Activity</h4>
               <button class="primary-button btn-sm" type="button" data-workspace-home-action="new-project">New Project</button>
             </div>
             <div class="workspace-home-activity">
