@@ -15,6 +15,79 @@ const MENU_GLYPHS = {
   down: "&#9660;"
 };
 
+function getProjectCollaborationLabel(project) {
+  return project.isShared || Object.keys(project.collaborators || {}).length
+    ? "Shared"
+    : "Private";
+}
+
+function sortProjectsForHome(projects) {
+  const sorted = [...projects];
+  if (state.homeProjectSort === "title") {
+    sorted.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+    return sorted;
+  }
+  if (state.homeProjectSort === "scenes") {
+    sorted.sort((a, b) => {
+      const aCount = (a.lines || []).filter((line) => line.type === "scene" && line.text.trim()).length;
+      const bCount = (b.lines || []).filter((line) => line.type === "scene" && line.text.trim()).length;
+      return bCount - aCount || new Date(b.updatedAt) - new Date(a.updatedAt);
+    });
+    return sorted;
+  }
+  sorted.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  return sorted;
+}
+
+function buildProjectGroups(projects) {
+  const grouped = new Map();
+  projects.forEach((project) => {
+    const workspaceId = project.workspace?.id || project.id;
+    const workspaceName = project.workspace?.name || "Personal Workspace";
+    const collaborationLabel = getProjectCollaborationLabel(project);
+    const key = `${workspaceId}::${workspaceName}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        workspaceId,
+        workspaceName,
+        collaborationLabel,
+        projects: []
+      });
+    }
+    grouped.get(key).projects.push(project);
+  });
+  return [...grouped.values()].sort((a, b) => a.workspaceName.localeCompare(b.workspaceName));
+}
+
+function buildProjectLibraryGroups(projects) {
+  return buildProjectGroups(projects);
+}
+
+function getTaskStatusCountLabel(tasks) {
+  const openCount = tasks.filter((task) => task.status !== "done").length;
+  const doneCount = tasks.filter((task) => task.status === "done").length;
+  return { openCount, doneCount };
+}
+
+function sortWorkspaceTasks(tasks) {
+  const sorted = [...tasks];
+  if (state.workspaceTaskSort === "status") {
+    const weight = { "in-progress": 0, todo: 1, done: 2 };
+    sorted.sort((a, b) => {
+      const diff = (weight[a.status] ?? 99) - (weight[b.status] ?? 99);
+      return diff || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+    });
+    return sorted;
+  }
+  if (state.workspaceTaskSort === "comments") {
+    sorted.sort((a, b) => (b.comments?.length || 0) - (a.comments?.length || 0)
+      || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    return sorted;
+  }
+  sorted.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  return sorted;
+}
+
 export function showAuth() {
   refs.homeView.hidden = true;
   refs.workspaceView.hidden = true;
@@ -45,6 +118,7 @@ export function showStudio() {
 export function renderWorkspaceView() {
   const workspaceId = state.currentWorkspaceId;
   state.workspaceTaskFilter = state.workspaceTaskFilter || "all";
+  state.workspaceTaskSort = state.workspaceTaskSort || "latest";
   const allProjects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   const workspaceLead = allProjects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot)
     || allProjects.find((project) => project.workspace?.id === workspaceId)
@@ -64,7 +138,7 @@ export function renderWorkspaceView() {
   ].filter(Boolean);
   const uniqueMembers = [...new Set(memberEntries)];
   const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
-  const allTaskItems = [...(workspaceLead.workspace?.tasks || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  const allTaskItems = sortWorkspaceTasks(workspaceLead.workspace?.tasks || []);
   const assignees = [
     { id: workspaceLead.ownerId || "workspace_owner", label: workspaceLead.ownerName || workspaceLead.ownerEmail || workspaceLead.author || "Workspace Owner" },
     ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: person.name || person.email || "Collaborator" })),
@@ -83,12 +157,19 @@ export function renderWorkspaceView() {
     inProgress: allTaskItems.filter((task) => task.status === "in-progress").length,
     done: allTaskItems.filter((task) => task.status === "done").length
   };
+  const taskStatusSummary = getTaskStatusCountLabel(allTaskItems);
   const taskItems = allTaskItems.filter((task) => {
     if (state.workspaceTaskFilter === "mine") {
       return task.assignedTo === currentUid;
     }
     if (state.workspaceTaskFilter === "ai") {
       return task.assignedTo === "ai_assist";
+    }
+    if (state.workspaceTaskFilter === "open") {
+      return task.status !== "done";
+    }
+    if (state.workspaceTaskFilter === "done") {
+      return task.status === "done";
     }
     return true;
   });
@@ -144,11 +225,19 @@ export function renderWorkspaceView() {
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "all" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">My Tasks</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "ai" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "open" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="open">Open</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "done" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="done">Done</button>
+            <select class="comment-filter-select workspace-task-sort-select" data-workspace-home-action="set-task-sort" aria-label="Sort tasks">
+              <option value="latest" ${state.workspaceTaskSort === "latest" ? "selected" : ""}>Latest</option>
+              <option value="status" ${state.workspaceTaskSort === "status" ? "selected" : ""}>By Status</option>
+              <option value="comments" ${state.workspaceTaskSort === "comments" ? "selected" : ""}>Most Discussed</option>
+            </select>
           </div>
           <div class="workspace-task-summary">
             <span class="workspace-task-summary-chip">To Do ${taskSummary.todo}</span>
             <span class="workspace-task-summary-chip">In Progress ${taskSummary.inProgress}</span>
             <span class="workspace-task-summary-chip">Done ${taskSummary.done}</span>
+            <span class="workspace-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
           </div>
           <div class="workspace-task-form">
             <input class="modal-input" type="text" placeholder="Task title" data-workspace-task-title>
@@ -177,7 +266,7 @@ export function renderWorkspaceView() {
                   <div class="workspace-task-head">
                     <div>
                       <strong>${escapeHtml(task.title)}</strong>
-                      <span>${escapeHtml(task.assignedLabel || "Unassigned")} - ${escapeHtml(task.sceneLabel || task.reference || "General workspace task")}</span>
+                      <span>${escapeHtml(task.sceneLabel || task.reference || "General workspace task")}</span>
                     </div>
                     <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
                       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
@@ -186,7 +275,13 @@ export function renderWorkspaceView() {
                     </select>
                   </div>
                   ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
-                  ${task.comments?.length ? `<p class="workspace-task-comment-preview">Latest comment: ${escapeHtml(task.comments[task.comments.length - 1].text)}</p>` : ""}
+                  <div class="workspace-task-chip-row">
+                    <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
+                    <span class="workspace-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
+                    ${task.projectId ? `<span class="workspace-task-tag">${escapeHtml(projects.find((project) => project.id === task.projectId)?.title || "Linked Project")}</span>` : ""}
+                    ${task.comments?.length ? `<span class="workspace-task-tag">${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}</span>` : ""}
+                  </div>
+                  ${task.comments?.length ? `<p class="workspace-task-comment-preview">Latest comment by ${escapeHtml(task.comments[task.comments.length - 1].author || "Workspace member")}: ${escapeHtml(task.comments[task.comments.length - 1].text)}</p>` : ""}
                   <div class="workspace-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
                     <div class="workspace-task-actions">
@@ -288,7 +383,8 @@ export function renderHome() {
 
   refs.projectGrid.innerHTML = "";
   const template = document.querySelector("#projectCardTemplate");
-  let projects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  state.homeProjectSort = state.homeProjectSort || "latest";
+  let projects = sortProjectsForHome(state.projects);
   let workspaceLead = null;
   const currentUid = auth.currentUser?.uid || "";
 
@@ -437,6 +533,7 @@ export function renderHome() {
     refs.homeProjectsTitle.textContent = "Projects";
     refs.homeProjectsSubtitle.textContent = "Open a script, switch workspaces, or start a new draft without losing the bigger picture.";
     refs.homeWorkspaceDashboard.hidden = false;
+    const sharedCount = projects.filter((project) => getProjectCollaborationLabel(project) === "Shared").length;
     refs.homeWorkspaceDashboard.innerHTML = `
       <section class="project-dashboard-summary">
         <div class="project-dashboard-copy">
@@ -444,10 +541,17 @@ export function renderHome() {
           <h3>Everything you are writing, in one clear library.</h3>
           <p>Projects come first here. Workspaces stay available whenever you need team context.</p>
         </div>
-        <div class="project-filter-row" role="tablist" aria-label="Project filters">
-          <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
-          <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
-          <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+        <div class="project-dashboard-controls">
+          <div class="project-filter-row" role="tablist" aria-label="Project filters">
+            <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
+            <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
+            <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+          </div>
+          <select class="comment-filter-select project-sort-select" data-home-project-sort aria-label="Sort projects">
+            <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
+            <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
+            <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Most Scenes</option>
+          </select>
         </div>
         <div class="project-summary-grid">
           <article class="project-summary-card">
@@ -466,9 +570,65 @@ export function renderHome() {
             <span>Latest activity</span>
             <strong>${projects[0]?.updatedAt ? escapeHtml(formatDateTime(projects[0].updatedAt)) : "No drafts yet"}</strong>
           </article>
+          <article class="project-summary-card">
+            <span>Shared projects</span>
+            <strong>${sharedCount}</strong>
+          </article>
         </div>
       </section>
     `;
+  }
+
+  if (!state.currentWorkspaceId) {
+    const appendProjectCard = (project) => {
+      const node = template.content.firstElementChild.cloneNode(true);
+      const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+      const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+      const workspaceLabel = project.workspace?.name || "Personal Workspace";
+      const collaborationLabel = getProjectCollaborationLabel(project);
+
+      node.querySelector(".project-card-title").textContent = project.title;
+      node.querySelector(".project-script-id").textContent = project.scriptId;
+      node.querySelector(".project-card-context").textContent = `${workspaceLabel} · ${collaborationLabel}`;
+      node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
+      node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
+      node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
+      node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
+      node.dataset.projectId = project.id;
+      node.querySelector(".project-card-open").dataset.projectId = project.id;
+      return node;
+    };
+
+    if (!projects.length) {
+      refs.projectGrid.innerHTML = `
+        <article class="project-library-empty">
+          <strong>No projects match this view yet.</strong>
+          <p>Create a new film script or switch filters to bring more work into view.</p>
+        </article>
+      `;
+    } else {
+      buildProjectLibraryGroups(projects).forEach((group) => {
+        const section = document.createElement("section");
+        section.className = "project-group-section";
+        section.innerHTML = `
+          <div class="project-group-head">
+            <div>
+              <h4>${escapeHtml(group.workspaceName)}</h4>
+              <p>${escapeHtml(group.collaborationLabel)} · ${group.projects.length} project${group.projects.length === 1 ? "" : "s"}</p>
+            </div>
+          </div>
+        `;
+        const groupGrid = document.createElement("div");
+        groupGrid.className = "project-group-grid";
+        group.projects.forEach((project) => groupGrid.appendChild(appendProjectCard(project)));
+        section.appendChild(groupGrid);
+        refs.projectGrid.appendChild(section);
+      });
+    }
+
+    renderRecentProjectMenus();
+    applyTranslations();
+    return;
   }
 
   projects.forEach((project) => {

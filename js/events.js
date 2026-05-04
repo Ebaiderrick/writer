@@ -402,6 +402,13 @@ export function bindEvents() {
     }
   });
 
+  refs.homeWorkspaceDashboard?.addEventListener("change", (event) => {
+    const sortSelect = event.target.closest("[data-home-project-sort]");
+    if (!sortSelect) return;
+    state.homeProjectSort = sortSelect.value || "latest";
+    renderHome();
+  });
+
   refs.workspaceDashboard?.addEventListener("click", (event) => {
     const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
     if (!action) return;
@@ -450,6 +457,12 @@ export function bindEvents() {
   });
 
   refs.workspaceDashboard?.addEventListener("change", (event) => {
+    const taskSortSelect = event.target.closest("[data-workspace-home-action='set-task-sort']");
+    if (taskSortSelect) {
+      state.workspaceTaskSort = taskSortSelect.value || "latest";
+      renderWorkspaceView();
+      return;
+    }
     const statusSelect = event.target.closest("[data-workspace-task-status]");
     if (statusSelect) {
       updateWorkspaceTask(statusSelect.dataset.workspaceTaskStatus, { status: statusSelect.value });

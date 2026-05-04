@@ -87,6 +87,9 @@ export const state = {
   leftPaneBlocks: DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block })),
   filterQuery: "",
   homeProjectFilter: "all",
+  homeProjectSort: "latest",
+  workspaceTaskFilter: "all",
+  workspaceTaskSort: "latest",
   backupPrompted: false,
   history: [],
   historyIndex: -1
