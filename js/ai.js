@@ -1478,7 +1478,38 @@ export const AI = (() => {
     }
   }
 
-  return { init, triggerAction, triggerSmartProofread, triggerAssistant };
+  async function runWorkspaceTaskAssistant(task, project) {
+    const projectContext = project?.lines?.map((line) => `[${line.type.toUpperCase()}] ${line.text}`).join("\n") || "";
+    const sceneContext = task.sceneId
+      ? (() => {
+          const sceneIndex = project?.lines?.findIndex((line) => line.id === task.sceneId) ?? -1;
+          if (sceneIndex < 0) return "";
+          const chunk = [];
+          for (let index = sceneIndex; index < (project?.lines?.length || 0); index += 1) {
+            const line = project.lines[index];
+            if (index !== sceneIndex && line.type === "scene") break;
+            chunk.push(`[${line.type.toUpperCase()}] ${line.text}`);
+          }
+          return chunk.join("\n");
+        })()
+      : "";
+    const storyMemory = buildStoryMemoryContext(project);
+    const context = sceneContext || projectContext;
+    const instruction = [
+      "You are @AIassist inside a screenplay workspace.",
+      "Complete the assigned writing task and return screenplay-ready text only.",
+      "Do not explain your answer. Do not include markdown fences.",
+      "Preserve screenplay formatting with sensible line breaks.",
+      task.sceneId ? "Focus on the linked scene context first." : "Use the broader script context where helpful."
+    ].join(" ");
+    return requestAiText({
+      action: "Improve",
+      instruction: `${storyMemory}${instruction}`,
+      input: `TASK TITLE: ${task.title}\nTASK DESCRIPTION: ${task.description || "No extra description provided."}\nREFERENCE: ${task.reference || "None"}\n\nSCRIPT CONTEXT:\n${context}`.trim()
+    });
+  }
+
+  return { init, triggerAction, triggerSmartProofread, triggerAssistant, runWorkspaceTaskAssistant };
 })();
 
 function getSelectedTextInBlock(block) {

@@ -947,11 +947,41 @@ html[data-theme="rose"] .mesh-background {
   font-size: 0.7rem;
 }
 
+.workspace-task-tag-ai {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  color: var(--accent-strong);
+}
+
 .workspace-task-comment-preview {
   margin: 0;
   color: var(--muted);
   font-size: 0.73rem;
   line-height: 1.4;
+}
+
+.workspace-ai-review {
+  display: grid;
+  gap: 12px;
+}
+
+.workspace-ai-review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workspace-ai-review-body {
+  max-height: min(44vh, 360px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-strong) 82%, transparent);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--ink);
 }
 
 .workspace-task-meta {

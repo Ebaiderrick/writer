@@ -55,6 +55,7 @@ import {
 
 let studioSidebarRefreshFrame = 0;
 let hasShownReadOnlyNotice = false;
+const aiTaskTimers = new Map();
 
 function ensureDefaultWorkspaceRoot() {
   const currentWorkspaceRoot = state.currentWorkspaceId
@@ -209,6 +210,71 @@ function getWorkspaceTaskById(taskId) {
   return getWorkspaceRootProject(state.currentWorkspaceId)?.workspace?.tasks?.find((task) => task.id === taskId) || null;
 }
 
+function resolveAiTaskStart(choice, manualValue = "") {
+  const now = Date.now();
+  if (choice === "in-3m") return new Date(now + (3 * 60 * 1000)).toISOString();
+  if (choice === "in-10m") return new Date(now + (10 * 60 * 1000)).toISOString();
+  if (choice === "manual" && manualValue) {
+    const parsed = new Date(manualValue);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+  }
+  return "";
+}
+
+function getAiTaskDisplayState(task) {
+  if (task.assigneeType !== "system") return "";
+  if (task.aiState === "scheduled" && task.aiStartAt) {
+    return new Date(task.aiStartAt).getTime() <= Date.now() ? "ready" : "scheduled";
+  }
+  return task.aiState || "idle";
+}
+
+function clearAiTaskTimer(taskId) {
+  const timer = aiTaskTimers.get(taskId);
+  if (timer) {
+    clearTimeout(timer);
+    aiTaskTimers.delete(taskId);
+  }
+}
+
+function scheduleAiTaskRun(task) {
+  clearAiTaskTimer(task.id);
+  if (!task || task.assigneeType !== "system" || !["scheduled", "ready"].includes(task.aiState)) {
+    return;
+  }
+  const startAtMs = task.aiStartAt ? new Date(task.aiStartAt).getTime() : Date.now();
+  const delay = Math.max(0, startAtMs - Date.now());
+  const timer = setTimeout(() => {
+    aiTaskTimers.delete(task.id);
+    runAiTask(task.id);
+  }, delay);
+  aiTaskTimers.set(task.id, timer);
+}
+
+function syncAiTaskSchedules(workspaceId = state.currentWorkspaceId) {
+  const root = getWorkspaceRootProject(workspaceId);
+  const tasks = root?.workspace?.tasks || [];
+  const validIds = new Set(tasks.map((task) => task.id));
+  [...aiTaskTimers.keys()].forEach((taskId) => {
+    if (!validIds.has(taskId)) clearAiTaskTimer(taskId);
+  });
+  tasks.forEach((task) => scheduleAiTaskRun(task));
+}
+
+function insertAiTaskResultIntoProject(task, resultText) {
+  const project = state.projects.find((item) => item.id === task.projectId);
+  if (!project) return false;
+  const generatedLines = parseTextToLines(resultText);
+  if (!generatedLines.length) return false;
+  const anchorId = task.lineId || task.sceneId || "";
+  let insertIndex = anchorId ? project.lines.findIndex((line) => line.id === anchorId) + 1 : project.lines.length;
+  if (insertIndex <= 0) insertIndex = project.lines.length;
+  project.lines.splice(insertIndex, 0, ...generatedLines);
+  project.updatedAt = new Date().toISOString();
+  upsertProject(project);
+  return true;
+}
+
 function addWorkspaceTaskFromDashboard() {
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
   if (!workspaceProject || !refs.workspaceDashboard) return;
@@ -219,6 +285,8 @@ function addWorkspaceTaskFromDashboard() {
   const assigneeSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-assignee]');
   const referenceInput = refs.workspaceDashboard.querySelector('[data-workspace-task-reference]');
   const statusSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-status-new]');
+  const aiStartSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start]');
+  const aiStartManual = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start-manual]');
   const title = titleInput?.value?.trim();
   if (!title) {
     customAlert("Enter a task title first.", "Workspace Tasks");
@@ -229,6 +297,11 @@ function addWorkspaceTaskFromDashboard() {
   const sceneChoice = getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
   const assignedTo = assigneeSelect?.value || "";
   const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
+  const aiStartChoice = aiStartSelect?.value || "now";
+  const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
+  const initialAiState = assignee?.assigneeType === "system"
+    ? (aiStartAt ? "scheduled" : "ready")
+    : "idle";
   const nextTask = {
     id: uid("task"),
     title,
@@ -243,6 +316,12 @@ function addWorkspaceTaskFromDashboard() {
     sceneLabel: sceneChoice?.label || "",
     lineId: sceneChoice?.lineId || "",
     comments: [],
+    aiState: initialAiState,
+    aiStartAt,
+    aiLastRunAt: "",
+    aiResultText: "",
+    aiResultSummary: "",
+    aiError: "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
@@ -253,6 +332,7 @@ function addWorkspaceTaskFromDashboard() {
     tasks: [...(workspace.tasks || []), nextTask]
   }));
   persistProjects(true, { syncInputs: false });
+  scheduleAiTaskRun(nextTask);
   renderWorkspaceView();
 }
 
@@ -265,7 +345,81 @@ function updateWorkspaceTask(taskId, patch) {
       : task)
   }));
   persistProjects(true, { syncInputs: false });
+  const task = getWorkspaceTaskById(taskId);
+  if (task) scheduleAiTaskRun(task);
   renderWorkspaceView();
+}
+
+async function runAiTask(taskId) {
+  const task = getWorkspaceTaskById(taskId);
+  if (!task || task.assigneeType !== "system" || task.aiState === "running") return;
+  const project = state.projects.find((item) => item.id === task.projectId) || getCurrentProject();
+  if (!project) {
+    updateWorkspaceTask(taskId, { aiState: "failed", aiError: "The linked project could not be found." });
+    return;
+  }
+  updateWorkspaceTask(taskId, {
+    aiState: "running",
+    aiError: "",
+    status: task.status === "done" ? "done" : "in-progress",
+    aiLastRunAt: new Date().toISOString()
+  });
+  try {
+    const resultText = String(await AI.runWorkspaceTaskAssistant(task, project) || "").trim();
+    if (!resultText) {
+      throw new Error("AI returned no usable result.");
+    }
+    updateWorkspaceTask(taskId, {
+      aiState: "review",
+      aiResultText: resultText,
+      aiResultSummary: task.title,
+      aiError: ""
+    });
+  } catch (error) {
+    updateWorkspaceTask(taskId, {
+      aiState: "failed",
+      aiError: error instanceof Error ? error.message : "AI task failed."
+    });
+  }
+}
+
+async function reviewAiTaskResult(taskId) {
+  const task = getWorkspaceTaskById(taskId);
+  if (!task?.aiResultText) return;
+  const container = document.createElement("div");
+  container.className = "workspace-ai-review";
+  container.innerHTML = `
+    <div class="workspace-ai-review-head">
+      <span class="workspace-task-tag">AI Suggestion</span>
+      <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "@AIassist")}</span>
+    </div>
+    <p class="modal-copy">${escapeHtml(task.title)}</p>
+    <div class="workspace-ai-review-body">${escapeHtml(task.aiResultText).replace(/\n/g, "<br>")}</div>
+  `;
+  await showModal({
+    title: "AI Task Result",
+    message: container,
+    confirmLabel: "Close",
+    showCancel: false
+  });
+}
+
+async function applyAiTaskResult(taskId) {
+  const task = getWorkspaceTaskById(taskId);
+  if (!task?.aiResultText) return;
+  const applied = insertAiTaskResultIntoProject(task, task.aiResultText);
+  if (!applied) {
+    await customAlert("The AI result could not be inserted into the project.", "AI Task");
+    return;
+  }
+  updateWorkspaceTask(taskId, { aiState: "applied", status: "done" });
+  openProject(task.projectId, { focusLineId: task.lineId || task.sceneId || "" });
+}
+
+function dismissAiTaskResult(taskId) {
+  const task = getWorkspaceTaskById(taskId);
+  if (!task) return;
+  updateWorkspaceTask(taskId, { aiState: "dismissed" });
 }
 
 async function editWorkspaceTask(taskId) {
@@ -293,6 +447,13 @@ async function editWorkspaceTask(taskId) {
       <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
       <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
     </select>
+    <select id="taskEditAiStart" class="comment-filter-select">
+      <option value="now" ${!task.aiStartAt ? "selected" : ""}>Run now</option>
+      <option value="in-3m">In 3 mins</option>
+      <option value="in-10m">In 10 mins</option>
+      <option value="manual" ${task.aiStartAt ? "selected" : ""}>Custom time</option>
+    </select>
+    <input id="taskEditAiStartManual" class="modal-input" type="datetime-local" value="${task.aiStartAt ? new Date(task.aiStartAt).toISOString().slice(0, 16) : ""}">
     <input id="taskEditReference" class="modal-input" type="text" value="${escapeHtml(task.reference || "")}" placeholder="Scene / block reference (optional)">
     <textarea id="taskEditDescription" class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen...">${escapeHtml(task.description || "")}</textarea>
   `;
@@ -306,6 +467,12 @@ async function editWorkspaceTask(taskId) {
   const sceneChoice = scenes.find((scene) => scene.sceneId === sceneId) || null;
   const assignedTo = container.querySelector("#taskEditAssignee")?.value || "";
   const assignee = assignees.find((entry) => entry.id === assignedTo);
+  const aiStartAt = assignee?.assigneeType === "system"
+    ? resolveAiTaskStart(
+        container.querySelector("#taskEditAiStart")?.value || "now",
+        container.querySelector("#taskEditAiStartManual")?.value || ""
+      )
+    : "";
   updateWorkspaceTask(taskId, {
     title: container.querySelector("#taskEditTitle")?.value?.trim() || task.title,
     description: container.querySelector("#taskEditDescription")?.value?.trim() || "",
@@ -316,6 +483,12 @@ async function editWorkspaceTask(taskId) {
     assignedTo,
     assignedLabel: assignee?.label || "Unassigned",
     assigneeType: assignee?.assigneeType || "human",
+    aiStartAt,
+    aiState: assignee?.assigneeType === "system"
+      ? (task.aiState === "review" || task.aiState === "applied" || task.aiState === "dismissed"
+          ? task.aiState
+          : (aiStartAt ? "scheduled" : "ready"))
+      : "idle",
     status: container.querySelector("#taskEditStatus")?.value || task.status,
     reference: container.querySelector("#taskEditReference")?.value?.trim() || ""
   });
@@ -324,6 +497,7 @@ async function editWorkspaceTask(taskId) {
 async function deleteWorkspaceTask(taskId) {
   const confirmed = await customConfirm("Delete this task and its comments?", "Delete Task");
   if (!confirmed) return;
+  clearAiTaskTimer(taskId);
   updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
     ...workspace,
     tasks: (workspace.tasks || []).filter((task) => task.id !== taskId)
@@ -371,6 +545,7 @@ async function commentOnWorkspaceTask(taskId) {
 }
 
 export function bindEvents() {
+  syncAiTaskSchedules();
   // Navigation
   refs.newProjectBtn.addEventListener("click", () => {
     launchNewCreationFlow();
@@ -452,6 +627,26 @@ export function bindEvents() {
       if (projectId) {
         openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       }
+      return;
+    }
+    if (action === "run-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) runAiTask(taskId);
+      return;
+    }
+    if (action === "review-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) reviewAiTaskResult(taskId);
+      return;
+    }
+    if (action === "apply-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) applyAiTaskResult(taskId);
+      return;
+    }
+    if (action === "dismiss-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) dismissAiTaskResult(taskId);
       return;
     }
   });

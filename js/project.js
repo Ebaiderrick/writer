@@ -575,6 +575,12 @@ function sanitizeWorkspaceTasks(tasks) {
       author: String(comment?.author || "").trim(),
       createdAt: comment?.createdAt || new Date().toISOString()
     })).filter((comment) => comment.text) : [],
+    aiState: ["idle", "scheduled", "ready", "running", "review", "applied", "dismissed", "failed"].includes(task?.aiState) ? task.aiState : "idle",
+    aiStartAt: task?.aiStartAt || "",
+    aiLastRunAt: task?.aiLastRunAt || "",
+    aiResultText: String(task?.aiResultText || "").trim(),
+    aiResultSummary: String(task?.aiResultSummary || "").trim(),
+    aiError: String(task?.aiError || "").trim(),
     createdAt: task?.createdAt || new Date().toISOString(),
     updatedAt: task?.updatedAt || task?.createdAt || new Date().toISOString(),
     createdByName: String(task?.createdByName || "").trim()

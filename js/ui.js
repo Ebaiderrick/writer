@@ -69,6 +69,28 @@ function getTaskStatusCountLabel(tasks) {
   return { openCount, doneCount };
 }
 
+function formatRelativeTaskTime(task) {
+  if (!task.aiStartAt) return "";
+  const diffMs = new Date(task.aiStartAt).getTime() - Date.now();
+  if (Number.isNaN(diffMs)) return "";
+  const minutes = Math.max(0, Math.round(diffMs / 60000));
+  if (minutes <= 0) return "Ready now";
+  if (minutes === 1) return "Starts in 1 min";
+  return `Starts in ${minutes} mins`;
+}
+
+function getAiTaskStateLabel(task) {
+  const stateLabel = task.aiState || "idle";
+  if (stateLabel === "scheduled") return formatRelativeTaskTime(task) || "Scheduled";
+  if (stateLabel === "ready") return "Ready";
+  if (stateLabel === "running") return "AI working";
+  if (stateLabel === "review") return "Review result";
+  if (stateLabel === "applied") return "Applied";
+  if (stateLabel === "dismissed") return "Dismissed";
+  if (stateLabel === "failed") return task.aiError || "AI failed";
+  return "AI task";
+}
+
 function sortWorkspaceTasks(tasks) {
   const sorted = [...tasks];
   if (state.workspaceTaskSort === "status") {
@@ -256,6 +278,13 @@ export function renderWorkspaceView() {
               <option value="in-progress">In Progress</option>
               <option value="done">Done</option>
             </select>
+            <select class="comment-filter-select" data-workspace-task-ai-start>
+              <option value="now">AI: Run now</option>
+              <option value="in-3m">AI: In 3 mins</option>
+              <option value="in-10m">AI: In 10 mins</option>
+              <option value="manual">AI: Custom time</option>
+            </select>
+            <input class="modal-input" type="datetime-local" data-workspace-task-ai-start-manual>
             <input class="modal-input" type="text" placeholder="Scene / block reference (optional)" data-workspace-task-reference>
             <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
             <button class="primary-button btn-sm" type="button" data-workspace-home-action="add-task">Create Task</button>
@@ -278,13 +307,19 @@ export function renderWorkspaceView() {
                   <div class="workspace-task-chip-row">
                     <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
                     <span class="workspace-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
+                    ${task.assigneeType === "system" ? `<span class="workspace-task-tag workspace-task-tag-ai">${escapeHtml(getAiTaskStateLabel(task))}</span>` : ""}
                     ${task.projectId ? `<span class="workspace-task-tag">${escapeHtml(projects.find((project) => project.id === task.projectId)?.title || "Linked Project")}</span>` : ""}
                     ${task.comments?.length ? `<span class="workspace-task-tag">${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}</span>` : ""}
                   </div>
+                  ${task.aiResultText ? `<p class="workspace-task-comment-preview">AI suggestion ready. Review before applying it to the script.</p>` : ""}
                   ${task.comments?.length ? `<p class="workspace-task-comment-preview">Latest comment by ${escapeHtml(task.comments[task.comments.length - 1].author || "Workspace member")}: ${escapeHtml(task.comments[task.comments.length - 1].text)}</p>` : ""}
                   <div class="workspace-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
                     <div class="workspace-task-actions">
+                      ${task.assigneeType === "system" && ["ready", "scheduled", "failed"].includes(task.aiState) ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">${task.aiState === "failed" ? "Retry AI" : "Run AI"}</button>` : ""}
+                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
+                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="apply-ai-task" data-task-id="${escapeHtml(task.id)}">Apply</button>` : ""}
+                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="dismiss-ai-task" data-task-id="${escapeHtml(task.id)}">Dismiss</button>` : ""}
                       <button class="ghost-button btn-sm" type="button" data-workspace-home-action="edit-task" data-task-id="${escapeHtml(task.id)}">Edit</button>
                       <button class="ghost-button btn-sm" type="button" data-workspace-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
                       <button class="ghost-button btn-sm" type="button" data-workspace-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
