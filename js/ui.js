@@ -48,6 +48,19 @@ function buildProfileTriggerMarkup({ uid = "", name = "", photoURL = "", classNa
   return `<button class="${escapeHtml(classes)}" type="button" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(photoURL)}">${escapeHtml(getUserHandle(name, "user"))}</button>`;
 }
 
+function buildProfileAvatarMarkup({ uid = "", name = "", photoURL = "", className = "" } = {}) {
+  const classes = ["workspace-profile-trigger", "workspace-profile-avatar", className].filter(Boolean).join(" ");
+  const source = String(name || "").trim().replace(/^@/, "");
+  const initials = source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "W";
+  return `<button class="${escapeHtml(classes)}" type="button" title="${escapeHtml(getUserHandle(name, "user"))}" aria-label="${escapeHtml(getUserHandle(name, "user"))}" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(photoURL)}">${escapeHtml(initials)}</button>`;
+}
+
 function sortProjectsForHome(projects) {
   const sorted = [...projects];
   if (state.homeProjectSort === "title") {
@@ -294,8 +307,8 @@ export function renderWorkspaceView() {
           </div>
           <div class="workspace-home-members">
             ${[
-              buildProfileTriggerMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
-              ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => buildProfileTriggerMarkup({
+              buildProfileAvatarMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
+              ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => buildProfileAvatarMarkup({
                 uid,
                 name: getMemberDisplayName(person),
                 photoURL: person.photoURL || "",
@@ -406,44 +419,83 @@ export function renderWorkspaceView() {
             <span class="workspace-task-summary-chip">Assigned to me ${myAssignedTasks.length}</span>
           </div>
           <div class="workspace-task-form">
-            <select class="comment-filter-select" data-workspace-task-template>
-              ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.label)}</option>`).join("")}
-            </select>
-            <input class="modal-input" type="text" placeholder="Task title" data-workspace-task-title>
-            <select class="comment-filter-select" data-workspace-task-project>
-              ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
-            </select>
-            <select class="comment-filter-select" data-workspace-task-scene>
-              <option value="">General task</option>
-              ${sceneOptions.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" data-scene-project-id="${escapeHtml(scene.projectId)}">${escapeHtml(scene.label)}</option>`).join("")}
-            </select>
-            <select class="comment-filter-select" data-workspace-task-assignee>
-              ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
-            </select>
-            <select class="comment-filter-select" data-workspace-task-status-new>
-              <option value="todo">To Do</option>
-              <option value="in-progress">In Progress</option>
-              <option value="done">Done</option>
-            </select>
-            <select class="comment-filter-select" data-workspace-task-priority>
-              <option value="normal">Priority: Normal</option>
-              <option value="high">Priority: High</option>
-              <option value="low">Priority: Low</option>
-            </select>
-            <input class="modal-input" type="datetime-local" data-workspace-task-due>
-            <select class="comment-filter-select" data-workspace-task-ai-start>
-              <option value="now">AI: Run now</option>
-              <option value="in-3m">AI: In 3 mins</option>
-              <option value="in-10m">AI: In 10 mins</option>
-              <option value="manual">AI: Custom time</option>
-            </select>
-            <input class="modal-input" type="datetime-local" data-workspace-task-ai-start-manual>
-            <input class="modal-input" type="text" placeholder="Scene / block reference (optional)" data-workspace-task-reference>
-            <select class="comment-filter-select" data-workspace-task-memory>
-              <option value="">Story memory link (optional)</option>
-              ${storyMemoryLinks.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)} · ${escapeHtml(item.name)}</option>`).join("")}
-            </select>
-            <input class="modal-input" type="text" placeholder="Handoff cue or @mention note (optional)" data-workspace-task-handoff>
+            <label class="workspace-task-field">
+              <span>Template</span>
+              <select class="comment-filter-select" data-workspace-task-template>
+                ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="workspace-task-field workspace-task-field-wide">
+              <span>Task</span>
+              <input class="modal-input" type="text" placeholder="Task title" data-workspace-task-title>
+            </label>
+            <label class="workspace-task-field">
+              <span>Project</span>
+              <select class="comment-filter-select" data-workspace-task-project>
+                ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="workspace-task-field">
+              <span>Scene</span>
+              <select class="comment-filter-select" data-workspace-task-scene>
+                <option value="">General task</option>
+                ${sceneOptions.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" data-scene-project-id="${escapeHtml(scene.projectId)}">${escapeHtml(scene.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="workspace-task-field">
+              <span>Assign to</span>
+              <select class="comment-filter-select" data-workspace-task-assignee>
+                ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="workspace-task-field">
+              <span>Status</span>
+              <select class="comment-filter-select" data-workspace-task-status-new>
+                <option value="todo">To Do</option>
+                <option value="in-progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+            </label>
+            <label class="workspace-task-field">
+              <span>Priority</span>
+              <select class="comment-filter-select" data-workspace-task-priority>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+            <label class="workspace-task-field">
+              <span>Due</span>
+              <input class="modal-input" type="datetime-local" data-workspace-task-due>
+            </label>
+            <label class="workspace-task-field">
+              <span>AI start</span>
+              <select class="comment-filter-select" data-workspace-task-ai-start>
+                <option value="now">Run now</option>
+                <option value="in-3m">In 3 mins</option>
+                <option value="in-10m">In 10 mins</option>
+                <option value="manual">Custom time</option>
+              </select>
+            </label>
+            <label class="workspace-task-field">
+              <span>Custom time</span>
+              <input class="modal-input" type="datetime-local" data-workspace-task-ai-start-manual>
+            </label>
+            <label class="workspace-task-field">
+              <span>Reference</span>
+              <input class="modal-input" type="text" placeholder="Scene / block reference" data-workspace-task-reference>
+            </label>
+            <label class="workspace-task-field">
+              <span>Story memory</span>
+              <select class="comment-filter-select" data-workspace-task-memory>
+                <option value="">None</option>
+                ${storyMemoryLinks.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)} · ${escapeHtml(item.name)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="workspace-task-field workspace-task-field-wide">
+              <span>Handoff cue</span>
+              <input class="modal-input" type="text" placeholder="@mention note or handoff cue" data-workspace-task-handoff>
+            </label>
             <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
             <p class="workspace-task-template-hint" data-workspace-task-template-hint>${escapeHtml(getWorkspaceTaskTemplate("custom").aiInstruction)}</p>
             <button class="primary-button btn-sm" type="button" data-workspace-home-action="add-task">Create Task</button>
