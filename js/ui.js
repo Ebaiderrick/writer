@@ -978,34 +978,22 @@ export function renderHome() {
     refs.homeProjectsTitle.textContent = "Projects";
     refs.homeProjectsSubtitle.textContent = "Open a script, switch contexts, or start a new draft from one clean project library.";
     refs.homeWorkspaceDashboard.hidden = false;
-    const sharedCount = projects.filter((project) => getProjectCollaborationLabel(project) === "Shared").length;
     refs.homeWorkspaceDashboard.innerHTML = `
-      <section class="project-dashboard-summary">
-        <div class="project-dashboard-copy">
-          <h3>Projects</h3>
-          <p>Everything you are writing lives here, with shared workspace context ready when you need it.</p>
-        </div>
-        <div class="project-summary-grid">
-          <article class="project-summary-card">
-            <span>Total projects</span>
-            <strong>${projects.length}</strong>
-          </article>
-          <article class="project-summary-card">
-            <span>Workspaces</span>
-            <strong>${new Set(projects.map((project) => project.workspace?.id || project.id)).size}</strong>
-          </article>
-          <article class="project-summary-card">
-            <span>Format</span>
-            <strong>${state.homeProjectFormat === "all" ? "All" : (state.homeProjectFormat === "prose-poetry" ? "Prose / Poetry" : "Film Script")}</strong>
-          </article>
-          <article class="project-summary-card">
-            <span>Latest activity</span>
-            <strong>${projects[0]?.updatedAt ? escapeHtml(formatDateTime(projects[0].updatedAt)) : "No drafts yet"}</strong>
-          </article>
-          <article class="project-summary-card">
-            <span>Shared projects</span>
-            <strong>${sharedCount}</strong>
-          </article>
+      <section class="project-dashboard-summary project-filter-bar-shell">
+        <div class="project-filter-row" role="tablist" aria-label="Project filters">
+          <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
+          <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
+          <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+          <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
+            <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>All formats</option>
+            <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film Script</option>
+            <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose / Poetry</option>
+          </select>
+          <select class="comment-filter-select project-format-select" data-home-project-sort aria-label="Project sort">
+            <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
+            <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
+            <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Most scenes</option>
+          </select>
         </div>
       </section>
     `;
@@ -1040,23 +1028,7 @@ export function renderHome() {
         </article>
       `;
     } else {
-      buildProjectLibraryGroups(projects).forEach((group) => {
-        const section = document.createElement("section");
-        section.className = "project-group-section";
-        section.innerHTML = `
-          <div class="project-group-head">
-            <div>
-              <h4>${escapeHtml(group.workspaceName)}</h4>
-              <p>${escapeHtml(group.collaborationLabel)} · ${group.projects.length} project${group.projects.length === 1 ? "" : "s"}</p>
-            </div>
-          </div>
-        `;
-        const groupGrid = document.createElement("div");
-        groupGrid.className = "project-group-grid";
-        group.projects.forEach((project) => groupGrid.appendChild(appendProjectCard(project)));
-        section.appendChild(groupGrid);
-        refs.projectGrid.appendChild(section);
-      });
+      projects.forEach((project) => refs.projectGrid.appendChild(appendProjectCard(project)));
     }
 
     renderRecentProjectMenus();

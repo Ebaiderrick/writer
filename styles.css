@@ -1318,14 +1318,13 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-dashboard-summary {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 10px 12px 8px;
+  display: block;
+  margin-bottom: 8px;
+  padding: 4px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.028);
+  box-shadow: none;
 }
 
 .project-dashboard-copy {
@@ -1348,7 +1347,12 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-filter-row {
-  display: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .project-filter-row::-webkit-scrollbar {
@@ -1356,12 +1360,12 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-filter-chip {
-  min-height: 30px;
-  border: 1px solid transparent;
-  background: transparent;
+  min-height: 28px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
   color: var(--muted);
-  border-radius: 999px;
-  padding: 6px 12px;
+  border-radius: 8px;
+  padding: 5px 9px;
   font-size: 0.72rem;
   font-weight: 600;
   line-height: 1;
@@ -1403,16 +1407,18 @@ html[data-theme="rose"] .mesh-background {
 .project-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 6px;
+  grid-auto-rows: 178px;
 }
 
 .project-card {
   border: 1px solid var(--line);
   background: var(--panel);
-  border-radius: 10px;
+  border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-  min-height: 188px;
+  height: 178px;
+  overflow: hidden;
 }
 
 .project-card:hover {
@@ -1479,32 +1485,35 @@ html[data-theme="rose"] .mesh-background {
   width: 100%;
   border: 0;
   background: transparent;
-  padding: 14px;
+  padding: 10px 12px 12px;
   text-align: left;
   cursor: pointer;
-  min-height: 148px;
+  height: 124px;
+  overflow: hidden;
 }
 
 .project-card-top {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 12px 14px 0;
+  padding: 10px 12px 0;
 }
 
 .project-card-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  flex-shrink: 0;
 }
 
 .project-quick-action {
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   color: var(--muted);
-  border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 0.66rem;
+  border-radius: 7px;
+  min-height: 22px;
+  padding: 3px 6px;
+  font-size: 0.62rem;
   cursor: pointer;
 }
 
@@ -1536,19 +1545,19 @@ html[data-theme="rose"] .mesh-background {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .project-card-context-action {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 4px 8px;
+  min-height: 20px;
+  padding: 3px 7px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 7px;
   background: transparent;
   color: var(--muted);
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1577,10 +1586,10 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-meta-row {
-  margin: 6px 0;
-  gap: 12px;
+  margin: 5px 0;
+  gap: 10px;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
 }
 
 .script-id-flag {
@@ -1603,9 +1612,9 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-card-logline {
-  margin: 0 0 12px;
-  line-height: 1.34;
-  font-size: 0.84rem;
+  margin: 0 0 9px;
+  line-height: 1.3;
+  font-size: 0.8rem;
   color: color-mix(in srgb, var(--ink) 70%, var(--muted));
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1623,7 +1632,7 @@ html[data-theme="rose"] .mesh-background {
 .project-card-open {
     display: block;
     width: 100%;
-    padding: 14px;
+    padding: 10px 12px 12px;
     border: none;
     background: transparent;
     text-align: left;
@@ -1631,16 +1640,16 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-format-select {
-  min-width: 136px;
+  min-width: 118px;
   flex: 0 0 auto;
-  min-height: 30px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: transparent;
+  min-height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 6px 12px;
+  padding: 5px 9px;
 }
 
 .primary-button,
