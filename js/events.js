@@ -991,6 +991,26 @@ export function bindEvents() {
     renderHome();
   });
 
+  refs.homeProjectsSubtitle?.addEventListener("click", (event) => {
+    const filterTrigger = event.target.closest("[data-home-project-filter]");
+    if (!filterTrigger) return;
+    state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
+    renderHome();
+  });
+
+  refs.homeProjectsSubtitle?.addEventListener("change", (event) => {
+    const formatSelect = event.target.closest("[data-home-project-format]");
+    if (formatSelect) {
+      state.homeProjectFormat = formatSelect.value || "all";
+      renderHome();
+      return;
+    }
+    const sortSelect = event.target.closest("[data-home-project-sort]");
+    if (!sortSelect) return;
+    state.homeProjectSort = sortSelect.value || "latest";
+    renderHome();
+  });
+
   refs.workspaceDashboard?.addEventListener("click", (event) => {
     const profileTrigger = event.target.closest("[data-profile-uid]");
     if (profileTrigger) {

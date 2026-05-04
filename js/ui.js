@@ -976,27 +976,25 @@ export function renderHome() {
     refs.homeHero.hidden = false;
     refs.workspaceBackBtn.hidden = true;
     refs.homeProjectsTitle.textContent = "Projects";
-    refs.homeProjectsSubtitle.textContent = "Open a script, switch contexts, or start a new draft from one clean project library.";
-    refs.homeWorkspaceDashboard.hidden = false;
-    refs.homeWorkspaceDashboard.innerHTML = `
-      <section class="project-dashboard-summary project-filter-bar-shell">
-        <div class="project-filter-row" role="tablist" aria-label="Project filters">
-          <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
-          <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
-          <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
-          <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
-            <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>All formats</option>
-            <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film Script</option>
-            <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose / Poetry</option>
-          </select>
-          <select class="comment-filter-select project-format-select" data-home-project-sort aria-label="Project sort">
-            <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
-            <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
-            <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Most scenes</option>
-          </select>
-        </div>
-      </section>
+    refs.homeProjectsSubtitle.innerHTML = `
+      <div class="project-filter-row project-filter-row-inline" role="tablist" aria-label="Project filters">
+        <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
+        <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
+        <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+        <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
+          <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>Format</option>
+          <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film</option>
+          <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose</option>
+        </select>
+        <select class="comment-filter-select project-format-select project-sort-select" data-home-project-sort aria-label="Project sort">
+          <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
+          <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
+          <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Scenes</option>
+        </select>
+      </div>
     `;
+    refs.homeWorkspaceDashboard.hidden = false;
+    refs.homeWorkspaceDashboard.innerHTML = "";
   }
 
   if (!state.currentWorkspaceId) {
