@@ -863,6 +863,7 @@ export function renderHome() {
               <h4>${escapeHtml(group.workspaceName)}</h4>
               <p>${escapeHtml(group.collaborationLabel)} · ${group.projects.length} project${group.projects.length === 1 ? "" : "s"}</p>
             </div>
+            <button class="ghost-button btn-sm" type="button" data-open-workspace-id="${escapeHtml(group.workspaceId)}">Open Workspace</button>
           </div>
         `;
         const groupGrid = document.createElement("div");
