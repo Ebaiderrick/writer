@@ -371,6 +371,11 @@ export function renderWorkspaceView() {
               <option value="in-progress">In Progress</option>
               <option value="done">Done</option>
             </select>
+            <select class="comment-filter-select" data-workspace-task-priority>
+              <option value="normal">Priority: Normal</option>
+              <option value="high">Priority: High</option>
+              <option value="low">Priority: Low</option>
+            </select>
             <select class="comment-filter-select" data-workspace-task-ai-start>
               <option value="now">AI: Run now</option>
               <option value="in-3m">AI: In 3 mins</option>
@@ -400,6 +405,7 @@ export function renderWorkspaceView() {
                   ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
                   <div class="workspace-task-chip-row">
                     <span class="workspace-task-tag">${escapeHtml(getWorkspaceTaskTemplate(task.templateKey).label)}</span>
+                    <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
                     <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
                     <span class="workspace-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
                     ${task.assigneeType === "system" ? `<span class="workspace-task-tag workspace-task-tag-ai">${escapeHtml(getAiTaskStateLabel(task))}</span>` : ""}
@@ -407,6 +413,7 @@ export function renderWorkspaceView() {
                     ${task.comments?.length ? `<span class="workspace-task-tag">${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}</span>` : ""}
                   </div>
                   ${task.aiResultText ? `<p class="workspace-task-comment-preview">AI suggestion ready. Review before applying it to the script.</p>` : ""}
+                  ${task.assigneeType === "system" && task.aiError ? `<p class="workspace-task-comment-preview">Last AI run: ${escapeHtml(task.aiError)}</p>` : ""}
                   ${task.comments?.length ? `<p class="workspace-task-comment-preview">Latest comment by ${escapeHtml(task.comments[task.comments.length - 1].author || "Workspace member")}: ${escapeHtml(task.comments[task.comments.length - 1].text)}</p>` : ""}
                   <div class="workspace-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>

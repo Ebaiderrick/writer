@@ -560,6 +560,7 @@ function sanitizeWorkspaceTasks(tasks) {
   return tasks.map((task, index) => ({
     id: task?.id || uid(`task-${index}`),
     templateKey: String(task?.templateKey || "custom").trim() || "custom",
+    priority: ["low", "normal", "high"].includes(task?.priority) ? task.priority : "normal",
     title: String(task?.title || "").trim(),
     description: String(task?.description || "").trim(),
     status: ["todo", "in-progress", "done"].includes(task?.status) ? task.status : "todo",
@@ -583,6 +584,7 @@ function sanitizeWorkspaceTasks(tasks) {
     aiResultText: String(task?.aiResultText || "").trim(),
     aiResultSummary: String(task?.aiResultSummary || "").trim(),
     aiError: String(task?.aiError || "").trim(),
+    lastApplyMode: ["insert-below", "replace-target", "append-scene"].includes(task?.lastApplyMode) ? task.lastApplyMode : "insert-below",
     createdAt: task?.createdAt || new Date().toISOString(),
     updatedAt: task?.updatedAt || task?.createdAt || new Date().toISOString(),
     createdByName: String(task?.createdByName || "").trim()

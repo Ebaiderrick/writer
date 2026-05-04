@@ -1017,6 +1017,18 @@ html[data-theme="rose"] .mesh-background {
   color: var(--accent-strong);
 }
 
+.workspace-task-tag-priority-high {
+  border-color: color-mix(in srgb, #f59e0b 40%, var(--line));
+  background: color-mix(in srgb, #f59e0b 16%, var(--surface-strong));
+  color: color-mix(in srgb, #f59e0b 78%, var(--ink));
+}
+
+.workspace-task-tag-priority-low {
+  border-color: color-mix(in srgb, #38bdf8 35%, var(--line));
+  background: color-mix(in srgb, #38bdf8 14%, var(--surface-strong));
+  color: color-mix(in srgb, #38bdf8 72%, var(--ink));
+}
+
 .workspace-task-comment-preview {
   margin: 0;
   color: var(--muted);
@@ -1029,11 +1041,42 @@ html[data-theme="rose"] .mesh-background {
   gap: 12px;
 }
 
+.workspace-ai-review-summary {
+  display: grid;
+  gap: 4px;
+}
+
 .workspace-ai-review-head {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.workspace-ai-review-caption {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.workspace-ai-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-ai-review-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-ai-review-label {
+  font-size: 0.71rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .workspace-ai-review-body {
@@ -1046,6 +1089,15 @@ html[data-theme="rose"] .mesh-background {
   font-size: 0.84rem;
   line-height: 1.55;
   color: var(--ink);
+}
+
+.workspace-ai-apply-row {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-ai-review-modal {
+  max-width: min(980px, calc(100vw - 32px));
 }
 
 .workspace-task-meta {
@@ -4504,6 +4556,10 @@ body.outline-hidden .section-scenes {
   .workspace-task-meta {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .workspace-ai-review-grid {
+    grid-template-columns: 1fr;
   }
 
   .field-grid,

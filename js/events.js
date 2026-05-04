@@ -346,14 +346,104 @@ function syncAiTaskSchedules(workspaceId = state.currentWorkspaceId) {
 }
 
 function insertAiTaskResultIntoProject(task, resultText) {
+  return insertAiTaskResultIntoProjectWithMode(task, resultText, task.lastApplyMode || "insert-below");
+}
+
+function getProjectSceneRange(project, task) {
+  if (!project || !Array.isArray(project.lines) || !project.lines.length) {
+    return null;
+  }
+  const explicitSceneIndex = task.sceneId
+    ? project.lines.findIndex((line) => line.id === task.sceneId)
+    : -1;
+  let startIndex = explicitSceneIndex;
+  if (startIndex < 0 && task.lineId) {
+    const lineIndex = project.lines.findIndex((line) => line.id === task.lineId);
+    if (lineIndex >= 0) {
+      for (let index = lineIndex; index >= 0; index -= 1) {
+        if (project.lines[index]?.type === "scene") {
+          startIndex = index;
+          break;
+        }
+      }
+    }
+  }
+  if (startIndex < 0) return null;
+  let endIndex = project.lines.length - 1;
+  for (let index = startIndex + 1; index < project.lines.length; index += 1) {
+    if (project.lines[index]?.type === "scene") {
+      endIndex = index - 1;
+      break;
+    }
+  }
+  return { startIndex, endIndex };
+}
+
+function getAiTaskTargetContext(task) {
+  const project = state.projects.find((item) => item.id === task.projectId);
+  if (!project?.lines?.length) {
+    return {
+      projectTitle: "Linked Project",
+      targetLabel: task.sceneLabel || task.reference || "Project context",
+      originalText: "No linked script context was found for this task."
+    };
+  }
+  const sceneRange = getProjectSceneRange(project, task);
+  const lineIndex = task.lineId
+    ? project.lines.findIndex((line) => line.id === task.lineId)
+    : -1;
+  const sourceLines = [];
+  let targetLabel = task.sceneLabel || task.reference || project.title;
+  if (lineIndex >= 0) {
+    const start = Math.max(0, lineIndex - 1);
+    const end = Math.min(project.lines.length - 1, lineIndex + 2);
+    for (let index = start; index <= end; index += 1) {
+      sourceLines.push(project.lines[index]);
+    }
+    targetLabel = task.reference || task.sceneLabel || "Linked line";
+  } else if (sceneRange) {
+    const limit = Math.min(sceneRange.endIndex, sceneRange.startIndex + 7);
+    for (let index = sceneRange.startIndex; index <= limit; index += 1) {
+      sourceLines.push(project.lines[index]);
+    }
+    targetLabel = task.sceneLabel || "Linked scene";
+  } else {
+    sourceLines.push(...project.lines.slice(Math.max(0, project.lines.length - 6)));
+  }
+  const originalText = sourceLines.map((line) => formatLineText(line)).join("\n").trim() || "No source context available.";
+  return {
+    projectTitle: project.title,
+    targetLabel,
+    originalText
+  };
+}
+
+function insertAiTaskResultIntoProjectWithMode(task, resultText, mode = "insert-below") {
   const project = state.projects.find((item) => item.id === task.projectId);
   if (!project) return false;
   const generatedLines = parseTextToLines(resultText);
   if (!generatedLines.length) return false;
-  const anchorId = task.lineId || task.sceneId || "";
-  let insertIndex = anchorId ? project.lines.findIndex((line) => line.id === anchorId) + 1 : project.lines.length;
-  if (insertIndex <= 0) insertIndex = project.lines.length;
-  project.lines.splice(insertIndex, 0, ...generatedLines);
+  const lineIndex = task.lineId ? project.lines.findIndex((line) => line.id === task.lineId) : -1;
+  const sceneRange = getProjectSceneRange(project, task);
+
+  if (mode === "replace-target") {
+    if (lineIndex >= 0) {
+      project.lines.splice(lineIndex, 1, ...generatedLines);
+    } else if (sceneRange) {
+      project.lines.splice(sceneRange.startIndex, (sceneRange.endIndex - sceneRange.startIndex) + 1, ...generatedLines);
+    } else {
+      project.lines.splice(project.lines.length, 0, ...generatedLines);
+    }
+  } else if (mode === "append-scene") {
+    const insertIndex = sceneRange ? sceneRange.endIndex + 1 : project.lines.length;
+    project.lines.splice(insertIndex, 0, ...generatedLines);
+  } else {
+    const anchorId = task.lineId || task.sceneId || "";
+    let insertIndex = anchorId ? project.lines.findIndex((line) => line.id === anchorId) + 1 : project.lines.length;
+    if (insertIndex <= 0) insertIndex = project.lines.length;
+    project.lines.splice(insertIndex, 0, ...generatedLines);
+  }
+
   project.updatedAt = new Date().toISOString();
   upsertProject(project);
   return true;
@@ -370,6 +460,7 @@ function addWorkspaceTaskFromDashboard() {
   const assigneeSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-assignee]');
   const referenceInput = refs.workspaceDashboard.querySelector('[data-workspace-task-reference]');
   const statusSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-status-new]');
+  const prioritySelect = refs.workspaceDashboard.querySelector('[data-workspace-task-priority]');
   const aiStartSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start]');
   const aiStartManual = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start-manual]');
   const templateKey = templateSelect?.value || "custom";
@@ -391,6 +482,7 @@ function addWorkspaceTaskFromDashboard() {
   const nextTask = {
     id: uid("task"),
     templateKey,
+    priority: prioritySelect?.value || "normal",
     title,
     description: descriptionInput?.value?.trim() || "",
     status: statusSelect?.value || "todo",
@@ -471,6 +563,13 @@ async function runAiTask(taskId) {
   const project = state.projects.find((item) => item.id === task.projectId) || getCurrentProject();
   if (!project) {
     updateWorkspaceTask(taskId, { aiState: "failed", aiError: "The linked project could not be found." });
+    createWorkspaceNotification({
+      task,
+      category: "ai",
+      title: "AI task needs relinking",
+      message: `${task.title} could not run because its linked project is missing.`,
+      actor: "@AIassist"
+    });
     return;
   }
   updateWorkspaceTask(taskId, {
@@ -506,7 +605,7 @@ async function runAiTask(taskId) {
       task,
       category: "ai",
       title: "AI task failed",
-      message: `${task.title} needs attention before it can run successfully again.`,
+      message: `${task.title} needs attention before it can run successfully again. ${String(error instanceof Error ? error.message : "AI task failed.").trim()}`,
       actor: "@AIassist"
     });
   }
@@ -515,38 +614,65 @@ async function runAiTask(taskId) {
 async function reviewAiTaskResult(taskId) {
   const task = getWorkspaceTaskById(taskId);
   if (!task?.aiResultText) return;
+  const context = getAiTaskTargetContext(task);
   const container = document.createElement("div");
   container.className = "workspace-ai-review";
   container.innerHTML = `
     <div class="workspace-ai-review-head">
       <span class="workspace-task-tag">AI Suggestion</span>
       <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "@AIassist")}</span>
+      <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
     </div>
-    <p class="modal-copy">${escapeHtml(task.title)}</p>
-    <div class="workspace-ai-review-body">${escapeHtml(task.aiResultText).replace(/\n/g, "<br>")}</div>
+    <div class="workspace-ai-review-summary">
+      <p class="modal-copy">${escapeHtml(task.title)}</p>
+      <p class="workspace-ai-review-caption">${escapeHtml(context.projectTitle)} · ${escapeHtml(context.targetLabel)}</p>
+    </div>
+    <div class="workspace-ai-review-grid">
+      <div class="workspace-ai-review-panel">
+        <span class="workspace-ai-review-label">Current Script Context</span>
+        <div class="workspace-ai-review-body">${escapeHtml(context.originalText).replace(/\n/g, "<br>")}</div>
+      </div>
+      <div class="workspace-ai-review-panel">
+        <span class="workspace-ai-review-label">AI Suggestion</span>
+        <div class="workspace-ai-review-body">${escapeHtml(task.aiResultText).replace(/\n/g, "<br>")}</div>
+      </div>
+    </div>
+    <label class="workspace-ai-apply-row">
+      <span class="workspace-ai-review-label">Apply Result As</span>
+      <select class="comment-filter-select" id="workspaceAiApplyMode">
+        <option value="insert-below" ${(task.lastApplyMode || "insert-below") === "insert-below" ? "selected" : ""}>Insert below target</option>
+        <option value="replace-target" ${task.lastApplyMode === "replace-target" ? "selected" : ""}>Replace target</option>
+        <option value="append-scene" ${task.lastApplyMode === "append-scene" ? "selected" : ""}>Append to scene</option>
+      </select>
+    </label>
   `;
-  await showModal({
+  const shouldApply = await showModal({
     title: "AI Task Result",
     message: container,
-    confirmLabel: "Close",
-    showCancel: false
+    confirmLabel: "Apply",
+    cancelLabel: "Close",
+    contentClass: "workspace-ai-review-modal"
   });
+  if (!shouldApply) return;
+  const applyMode = container.querySelector("#workspaceAiApplyMode")?.value || task.lastApplyMode || "insert-below";
+  await applyAiTaskResult(taskId, applyMode);
 }
 
-async function applyAiTaskResult(taskId) {
+async function applyAiTaskResult(taskId, applyMode = null) {
   const task = getWorkspaceTaskById(taskId);
   if (!task?.aiResultText) return;
-  const applied = insertAiTaskResultIntoProject(task, task.aiResultText);
+  const finalMode = applyMode || task.lastApplyMode || "insert-below";
+  const applied = insertAiTaskResultIntoProjectWithMode(task, task.aiResultText, finalMode);
   if (!applied) {
     await customAlert("The AI result could not be inserted into the project.", "AI Task");
     return;
   }
-  updateWorkspaceTask(taskId, { aiState: "applied", status: "done" });
+  updateWorkspaceTask(taskId, { aiState: "applied", status: "done", lastApplyMode: finalMode });
   createWorkspaceNotification({
     task,
     category: "completed",
     title: "AI result applied",
-    message: `${task.title} was applied to the script.`,
+    message: `${task.title} was applied to the script with ${finalMode.replace("-", " ")} mode.`,
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
   openProject(task.projectId, { focusLineId: task.lineId || task.sceneId || "" });
@@ -594,6 +720,11 @@ async function editWorkspaceTask(taskId) {
       <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
       <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
     </select>
+    <select id="taskEditPriority" class="comment-filter-select">
+      <option value="normal" ${(task.priority || "normal") === "normal" ? "selected" : ""}>Priority: Normal</option>
+      <option value="high" ${(task.priority || "normal") === "high" ? "selected" : ""}>Priority: High</option>
+      <option value="low" ${(task.priority || "normal") === "low" ? "selected" : ""}>Priority: Low</option>
+    </select>
     <select id="taskEditAiStart" class="comment-filter-select">
       <option value="now" ${!task.aiStartAt ? "selected" : ""}>Run now</option>
       <option value="in-3m">In 3 mins</option>
@@ -627,6 +758,7 @@ async function editWorkspaceTask(taskId) {
     : "";
   updateWorkspaceTask(taskId, {
     templateKey: container.querySelector("#taskEditTemplate")?.value || "custom",
+    priority: container.querySelector("#taskEditPriority")?.value || task.priority || "normal",
     title: container.querySelector("#taskEditTitle")?.value?.trim() || task.title,
     description: container.querySelector("#taskEditDescription")?.value?.trim() || "",
     projectId: sceneChoice?.projectId || container.querySelector("#taskEditProject")?.value || task.projectId,
