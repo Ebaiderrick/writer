@@ -41,11 +41,11 @@
 
   /* Script Defaults */
   --script-font-size: 12pt;
-  --script-line-width: 60ch;
-  --script-character-offset: 22ch;
+  --script-line-width: 66ch;
+  --script-character-offset: 23ch;
   --script-character-width: 24ch;
-  --script-dialogue-offset: 10ch;
-  --script-dialogue-width: 36ch;
+  --script-dialogue-offset: 11ch;
+  --script-dialogue-width: 38ch;
   --script-parenthetical-offset: 16ch;
   --script-parenthetical-width: 24ch;
   --script-dual-offset: 22ch;
@@ -2146,6 +2146,18 @@ html[data-theme="rose"] .mesh-background {
   grid-template-columns: 0 0 minmax(0, 1fr) 0 0;
 }
 
+body.focus-mode-active .studio-layout:not(.left-pane-hidden):not(.right-pane-hidden) {
+  grid-template-columns: 0 0 minmax(0, 1fr) 0 0;
+}
+
+body.focus-mode-active .left-pane,
+body.focus-mode-active .right-pane,
+body.focus-mode-active .resize-handle {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+}
+
 .left-pane,
 .center-pane,
 .right-pane {
@@ -2163,6 +2175,7 @@ html[data-theme="rose"] .mesh-background {
 .right-pane {
   padding: 14px 10px 18px;
   background: var(--surface-muted);
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .center-pane {
@@ -2392,7 +2405,9 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .editor-scroll {
   height: 100%;
-  padding: 12px 12px 28px;
+  padding: 16px 18px 34px;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable both-edges;
 }
 
 .ai-panel {
@@ -2467,7 +2482,9 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .screenplay-editor {
   position: relative;
   min-height: calc(100vh - 280px);
-  padding: 54px 64px 96px;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 52px 72px 92px;
 }
 
 .script-block-row {
@@ -2527,8 +2544,9 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   word-break: break-word;
   font-family: "Courier New", monospace;
   font-size: var(--script-font-size);
-  line-height: 1.5;
+  line-height: 1.64;
   color: var(--paper-ink);
+  caret-color: var(--accent-strong);
   width: min(100%, var(--script-line-width));
 }
 

@@ -55,8 +55,29 @@ import {
 } from './collaborate.js';
 
 let studioSidebarRefreshFrame = 0;
+let previewRefreshTimer = 0;
+let focusModeTimer = 0;
 let hasShownReadOnlyNotice = false;
 const aiTaskTimers = new Map();
+
+function setTypingFocusModeActive() {
+  if (!state.viewOptions.focusMode) return;
+  document.body.classList.add("focus-mode-active");
+  clearTimeout(focusModeTimer);
+  focusModeTimer = window.setTimeout(() => {
+    document.body.classList.remove("focus-mode-active");
+  }, 1500);
+}
+
+function schedulePreviewRefresh({ includeCover = false } = {}) {
+  clearTimeout(previewRefreshTimer);
+  previewRefreshTimer = window.setTimeout(() => {
+    if (includeCover) {
+      renderCoverPreview();
+    }
+    renderPreview();
+  }, 90);
+}
 
 function getWorkspaceTaskTemplate(templateKey) {
   return WORKSPACE_TASK_TEMPLATES.find((template) => template.key === templateKey) || WORKSPACE_TASK_TEMPLATES[0];
@@ -1357,6 +1378,15 @@ export function bindEvents() {
     applyViewState();
     persistProjects(false);
   });
+  refs.quickDisplayFocusMode?.addEventListener("change", () => {
+    state.viewOptions.focusMode = refs.quickDisplayFocusMode.checked;
+    if (!state.viewOptions.focusMode) {
+      clearTimeout(focusModeTimer);
+      document.body.classList.remove("focus-mode-active");
+    }
+    applyViewState();
+    persistProjects(false);
+  });
   refs.quickDisplayFullscreen?.addEventListener("change", () => {
     if (refs.quickDisplayFullscreen.checked) {
       document.documentElement.requestFullscreen?.();
@@ -1863,9 +1893,8 @@ export function duplicateActiveBlock() {
 
 function handleMetaInput() {
   syncProjectFromInputs();
-  renderCoverPreview();
-  renderPreview();
-  scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: false });
+  schedulePreviewRefresh({ includeCover: true });
+  scheduleStudioSidebarRefresh({ includeHome: false, includeAnalytics: false });
   queueSave();
 }
 
@@ -1903,7 +1932,7 @@ function canEditCurrentProjectWithNotice() {
   return false;
 }
 
-function scheduleStudioSidebarRefresh({ includeHome = true, includeAnalytics = true } = {}) {
+function scheduleStudioSidebarRefresh({ includeHome = false, includeAnalytics = true } = {}) {
   if (studioSidebarRefreshFrame) {
     return;
   }
@@ -1938,9 +1967,10 @@ function handleBlockInput(id, element) {
     line.secondary = normalized;
     project.updatedAt = new Date().toISOString();
     setActiveBlock(id);
-    renderPreview();
-    scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: true });
+    schedulePreviewRefresh();
+    scheduleStudioSidebarRefresh({ includeHome: false, includeAnalytics: true });
     updateSuggestions();
+    setTypingFocusModeActive();
     queueSave();
     return;
   }
@@ -1994,13 +2024,14 @@ function handleBlockInput(id, element) {
   }
 
   setActiveBlock(id);
-  renderPreview();
-  scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: true });
+  schedulePreviewRefresh();
+  scheduleStudioSidebarRefresh({ includeHome: false, includeAnalytics: true });
   if (line.type === "scene") {
     hideSuggestionTray(true);
   } else {
     updateSuggestions();
   }
+  setTypingFocusModeActive();
   queueSave();
 }
 

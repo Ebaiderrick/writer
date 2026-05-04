@@ -31,6 +31,7 @@ export const refs = {
   get quickDisplayActiveBlock() { return getCached("#quickDisplayActiveBlock"); },
   get quickDisplayFullscreen() { return getCached("#quickDisplayFullscreen"); },
   get quickDisplayPreview() { return getCached("#quickDisplayPreview"); },
+  get quickDisplayFocusMode() { return getCached("#quickDisplayFocusMode"); },
   get toolStrip() { return getCached("#toolStrip"); },
   get studioLayout() { return getCached("#studioLayout"); },
   get projectGrid() { return getCached("#projectGrid"); },

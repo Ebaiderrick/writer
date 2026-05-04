@@ -1484,16 +1484,18 @@ export function updateMenuStateButtons() {
 }
 
 export function applyViewState() {
-  document.body.classList.remove("show-ruler");
-  document.body.classList.remove("outline-hidden");
-  document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
-  refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
-  if (refs.quickDisplayBg) refs.quickDisplayBg.checked = Boolean(state.backgroundAnimation);
-  if (refs.quickDisplayActiveBlock) refs.quickDisplayActiveBlock.checked = !refs.leftPane?.classList.contains("is-hidden");
-  if (refs.quickDisplayPreview) refs.quickDisplayPreview.checked = !refs.rightPane?.classList.contains("is-hidden");
-  if (refs.quickDisplayFullscreen) refs.quickDisplayFullscreen.checked = Boolean(document.fullscreenElement);
-  updateMenuStateButtons();
-}
+    document.body.classList.remove("show-ruler");
+    document.body.classList.remove("outline-hidden");
+    document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
+    document.body.classList.toggle("focus-mode-enabled", Boolean(state.viewOptions.focusMode));
+    refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+    if (refs.quickDisplayBg) refs.quickDisplayBg.checked = Boolean(state.backgroundAnimation);
+    if (refs.quickDisplayActiveBlock) refs.quickDisplayActiveBlock.checked = !refs.leftPane?.classList.contains("is-hidden");
+    if (refs.quickDisplayPreview) refs.quickDisplayPreview.checked = !refs.rightPane?.classList.contains("is-hidden");
+    if (refs.quickDisplayFullscreen) refs.quickDisplayFullscreen.checked = Boolean(document.fullscreenElement);
+    if (refs.quickDisplayFocusMode) refs.quickDisplayFocusMode.checked = Boolean(state.viewOptions.focusMode);
+    updateMenuStateButtons();
+  }
 
 export function setTheme(theme) {
   state.theme = theme === "rose" ? "cedar" : theme;

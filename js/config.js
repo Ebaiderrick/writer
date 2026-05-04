@@ -28,7 +28,8 @@ export const DEFAULT_VIEW_OPTIONS = {
   pageNumbers: true,
   pageCount: false,
   showOutline: true,
-  textSize: 12
+  textSize: 12,
+  focusMode: false
 };
 export const LEFT_PANE_BLOCK_DEFS = [
   { key: "current", label: "Current Script" },
