@@ -670,7 +670,18 @@ export const AI = (() => {
       }
     } else {
       openMenu(blockRow);
+      showInput(action);
     }
+  }
+
+  function triggerSelectionAction(action) {
+    const selectedBlock = document.activeElement?.closest?.(".script-block")
+      || document.querySelector(".script-block-row.is-active .script-block")
+      || refs.screenplayEditor?.querySelector(".script-block");
+    if (!selectedBlock) return;
+    const row = selectedBlock.closest(".script-block-row");
+    if (!row) return;
+    triggerAction(row, action);
   }
 
   function triggerSmartProofread() {
@@ -1516,7 +1527,7 @@ export const AI = (() => {
     });
   }
 
-  return { init, triggerAction, triggerSmartProofread, triggerAssistant, runWorkspaceTaskAssistant };
+  return { init, triggerAction, triggerSelectionAction, triggerSmartProofread, triggerAssistant, runWorkspaceTaskAssistant };
 })();
 
 function getSelectedTextInBlock(block) {

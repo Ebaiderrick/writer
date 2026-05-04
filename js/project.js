@@ -79,6 +79,9 @@ function chooseLatestPayload(primary, recovery) {
 function updateSaveBadge(mode = "saved", savedAt = state.lastSavedAt) {
   if (!refs.saveBadge) return;
   refs.saveBadge.classList.remove("saving", "is-saved", "is-local");
+  const formattedTime = savedAt
+    ? new Date(savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : "";
   if (mode === "saving") {
     refs.saveBadge.textContent = t("save.saving");
     refs.saveBadge.classList.add("saving");
@@ -90,13 +93,27 @@ function updateSaveBadge(mode = "saved", savedAt = state.lastSavedAt) {
   refs.saveBadge.title = savedAt
     ? `Last saved ${new Date(savedAt).toLocaleString()}`
     : "";
+  if (refs.saveMetaText) {
+    if (mode === "saving") {
+      refs.saveMetaText.textContent = formattedTime
+        ? `Saving changes... Last saved at ${formattedTime}.`
+        : "Saving changes...";
+    } else if (mode === "local") {
+      refs.saveMetaText.textContent = formattedTime
+        ? `Saved locally at ${formattedTime}.`
+        : "Saved locally.";
+    } else {
+      refs.saveMetaText.textContent = formattedTime
+        ? `Saved at ${formattedTime}.`
+        : "All changes synced.";
+    }
+  }
 }
 
 function writeRecoverySnapshot({ syncInputs = false } = {}) {
   if (syncInputs) syncProjectFromInputs();
   const savedAt = new Date().toISOString();
   localStorage.setItem(RECOVERY_KEY, JSON.stringify(buildPersistencePayload(savedAt)));
-  state.lastSavedAt = savedAt;
 }
 
 async function syncCurrentProjectToFirestore() {

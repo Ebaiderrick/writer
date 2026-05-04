@@ -38,6 +38,7 @@ export const refs = {
   get newProjectBtn() { return getCached("#newProjectBtn"); },
   get goHomeBtn() { return getCached("#goHomeBtn"); },
   get saveBadge() { return getCached("#saveBadge"); },
+  get saveMetaText() { return getCached("#saveMetaText"); },
   get titleInput() { return getCached("#titleInput"); },
   get authorInput() { return getCached("#authorInput"); },
   get contactInput() { return getCached("#contactInput"); },

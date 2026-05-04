@@ -59,6 +59,84 @@ let previewRefreshTimer = 0;
 let focusModeTimer = 0;
 let hasShownReadOnlyNotice = false;
 const aiTaskTimers = new Map();
+const INLINE_SELECTION_TOOLS = [
+  { label: "Improve", action: "Improve", requiresAi: true },
+  { label: "Rewrite", action: "Rephrase", requiresAi: true },
+  { label: "Fix Grammar", action: "Grammar", requiresGrammar: true }
+];
+
+function ensureSelectionToolbar() {
+  let toolbar = document.getElementById("selectionAiToolbar");
+  if (toolbar) return toolbar;
+  toolbar = document.createElement("div");
+  toolbar.id = "selectionAiToolbar";
+  toolbar.className = "selection-ai-toolbar";
+  toolbar.hidden = true;
+  toolbar.innerHTML = `
+    <div class="selection-ai-toolbar-actions">
+      ${INLINE_SELECTION_TOOLS.map((tool) => `<button class="selection-ai-toolbar-btn" type="button" data-selection-ai-action="${tool.action}" data-requires-ai="${tool.requiresAi ? "true" : "false"}" data-requires-grammar="${tool.requiresGrammar ? "true" : "false"}">${tool.label}</button>`).join("")}
+    </div>
+  `;
+  toolbar.addEventListener("mousedown", (event) => event.preventDefault());
+  toolbar.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-selection-ai-action]");
+    if (!button) return;
+    hideSelectionToolbar();
+    AI.triggerSelectionAction(button.dataset.selectionAiAction);
+  });
+  document.body.appendChild(toolbar);
+  return toolbar;
+}
+
+function hideSelectionToolbar() {
+  const toolbar = document.getElementById("selectionAiToolbar");
+  if (!toolbar) return;
+  toolbar.hidden = true;
+  toolbar.classList.remove("is-visible");
+}
+
+function updateSelectionToolbar() {
+  const toolbar = ensureSelectionToolbar();
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    hideSelectionToolbar();
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  const block = range.commonAncestorContainer?.nodeType === Node.TEXT_NODE
+    ? range.commonAncestorContainer.parentElement?.closest(".script-block")
+    : range.commonAncestorContainer?.closest?.(".script-block");
+  if (!block || !refs.screenplayEditor?.contains(block)) {
+    hideSelectionToolbar();
+    return;
+  }
+
+  const buttons = [...toolbar.querySelectorAll("[data-selection-ai-action]")];
+  let visibleCount = 0;
+  buttons.forEach((button) => {
+    const needsAi = button.dataset.requiresAi === "true";
+    const needsGrammar = button.dataset.requiresGrammar === "true";
+    const shouldShow = (!needsAi || state.aiAssist) && (!needsGrammar || state.grammarCheck);
+    button.hidden = !shouldShow;
+    if (shouldShow) visibleCount += 1;
+  });
+  if (!visibleCount) {
+    hideSelectionToolbar();
+    return;
+  }
+
+  const rect = range.getBoundingClientRect();
+  if (!rect || (!rect.width && !rect.height)) {
+    hideSelectionToolbar();
+    return;
+  }
+
+  toolbar.style.top = `${Math.max(window.scrollY + 12, window.scrollY + rect.top - 52)}px`;
+  toolbar.style.left = `${window.scrollX + rect.left + (rect.width / 2)}px`;
+  toolbar.hidden = false;
+  toolbar.classList.add("is-visible");
+}
 
 function setTypingFocusModeActive() {
   if (!state.viewOptions.focusMode) return;
@@ -597,6 +675,12 @@ function addWorkspaceTaskFromDashboard() {
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
   renderWorkspaceView();
+  showToast(
+    assignee?.assigneeType === "system"
+      ? `AI task queued for ${nextTask.assignedLabel}.`
+      : `${nextTask.title} assigned to ${nextTask.assignedLabel || "the workspace"}.`,
+    "success"
+  );
 }
 
 function updateWorkspaceTask(taskId, patch) {
@@ -612,6 +696,7 @@ function updateWorkspaceTask(taskId, patch) {
   const task = getWorkspaceTaskById(taskId);
   if (task && previousTask) {
     if (patch.status && patch.status !== previousTask.status) {
+      showToast(`${task.title} moved to ${patch.status === "in-progress" ? "In Progress" : patch.status === "done" ? "Done" : "To Do"}.`, "success");
       createWorkspaceNotification({
         task,
         category: patch.status === "done" ? "completed" : "task",
@@ -621,6 +706,7 @@ function updateWorkspaceTask(taskId, patch) {
       });
     }
     if (patch.assignedTo && patch.assignedTo !== previousTask.assignedTo) {
+      showToast(`${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`, "success");
       createWorkspaceNotification({
         task,
         category: task.assigneeType === "system" ? "ai" : "task",
@@ -630,6 +716,7 @@ function updateWorkspaceTask(taskId, patch) {
       });
     }
     if (patch.dueAt && patch.dueAt !== previousTask.dueAt) {
+      showToast(`${task.title} due date updated.`, "success");
       createWorkspaceNotification({
         task,
         category: "task",
@@ -767,6 +854,7 @@ async function applyAiTaskResult(taskId, applyMode = null) {
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
   openProject(task.projectId, { focusLineId: task.lineId || task.sceneId || "" });
+  showToast("AI result applied to the script.", "success");
 }
 
 function dismissAiTaskResult(taskId) {
@@ -780,6 +868,7 @@ function dismissAiTaskResult(taskId) {
     message: `${task.title} was reviewed and dismissed.`,
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
+  showToast("AI result dismissed.", "success");
 }
 
 async function editWorkspaceTask(taskId) {
@@ -903,6 +992,7 @@ async function deleteWorkspaceTask(taskId) {
   }));
   persistProjects(true, { syncInputs: false });
   renderWorkspaceView();
+  showToast("Task deleted.", "success");
 }
 
 async function commentOnWorkspaceTask(taskId) {
@@ -970,6 +1060,7 @@ async function commentOnWorkspaceTask(taskId) {
       actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
     });
   }
+  showToast("Comment added to task.", "success");
 }
 
 export function bindEvents() {
@@ -1196,6 +1287,11 @@ export function bindEvents() {
   document.getElementById("smartProofreadBtn")?.addEventListener("click", () => {
     AI.triggerSmartProofread();
   });
+  document.addEventListener("selectionchange", () => {
+    window.requestAnimationFrame(updateSelectionToolbar);
+  });
+  window.addEventListener("resize", hideSelectionToolbar);
+  refs.screenplayEditor?.addEventListener("scroll", hideSelectionToolbar);
 
   // Meta Inputs
   [refs.titleInput, refs.authorInput, refs.contactInput, refs.companyInput, refs.detailsInput, refs.loglineInput]
@@ -1350,11 +1446,13 @@ export function bindEvents() {
     refs.aiPanel.hidden = !state.aiAssist;
     applyToolbarState();
     queueSave();
+    updateSelectionToolbar();
   });
 
   refs.grammarCheckToggle.addEventListener("change", () => {
     setGrammarCheck(refs.grammarCheckToggle.checked);
     queueSave();
+    updateSelectionToolbar();
   });
 
   refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);

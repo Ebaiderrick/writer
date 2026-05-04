@@ -1085,6 +1085,22 @@ html[data-theme="rose"] .mesh-background {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.workspace-task-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+}
+
+.workspace-task-card.is-owned-by-you {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-strong));
+  box-shadow: 0 18px 34px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.workspace-task-card.is-ai-task {
+  border-style: dashed;
 }
 
 .workspace-task-head {
@@ -1109,6 +1125,48 @@ html[data-theme="rose"] .mesh-background {
 .workspace-task-copy {
   margin: 0;
   line-height: 1.5;
+}
+
+.workspace-task-assignee-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workspace-task-assignee-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent-contrast);
+  background: color-mix(in srgb, var(--accent) 82%, white);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+}
+
+.workspace-task-assignee-avatar.is-system {
+  background: color-mix(in srgb, var(--surface-strong) 55%, var(--accent-soft));
+  color: var(--accent-strong);
+}
+
+.workspace-task-assignee-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.workspace-task-assignee-copy strong {
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.workspace-task-assignee-copy span {
+  font-size: var(--text-meta);
+  color: var(--muted);
 }
 
 .workspace-task-chip-row {
@@ -1885,6 +1943,12 @@ html[data-theme="rose"] .mesh-background {
   align-items: flex-start;
   gap: 3px;
   margin-left: 0;
+}
+
+.save-meta-text {
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: var(--muted);
 }
 
 #lastEditorFlag {
@@ -6003,6 +6067,88 @@ html[data-theme="white"] .user-trigger {
   line-height: 1;
   padding: 0;
   cursor: pointer;
+}
+
+.ghost-button,
+.primary-button,
+.nav-link,
+.tool-button,
+.collapse-arrow,
+.pane-collapse,
+.theme-option,
+.workspace-filter-chip,
+.workspace-home-member-pill,
+.workspace-member-button,
+.workspace-profile-trigger {
+  transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
+}
+
+.ghost-button:hover,
+.primary-button:hover,
+.nav-link:hover,
+.tool-button:hover,
+.theme-option:hover,
+.workspace-filter-chip:hover,
+.workspace-home-member-pill:hover,
+.workspace-member-button:hover,
+.workspace-profile-trigger:hover {
+  filter: brightness(0.98);
+}
+
+.ghost-button:active,
+.primary-button:active,
+.nav-link:active,
+.tool-button:active,
+.collapse-arrow:active,
+.pane-collapse:active,
+.theme-option:active,
+.workspace-filter-chip:active,
+.workspace-home-member-pill:active,
+.workspace-member-button:active,
+.workspace-profile-trigger:active {
+  transform: scale(0.98);
+}
+
+.selection-ai-toolbar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translateX(-50%);
+  z-index: 1500;
+  pointer-events: auto;
+}
+
+.selection-ai-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(18px);
+}
+
+.selection-ai-toolbar-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.selection-ai-toolbar-btn:hover {
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+  color: var(--accent-strong);
+}
+
+.selection-ai-toolbar-btn:active {
+  transform: scale(0.98);
 }
 
 .is-busy {

@@ -61,6 +61,32 @@ function buildProfileAvatarMarkup({ uid = "", name = "", photoURL = "", classNam
   return `<button class="${escapeHtml(classes)}" type="button" title="${escapeHtml(getUserHandle(name, "user"))}" aria-label="${escapeHtml(getUserHandle(name, "user"))}" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(photoURL)}">${escapeHtml(initials)}</button>`;
 }
 
+function buildWorkspaceTaskAssigneeMarkup(task, currentUid) {
+  const label = task.assignedLabel || "Unassigned";
+  const source = task.assigneeType === "system" ? "AI" : label.replace(/^@/, "");
+  const initials = source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || (task.assigneeType === "system" ? "AI" : "U");
+  const ownershipLabel = task.assignedTo === currentUid
+    ? "Assigned to you"
+    : task.assigneeType === "system"
+      ? "Assigned to AI"
+      : `Assigned to ${label}`;
+  return `
+    <div class="workspace-task-assignee-row">
+      <span class="workspace-task-assignee-avatar ${task.assigneeType === "system" ? "is-system" : ""}">${escapeHtml(initials)}</span>
+      <div class="workspace-task-assignee-copy">
+        <strong>${escapeHtml(ownershipLabel)}</strong>
+        <span>${escapeHtml(label)}</span>
+      </div>
+    </div>
+  `;
+}
+
 function sortProjectsForHome(projects) {
   const sorted = [...projects];
   if (state.homeProjectSort === "title") {
@@ -169,7 +195,7 @@ function buildWorkspacePersonalInbox(tasks, currentUid) {
       items.push({
         id: `${task.id}-assignment`,
         type: dueState === "overdue" ? "overdue" : dueState === "soon" || dueState === "today" ? "due" : "assigned",
-        label: dueState === "overdue" ? "Overdue for me" : dueState === "soon" || dueState === "today" ? "Due for me" : "Assigned to me",
+        label: dueState === "overdue" ? "Overdue for you" : dueState === "soon" || dueState === "today" ? "Due for you" : "Assigned to you",
         message: task.title,
         task
       });
@@ -560,7 +586,7 @@ export function renderWorkspaceView() {
             <span class="workspace-task-summary-chip">In Progress ${taskSummary.inProgress}</span>
             <span class="workspace-task-summary-chip">Done ${taskSummary.done}</span>
             <span class="workspace-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
-            <span class="workspace-task-summary-chip">Assigned to me ${myAssignedTasks.length}</span>
+            <span class="workspace-task-summary-chip">Assigned to you ${myAssignedTasks.length}</span>
             <span class="workspace-task-summary-chip">Due soon ${dueSoonCount}</span>
             <span class="workspace-task-summary-chip">Overdue ${overdueCount}</span>
           </div>
@@ -688,7 +714,7 @@ export function renderWorkspaceView() {
           </div>
           <div class="workspace-task-list">
             ${taskItems.length ? taskItems.map((task) => `
-                <article class="workspace-task-card">
+                <article class="workspace-task-card ${task.assignedTo === currentUid ? "is-owned-by-you" : ""} ${task.assigneeType === "system" ? "is-ai-task" : ""}">
                   <div class="workspace-task-head">
                     <div>
                       <strong>${escapeHtml(task.title)}</strong>
@@ -701,10 +727,11 @@ export function renderWorkspaceView() {
                     </select>
                   </div>
                   ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  ${buildWorkspaceTaskAssigneeMarkup(task, currentUid)}
                   <div class="workspace-task-chip-row">
                     <span class="workspace-task-tag">${escapeHtml(getWorkspaceTaskTemplate(task.templateKey).label)}</span>
                     <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
-                    ${task.assignedTo === currentUid ? '<span class="workspace-task-tag workspace-task-tag-focus">Assigned to me</span>' : ""}
+                    ${task.assignedTo === currentUid ? '<span class="workspace-task-tag workspace-task-tag-focus">Assigned to you</span>' : ""}
                     ${getTaskDueState(task) ? `<span class="workspace-task-tag workspace-task-tag-${escapeHtml(getTaskDueState(task))}">${escapeHtml(getTaskDueLabel(task))}</span>` : ""}
                     <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
                     <span class="workspace-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
@@ -966,7 +993,7 @@ export function renderHome() {
             </div>
             <div class="workspace-task-list">
               ${taskItems.length ? taskItems.map((task) => `
-                <article class="workspace-task-card">
+                <article class="workspace-task-card ${task.assignedTo === currentUid ? "is-owned-by-you" : ""} ${task.assigneeType === "system" ? "is-ai-task" : ""}">
                   <div class="workspace-task-head">
                     <div>
                       <strong>${escapeHtml(task.title)}</strong>
@@ -979,6 +1006,7 @@ export function renderHome() {
                     </select>
                   </div>
                   ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  ${buildWorkspaceTaskAssigneeMarkup(task, currentUid)}
                   <div class="workspace-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
                     ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-project-id="${escapeHtml(task.projectId)}">Open Project</button>` : ""}
