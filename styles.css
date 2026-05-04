@@ -570,6 +570,7 @@ html[data-theme="rose"] .mesh-background {
   display: flex;
   align-items: center;
   gap: 10px;
+  overflow: visible;
 }
 
 .workspace-view {
@@ -938,8 +939,7 @@ html[data-theme="rose"] .mesh-background {
   gap: 6px;
 }
 
-.workspace-task-sort-select,
-.project-sort-select {
+.workspace-task-sort-select {
   min-width: 124px;
 }
 
@@ -1636,25 +1636,20 @@ html[data-theme="rose"] .mesh-background {
     cursor: pointer;
 }
 
-.project-format-select {
-  width: 80px;
-  min-width: 80px;
-  flex: 0 0 auto;
+.project-format-select,
+.project-sort-select {
+  width: 90px;
+  min-width: 90px;
+  flex: 0 0 90px;
   min-height: 26px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  padding: 4px 20px 4px 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.project-sort-select {
-  width: 80px;
-  min-width: 80px;
+  padding: 4px 8px;
+  white-space: nowrap;
 }
 
 .primary-button,
