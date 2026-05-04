@@ -18,6 +18,18 @@ import { canEditProject } from './collaborate.js';
 
 let _renderingEditor = false;
 
+function getLineLinkedTasks(project, lineId, sceneOwnerId, lineType) {
+  const tasks = project?.workspace?.tasks || [];
+  return tasks.filter((task) => {
+    if (task.projectId && task.projectId !== project.id) return false;
+    if (task.lineId) return task.lineId === lineId;
+    if (task.sceneId) {
+      return task.sceneId === (lineType === "scene" ? lineId : sceneOwnerId);
+    }
+    return false;
+  });
+}
+
 export function renderEditor() {
   if (_renderingEditor) return;
   _renderingEditor = true;
@@ -101,6 +113,18 @@ function _renderEditorInner() {
       block.replaceWith(columns);
       columns.appendChild(block);
       columns.appendChild(secBlock);
+    }
+
+    const linkedTasks = getLineLinkedTasks(project, line.id, currentSceneId, line.type);
+    if (linkedTasks.length) {
+      const marker = document.createElement("button");
+      marker.type = "button";
+      marker.className = `script-task-marker ${linkedTasks.some((task) => task.status !== "done") ? "is-open" : "is-done"}`;
+      marker.dataset.scriptTaskTarget = line.id;
+      marker.dataset.taskIds = linkedTasks.map((task) => task.id).join(",");
+      marker.title = linkedTasks.map((task) => task.title).join("\n");
+      marker.textContent = linkedTasks.length === 1 ? "Task" : `${linkedTasks.length} Tasks`;
+      row.insertBefore(marker, row.querySelector(".dual-columns") || row.querySelector(".script-block"));
     }
 
     const hiddenByScene = !filterSet && Boolean(collapsedSceneId && line.type !== "scene");

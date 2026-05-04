@@ -574,6 +574,7 @@ function sanitizeWorkspaceTasks(tasks) {
     sceneId: String(task?.sceneId || "").trim(),
     sceneLabel: String(task?.sceneLabel || "").trim(),
     lineId: String(task?.lineId || "").trim(),
+    lineLabel: String(task?.lineLabel || "").trim(),
     memoryLinkType: String(task?.memoryLinkType || "").trim(),
     memoryLinkId: String(task?.memoryLinkId || "").trim(),
     memoryLinkName: String(task?.memoryLinkName || "").trim(),

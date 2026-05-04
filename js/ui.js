@@ -114,6 +114,89 @@ function formatTaskDueLabel(task) {
   return `Due ${formatDateTime(task.dueAt)}`;
 }
 
+function getTaskDueState(task) {
+  if (!task?.dueAt || task.status === "done") return "";
+  const dueAt = new Date(task.dueAt).getTime();
+  if (Number.isNaN(dueAt)) return "";
+  const diff = dueAt - Date.now();
+  if (diff < 0) return "overdue";
+  if (diff <= 24 * 60 * 60 * 1000) return "today";
+  if (diff <= 48 * 60 * 60 * 1000) return "soon";
+  return "";
+}
+
+function getTaskDueLabel(task) {
+  const stateLabel = getTaskDueState(task);
+  if (stateLabel === "overdue") return "Overdue";
+  if (stateLabel === "today") return "Due today";
+  if (stateLabel === "soon") return "Due soon";
+  return formatTaskDueLabel(task);
+}
+
+function getTaskTargetLabel(task) {
+  return task.lineLabel || task.sceneLabel || task.reference || "General workspace task";
+}
+
+function buildWorkspaceDueNotifications(tasks, projects) {
+  return tasks
+    .filter((task) => task.dueAt && task.status !== "done")
+    .map((task) => {
+      const dueState = getTaskDueState(task);
+      if (!dueState) return null;
+      const projectTitle = projects.find((project) => project.id === task.projectId)?.title || "Linked Project";
+      return {
+        id: `due-${task.id}-${dueState}`,
+        taskId: task.id,
+        projectId: task.projectId,
+        category: dueState === "overdue" ? "overdue" : "due-soon",
+        title: dueState === "overdue" ? "Task overdue" : "Task due soon",
+        message: `${task.title} in ${projectTitle} is ${dueState === "overdue" ? "past due" : `due ${formatDateTime(task.dueAt)}`}.`,
+        actor: task.assignedLabel || "Workspace",
+        createdAt: task.dueAt,
+        read: false,
+        synthetic: true
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+}
+
+function buildWorkspacePersonalInbox(tasks, currentUid) {
+  return tasks.flatMap((task) => {
+    const items = [];
+    const dueState = getTaskDueState(task);
+    if (task.assignedTo === currentUid && task.status !== "done") {
+      items.push({
+        id: `${task.id}-assignment`,
+        type: dueState === "overdue" ? "overdue" : dueState === "soon" || dueState === "today" ? "due" : "assigned",
+        label: dueState === "overdue" ? "Overdue for me" : dueState === "soon" || dueState === "today" ? "Due for me" : "Assigned to me",
+        message: task.title,
+        task
+      });
+    }
+    if (task.comments?.some((comment) => comment.mentionId === currentUid)) {
+      const latestMention = [...task.comments].reverse().find((comment) => comment.mentionId === currentUid);
+      items.push({
+        id: `${task.id}-mention`,
+        type: "mention",
+        label: "Mentioned",
+        message: latestMention?.text || task.title,
+        task
+      });
+    }
+    if (task.assigneeType === "system" && task.aiState === "review") {
+      items.push({
+        id: `${task.id}-review`,
+        type: "review",
+        label: "Review ready",
+        message: task.title,
+        task
+      });
+    }
+    return items;
+  }).slice(0, 8);
+}
+
 function formatRelativeTaskTime(task) {
   if (!task.aiStartAt) return "";
   const diffMs = new Date(task.aiStartAt).getTime() - Date.now();
@@ -142,6 +225,14 @@ function getWorkspaceTaskTemplate(templateKey) {
 
 function sortWorkspaceTasks(tasks) {
   const sorted = [...tasks];
+  if (state.workspaceTaskSort === "due") {
+    sorted.sort((a, b) => {
+      const aDue = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const bDue = b.dueAt ? new Date(b.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      return aDue - bDue || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+    });
+    return sorted;
+  }
   if (state.workspaceTaskSort === "status") {
     const weight = { "in-progress": 0, todo: 1, done: 2 };
     sorted.sort((a, b) => {
@@ -211,7 +302,9 @@ export function renderWorkspaceView() {
   const uniqueMembers = [...new Set(memberEntries)];
   const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
   const allTaskItems = sortWorkspaceTasks(workspaceLead.workspace?.tasks || []);
-  const notifications = [...(workspaceLead.workspace?.notifications || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const persistedNotifications = [...(workspaceLead.workspace?.notifications || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const notifications = [...buildWorkspaceDueNotifications(allTaskItems, projects), ...persistedNotifications]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const unreadNotifications = notifications.filter((notification) => !notification.read);
   const inboxItems = allTaskItems.filter((task) => task.status === "done" || task.aiState === "review" || task.aiState === "failed").slice(0, 6);
   const assignees = [
@@ -226,9 +319,25 @@ export function renderWorkspaceView() {
       sceneId: line.id,
       label: `${project.title} - ${line.text.trim()}`
     })));
+  const lineOptions = projects.flatMap((project) => (project.lines || [])
+    .filter((line) => line.text.trim() && line.type !== "scene")
+    .map((line, index) => {
+      const owningSceneId = getSceneIdForIndex(index, project);
+      const owningScene = owningSceneId
+        ? project.lines.find((entry) => entry.id === owningSceneId)?.text?.trim() || "Scene"
+        : "General";
+      return {
+        projectId: project.id,
+        lineId: line.id,
+        sceneId: owningSceneId,
+        label: `${project.title} - ${owningScene} - ${formatLineText(line.text, line.type).slice(0, 56)}`
+      };
+    }));
   const currentUid = auth.currentUser?.uid || "";
   const myAssignedTasks = allTaskItems.filter((task) => task.assignedTo === currentUid);
-  const dueSoonCount = allTaskItems.filter((task) => task.dueAt && task.status !== "done" && (new Date(task.dueAt).getTime() - Date.now()) <= (48 * 60 * 60 * 1000)).length;
+  const dueSoonCount = allTaskItems.filter((task) => ["soon", "today"].includes(getTaskDueState(task))).length;
+  const overdueCount = allTaskItems.filter((task) => getTaskDueState(task) === "overdue").length;
+  const personalInboxItems = buildWorkspacePersonalInbox(allTaskItems, currentUid);
   const memberTaskSummary = assignees
     .filter((assignee) => assignee.id !== "ai_assist")
     .map((assignee) => {
@@ -271,6 +380,12 @@ export function renderWorkspaceView() {
     }
     if (state.workspaceTaskFilter === "ai") {
       return task.assignedTo === "ai_assist";
+    }
+    if (state.workspaceTaskFilter === "due-soon") {
+      return ["soon", "today"].includes(getTaskDueState(task));
+    }
+    if (state.workspaceTaskFilter === "overdue") {
+      return getTaskDueState(task) === "overdue";
     }
     if (state.workspaceTaskFilter === "open") {
       return task.status !== "done";
@@ -349,6 +464,26 @@ export function renderWorkspaceView() {
         </section>
         <section class="workspace-home-panel">
           <div class="workspace-home-panel-head">
+            <h4>My Inbox</h4>
+            <span class="workspace-home-panel-meta">${personalInboxItems.length} active</span>
+          </div>
+          <div class="workspace-inbox-list">
+            ${personalInboxItems.map((item) => `
+              <article class="workspace-inbox-item workspace-inbox-item-${escapeHtml(item.type)}">
+                <div class="workspace-inbox-copy">
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <span>${escapeHtml(item.message)}</span>
+                  <small>${escapeHtml(item.task.assignedLabel || "Workspace task")}</small>
+                </div>
+                <div class="workspace-notification-actions">
+                  <button class="ghost-button btn-sm" type="button" data-workspace-home-action="${item.type === "mention" ? "comment-task" : "open-task-project"}" data-task-id="${escapeHtml(item.task.id)}" data-task-project-id="${escapeHtml(item.task.projectId || "")}">${item.type === "mention" ? "Open Thread" : item.task.lineId ? "Open Line" : item.task.sceneId ? "Open Scene" : "Open Project"}</button>
+                </div>
+              </article>
+            `).join("") || '<p class="workspace-home-empty">Assignments, mentions, and review items for you will collect here.</p>'}
+          </div>
+        </section>
+        <section class="workspace-home-panel">
+          <div class="workspace-home-panel-head">
             <h4>Notifications</h4>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-all-notifications-read">Mark all read</button>
           </div>
@@ -358,15 +493,15 @@ export function renderWorkspaceView() {
           </div>
           <div class="workspace-notification-list">
             ${notifications.slice(0, 6).map((notification) => `
-              <article class="workspace-notification-item${notification.read ? "" : " is-unread"}">
+              <article class="workspace-notification-item${notification.read ? "" : " is-unread"}${notification.category === "overdue" || notification.category === "due-soon" ? " workspace-notification-item-due" : ""}">
                 <div class="workspace-notification-copy">
                   <strong>${escapeHtml(notification.title)}</strong>
                   <span>${escapeHtml(notification.message || notification.actor || "Workspace update")}</span>
                   <small>${escapeHtml(formatDateTime(notification.createdAt))}</small>
                 </div>
                 <div class="workspace-notification-actions">
-                  ${notification.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-notification" data-notification-id="${escapeHtml(notification.id)}" data-task-project-id="${escapeHtml(notification.projectId)}">Open</button>` : ""}
-                  ${!notification.read ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-notification-read" data-notification-id="${escapeHtml(notification.id)}">Read</button>` : ""}
+                  ${notification.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-notification" data-notification-id="${escapeHtml(notification.id)}" data-task-id="${escapeHtml(notification.taskId || "")}" data-task-project-id="${escapeHtml(notification.projectId)}">Open</button>` : ""}
+                  ${!notification.synthetic && !notification.read ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-notification-read" data-notification-id="${escapeHtml(notification.id)}">Read</button>` : ""}
                 </div>
               </article>
             `).join("") || '<p class="workspace-home-empty">No notifications yet.</p>'}
@@ -403,10 +538,13 @@ export function renderWorkspaceView() {
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "all" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">My Tasks</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "ai" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "due-soon" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="due-soon">Due Soon</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "overdue" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="overdue">Overdue</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "open" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="open">Open</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "done" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="done">Done</button>
             <select class="comment-filter-select workspace-task-sort-select" data-workspace-home-action="set-task-sort" aria-label="Sort tasks">
               <option value="latest" ${state.workspaceTaskSort === "latest" ? "selected" : ""}>Latest</option>
+              <option value="due" ${state.workspaceTaskSort === "due" ? "selected" : ""}>Due Date</option>
               <option value="status" ${state.workspaceTaskSort === "status" ? "selected" : ""}>By Status</option>
               <option value="comments" ${state.workspaceTaskSort === "comments" ? "selected" : ""}>Most Discussed</option>
             </select>
@@ -417,6 +555,8 @@ export function renderWorkspaceView() {
             <span class="workspace-task-summary-chip">Done ${taskSummary.done}</span>
             <span class="workspace-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
             <span class="workspace-task-summary-chip">Assigned to me ${myAssignedTasks.length}</span>
+            <span class="workspace-task-summary-chip">Due soon ${dueSoonCount}</span>
+            <span class="workspace-task-summary-chip">Overdue ${overdueCount}</span>
           </div>
           <div class="workspace-task-form">
             <label class="workspace-task-field">
@@ -440,6 +580,13 @@ export function renderWorkspaceView() {
               <select class="comment-filter-select" data-workspace-task-scene>
                 <option value="">General task</option>
                 ${sceneOptions.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" data-scene-project-id="${escapeHtml(scene.projectId)}">${escapeHtml(scene.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="workspace-task-field">
+              <span>Line</span>
+              <select class="comment-filter-select" data-workspace-task-line>
+                <option value="">Scene level</option>
+                ${lineOptions.map((line) => `<option value="${escapeHtml(line.lineId)}" data-line-project-id="${escapeHtml(line.projectId)}" data-line-scene-id="${escapeHtml(line.sceneId || "")}">${escapeHtml(line.label)}</option>`).join("")}
               </select>
             </label>
             <label class="workspace-task-field">
@@ -539,7 +686,7 @@ export function renderWorkspaceView() {
                   <div class="workspace-task-head">
                     <div>
                       <strong>${escapeHtml(task.title)}</strong>
-                      <span>${escapeHtml(task.sceneLabel || task.reference || "General workspace task")}</span>
+                      <span>${escapeHtml(getTaskTargetLabel(task))}</span>
                     </div>
                     <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
                       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
@@ -552,11 +699,13 @@ export function renderWorkspaceView() {
                     <span class="workspace-task-tag">${escapeHtml(getWorkspaceTaskTemplate(task.templateKey).label)}</span>
                     <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
                     ${task.assignedTo === currentUid ? '<span class="workspace-task-tag workspace-task-tag-focus">Assigned to me</span>' : ""}
+                    ${getTaskDueState(task) ? `<span class="workspace-task-tag workspace-task-tag-${escapeHtml(getTaskDueState(task))}">${escapeHtml(getTaskDueLabel(task))}</span>` : ""}
                     <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
                     <span class="workspace-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
                     ${task.assigneeType === "system" ? `<span class="workspace-task-tag workspace-task-tag-ai">${escapeHtml(getAiTaskStateLabel(task))}</span>` : ""}
                     ${task.projectId ? `<span class="workspace-task-tag">${escapeHtml(projects.find((project) => project.id === task.projectId)?.title || "Linked Project")}</span>` : ""}
-                    ${task.dueAt ? `<span class="workspace-task-tag">${escapeHtml(formatTaskDueLabel(task))}</span>` : ""}
+                    ${task.lineLabel ? `<span class="workspace-task-tag">${escapeHtml(task.lineLabel)}</span>` : ""}
+                    ${task.dueAt && !getTaskDueState(task) ? `<span class="workspace-task-tag">${escapeHtml(formatTaskDueLabel(task))}</span>` : ""}
                     ${task.memoryLinkName ? `<span class="workspace-task-tag">${escapeHtml(task.memoryLinkName)}</span>` : ""}
                     ${task.comments?.length ? `<span class="workspace-task-tag">${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}</span>` : ""}
                   </div>
@@ -575,7 +724,7 @@ export function renderWorkspaceView() {
                       <button class="ghost-button btn-sm" type="button" data-workspace-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
                       ${task.memoryLinkId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-memory" data-task-id="${escapeHtml(task.id)}" data-memory-id="${escapeHtml(task.memoryLinkId)}" data-memory-project-id="${escapeHtml(task.memoryProjectId || task.projectId)}">Open Memory</button>` : ""}
                       <button class="ghost-button btn-sm" type="button" data-workspace-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
-                      ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
+                      ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.lineId ? "Open Line" : task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
                     </div>
                   </div>
                 </article>

@@ -242,6 +242,26 @@ function getWorkspaceTaskSceneChoices(workspaceId = state.currentWorkspaceId) {
       })));
 }
 
+function getWorkspaceTaskLineChoices(workspaceId = state.currentWorkspaceId) {
+  return getWorkspaceProjects(workspaceId)
+    .filter((project) => !project.isWorkspaceRoot)
+    .flatMap((project) => (project.lines || [])
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => line.type !== "scene" && line.text.trim())
+      .map(({ line, index }) => {
+        const sceneId = getSceneIdForIndex(index, project);
+        const sceneLine = sceneId ? project.lines.find((entry) => entry.id === sceneId) : null;
+        return {
+          projectId: project.id,
+          lineId: line.id,
+          sceneId: sceneId || "",
+          sceneLabel: sceneLine?.text?.trim() || "",
+          lineLabel: formatLineText(line.text, line.type).slice(0, 80),
+          label: `${project.title} - ${(sceneLine?.text?.trim() || "General")} - ${formatLineText(line.text, line.type).slice(0, 56)}`
+        };
+      }));
+}
+
 function getWorkspaceStoryMemoryChoices(workspaceId = state.currentWorkspaceId) {
   const bucketLabels = {
     characters: "Character",
@@ -477,6 +497,7 @@ function addWorkspaceTaskFromDashboard() {
   const descriptionInput = refs.workspaceDashboard.querySelector('[data-workspace-task-description]');
   const projectSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-project]');
   const sceneSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-scene]');
+  const lineSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-line]');
   const assigneeSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-assignee]');
   const referenceInput = refs.workspaceDashboard.querySelector('[data-workspace-task-reference]');
   const statusSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-status-new]');
@@ -494,7 +515,9 @@ function addWorkspaceTaskFromDashboard() {
   }
   const projectId = projectSelect?.value || "";
   const sceneId = sceneSelect?.value || "";
+  const lineId = lineSelect?.value || "";
   const sceneChoice = getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
+  const lineChoice = getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null;
   const assignedTo = assigneeSelect?.value || "";
   const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
   const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
@@ -515,11 +538,12 @@ function addWorkspaceTaskFromDashboard() {
     assignedLabel: assignee?.label || "Unassigned",
     assigneeType: assignee?.assigneeType || "human",
     handoffNote: handoffInput?.value?.trim() || "",
-    projectId: sceneChoice?.projectId || projectId,
+    projectId: lineChoice?.projectId || sceneChoice?.projectId || projectId,
     reference: referenceInput?.value?.trim() || "",
-    sceneId: sceneChoice?.sceneId || "",
-    sceneLabel: sceneChoice?.label || "",
-    lineId: sceneChoice?.lineId || "",
+    sceneId: lineChoice?.sceneId || sceneChoice?.sceneId || "",
+    sceneLabel: lineChoice?.sceneLabel || sceneChoice?.label || "",
+    lineId: lineChoice?.lineId || sceneChoice?.lineId || "",
+    lineLabel: lineChoice?.lineLabel || "",
     memoryLinkType: memoryChoice?.type || "",
     memoryLinkId: memoryChoice?.id || "",
     memoryLinkName: memoryChoice?.name || "",
@@ -736,6 +760,7 @@ async function editWorkspaceTask(taskId) {
   if (!workspaceProject || !task) return;
   const assignees = getWorkspaceTaskAssignees(workspaceProject);
   const scenes = getWorkspaceTaskSceneChoices();
+  const lines = getWorkspaceTaskLineChoices();
   const memoryChoices = getWorkspaceStoryMemoryChoices();
   const selectedTemplate = getWorkspaceTaskTemplate(task.templateKey);
   const container = document.createElement("div");
@@ -751,6 +776,10 @@ async function editWorkspaceTask(taskId) {
     <select id="taskEditScene" class="comment-filter-select">
       <option value="">General task</option>
       ${scenes.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" ${scene.sceneId === task.sceneId ? "selected" : ""}>${escapeHtml(scene.label)}</option>`).join("")}
+    </select>
+    <select id="taskEditLine" class="comment-filter-select">
+      <option value="">Scene level</option>
+      ${lines.map((line) => `<option value="${escapeHtml(line.lineId)}" ${line.lineId === task.lineId ? "selected" : ""}>${escapeHtml(line.label)}</option>`).join("")}
     </select>
     <select id="taskEditAssignee" class="comment-filter-select">
       ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}" ${assignee.id === task.assignedTo ? "selected" : ""}>${escapeHtml(assignee.label)}</option>`).join("")}
@@ -793,7 +822,9 @@ async function editWorkspaceTask(taskId) {
   });
   if (!saved) return;
   const sceneId = container.querySelector("#taskEditScene")?.value || "";
+  const lineId = container.querySelector("#taskEditLine")?.value || "";
   const sceneChoice = scenes.find((scene) => scene.sceneId === sceneId) || null;
+  const lineChoice = lines.find((line) => line.lineId === lineId) || null;
   const assignedTo = container.querySelector("#taskEditAssignee")?.value || "";
   const assignee = assignees.find((entry) => entry.id === assignedTo);
   const memoryId = container.querySelector("#taskEditMemory")?.value || "";
@@ -810,10 +841,11 @@ async function editWorkspaceTask(taskId) {
     title: container.querySelector("#taskEditTitle")?.value?.trim() || task.title,
     description: container.querySelector("#taskEditDescription")?.value?.trim() || "",
     dueAt: container.querySelector("#taskEditDueAt")?.value ? new Date(container.querySelector("#taskEditDueAt").value).toISOString() : "",
-    projectId: sceneChoice?.projectId || container.querySelector("#taskEditProject")?.value || task.projectId,
-    sceneId: sceneChoice?.sceneId || "",
-    sceneLabel: sceneChoice?.label || "",
-    lineId: sceneChoice?.lineId || "",
+    projectId: lineChoice?.projectId || sceneChoice?.projectId || container.querySelector("#taskEditProject")?.value || task.projectId,
+    sceneId: lineChoice?.sceneId || sceneChoice?.sceneId || "",
+    sceneLabel: lineChoice?.sceneLabel || sceneChoice?.label || "",
+    lineId: lineChoice?.lineId || sceneChoice?.lineId || "",
+    lineLabel: lineChoice?.lineLabel || "",
     assignedTo,
     assignedLabel: assignee?.label || "Unassigned",
     assigneeType: assignee?.assigneeType || "human",
@@ -1037,10 +1069,12 @@ export function bindEvents() {
       const trigger = event.target.closest("[data-notification-id]");
       const projectId = trigger?.dataset.taskProjectId;
       const notificationId = trigger?.dataset.notificationId;
-      if (notificationId) markWorkspaceNotificationRead(notificationId, true);
+      if (notificationId && !notificationId.startsWith("due-")) markWorkspaceNotificationRead(notificationId, true);
       if (projectId) {
         const notification = getWorkspaceNotifications().find((item) => item.id === notificationId);
-        const task = notification?.taskId ? getWorkspaceTaskById(notification.taskId) : null;
+        const task = notification?.taskId
+          ? getWorkspaceTaskById(notification.taskId)
+          : (trigger?.dataset.taskId ? getWorkspaceTaskById(trigger.dataset.taskId) : null);
         openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       }
       return;
@@ -1402,6 +1436,14 @@ export function bindEvents() {
   });
 
   refs.screenplayEditor.addEventListener("click", async (e) => {
+    const taskMarker = e.target.closest("[data-script-task-target]");
+    if (taskMarker) {
+      const [firstTaskId] = String(taskMarker.dataset.taskIds || "").split(",").filter(Boolean);
+      if (firstTaskId) {
+        await commentOnWorkspaceTask(firstTaskId);
+      }
+      return;
+    }
     const block = e.target.closest(".script-block");
     if (block) {
         setActiveBlock(block.dataset.id);
