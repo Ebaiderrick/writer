@@ -600,18 +600,19 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-view > * {
-  width: min(1188px, calc(100vw - 40px));
+  width: min(1100px, calc(100vw - 40px));
 }
 
 .workspace-view-body,
 .workspace-topbar {
-  max-width: min(1188px, calc(100vw - 40px));
+  max-width: min(1100px, calc(100vw - 40px));
 }
 
 .workspace-view-body {
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
   align-items: start;
-  max-height: calc(100vh - 132px);
+  height: calc(100vh - 126px);
+  max-height: calc(100vh - 126px);
   overflow: hidden;
   padding: 0;
 }
@@ -628,7 +629,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-projects {
   display: grid;
-  gap: 24px;
+  gap: 16px;
 }
 
 .workspace-view::before {
@@ -653,7 +654,7 @@ html[data-theme="rose"] .mesh-background {
 .workspace-topbar {
   border-radius: 26px 26px 0 0;
   margin-bottom: 0;
-  padding: 14px 18px;
+  padding: 10px 14px;
 }
 
 .workspace-view-body {
@@ -667,14 +668,18 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home,
 .workspace-projects {
   min-height: 0;
-  padding: 16px;
-  overflow: auto;
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 24%, var(--line)) transparent;
 }
 
 .workspace-home-shell {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .workspace-home-hero-card,
@@ -688,8 +693,8 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-hero-card {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
-  gap: 16px;
-  padding: 16px;
+  gap: 12px;
+  padding: 12px;
 }
 
 .workspace-home-kicker {
@@ -713,7 +718,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-hero-copy h3 {
   margin: 0;
-  font-size: clamp(1.35rem, 1.6vw, 1.78rem);
+  font-size: clamp(1.18rem, 1.35vw, 1.45rem);
   letter-spacing: -0.03em;
 }
 
@@ -721,8 +726,8 @@ html[data-theme="rose"] .mesh-background {
   margin: 0;
   max-width: 62ch;
   color: color-mix(in srgb, var(--ink) 76%, var(--muted));
-  line-height: 1.45;
-  font-size: 0.88rem;
+  line-height: 1.4;
+  font-size: 0.78rem;
 }
 
 .workspace-home-hero-metrics {
@@ -734,7 +739,7 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-metric {
   display: grid;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 14px;
   background: color-mix(in srgb, var(--surface-strong) 85%, transparent);
 }
@@ -752,7 +757,7 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 
 .workspace-home-panel-wide {
@@ -761,20 +766,20 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-panel {
   display: grid;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 9px;
+  padding: 11px 12px;
 }
 
 .workspace-home-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .workspace-home-panel-head h4 {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
 }
 
 .workspace-home-panel-meta {
@@ -800,7 +805,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-activity {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .workspace-home-activity-timeline .workspace-home-activity-item {
@@ -873,13 +878,13 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-activity-item {
   display: grid;
   gap: 4px;
-  padding: 9px 11px;
+  padding: 8px 10px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
 }
 
 .workspace-home-activity-item strong {
-  font-size: 0.8rem;
+  font-size: 0.76rem;
 }
 
 .workspace-home-activity-item span,
@@ -961,7 +966,7 @@ html[data-theme="rose"] .mesh-background {
 .workspace-task-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .workspace-task-description {
@@ -989,7 +994,7 @@ html[data-theme="rose"] .mesh-background {
 .workspace-task-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .workspace-task-summary-chip {
@@ -1014,14 +1019,14 @@ html[data-theme="rose"] .mesh-background {
 .workspace-task-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .workspace-task-card {
   display: grid;
   gap: 7px;
-  padding: 11px 12px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
@@ -1176,11 +1181,29 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-close-button {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   padding: 0;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   border-radius: 999px;
+}
+
+.workspace-home::-webkit-scrollbar,
+.workspace-projects::-webkit-scrollbar {
+  width: 10px;
+}
+
+.workspace-home::-webkit-scrollbar-track,
+.workspace-projects::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.workspace-home::-webkit-scrollbar-thumb,
+.workspace-projects::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background: color-mix(in srgb, var(--accent) 24%, var(--line));
 }
 
 .workspace-view-brand strong {
@@ -4646,6 +4669,11 @@ body.outline-hidden .section-scenes {
 
   .workspace-home-subgrid {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-view-body {
+    height: calc(100vh - 110px);
+    max-height: calc(100vh - 110px);
   }
 
   .field-grid,
