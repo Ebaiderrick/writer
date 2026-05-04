@@ -282,6 +282,7 @@ export function renderWorkspaceView() {
   state.workspaceTaskFilter = state.workspaceTaskFilter || "all";
   state.workspaceTaskSort = state.workspaceTaskSort || "latest";
   const allProjects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  const workspaceOptions = buildProjectGroups(allProjects.filter((project) => !project.isWorkspaceRoot));
   const workspaceLead = allProjects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot)
     || allProjects.find((project) => project.workspace?.id === workspaceId)
     || null;
@@ -397,7 +398,7 @@ export function renderWorkspaceView() {
   });
 
   if (refs.workspaceViewTitle) refs.workspaceViewTitle.textContent = workspaceLead.workspace?.name || workspaceLead.title || "Workspace";
-  if (refs.workspaceViewSubtitle) refs.workspaceViewSubtitle.textContent = "Projects, members, delegation, and shared progress live here.";
+  if (refs.workspaceViewSubtitle) refs.workspaceViewSubtitle.textContent = `${projects.length} project${projects.length === 1 ? "" : "s"}, ${allTaskItems.length} task${allTaskItems.length === 1 ? "" : "s"}, and shared activity in one calm view.`;
 
   refs.workspaceDashboard.innerHTML = `
     <div class="workspace-home-shell">
@@ -405,6 +406,14 @@ export function renderWorkspaceView() {
         <div class="workspace-home-hero-copy">
           <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
           <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
+          ${workspaceOptions.length > 1 ? `
+            <div class="workspace-switch-row">
+              <span>Workspace</span>
+              <select class="comment-filter-select workspace-switch-select" data-workspace-switch aria-label="Switch workspace">
+                ${workspaceOptions.map((group) => `<option value="${escapeHtml(group.workspaceId)}" ${group.workspaceId === workspaceId ? "selected" : ""}>${escapeHtml(group.workspaceName)}</option>`).join("")}
+              </select>
+            </div>
+          ` : ""}
         </div>
         <div class="workspace-home-hero-metrics">
           <div class="workspace-home-metric"><span>Projects</span><strong>${projects.length}</strong></div>
@@ -746,7 +755,7 @@ export function renderWorkspaceView() {
       node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
       node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
       node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-      node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
+      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
       refs.workspaceProjectGrid.appendChild(node);
@@ -818,9 +827,14 @@ export function renderHome() {
   const template = document.querySelector("#projectCardTemplate");
   state.homeProjectSort = state.homeProjectSort || "latest";
   state.homeProjectFormat = state.homeProjectFormat || "all";
+  state.homeWorkspaceFilter = state.homeWorkspaceFilter || "all";
   let projects = sortProjectsForHome(state.projects);
   let workspaceLead = null;
   const currentUid = auth.currentUser?.uid || "";
+  const workspaceOptions = buildProjectGroups(state.projects.filter((project) => !project.isWorkspaceRoot));
+  if (state.homeWorkspaceFilter !== "all" && !workspaceOptions.some((group) => group.workspaceId === state.homeWorkspaceFilter)) {
+    state.homeWorkspaceFilter = "all";
+  }
 
   if (state.currentWorkspaceId) {
     workspaceLead = projects.find((project) => project.workspace?.id === state.currentWorkspaceId && project.isWorkspaceRoot)
@@ -840,6 +854,9 @@ export function renderHome() {
       });
     } else if (state.homeProjectFilter === "shared") {
       projects = projects.filter((project) => project.isShared || Object.keys(project.collaborators || {}).length > 0);
+    }
+    if (state.homeWorkspaceFilter !== "all") {
+      projects = projects.filter((project) => (project.workspace?.id || project.id) === state.homeWorkspaceFilter);
     }
     if (state.homeProjectFormat !== "all") {
       projects = projects.filter((project) => getProjectFormatValue(project) === state.homeProjectFormat);
@@ -979,22 +996,34 @@ export function renderHome() {
     refs.workspaceBackBtn.hidden = true;
     refs.homeProjectsTitle.textContent = "Projects";
     refs.homeProjectsSubtitle.innerHTML = `
-      <div class="project-filter-row project-filter-row-inline" role="tablist" aria-label="Project filters">
-        <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
-        <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
-        <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
-        <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
-          <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>Format</option>
-          <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film</option>
-          <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose</option>
-        </select>
-        <select class="comment-filter-select project-format-select project-sort-select" data-home-project-sort aria-label="Project sort">
-          <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
-          <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
-          <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Scenes</option>
-        </select>
-      </div>
-      `;
+      <div class="project-toolbar">
+        <div class="project-toolbar-main">
+          <div class="project-filter-row project-filter-row-inline" role="tablist" aria-label="Project filters">
+            <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
+            <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
+            <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+          </div>
+          <div class="project-toolbar-selects">
+            ${workspaceOptions.length > 1 ? `
+              <select class="comment-filter-select project-workspace-select" data-home-workspace-filter aria-label="Workspace filter">
+                <option value="all">All Workspaces</option>
+                ${workspaceOptions.map((group) => `<option value="${escapeHtml(group.workspaceId)}" ${state.homeWorkspaceFilter === group.workspaceId ? "selected" : ""}>${escapeHtml(group.workspaceName)}</option>`).join("")}
+              </select>
+            ` : ""}
+            <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
+              <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>Format</option>
+              <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film</option>
+              <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose</option>
+            </select>
+            <select class="comment-filter-select project-format-select project-sort-select" data-home-project-sort aria-label="Project sort">
+              <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
+              <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
+              <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Scenes</option>
+            </select>
+          </div>
+        </div>
+        <span class="project-toolbar-note">${workspaceOptions.length > 1 ? `${workspaceOptions.length} workspaces connected` : "Your projects stay tied to one workspace context."}</span>
+      </div>`;
     if (refs.homeWorkspaceDashboard) {
       refs.homeWorkspaceDashboard.hidden = false;
       refs.homeWorkspaceDashboard.innerHTML = "";
@@ -1012,11 +1041,11 @@ export function renderHome() {
       node.querySelector(".project-card-title").textContent = project.title;
       node.querySelector(".project-script-id").textContent = project.scriptId;
       node.querySelector(".project-card-context-action").dataset.openWorkspaceId = project.workspace?.id || project.id;
-      node.querySelector(".project-card-context").textContent = `${workspaceLabel} Â· ${collaborationLabel}`;
+      node.querySelector(".project-card-context").textContent = workspaceLabel;
       node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
       node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
       node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-      node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
+      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
       return node;
@@ -1050,11 +1079,11 @@ export function renderHome() {
     node.querySelector(".project-card-title").textContent = project.title;
     node.querySelector(".project-script-id").textContent = project.scriptId;
     node.querySelector(".project-card-context-action").dataset.openWorkspaceId = project.workspace?.id || project.id;
-    node.querySelector(".project-card-context").textContent = `${workspaceLabel} Â· ${collaborationLabel}`;
+    node.querySelector(".project-card-context").textContent = workspaceLabel;
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
     node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-    node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
+    node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
 
     // Note: Event listeners will be bound in events.js, but we need the IDs here
     node.dataset.projectId = project.id;
@@ -3670,4 +3699,6 @@ window.addEventListener('scriptIdUpdated', () => {
     renderCurrentScriptId();
     renderHome();
 });
+
+
 

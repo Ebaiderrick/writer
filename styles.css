@@ -38,6 +38,11 @@
   --right-pane-width: 300px;
   --topbar-height: 58px;
   --toolbar-height: 110px;
+  --text-title: 1rem;
+  --text-body: 0.84rem;
+  --text-meta: 0.72rem;
+  --radius-md: 10px;
+  --radius-lg: 12px;
 
   /* Script Defaults */
   --script-font-size: 12pt;
@@ -562,8 +567,35 @@ html[data-theme="rose"] .mesh-background {
 .home-projects-subtitle {
   margin: 0;
   max-width: none;
-  font-size: 0.92rem;
+  font-size: var(--text-meta);
   color: var(--muted);
+}
+
+.project-toolbar {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.project-toolbar-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.project-toolbar-selects {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.project-toolbar-note {
+  font-size: var(--text-meta);
+  color: var(--muted);
+  line-height: 1.2;
 }
 
 .home-projects-actions {
@@ -690,6 +722,7 @@ html[data-theme="rose"] .mesh-background {
   border-radius: 18px;
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
 .workspace-home-hero-card {
@@ -698,6 +731,7 @@ html[data-theme="rose"] .mesh-background {
   gap: 8px;
   padding: 8px 10px;
   align-items: stretch;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
 .workspace-home-kicker {
@@ -712,7 +746,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-hero-copy h3 {
   margin: 0;
-  font-size: clamp(1rem, 1.12vw, 1.18rem);
+  font-size: clamp(1rem, 1.08vw, 1.12rem);
   letter-spacing: -0.03em;
 }
 
@@ -721,7 +755,7 @@ html[data-theme="rose"] .mesh-background {
   max-width: 62ch;
   color: color-mix(in srgb, var(--ink) 76%, var(--muted));
   line-height: 1.3;
-  font-size: 0.7rem;
+  font-size: var(--text-meta);
 }
 
 .workspace-home-hero-metrics {
@@ -744,7 +778,7 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-home-metric strong {
-  font-size: 0.76rem;
+  font-size: var(--text-body);
   color: var(--ink);
   line-height: 1.16;
 }
@@ -763,6 +797,13 @@ html[data-theme="rose"] .mesh-background {
   display: grid;
   gap: 7px;
   padding: 8px 9px;
+}
+
+.workspace-home-panel:hover,
+.workspace-home-hero-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.07);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
 }
 
 .workspace-home-panel-head {
@@ -1234,12 +1275,28 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-view-brand strong {
-  font-size: clamp(1.04rem, 1.18vw, 1.16rem);
+  font-size: clamp(1rem, 1.12vw, 1.12rem);
 }
 
 .workspace-view-brand span {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--text-meta);
+}
+
+.workspace-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.workspace-switch-row span {
+  font-size: var(--text-meta);
+  color: var(--muted);
+}
+
+.workspace-switch-select {
+  min-width: 154px;
 }
 
 .workspace-task-comments,
@@ -1349,6 +1406,7 @@ html[data-theme="rose"] .mesh-background {
   scrollbar-width: none;
 }
 
+
 .project-filter-row-inline {
   width: fit-content;
   max-width: min(100%, 620px);
@@ -1363,11 +1421,12 @@ html[data-theme="rose"] .mesh-background {
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--muted);
-  border-radius: 8px;
-  padding: 4px 8px;
-  font-size: 0.7rem;
+  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  font-size: var(--text-meta);
   font-weight: 600;
   line-height: 1;
+  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, transform 0.22s ease;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1414,9 +1473,9 @@ html[data-theme="rose"] .mesh-background {
 .project-card {
   border: 1px solid var(--line);
   background: var(--panel);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
   height: 198px;
   overflow: hidden;
 }
@@ -1424,6 +1483,7 @@ html[data-theme="rose"] .mesh-background {
 .project-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
 }
 
 .project-dashboard-controls {
@@ -1510,10 +1570,10 @@ html[data-theme="rose"] .mesh-background {
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   color: var(--muted);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   min-height: 22px;
   padding: 3px 6px;
-  font-size: 0.62rem;
+  font-size: var(--text-meta);
   cursor: pointer;
 }
 
@@ -1534,7 +1594,15 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .project-card-context {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
+  color: var(--ink);
+  font-size: var(--text-meta);
+  white-space: nowrap;
 }
 
 .project-card-context-row {
@@ -1551,12 +1619,18 @@ html[data-theme="rose"] .mesh-background {
   min-height: 24px;
   padding: 4px 9px;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent-soft) 82%, var(--panel));
   color: var(--accent-strong);
-  font-size: 0.66rem;
+  font-size: var(--text-meta);
   font-weight: 600;
   white-space: nowrap;
+  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, transform 0.22s ease;
+}
+
+.project-card-context-action:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--panel));
 }
 
 .project-delete {
@@ -1586,13 +1660,15 @@ html[data-theme="rose"] .mesh-background {
   margin: 5px 0;
   gap: 10px;
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: var(--text-meta);
 }
 
 .script-id-flag {
   display: inline-flex;
   align-items: center;
   width: fit-content;
+  font-size: var(--text-meta);
+  font-weight: 700;
   min-height: 18px;
   padding: 2px 7px;
   border: 1px solid var(--line);
@@ -1600,12 +1676,15 @@ html[data-theme="rose"] .mesh-background {
   background: color-mix(in srgb, var(--panel) 86%, var(--accent-soft));
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 0.68rem;
-  font-weight: 700;
 }
 
 .script-id-flag[hidden] {
   display: none;
+}
+
+.project-workspace-select {
+  min-width: 138px;
+  flex: 0 0 138px;
 }
 
 .project-card-logline {
@@ -1618,6 +1697,7 @@ html[data-theme="rose"] .mesh-background {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
 
 .project-card-updated {
   margin: 0;
@@ -1641,8 +1721,8 @@ html[data-theme="rose"] .mesh-background {
   width: 90px;
   min-width: 90px;
   flex: 0 0 90px;
-  min-height: 26px;
-  border-radius: 8px;
+  min-height: 30px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--muted);
@@ -1676,8 +1756,9 @@ html[data-theme="rose"] .mesh-background {
 .ghost-button {
   min-height: var(--button-height);
   padding: 6px 12px;
-  font-size: 0.84rem;
+  font-size: var(--text-body);
   font-weight: 600;
+  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
 }
 
 .primary-button {
@@ -1686,8 +1767,30 @@ html[data-theme="rose"] .mesh-background {
   border-color: var(--accent);
 }
 
+.primary-button:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  border-color: color-mix(in srgb, var(--accent) 86%, #000);
+}
+
 .ghost-button {
   background: var(--control-bg);
+}
+
+.ghost-button:hover,
+.project-quick-action:hover,
+.nav-menu-button:hover,
+.comment-filter-select:hover {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+  background: color-mix(in srgb, var(--panel) 86%, var(--accent-soft));
+  color: var(--ink);
+}
+
+.primary-button:active,
+.ghost-button:active,
+.project-quick-action:active,
+.nav-menu-button:active,
+.project-card-context-action:active {
+  transform: scale(0.98);
 }
 
 .btn-sm {
@@ -2983,18 +3086,17 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .comment-compose-overlay[hidden] {
   display: none !important;
 }
-
 .comment-compose-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
 }
 
 .comment-compose-label {
-  font-size: 0.82rem;
+  font-size: var(--text-meta);
   font-weight: 600;
-  color: var(--ink);
 }
+
 
 .comment-compose-close {
   border: none;
@@ -3031,24 +3133,26 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 /* Left pane comment list */
-.comment-filter-select {
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.78rem;
-  cursor: pointer;
-  width: 100%;
-}
-
 .comment-pane-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
   max-height: 400px;
+}
+
+.comment-filter-select {
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-meta);
+  cursor: pointer;
+  width: 100%;
+  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, transform 0.22s ease;
 }
 
 .comment-pane-item {
@@ -4905,6 +5009,33 @@ body.outline-hidden .section-scenes {
     align-items: stretch;
   }
 
+  .project-toolbar,
+  .project-toolbar-main,
+  .project-toolbar-selects {
+    width: 100%;
+  }
+
+  .project-toolbar-main,
+  .project-toolbar-selects,
+  .workspace-switch-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .project-filter-row {
+    flex-wrap: wrap;
+  }
+
+  .project-filter-chip,
+  .comment-filter-select,
+  .home-projects-actions .primary-button,
+  .home-projects-actions .ghost-button,
+  .workspace-switch-select {
+    width: 100%;
+    max-width: none;
+    flex: 1 1 auto;
+  }
+
   .workspace-ai-review-grid {
     grid-template-columns: 1fr;
   }
@@ -6114,3 +6245,4 @@ html[data-theme="white"] .user-trigger {
   min-height: 90px;
   resize: vertical;
 }
+

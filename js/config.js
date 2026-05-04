@@ -152,6 +152,7 @@ export const state = {
   homeProjectFilter: "all",
   homeProjectSort: "latest",
   homeProjectFormat: "all",
+  homeWorkspaceFilter: "all",
   workspaceTaskFilter: "all",
   workspaceTaskSort: "latest",
   backupPrompted: false,

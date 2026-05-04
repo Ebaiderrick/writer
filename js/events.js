@@ -998,6 +998,12 @@ export function bindEvents() {
     renderHome();
   });
 
+  refs.workspaceView?.addEventListener("change", (event) => {
+    const workspaceSwitch = event.target.closest("[data-workspace-switch]");
+    if (!workspaceSwitch) return;
+    openWorkspaceDashboard(workspaceSwitch.value);
+  });
+
   refs.homeWorkspaceDashboard?.addEventListener("click", (event) => {
     const filterTrigger = event.target.closest("[data-home-project-filter]");
     if (filterTrigger) {
@@ -1010,6 +1016,12 @@ export function bindEvents() {
     const formatSelect = event.target.closest("[data-home-project-format]");
     if (formatSelect) {
       state.homeProjectFormat = formatSelect.value || "all";
+      renderHome();
+      return;
+    }
+    const workspaceSelect = event.target.closest("[data-home-workspace-filter]");
+    if (workspaceSelect) {
+      state.homeWorkspaceFilter = workspaceSelect.value || "all";
       renderHome();
       return;
     }
@@ -1030,6 +1042,12 @@ export function bindEvents() {
     const formatSelect = event.target.closest("[data-home-project-format]");
     if (formatSelect) {
       state.homeProjectFormat = formatSelect.value || "all";
+      renderHome();
+      return;
+    }
+    const workspaceSelect = event.target.closest("[data-home-workspace-filter]");
+    if (workspaceSelect) {
+      state.homeWorkspaceFilter = workspaceSelect.value || "all";
       renderHome();
       return;
     }
