@@ -637,7 +637,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-digital-clock {
   font-variant-numeric: tabular-nums;
-  font-size: 0.88rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--muted);
   letter-spacing: 0.03em;
@@ -683,7 +683,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-view-brand span {
   color: var(--muted);
-  font-size: 0.88rem;
+  font-size: 0.95rem;
 }
 
 .workspace-projects {
@@ -804,7 +804,7 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-home-metric span {
-  font-size: 0.71rem;
+  font-size: 0.78rem;
   color: var(--muted);
 }
 
@@ -846,7 +846,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-panel-head h4 {
   margin: 0;
-  font-size: 0.84rem;
+  font-size: 0.9rem;
 }
 
 .workspace-home-panel-meta {
@@ -959,7 +959,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-activity-item span,
 .workspace-home-empty {
-  font-size: 0.75rem;
+  font-size: 0.81rem;
   color: var(--muted);
 }
 
@@ -993,11 +993,11 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-summary-item strong {
-  font-size: 0.87rem;
+  font-size: 0.93rem;
 }
 
 .workspace-summary-item span {
-  font-size: 0.8rem;
+  font-size: 0.86rem;
   color: var(--muted);
 }
 
@@ -1044,7 +1044,7 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-task-field span {
-  font-size: 0.71rem;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1064,7 +1064,7 @@ html[data-theme="rose"] .mesh-background {
   grid-column: 1 / -2;
   margin: 0;
   color: var(--muted);
-  font-size: 0.73rem;
+  font-size: 0.79rem;
   line-height: 1.35;
 }
 
@@ -1143,13 +1143,13 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-task-head strong {
   display: block;
-  font-size: 0.83rem;
+  font-size: 0.89rem;
 }
 
 .workspace-task-head span,
 .workspace-task-copy,
 .workspace-task-meta span {
-  font-size: 0.75rem;
+  font-size: 0.81rem;
   color: var(--muted);
 }
 
@@ -1191,12 +1191,12 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-task-assignee-copy strong {
-  font-size: 0.85rem;
+  font-size: 0.91rem;
   color: var(--ink);
 }
 
 .workspace-task-assignee-copy span {
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   color: var(--muted);
 }
 
@@ -1258,7 +1258,7 @@ html[data-theme="rose"] .mesh-background {
 .workspace-task-comment-preview {
   margin: 0;
   color: var(--muted);
-  font-size: 0.73rem;
+  font-size: 0.79rem;
   line-height: 1.4;
 }
 
@@ -1364,12 +1364,12 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-view-brand strong {
-  font-size: clamp(1rem, 1.12vw, 1.12rem);
+  font-size: clamp(1.06rem, 1.18vw, 1.18rem);
 }
 
 .workspace-view-brand span {
   color: var(--muted);
-  font-size: var(--text-meta);
+  font-size: calc(var(--text-meta) + 1px);
 }
 
 .workspace-switch-row {
@@ -1410,12 +1410,12 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-task-comment strong {
-  font-size: 0.82rem;
+  font-size: 0.88rem;
 }
 
 .workspace-task-comment span,
 .workspace-task-comment p {
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   color: var(--muted);
   margin: 0;
 }

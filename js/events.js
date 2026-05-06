@@ -163,11 +163,19 @@ function getWorkspaceTaskTemplate(templateKey) {
 }
 
 function getWorkspaceProjectForAi(workspaceProject) {
-  return workspaceProject || getWorkspaceRootProject(state.currentWorkspaceId);
+  return workspaceProject || getWorkspaceLeadProject(state.currentWorkspaceId);
 }
 
 function workspaceSupportsAi(workspaceProject = null) {
   return workspaceHasAIAssist(getWorkspaceProjectForAi(workspaceProject));
+}
+
+function getWorkspaceLeadProject(workspaceId = state.currentWorkspaceId) {
+  if (!workspaceId) return null;
+  return getWorkspaceRootProject(workspaceId)
+    || getWorkspaceProjects(workspaceId)[0]
+    || state.projects.find((project) => project.workspace?.id === workspaceId)
+    || null;
 }
 
 function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = false } = {}) {
@@ -250,7 +258,7 @@ async function launchNewCreationFlow() {
 
 function openWorkspaceDashboard(workspaceId) {
   if (!workspaceId) return;
-  const workspaceRoot = getWorkspaceRootProject(workspaceId) || getWorkspaceProjects(workspaceId)[0] || null;
+  const workspaceRoot = getWorkspaceLeadProject(workspaceId);
   state.currentWorkspaceId = workspaceId;
   if (workspaceRoot) {
     state.currentProjectId = workspaceRoot.id;
@@ -264,7 +272,7 @@ function openWorkspaceEditor() {
   if (!state.currentWorkspaceId) return;
   const workspaceProjects = getWorkspaceProjects(state.currentWorkspaceId).filter((project) => !project.isWorkspaceRoot);
   const activeProject = state.projects.find((project) => project.id === state.currentProjectId && project.workspace?.id === state.currentWorkspaceId && !project.isWorkspaceRoot);
-  const target = activeProject || workspaceProjects[0] || null;
+  const target = activeProject || workspaceProjects[0] || getWorkspaceLeadProject(state.currentWorkspaceId) || null;
   if (!target) {
     customAlert("Create a project in this workspace first to open the editor.", "Workspace");
     return;
@@ -408,11 +416,11 @@ function getWorkspaceStoryMemoryChoices(workspaceId = state.currentWorkspaceId) 
 }
 
 function getWorkspaceTaskById(taskId) {
-  return getWorkspaceRootProject(state.currentWorkspaceId)?.workspace?.tasks?.find((task) => task.id === taskId) || null;
+  return getWorkspaceLeadProject(state.currentWorkspaceId)?.workspace?.tasks?.find((task) => task.id === taskId) || null;
 }
 
 function getWorkspaceNotifications(workspaceId = state.currentWorkspaceId) {
-  return [...(getWorkspaceRootProject(workspaceId)?.workspace?.notifications || [])]
+  return [...(getWorkspaceLeadProject(workspaceId)?.workspace?.notifications || [])]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
@@ -501,7 +509,7 @@ function scheduleAiTaskRun(task) {
 }
 
 function syncAiTaskSchedules(workspaceId = state.currentWorkspaceId) {
-  const root = getWorkspaceRootProject(workspaceId);
+  const root = getWorkspaceLeadProject(workspaceId);
   const tasks = root?.workspace?.tasks || [];
   const validIds = new Set(tasks.map((task) => task.id));
   [...aiTaskTimers.keys()].forEach((taskId) => {
@@ -616,7 +624,7 @@ function insertAiTaskResultIntoProjectWithMode(task, resultText, mode = "insert-
 
 function addWorkspaceTaskFromContainer(container) {
   if (!container) return addWorkspaceTaskFromDashboard();
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const workspaceProject = getWorkspaceLeadProject(state.currentWorkspaceId);
   if (!workspaceProject) return;
   const templateSelect = container.querySelector('[data-workspace-task-template]');
   const titleInput = container.querySelector('[data-workspace-task-title]');
@@ -714,7 +722,7 @@ function addWorkspaceTaskFromContainer(container) {
 }
 
 function addWorkspaceTaskFromDashboard() {
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const workspaceProject = getWorkspaceLeadProject(state.currentWorkspaceId);
   if (!workspaceProject || !refs.workspaceDashboard) return;
   const templateSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-template]');
   const titleInput = refs.workspaceDashboard.querySelector('[data-workspace-task-title]');
@@ -860,7 +868,7 @@ function updateWorkspaceTask(taskId, patch) {
 async function runAiTask(taskId) {
   const task = getWorkspaceTaskById(taskId);
   if (!task || task.assigneeType !== "system" || task.aiState === "running") return;
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const workspaceProject = getWorkspaceLeadProject(state.currentWorkspaceId);
   if (!workspaceSupportsAi(workspaceProject)) {
     updateWorkspaceTask(taskId, { aiState: "failed", aiError: "Add @AIassist to this workspace before running AI tasks." });
     showToast("Add @AIassist to this workspace before running AI tasks.", "error");
@@ -1005,7 +1013,7 @@ function dismissAiTaskResult(taskId) {
 }
 
 async function editWorkspaceTask(taskId) {
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const workspaceProject = getWorkspaceLeadProject(state.currentWorkspaceId);
   const task = getWorkspaceTaskById(taskId);
   if (!workspaceProject || !task) return;
   const assignees = getWorkspaceTaskAssignees(workspaceProject);
@@ -1131,7 +1139,7 @@ async function deleteWorkspaceTask(taskId) {
 async function commentOnWorkspaceTask(taskId) {
   const task = getWorkspaceTaskById(taskId);
   if (!task) return;
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const workspaceProject = getWorkspaceLeadProject(state.currentWorkspaceId);
   const assignees = workspaceProject ? getWorkspaceTaskAssignees(workspaceProject).filter((entry) => entry.assigneeType === "human") : [];
   const container = document.createElement("div");
   container.className = "workspace-task-comments";
@@ -2207,7 +2215,7 @@ export function bindEvents() {
 }
 
 function getWorkspaceMemberList() {
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const workspaceProject = getWorkspaceLeadProject(state.currentWorkspaceId);
   if (!workspaceProject) return [];
   const ownerLabel = workspaceProject.ownerName || workspaceProject.ownerEmail || "Workspace Owner";
   const members = [
