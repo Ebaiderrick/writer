@@ -804,6 +804,15 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
   bioEl.textContent = '—';
   imgEl.src = photoURL || generateCollabAvatar(displayName);
 
+  // Eya – AI assistant profile
+  const isEya = uid === "ai_assist" || String(name || "").toLowerCase().includes("aiassist") || String(name || "").toLowerCase() === "eya";
+  if (isEya) {
+    nameEl.textContent = "@AIassist · Eya";
+    if (emailEl) { emailEl.textContent = "AI Writing Assistant"; emailEl.hidden = false; }
+    bioEl.textContent = "Eya is EyaWriter's built-in AI collaborator — a quiet presence in the workspace. She reads the room, helps where needed, and never takes up more space than the work requires. Add her to a workspace to unlock shared AI features for the whole team.";
+    imgEl.src = generateEyaAvatar();
+  }
+
   popup.classList.add('active');
 
   const closePopup = () => {
@@ -835,6 +844,11 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
       console.error('Failed to load collaborator profile', err);
     }
   }
+}
+
+function generateEyaAvatar() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><defs><linearGradient id="eg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient></defs><circle cx="48" cy="48" r="48" fill="url(#eg)"/><text x="48" y="56" text-anchor="middle" font-family="system-ui,sans-serif" font-size="28" font-weight="700" fill="white" opacity="0.92">AI</text></svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
 function generateCollabAvatar(name) {

@@ -283,11 +283,23 @@ export function showAuth() {
   refs.authView.hidden = false;
 }
 
-export function showHome() {
-  refs.authView.hidden = true;
-  refs.homeView.hidden = false;
-  refs.workspaceView.hidden = true;
-  refs.studioView.hidden = true;
+let _workspaceClockTimer = null;
+
+function startWorkspaceClock() {
+  const el = document.getElementById("workspaceDigitalClock");
+  if (!el) return;
+  const tick = () => {
+    const now = new Date();
+    el.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  };
+  tick();
+  clearInterval(_workspaceClockTimer);
+  _workspaceClockTimer = setInterval(tick, 1000);
+}
+
+function stopWorkspaceClock() {
+  clearInterval(_workspaceClockTimer);
+  _workspaceClockTimer = null;
 }
 
 export function showWorkspaceView() {
@@ -295,12 +307,22 @@ export function showWorkspaceView() {
   refs.homeView.hidden = false;
   refs.workspaceView.hidden = false;
   refs.studioView.hidden = true;
+  startWorkspaceClock();
+}
+
+export function showHome() {
+  refs.authView.hidden = true;
+  refs.homeView.hidden = false;
+  refs.workspaceView.hidden = true;
+  refs.studioView.hidden = true;
+  stopWorkspaceClock();
 }
 
 export function showStudio() {
   refs.homeView.hidden = true;
   refs.workspaceView.hidden = true;
   refs.studioView.hidden = false;
+  stopWorkspaceClock();
 }
 
 export function renderWorkspaceView() {
@@ -782,7 +804,7 @@ export function renderWorkspaceView() {
       node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
       node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
       node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
+      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} ï¿½ ${collaborationLabel}`;
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
       refs.workspaceProjectGrid.appendChild(node);
@@ -1073,7 +1095,7 @@ export function renderHome() {
       node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
       node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
       node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
+      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} ï¿½ ${collaborationLabel}`;
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
       return node;
@@ -1111,7 +1133,7 @@ export function renderHome() {
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
     node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-    node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
+    node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} ï¿½ ${collaborationLabel}`;
 
     // Note: Event listeners will be bound in events.js, but we need the IDs here
     node.dataset.projectId = project.id;
@@ -2409,12 +2431,31 @@ export async function showWorkspacePopup() {
     });
   });
 
-  const handleInviteResult = (event) => {
+  const handleInviteResult = async (event) => {
     const status = container.querySelector("[data-workspace-status]");
     if (!status) {
       return;
     }
-    status.textContent = event.detail?.ok ? "Invitation sent." : (event.detail?.reason || "Unable to send invite.");
+    if (event.detail?.ok) {
+      status.textContent = "Invitation sent.";
+      // Ask if they want to add AIassist for AI features
+      const hasAI = Object.values(project.collaborators || {}).some((c) => c.isAIAssist) ||
+        (project.collaborators?.["ai_assist"]);
+      if (!hasAI) {
+        const wantAI = await customConfirm(
+          "Add @AIassist (Eya) to this workspace to enable AI writing features for all members. Without Eya, AI features only work in the personal editor.\n\nAdd @AIassist now?",
+          "Enable AI Features"
+        );
+        if (wantAI) {
+          window.dispatchEvent(new CustomEvent("workspaceAddAIAssist", { detail: { projectId: project.id } }));
+          status.textContent = "Invitation sent. @AIassist (Eya) added to the workspace.";
+        } else {
+          status.textContent = "Invitation sent. AI features remain editor-only until @AIassist is added.";
+        }
+      }
+    } else {
+      status.textContent = event.detail?.reason || "Unable to send invite.";
+    }
   };
   const handleMutationResult = (event) => {
     const status = container.querySelector("[data-workspace-status]");

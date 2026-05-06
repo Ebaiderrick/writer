@@ -237,15 +237,14 @@
 
     <section id="workspaceView" class="workspace-view" hidden>
       <header class="home-topbar workspace-topbar">
-        <div class="nav-stack">
-          <div class="workspace-view-brand">
-            <strong id="workspaceViewTitle">Workspace</strong>
-            <span id="workspaceViewSubtitle">Projects, members, and delegation live here.</span>
-          </div>
+        <div class="workspace-view-brand">
+          <strong id="workspaceViewTitle">Workspace</strong>
+          <span id="workspaceViewSubtitle">Projects, members, and delegation live here.</span>
         </div>
-        <div class="home-projects-actions">
+        <div class="workspace-topbar-right">
+          <span id="workspaceDigitalClock" class="workspace-digital-clock" aria-live="off"></span>
           <button id="workspaceBackBtn" class="ghost-button" type="button">All Projects</button>
-          <button id="workspaceCloseBtn" class="icon-button workspace-close-button" type="button" aria-label="Close workspace">✕</button>
+          <button id="workspaceCloseBtn" class="primary-button workspace-save-home-btn" type="button">Save &amp; Home</button>
         </div>
       </header>
       <section class="workspace-view-body">
@@ -449,7 +448,7 @@
               <summary class="menu-group-summary">Tools</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
-                <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Workspace</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Editor</button>
               </div>
             </details>
 
@@ -764,13 +763,13 @@
                 </div>
               </section>
 
-              <section class="panel section-workspace" data-left-pane-block="workspace" data-left-pane-label="Team Workspace" hidden>
+              <section class="panel section-workspace" data-left-pane-block="workspace" data-left-pane-label="Editor" hidden>
                 <div class="panel-head">
                   <div>
-                    <h3>Team Workspace</h3>
+                    <h3>Editor</h3>
                     <p>Shared access, roles, comments, and activity</p>
                   </div>
-                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Team Workspace">â–¼</button>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Editor">▼</button>
                 </div>
                 <div class="panel-section-body">
                   <button class="ghost-button btn-sm" data-menu-action="open-workspace">Open Workspace</button>

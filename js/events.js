@@ -35,7 +35,7 @@ import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
   placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
-  formatLineText
+  formatLineText, escapeHtml
 } from './utils.js';
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
 import {
@@ -590,6 +590,101 @@ function insertAiTaskResultIntoProjectWithMode(task, resultText, mode = "insert-
   return true;
 }
 
+function addWorkspaceTaskFromContainer(container) {
+  if (!container) return addWorkspaceTaskFromDashboard();
+  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  if (!workspaceProject) return;
+  const templateSelect = container.querySelector('[data-workspace-task-template]');
+  const titleInput = container.querySelector('[data-workspace-task-title]');
+  const descriptionInput = container.querySelector('[data-workspace-task-description]');
+  const projectSelect = container.querySelector('[data-workspace-task-project]');
+  const sceneSelect = container.querySelector('[data-workspace-task-scene]');
+  const lineSelect = container.querySelector('[data-workspace-task-line]');
+  const assigneeSelect = container.querySelector('[data-workspace-task-assignee]');
+  const referenceInput = container.querySelector('[data-workspace-task-reference]');
+  const statusSelect = container.querySelector('[data-workspace-task-status-new]');
+  const prioritySelect = container.querySelector('[data-workspace-task-priority]');
+  const dueInput = container.querySelector('[data-workspace-task-due]');
+  const handoffInput = container.querySelector('[data-workspace-task-handoff]');
+  const memorySelect = container.querySelector('[data-workspace-task-memory]');
+  const aiStartSelect = container.querySelector('[data-workspace-task-ai-start]');
+  const aiStartManual = container.querySelector('[data-workspace-task-ai-start-manual]');
+  const templateKey = templateSelect?.value || "custom";
+  const title = titleInput?.value?.trim();
+  if (!title) {
+    customAlert("Enter a task title first.", "Workspace Tasks");
+    return;
+  }
+  const projectId = projectSelect?.value || "";
+  const sceneId = sceneSelect?.value || "";
+  const lineId = lineSelect?.value || "";
+  const sceneChoice = getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
+  const lineChoice = getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null;
+  const assignedTo = assigneeSelect?.value || "";
+  const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
+  const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
+  const aiStartChoice = aiStartSelect?.value || "now";
+  const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
+  const initialAiState = assignee?.assigneeType === "system" ? (aiStartAt ? "scheduled" : "ready") : "idle";
+  const nextTask = {
+    id: uid("task"),
+    templateKey,
+    priority: prioritySelect?.value || "normal",
+    title,
+    description: descriptionInput?.value?.trim() || "",
+    status: statusSelect?.value || "todo",
+    dueAt: dueInput?.value ? new Date(dueInput.value).toISOString() : "",
+    assignedTo,
+    assignedLabel: assignee?.label || "Unassigned",
+    assigneeType: assignee?.assigneeType || "human",
+    handoffNote: handoffInput?.value?.trim() || "",
+    projectId: lineChoice?.projectId || sceneChoice?.projectId || projectId,
+    reference: referenceInput?.value?.trim() || "",
+    sceneId: lineChoice?.sceneId || sceneChoice?.sceneId || "",
+    sceneLabel: lineChoice?.sceneLabel || sceneChoice?.label || "",
+    lineId: lineChoice?.lineId || sceneChoice?.lineId || "",
+    lineLabel: lineChoice?.lineLabel || "",
+    memoryLinkType: memoryChoice?.type || "",
+    memoryLinkId: memoryChoice?.id || "",
+    memoryLinkName: memoryChoice?.name || "",
+    memoryProjectId: memoryChoice?.projectId || "",
+    comments: [],
+    aiState: initialAiState,
+    aiStartAt,
+    aiLastRunAt: "",
+    aiResultText: "",
+    aiResultSummary: "",
+    aiError: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  };
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    tasks: [...(workspace.tasks || []), nextTask]
+  }));
+  createWorkspaceNotification({
+    task: nextTask,
+    category: assignee?.assigneeType === "system" ? "ai" : "task",
+    title: assignee?.assigneeType === "system" ? "AI task queued" : "New task created",
+    message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the workspace"}.`}`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  });
+  persistProjects(true, { syncInputs: false });
+  scheduleAiTaskRun(nextTask);
+  if (container === refs.homeWorkspaceDashboard) {
+    renderHome();
+  } else {
+    renderWorkspaceView();
+  }
+  showToast(
+    assignee?.assigneeType === "system"
+      ? `AI task queued for ${nextTask.assignedLabel}.`
+      : `${nextTask.title} assigned to ${nextTask.assignedLabel || "the workspace"}.`,
+    "success"
+  );
+}
+
 function addWorkspaceTaskFromDashboard() {
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
   if (!workspaceProject || !refs.workspaceDashboard) return;
@@ -1083,10 +1178,36 @@ export function bindEvents() {
   });
 
   refs.workspaceCloseBtn?.addEventListener("click", () => {
+    persistProjects(true, { syncInputs: false });
     state.currentWorkspaceId = null;
-    persistProjects(false, { syncInputs: false });
     showHome();
     renderHome();
+  });
+
+  // Workspace project grid – open project cards inside the workspace view
+  refs.workspaceProjectGrid?.addEventListener("click", (e) => {
+    const openBtn = e.target.closest(".project-card-open");
+    if (openBtn && openBtn.dataset.projectId) {
+      openProject(openBtn.dataset.projectId);
+      return;
+    }
+    const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
+    if (workspaceTrigger) {
+      openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
+      return;
+    }
+    const card = e.target.closest(".project-card");
+    if (!card) return;
+    const projectId = card.dataset.projectId;
+    if (e.target.closest(".project-delete")) {
+      removeProject(projectId);
+    } else if (e.target.closest('[data-project-action="rename"]')) {
+      renameProjectById(projectId);
+    } else if (e.target.closest('[data-project-action="duplicate"]')) {
+      duplicateProjectById(projectId);
+    } else {
+      openProject(projectId);
+    }
   });
 
   refs.workspaceView?.addEventListener("change", (event) => {
@@ -1100,6 +1221,81 @@ export function bindEvents() {
     if (filterTrigger) {
       state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
       renderHome();
+      return;
+    }
+    // Delegate workspace-home-action clicks from the home workspace dashboard
+    const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
+    if (!action) return;
+    if (action === "add-task") {
+      addWorkspaceTaskFromContainer(refs.homeWorkspaceDashboard);
+      return;
+    }
+    if (action === "new-project") {
+      createProjectInsideCurrentWorkspace();
+      return;
+    }
+    if (action === "open-popup") {
+      showWorkspacePopup();
+      return;
+    }
+    if (action === "edit-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) editWorkspaceTask(taskId);
+      return;
+    }
+    if (action === "delete-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) deleteWorkspaceTask(taskId);
+      return;
+    }
+    if (action === "open-task-project") {
+      const trigger = event.target.closest("[data-task-project-id]");
+      const projectId = trigger?.dataset.taskProjectId;
+      const taskId = trigger?.dataset.taskId;
+      const task = taskId ? getWorkspaceTaskById(taskId) : null;
+      if (projectId) openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+      return;
+    }
+    if (action === "mark-all-notifications-read") {
+      markAllWorkspaceNotificationsRead();
+      return;
+    }
+    if (action === "mark-notification-read") {
+      const notificationId = event.target.closest("[data-notification-id]")?.dataset.notificationId;
+      if (notificationId) markWorkspaceNotificationRead(notificationId, true);
+      return;
+    }
+    if (action === "open-notification") {
+      const trigger = event.target.closest("[data-notification-id]");
+      const projectId = trigger?.dataset.taskProjectId;
+      const notificationId = trigger?.dataset.notificationId;
+      if (notificationId && !notificationId.startsWith("due-")) markWorkspaceNotificationRead(notificationId, true);
+      if (projectId) {
+        const notification = getWorkspaceNotifications().find((item) => item.id === notificationId);
+        const task = notification?.taskId ? getWorkspaceTaskById(notification.taskId) : null;
+        openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+      }
+      return;
+    }
+    if (action === "comment-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) commentOnWorkspaceTask(taskId);
+      return;
+    }
+    if (action === "review-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) reviewAiTaskResult(taskId);
+      return;
+    }
+    if (action === "run-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) runAiTask(taskId);
+      return;
+    }
+    if (action === "set-task-filter") {
+      state.workspaceTaskFilter = event.target.closest("[data-task-filter]")?.dataset.taskFilter || "all";
+      renderHome();
+      return;
     }
   });
 
@@ -1117,9 +1313,23 @@ export function bindEvents() {
       return;
     }
     const sortSelect = event.target.closest("[data-home-project-sort]");
-    if (!sortSelect) return;
-    state.homeProjectSort = sortSelect.value || "latest";
-    renderHome();
+    if (sortSelect) {
+      state.homeProjectSort = sortSelect.value || "latest";
+      renderHome();
+      return;
+    }
+    // Task status change within home workspace dashboard
+    const statusSelect = event.target.closest("[data-workspace-task-status]");
+    if (statusSelect) {
+      updateWorkspaceTask(statusSelect.dataset.workspaceTaskStatus, { status: statusSelect.value });
+      renderHome();
+      return;
+    }
+    // Task template change
+    const templateSelect = event.target.closest("[data-workspace-task-template]");
+    if (templateSelect) {
+      applyWorkspaceTaskTemplateToForm(refs.homeWorkspaceDashboard, templateSelect.value);
+    }
   });
 
   refs.homeProjectsSubtitle?.addEventListener("click", (event) => {
@@ -1912,6 +2122,124 @@ export function bindEvents() {
   window.addEventListener('proofreadCleanupApplied', () => {
     renderStudio();
   });
+
+  // Add AIassist (Eya) to workspace when requested
+  window.addEventListener("workspaceAddAIAssist", ({ detail }) => {
+    const projectId = detail?.projectId;
+    if (!projectId) return;
+    updateWorkspaceAcrossProjects(state.currentWorkspaceId || projectId, (workspace) => workspace);
+    const project = state.projects.find((p) => p.id === projectId);
+    if (!project) return;
+    if (!project.collaborators) project.collaborators = {};
+    if (!project.collaborators["ai_assist"]) {
+      project.collaborators["ai_assist"] = {
+        role: "editor",
+        name: "Eya",
+        email: "ai@eyawriter.app",
+        username: "AIassist",
+        isAIAssist: true,
+        photoURL: ""
+      };
+      upsertProject(project);
+      persistProjects(true, { syncInputs: false });
+      showToast("@AIassist (Eya) added to the workspace. AI features are now available to all members.", "success");
+    }
+  });
+
+  // @mention dropdown for workspace task inputs
+  document.addEventListener("input", handleWorkspaceMentionInput);
+  document.addEventListener("keydown", handleWorkspaceMentionKeydown);
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#workspaceMentionDropdown")) {
+      document.getElementById("workspaceMentionDropdown")?.remove();
+    }
+  });
+}
+
+function getWorkspaceMemberList() {
+  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  if (!workspaceProject) return [];
+  const ownerLabel = workspaceProject.ownerName || workspaceProject.ownerEmail || "Workspace Owner";
+  const members = [
+    { id: workspaceProject.ownerId || "owner", handle: `@${ownerLabel.replace(/\s+/g, "")}`, label: ownerLabel },
+    ...Object.entries(workspaceProject.collaborators || {}).map(([uid, person]) => {
+      const name = person.username || person.name || person.email || "Collaborator";
+      return { id: uid, handle: `@${name.replace(/\s+/g, "")}`, label: name };
+    }),
+    { id: "ai_assist", handle: "@AIassist", label: "Eya · AI Assistant" }
+  ];
+  return members;
+}
+
+function handleWorkspaceMentionInput(e) {
+  const target = e.target;
+  const isTaskInput = target.closest("[data-workspace-task-title], [data-workspace-task-description], [data-workspace-task-handoff]");
+  if (!isTaskInput) return;
+  const val = target.value || "";
+  const cursor = target.selectionStart || 0;
+  const textBefore = val.slice(0, cursor);
+  const atMatch = textBefore.match(/@(\w*)$/);
+  if (!atMatch) {
+    document.getElementById("workspaceMentionDropdown")?.remove();
+    return;
+  }
+  const query = atMatch[1].toLowerCase();
+  const members = getWorkspaceMemberList().filter((m) => m.handle.toLowerCase().includes(query) || m.label.toLowerCase().includes(query));
+  showWorkspaceMentionDropdown(target, members, (handle) => {
+    const before = val.slice(0, cursor).replace(/@\w*$/, handle + " ");
+    const after = val.slice(cursor);
+    target.value = before + after;
+    target.selectionStart = target.selectionEnd = before.length;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    document.getElementById("workspaceMentionDropdown")?.remove();
+  });
+}
+
+function handleWorkspaceMentionKeydown(e) {
+  const dropdown = document.getElementById("workspaceMentionDropdown");
+  if (!dropdown) return;
+  if (e.key === "Escape") { dropdown.remove(); return; }
+  const items = [...dropdown.querySelectorAll("[data-mention-item]")];
+  const active = dropdown.querySelector("[data-mention-item].is-active");
+  const idx = items.indexOf(active);
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    const next = items[(idx + 1) % items.length];
+    items.forEach((el) => el.classList.remove("is-active"));
+    next?.classList.add("is-active");
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    const prev = items[(idx - 1 + items.length) % items.length];
+    items.forEach((el) => el.classList.remove("is-active"));
+    prev?.classList.add("is-active");
+  } else if (e.key === "Enter" && active) {
+    e.preventDefault();
+    active.click();
+  }
+}
+
+function showWorkspaceMentionDropdown(anchor, members, onSelect) {
+  document.getElementById("workspaceMentionDropdown")?.remove();
+  if (!members.length) return;
+  const dropdown = document.createElement("div");
+  dropdown.id = "workspaceMentionDropdown";
+  dropdown.className = "workspace-mention-dropdown";
+  dropdown.innerHTML = members.map((m, i) => `
+    <button class="workspace-mention-item${i === 0 ? " is-active" : ""}" type="button" data-mention-item data-handle="${escapeHtml(m.handle)}">
+      <strong>${escapeHtml(m.handle)}</strong>
+      <span>${escapeHtml(m.label)}</span>
+    </button>
+  `).join("");
+  dropdown.addEventListener("click", (e) => {
+    const item = e.target.closest("[data-mention-item]");
+    if (item) onSelect(item.dataset.handle);
+  });
+  const rect = anchor.getBoundingClientRect();
+  dropdown.style.position = "fixed";
+  dropdown.style.top = `${rect.bottom + 4}px`;
+  dropdown.style.left = `${rect.left}px`;
+  dropdown.style.zIndex = "9999";
+  document.body.appendChild(dropdown);
 }
 
 // Action Handlers
@@ -3046,6 +3374,11 @@ function setButtonGlyph(button, entity) {
 async function renameCurrentProject() {
   const project = getCurrentProject();
   if (!project) return;
+  const currentUid = auth.currentUser?.uid;
+  if (project.isShared && project.ownerId && project.ownerId !== currentUid) {
+    await customAlert("Only the project owner can rename a shared file.", "Permission Denied");
+    return;
+  }
   const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (nextTitle === null) return;
   project.title = nextTitle.trim() || "Untitled Script";
@@ -3055,8 +3388,14 @@ async function renameCurrentProject() {
   queueSave();
 }
 
-function duplicateProject() {
+async function duplicateProject() {
   const current = getCurrentProject();
+  if (!current) return;
+  const confirm = await customPrompt(`Type "yes" to duplicate "${current.title}":`, "", "Duplicate Project");
+  if (!confirm || confirm.trim().toLowerCase() !== "yes") {
+    if (confirm !== null) await customAlert("Duplication cancelled. You must type \"yes\" to confirm.", "Cancelled");
+    return;
+  }
   const copy = cloneProject({ ...current, title: `${current.title} Copy` }, true);
   upsertProject(copy);
   openProject(copy.id);
@@ -3066,6 +3405,11 @@ function duplicateProject() {
 async function renameProjectById(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
+  const currentUid = auth.currentUser?.uid;
+  if (project.isShared && project.ownerId && project.ownerId !== currentUid) {
+    await customAlert("Only the project owner can rename a shared file.", "Permission Denied");
+    return;
+  }
   const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (!nextTitle || !nextTitle.trim()) return;
   project.title = nextTitle.trim();
@@ -3078,9 +3422,14 @@ async function renameProjectById(projectId) {
   }
 }
 
-function duplicateProjectById(projectId) {
+async function duplicateProjectById(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
+  const confirm = await customPrompt(`Type "yes" to duplicate "${project.title}":`, "", "Duplicate Project");
+  if (!confirm || confirm.trim().toLowerCase() !== "yes") {
+    if (confirm !== null) await customAlert("Duplication cancelled. You must type \"yes\" to confirm.", "Cancelled");
+    return;
+  }
   const copy = cloneProject({ ...project, title: `${project.title} Copy` }, true);
   upsertProject(copy);
   persistProjects(true, { syncInputs: false });

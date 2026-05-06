@@ -33,7 +33,7 @@ export const DEFAULT_VIEW_OPTIONS = {
 };
 export const LEFT_PANE_BLOCK_DEFS = [
   { key: "current", label: "Current Script" },
-  { key: "workspace", label: "Team Workspace" },
+  { key: "workspace", label: "Editor" },
   { key: "characters", label: "Characters" },
   { key: "scenes", label: "Scenes" },
   { key: "comments", label: "Comments" },
