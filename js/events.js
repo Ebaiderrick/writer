@@ -1,10 +1,10 @@
-import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
+import { state, TYPE_SEQUENCE, TYPE_LABELS, EDITOR_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, createProjectWithOptions, upsertProject, sanitizeProject, cloneProject,
-  getWorkspaceProjects, getWorkspaceRootProject, updateWorkspaceAcrossProjects,
+  getEditorProjects, getEditorRootProject, updateEditorAcrossProjects,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
   deleteProjectFromCloud
@@ -12,7 +12,8 @@ import {
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
-  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
+  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray,
+  renderSuggestionTray
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
 import { buildWordDocxBlob, DOCX_MIME_TYPE } from './docxExport.js';
@@ -20,15 +21,15 @@ import { paginateScriptLines } from './pagination.js';
 import { auth } from './firebase.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
-  showStudio, showHome, showWorkspaceView, applyViewState, setTheme, toggleMenu,
+  showStudio, showHome, showEditorView, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
   showModal, showToast, updateToast,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
-  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView, renderStudioProjectContext,
-  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow
+  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderEditorView, renderStudioProjectContext,
+  showStoryMemoryPopup, showEditorPopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -49,8 +50,8 @@ import {
 import {
   inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
   hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel,
-  canEditProject, updateCollaboratorRole, addWorkspaceReminder,
-  toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace,
+  canEditProject, updateCollaboratorRole, addEditorReminder,
+  toggleEditorReminder, deleteEditorReminder, renameEditor,
   showCollabProfile
 } from './collaborate.js';
 
@@ -157,19 +158,19 @@ function schedulePreviewRefresh({ includeCover = false } = {}) {
   }, 90);
 }
 
-function getWorkspaceTaskTemplate(templateKey) {
-  return WORKSPACE_TASK_TEMPLATES.find((template) => template.key === templateKey) || WORKSPACE_TASK_TEMPLATES[0];
+function getEditorTaskTemplate(templateKey) {
+  return EDITOR_TASK_TEMPLATES.find((template) => template.key === templateKey) || EDITOR_TASK_TEMPLATES[0];
 }
 
-function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = false } = {}) {
+function applyEditorTaskTemplateToForm(container, templateKey, { force = false } = {}) {
   if (!container) return;
-  const template = getWorkspaceTaskTemplate(templateKey);
-  const titleInput = container.querySelector('[data-workspace-task-title], #taskEditTitle');
-  const descriptionInput = container.querySelector('[data-workspace-task-description], #taskEditDescription');
-  const templateInput = container.querySelector('[data-workspace-task-template], #taskEditTemplate');
-  const hint = container.querySelector('[data-workspace-task-template-hint], #taskEditTemplateHint');
-  const previousKey = container.dataset.workspaceTemplateApplied || "custom";
-  const previousTemplate = getWorkspaceTaskTemplate(previousKey);
+  const template = getEditorTaskTemplate(templateKey);
+  const titleInput = container.querySelector('[data-editor-task-title], #taskEditTitle');
+  const descriptionInput = container.querySelector('[data-editor-task-description], #taskEditDescription');
+  const templateInput = container.querySelector('[data-editor-task-template], #taskEditTemplate');
+  const hint = container.querySelector('[data-editor-task-template-hint], #taskEditTemplateHint');
+  const previousKey = container.dataset.editorTemplateApplied || "custom";
+  const previousTemplate = getEditorTaskTemplate(previousKey);
 
   if (templateInput) {
     templateInput.value = template.key;
@@ -189,24 +190,24 @@ function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = fals
   if (hint) {
     hint.textContent = template.aiInstruction;
   }
-  container.dataset.workspaceTemplateApplied = template.key;
+  container.dataset.editorTemplateApplied = template.key;
 }
 
-function ensureDefaultWorkspaceRoot() {
-  const currentWorkspaceRoot = state.currentWorkspaceId
-    ? getWorkspaceRootProject(state.currentWorkspaceId)
+function ensureDefaultEditorRoot() {
+  const currentEditorRoot = state.currentEditorId
+    ? getEditorRootProject(state.currentEditorId)
     : null;
-  if (currentWorkspaceRoot) return currentWorkspaceRoot;
+  if (currentEditorRoot) return currentEditorRoot;
 
-  const existingWorkspaceRoot = state.projects.find((project) => project.isWorkspaceRoot);
-  if (existingWorkspaceRoot) return existingWorkspaceRoot;
+  const existingEditorRoot = state.projects.find((project) => project.isEditorRoot);
+  if (existingEditorRoot) return existingEditorRoot;
 
   return createProjectWithOptions({
-    creationKind: "workspace",
+    creationKind: "editor",
     workType: "film-script",
-    isWorkspaceRoot: true,
-    title: "My Workspace",
-    workspaceName: "My Workspace"
+    isEditorRoot: true,
+    title: "My Editor",
+    editorName: "My Editor"
   });
 }
 
@@ -221,39 +222,39 @@ async function launchNewCreationFlow() {
     await customAlert("A project name is required before creation.", "Project Not Created");
     return;
   }
-  const workspaceRoot = ensureDefaultWorkspaceRoot();
+  const editorRoot = ensureDefaultEditorRoot();
   const project = createProjectWithOptions({
     creationKind: "project",
     workType: selection.workType,
     title: projectName.trim(),
-    workspace: {
-      id: workspaceRoot.workspace?.id || workspaceRoot.id,
-      name: workspaceRoot.workspace?.name || workspaceRoot.title,
-      inviteCode: workspaceRoot.workspace?.inviteCode,
-      reminders: workspaceRoot.workspace?.reminders || [],
-      targets: workspaceRoot.workspace?.targets || {},
-      tasks: workspaceRoot.workspace?.tasks || []
+    editor: {
+      id: editorRoot.editor?.id || editorRoot.id,
+      name: editorRoot.editor?.name || editorRoot.title,
+      inviteCode: editorRoot.editor?.inviteCode,
+      reminders: editorRoot.editor?.reminders || [],
+      targets: editorRoot.editor?.targets || {},
+      tasks: editorRoot.editor?.tasks || []
     }
   });
   openProject(project.id, { silentLoadToast: true });
   showToast("Project created.", "success");
 }
 
-function openWorkspaceDashboard(workspaceId) {
-  if (!workspaceId) return;
-  const workspaceRoot = getWorkspaceRootProject(workspaceId) || getWorkspaceProjects(workspaceId)[0] || null;
-  state.currentWorkspaceId = workspaceId;
-  if (workspaceRoot) {
-    state.currentProjectId = workspaceRoot.id;
+function openEditorDashboard(editorId) {
+  if (!editorId) return;
+  const editorRoot = getEditorRootProject(editorId) || getEditorProjects(editorId)[0] || null;
+  state.currentEditorId = editorId;
+  if (editorRoot) {
+    state.currentProjectId = editorRoot.id;
   }
   persistProjects(false, { syncInputs: false });
-  showWorkspaceView();
-  renderWorkspaceView();
+  showEditorView();
+  renderEditorView();
 }
 
-async function createProjectInsideCurrentWorkspace() {
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId) || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId);
-  if (!workspaceProject) {
+async function createProjectInsideCurrentEditor() {
+  const editorProject = getEditorRootProject(state.currentEditorId) || state.projects.find((project) => project.editor?.id === state.currentEditorId);
+  if (!editorProject) {
     launchNewCreationFlow();
     return;
   }
@@ -266,22 +267,22 @@ async function createProjectInsideCurrentWorkspace() {
     creationKind: "project",
     workType: "film-script",
     title: projectName.trim(),
-    isShared: workspaceProject.isShared,
-    ownerId: workspaceProject.ownerId,
-    ownerName: workspaceProject.ownerName,
-    ownerEmail: workspaceProject.ownerEmail,
-    ownerPhotoURL: workspaceProject.ownerPhotoURL,
-    collaborators: workspaceProject.collaborators,
-    activityLog: workspaceProject.activityLog,
-    lastEditorName: workspaceProject.lastEditorName,
-    lastActivityAt: workspaceProject.lastActivityAt,
-    workspace: {
-      id: workspaceProject.workspace?.id,
-      name: workspaceProject.workspace?.name || workspaceProject.title,
-      inviteCode: workspaceProject.workspace?.inviteCode,
-      reminders: workspaceProject.workspace?.reminders || [],
-      targets: workspaceProject.workspace?.targets || {},
-      tasks: workspaceProject.workspace?.tasks || []
+    isShared: editorProject.isShared,
+    ownerId: editorProject.ownerId,
+    ownerName: editorProject.ownerName,
+    ownerEmail: editorProject.ownerEmail,
+    ownerPhotoURL: editorProject.ownerPhotoURL,
+    collaborators: editorProject.collaborators,
+    activityLog: editorProject.activityLog,
+    lastEditorName: editorProject.lastEditorName,
+    lastActivityAt: editorProject.lastActivityAt,
+    editor: {
+      id: editorProject.editor?.id,
+      name: editorProject.editor?.name || editorProject.title,
+      inviteCode: editorProject.editor?.inviteCode,
+      reminders: editorProject.editor?.reminders || [],
+      targets: editorProject.editor?.targets || {},
+      tasks: editorProject.editor?.tasks || []
     }
   });
   openProject(project.id, { silentLoadToast: true });
@@ -289,7 +290,7 @@ async function createProjectInsideCurrentWorkspace() {
 }
 
 function isDisposableUntitledDraft(project = getCurrentProject()) {
-  if (!project || project.isWorkspaceRoot) return false;
+  if (!project || project.isEditorRoot) return false;
   const defaultLikeTitle = /^(Untitled Script|Film Script \d+)$/i.test(String(project.title || "").trim());
   const hasMeta = [project.author, project.contact, project.company, project.details, project.logline].some((value) => String(value || "").trim());
   const hasContent = (project.lines || []).some((line) => String(line?.text || "").trim() || String(line?.secondary || "").trim());
@@ -300,14 +301,14 @@ async function discardUntitledDraftIfNeeded() {
   if (refs.studioView?.hidden) return false;
   const project = getCurrentProject();
   if (!isDisposableUntitledDraft(project)) return false;
-  const workspaceId = project.workspace?.id || project.id;
+  const editorId = project.editor?.id || project.id;
   state.projects = state.projects.filter((item) => item.id !== project.id);
   if (!state.projects.length) {
     const fallback = createProjectWithOptions();
     state.projects = [fallback];
   }
-  if (state.currentWorkspaceId === workspaceId && project.workspace?.id !== project.id) {
-    state.currentWorkspaceId = workspaceId;
+  if (state.currentEditorId === editorId && project.editor?.id !== project.id) {
+    state.currentEditorId = editorId;
   }
   state.currentProjectId = state.projects[0].id;
   persistProjects(true, { syncInputs: false });
@@ -315,10 +316,10 @@ async function discardUntitledDraftIfNeeded() {
   return true;
 }
 
-function getWorkspaceTaskAssignees(workspaceProject) {
-  const ownerUid = workspaceProject.ownerId || "workspace_owner";
-  const ownerLabel = workspaceProject.ownerName || workspaceProject.ownerEmail || workspaceProject.author || "Workspace Owner";
-  const collaboratorEntries = Object.entries(workspaceProject.collaborators || {}).map(([uid, person]) => ({
+function getEditorTaskAssignees(editorProject) {
+  const ownerUid = editorProject.ownerId || "editor_owner";
+  const ownerLabel = editorProject.ownerName || editorProject.ownerEmail || editorProject.author || "Editor Owner";
+  const collaboratorEntries = Object.entries(editorProject.collaborators || {}).map(([uid, person]) => ({
     id: uid,
     label: person.name || person.email || "Collaborator",
     assigneeType: "human"
@@ -330,9 +331,9 @@ function getWorkspaceTaskAssignees(workspaceProject) {
   ];
 }
 
-function getWorkspaceTaskSceneChoices(workspaceId = state.currentWorkspaceId) {
-  return getWorkspaceProjects(workspaceId)
-    .filter((project) => !project.isWorkspaceRoot)
+function getEditorTaskSceneChoices(editorId = state.currentEditorId) {
+  return getEditorProjects(editorId)
+    .filter((project) => !project.isEditorRoot)
     .flatMap((project) => (project.lines || [])
       .filter((line) => line.type === "scene" && line.text.trim())
       .map((line) => ({
@@ -343,9 +344,9 @@ function getWorkspaceTaskSceneChoices(workspaceId = state.currentWorkspaceId) {
       })));
 }
 
-function getWorkspaceTaskLineChoices(workspaceId = state.currentWorkspaceId) {
-  return getWorkspaceProjects(workspaceId)
-    .filter((project) => !project.isWorkspaceRoot)
+function getEditorTaskLineChoices(editorId = state.currentEditorId) {
+  return getEditorProjects(editorId)
+    .filter((project) => !project.isEditorRoot)
     .flatMap((project) => (project.lines || [])
       .map((line, index) => ({ line, index }))
       .filter(({ line }) => line.type !== "scene" && line.text.trim())
@@ -363,15 +364,15 @@ function getWorkspaceTaskLineChoices(workspaceId = state.currentWorkspaceId) {
       }));
 }
 
-function getWorkspaceStoryMemoryChoices(workspaceId = state.currentWorkspaceId) {
+function getEditorStoryMemoryChoices(editorId = state.currentEditorId) {
   const bucketLabels = {
     characters: "Character",
     locations: "Location",
     scenes: "Scene",
     themes: "Theme"
   };
-  return getWorkspaceProjects(workspaceId)
-    .filter((project) => !project.isWorkspaceRoot)
+  return getEditorProjects(editorId)
+    .filter((project) => !project.isEditorRoot)
     .flatMap((project) => Object.entries(project.storyMemory || {})
       .filter(([bucket]) => bucketLabels[bucket])
       .flatMap(([bucket, items]) => (Array.isArray(items) ? items : []).map((item) => ({
@@ -383,19 +384,19 @@ function getWorkspaceStoryMemoryChoices(workspaceId = state.currentWorkspaceId) 
       }))));
 }
 
-function getWorkspaceTaskById(taskId) {
-  return getWorkspaceRootProject(state.currentWorkspaceId)?.workspace?.tasks?.find((task) => task.id === taskId) || null;
+function getEditorTaskById(taskId) {
+  return getEditorRootProject(state.currentEditorId)?.editor?.tasks?.find((task) => task.id === taskId) || null;
 }
 
-function getWorkspaceNotifications(workspaceId = state.currentWorkspaceId) {
-  return [...(getWorkspaceRootProject(workspaceId)?.workspace?.notifications || [])]
+function getEditorNotifications(editorId = state.currentEditorId) {
+  return [...(getEditorRootProject(editorId)?.editor?.notifications || [])]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-function createWorkspaceNotification({ workspaceId = state.currentWorkspaceId, task = null, category = "update", title = "", message = "", actor = "" } = {}) {
-  if (!workspaceId || !title) return;
-  updateWorkspaceAcrossProjects(workspaceId, (workspace) => ({
-    ...workspace,
+function createEditorNotification({ editorId = state.currentEditorId, task = null, category = "update", title = "", message = "", actor = "" } = {}) {
+  if (!editorId || !title) return;
+  updateEditorAcrossProjects(editorId, (editor) => ({
+    ...editor,
     notifications: [
       {
         id: uid("notif"),
@@ -408,31 +409,31 @@ function createWorkspaceNotification({ workspaceId = state.currentWorkspaceId, t
         createdAt: new Date().toISOString(),
         read: false
       },
-      ...(workspace.notifications || [])
+      ...(editor.notifications || [])
     ].slice(0, 40)
   }));
 }
 
-function markWorkspaceNotificationRead(notificationId, read = true) {
-  if (!state.currentWorkspaceId || !notificationId) return;
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
-    ...workspace,
-    notifications: (workspace.notifications || []).map((notification) => notification.id === notificationId
+function markEditorNotificationRead(notificationId, read = true) {
+  if (!state.currentEditorId || !notificationId) return;
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    notifications: (editor.notifications || []).map((notification) => notification.id === notificationId
       ? { ...notification, read }
       : notification)
   }));
   persistProjects(true, { syncInputs: false });
-  renderWorkspaceView();
+  renderEditorView();
 }
 
-function markAllWorkspaceNotificationsRead() {
-  if (!state.currentWorkspaceId) return;
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
-    ...workspace,
-    notifications: (workspace.notifications || []).map((notification) => ({ ...notification, read: true }))
+function markAllEditorNotificationsRead() {
+  if (!state.currentEditorId) return;
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    notifications: (editor.notifications || []).map((notification) => ({ ...notification, read: true }))
   }));
   persistProjects(true, { syncInputs: false });
-  renderWorkspaceView();
+  renderEditorView();
 }
 
 function resolveAiTaskStart(choice, manualValue = "") {
@@ -476,9 +477,9 @@ function scheduleAiTaskRun(task) {
   aiTaskTimers.set(task.id, timer);
 }
 
-function syncAiTaskSchedules(workspaceId = state.currentWorkspaceId) {
-  const root = getWorkspaceRootProject(workspaceId);
-  const tasks = root?.workspace?.tasks || [];
+function syncAiTaskSchedules(editorId = state.currentEditorId) {
+  const root = getEditorRootProject(editorId);
+  const tasks = root?.editor?.tasks || [];
   const validIds = new Set(tasks.map((task) => task.id));
   [...aiTaskTimers.keys()].forEach((taskId) => {
     if (!validIds.has(taskId)) clearAiTaskTimer(taskId);
@@ -590,38 +591,38 @@ function insertAiTaskResultIntoProjectWithMode(task, resultText, mode = "insert-
   return true;
 }
 
-function addWorkspaceTaskFromDashboard() {
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
-  if (!workspaceProject || !refs.workspaceDashboard) return;
-  const templateSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-template]');
-  const titleInput = refs.workspaceDashboard.querySelector('[data-workspace-task-title]');
-  const descriptionInput = refs.workspaceDashboard.querySelector('[data-workspace-task-description]');
-  const projectSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-project]');
-  const sceneSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-scene]');
-  const lineSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-line]');
-  const assigneeSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-assignee]');
-  const referenceInput = refs.workspaceDashboard.querySelector('[data-workspace-task-reference]');
-  const statusSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-status-new]');
-  const prioritySelect = refs.workspaceDashboard.querySelector('[data-workspace-task-priority]');
-  const dueInput = refs.workspaceDashboard.querySelector('[data-workspace-task-due]');
-  const handoffInput = refs.workspaceDashboard.querySelector('[data-workspace-task-handoff]');
-  const memorySelect = refs.workspaceDashboard.querySelector('[data-workspace-task-memory]');
-  const aiStartSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start]');
-  const aiStartManual = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start-manual]');
+function addEditorTaskFromDashboard() {
+  const editorProject = getEditorRootProject(state.currentEditorId);
+  if (!editorProject || !refs.editorDashboard) return;
+  const templateSelect = refs.editorDashboard.querySelector('[data-editor-task-template]');
+  const titleInput = refs.editorDashboard.querySelector('[data-editor-task-title]');
+  const descriptionInput = refs.editorDashboard.querySelector('[data-editor-task-description]');
+  const projectSelect = refs.editorDashboard.querySelector('[data-editor-task-project]');
+  const sceneSelect = refs.editorDashboard.querySelector('[data-editor-task-scene]');
+  const lineSelect = refs.editorDashboard.querySelector('[data-editor-task-line]');
+  const assigneeSelect = refs.editorDashboard.querySelector('[data-editor-task-assignee]');
+  const referenceInput = refs.editorDashboard.querySelector('[data-editor-task-reference]');
+  const statusSelect = refs.editorDashboard.querySelector('[data-editor-task-status-new]');
+  const prioritySelect = refs.editorDashboard.querySelector('[data-editor-task-priority]');
+  const dueInput = refs.editorDashboard.querySelector('[data-editor-task-due]');
+  const handoffInput = refs.editorDashboard.querySelector('[data-editor-task-handoff]');
+  const memorySelect = refs.editorDashboard.querySelector('[data-editor-task-memory]');
+  const aiStartSelect = refs.editorDashboard.querySelector('[data-editor-task-ai-start]');
+  const aiStartManual = refs.editorDashboard.querySelector('[data-editor-task-ai-start-manual]');
   const templateKey = templateSelect?.value || "custom";
   const title = titleInput?.value?.trim();
   if (!title) {
-    customAlert("Enter a task title first.", "Workspace Tasks");
+    customAlert("Enter a task title first.", "Editor Tasks");
     return;
   }
   const projectId = projectSelect?.value || "";
   const sceneId = sceneSelect?.value || "";
   const lineId = lineSelect?.value || "";
-  const sceneChoice = getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
-  const lineChoice = getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null;
+  const sceneChoice = getEditorTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
+  const lineChoice = getEditorTaskLineChoices().find((line) => line.lineId === lineId) || null;
   const assignedTo = assigneeSelect?.value || "";
-  const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
-  const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
+  const assignee = getEditorTaskAssignees(editorProject).find((entry) => entry.id === assignedTo);
+  const memoryChoice = getEditorStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
   const aiStartChoice = aiStartSelect?.value || "now";
   const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
   const initialAiState = assignee?.assigneeType === "system"
@@ -658,87 +659,87 @@ function addWorkspaceTaskFromDashboard() {
     aiError: "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+    createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
   };
 
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
-    ...workspace,
-    tasks: [...(workspace.tasks || []), nextTask]
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    tasks: [...(editor.tasks || []), nextTask]
   }));
-  createWorkspaceNotification({
+  createEditorNotification({
     task: nextTask,
     category: assignee?.assigneeType === "system" ? "ai" : "task",
     title: assignee?.assigneeType === "system" ? "AI task queued" : "New task created",
-    message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the workspace"}.`}`,
-    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+    message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the editor"}.`}`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
   });
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
-  renderWorkspaceView();
+  renderEditorView();
   showToast(
     assignee?.assigneeType === "system"
       ? `AI task queued for ${nextTask.assignedLabel}.`
-      : `${nextTask.title} assigned to ${nextTask.assignedLabel || "the workspace"}.`,
+      : `${nextTask.title} assigned to ${nextTask.assignedLabel || "the editor"}.`,
     "success"
   );
 }
 
-function updateWorkspaceTask(taskId, patch) {
-  if (!state.currentWorkspaceId || !taskId) return;
-  const previousTask = getWorkspaceTaskById(taskId);
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
-    ...workspace,
-    tasks: (workspace.tasks || []).map((task) => task.id === taskId
+function updateEditorTask(taskId, patch) {
+  if (!state.currentEditorId || !taskId) return;
+  const previousTask = getEditorTaskById(taskId);
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    tasks: (editor.tasks || []).map((task) => task.id === taskId
       ? { ...task, ...patch, updatedAt: new Date().toISOString() }
       : task)
   }));
   persistProjects(true, { syncInputs: false });
-  const task = getWorkspaceTaskById(taskId);
+  const task = getEditorTaskById(taskId);
   if (task && previousTask) {
     if (patch.status && patch.status !== previousTask.status) {
       showToast(`${task.title} moved to ${patch.status === "in-progress" ? "In Progress" : patch.status === "done" ? "Done" : "To Do"}.`, "success");
-      createWorkspaceNotification({
+      createEditorNotification({
         task,
         category: patch.status === "done" ? "completed" : "task",
         title: patch.status === "done" ? "Task completed" : "Task status updated",
         message: `${task.title} is now ${patch.status === "in-progress" ? "in progress" : patch.status.replace("-", " ")}.`,
-        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
       });
     }
     if (patch.assignedTo && patch.assignedTo !== previousTask.assignedTo) {
       showToast(`${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`, "success");
-      createWorkspaceNotification({
+      createEditorNotification({
         task,
         category: task.assigneeType === "system" ? "ai" : "task",
         title: "Task reassigned",
         message: `${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`,
-        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
       });
     }
     if (patch.dueAt && patch.dueAt !== previousTask.dueAt) {
       showToast(`${task.title} due date updated.`, "success");
-      createWorkspaceNotification({
+      createEditorNotification({
         task,
         category: "task",
         title: "Task due date updated",
         message: `${task.title} is due ${new Date(task.dueAt).toLocaleString()}.`,
-        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
       });
     }
   }
   if (task) scheduleAiTaskRun(task);
-  renderWorkspaceView();
+  renderEditorView();
 }
 
 async function runAiTask(taskId) {
-  const task = getWorkspaceTaskById(taskId);
+  const task = getEditorTaskById(taskId);
   if (!task || task.assigneeType !== "system" || task.aiState === "running") return;
   const taskToastId = `ai-task-${taskId}`;
   const project = state.projects.find((item) => item.id === task.projectId) || getCurrentProject();
   if (!project) {
-    updateWorkspaceTask(taskId, { aiState: "failed", aiError: "The linked project could not be found." });
+    updateEditorTask(taskId, { aiState: "failed", aiError: "The linked project could not be found." });
     updateToast(taskToastId, "AI task could not find its linked project.", "error", { duration: 4200 });
-    createWorkspaceNotification({
+    createEditorNotification({
       task,
       category: "ai",
       title: "AI task needs relinking",
@@ -747,7 +748,7 @@ async function runAiTask(taskId) {
     });
     return;
   }
-  updateWorkspaceTask(taskId, {
+  updateEditorTask(taskId, {
     aiState: "running",
     aiError: "",
     status: task.status === "done" ? "done" : "in-progress",
@@ -755,18 +756,18 @@ async function runAiTask(taskId) {
   });
   updateToast(taskToastId, `${task.title} is processing...`, "loading", { duration: 0 });
   try {
-    const resultText = String(await AI.runWorkspaceTaskAssistant(task, project) || "").trim();
+    const resultText = String(await AI.runEditorTaskAssistant(task, project) || "").trim();
     if (!resultText) {
       throw new Error("AI returned no usable result.");
     }
-    updateWorkspaceTask(taskId, {
+    updateEditorTask(taskId, {
       aiState: "review",
       aiResultText: resultText,
       aiResultSummary: task.title,
       aiError: ""
     });
     updateToast(taskToastId, "AI task finished.", "success");
-    createWorkspaceNotification({
+    createEditorNotification({
       task: { ...task, aiResultText: resultText },
       category: "review",
       title: "AI result ready for review",
@@ -774,12 +775,12 @@ async function runAiTask(taskId) {
       actor: "@AIassist"
     });
   } catch (error) {
-    updateWorkspaceTask(taskId, {
+    updateEditorTask(taskId, {
       aiState: "failed",
       aiError: error instanceof Error ? error.message : "AI task failed."
     });
     updateToast(taskToastId, "AI task failed.", "error", { duration: 4200 });
-    createWorkspaceNotification({
+    createEditorNotification({
       task,
       category: "ai",
       title: "AI task failed",
@@ -790,34 +791,34 @@ async function runAiTask(taskId) {
 }
 
 async function reviewAiTaskResult(taskId) {
-  const task = getWorkspaceTaskById(taskId);
+  const task = getEditorTaskById(taskId);
   if (!task?.aiResultText) return;
   const context = getAiTaskTargetContext(task);
   const container = document.createElement("div");
-  container.className = "workspace-ai-review";
+  container.className = "editor-ai-review";
   container.innerHTML = `
-    <div class="workspace-ai-review-head">
-      <span class="workspace-task-tag">AI Suggestion</span>
-      <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "@AIassist")}</span>
-      <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
+    <div class="editor-ai-review-head">
+      <span class="editor-task-tag">AI Suggestion</span>
+      <span class="editor-task-tag">${escapeHtml(task.assignedLabel || "@AIassist")}</span>
+      <span class="editor-task-tag editor-task-tag-priority editor-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
     </div>
-    <div class="workspace-ai-review-summary">
+    <div class="editor-ai-review-summary">
       <p class="modal-copy">${escapeHtml(task.title)}</p>
-      <p class="workspace-ai-review-caption">${escapeHtml(context.projectTitle)} · ${escapeHtml(context.targetLabel)}</p>
+      <p class="editor-ai-review-caption">${escapeHtml(context.projectTitle)} · ${escapeHtml(context.targetLabel)}</p>
     </div>
-    <div class="workspace-ai-review-grid">
-      <div class="workspace-ai-review-panel">
-        <span class="workspace-ai-review-label">Current Script Context</span>
-        <div class="workspace-ai-review-body">${escapeHtml(context.originalText).replace(/\n/g, "<br>")}</div>
+    <div class="editor-ai-review-grid">
+      <div class="editor-ai-review-panel">
+        <span class="editor-ai-review-label">Current Script Context</span>
+        <div class="editor-ai-review-body">${escapeHtml(context.originalText).replace(/\n/g, "<br>")}</div>
       </div>
-      <div class="workspace-ai-review-panel">
-        <span class="workspace-ai-review-label">AI Suggestion</span>
-        <div class="workspace-ai-review-body">${escapeHtml(task.aiResultText).replace(/\n/g, "<br>")}</div>
+      <div class="editor-ai-review-panel">
+        <span class="editor-ai-review-label">AI Suggestion</span>
+        <div class="editor-ai-review-body">${escapeHtml(task.aiResultText).replace(/\n/g, "<br>")}</div>
       </div>
     </div>
-    <label class="workspace-ai-apply-row">
-      <span class="workspace-ai-review-label">Apply Result As</span>
-      <select class="comment-filter-select" id="workspaceAiApplyMode">
+    <label class="editor-ai-apply-row">
+      <span class="editor-ai-review-label">Apply Result As</span>
+      <select class="comment-filter-select" id="editorAiApplyMode">
         <option value="insert-below" ${(task.lastApplyMode || "insert-below") === "insert-below" ? "selected" : ""}>Insert below target</option>
         <option value="replace-target" ${task.lastApplyMode === "replace-target" ? "selected" : ""}>Replace target</option>
         <option value="append-scene" ${task.lastApplyMode === "append-scene" ? "selected" : ""}>Append to scene</option>
@@ -829,15 +830,15 @@ async function reviewAiTaskResult(taskId) {
     message: container,
     confirmLabel: "Apply",
     cancelLabel: "Close",
-    contentClass: "workspace-ai-review-modal"
+    contentClass: "editor-ai-review-modal"
   });
   if (!shouldApply) return;
-  const applyMode = container.querySelector("#workspaceAiApplyMode")?.value || task.lastApplyMode || "insert-below";
+  const applyMode = container.querySelector("#editorAiApplyMode")?.value || task.lastApplyMode || "insert-below";
   await applyAiTaskResult(taskId, applyMode);
 }
 
 async function applyAiTaskResult(taskId, applyMode = null) {
-  const task = getWorkspaceTaskById(taskId);
+  const task = getEditorTaskById(taskId);
   if (!task?.aiResultText) return;
   const finalMode = applyMode || task.lastApplyMode || "insert-below";
   const applied = insertAiTaskResultIntoProjectWithMode(task, task.aiResultText, finalMode);
@@ -845,50 +846,50 @@ async function applyAiTaskResult(taskId, applyMode = null) {
     await customAlert("The AI result could not be inserted into the project.", "AI Task");
     return;
   }
-  updateWorkspaceTask(taskId, { aiState: "applied", status: "done", lastApplyMode: finalMode });
-  createWorkspaceNotification({
+  updateEditorTask(taskId, { aiState: "applied", status: "done", lastApplyMode: finalMode });
+  createEditorNotification({
     task,
     category: "completed",
     title: "AI result applied",
     message: `${task.title} was applied to the script with ${finalMode.replace("-", " ")} mode.`,
-    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
   });
   openProject(task.projectId, { focusLineId: task.lineId || task.sceneId || "" });
   showToast("AI result applied to the script.", "success");
 }
 
 function dismissAiTaskResult(taskId) {
-  const task = getWorkspaceTaskById(taskId);
+  const task = getEditorTaskById(taskId);
   if (!task) return;
-  updateWorkspaceTask(taskId, { aiState: "dismissed" });
-  createWorkspaceNotification({
+  updateEditorTask(taskId, { aiState: "dismissed" });
+  createEditorNotification({
     task,
     category: "review",
     title: "AI result dismissed",
     message: `${task.title} was reviewed and dismissed.`,
-    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
   });
   showToast("AI result dismissed.", "success");
 }
 
-async function editWorkspaceTask(taskId) {
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
-  const task = getWorkspaceTaskById(taskId);
-  if (!workspaceProject || !task) return;
-  const assignees = getWorkspaceTaskAssignees(workspaceProject);
-  const scenes = getWorkspaceTaskSceneChoices();
-  const lines = getWorkspaceTaskLineChoices();
-  const memoryChoices = getWorkspaceStoryMemoryChoices();
-  const selectedTemplate = getWorkspaceTaskTemplate(task.templateKey);
+async function editEditorTask(taskId) {
+  const editorProject = getEditorRootProject(state.currentEditorId);
+  const task = getEditorTaskById(taskId);
+  if (!editorProject || !task) return;
+  const assignees = getEditorTaskAssignees(editorProject);
+  const scenes = getEditorTaskSceneChoices();
+  const lines = getEditorTaskLineChoices();
+  const memoryChoices = getEditorStoryMemoryChoices();
+  const selectedTemplate = getEditorTaskTemplate(task.templateKey);
   const container = document.createElement("div");
-  container.className = "workspace-task-form workspace-task-form-modal";
+  container.className = "editor-task-form editor-task-form-modal";
   container.innerHTML = `
     <select id="taskEditTemplate" class="comment-filter-select">
-      ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}" ${template.key === (task.templateKey || "custom") ? "selected" : ""}>${escapeHtml(template.label)}</option>`).join("")}
+      ${EDITOR_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}" ${template.key === (task.templateKey || "custom") ? "selected" : ""}>${escapeHtml(template.label)}</option>`).join("")}
     </select>
     <input id="taskEditTitle" class="modal-input" type="text" value="${task.title}">
     <select id="taskEditProject" class="comment-filter-select">
-      ${getWorkspaceProjects(state.currentWorkspaceId).filter((project) => !project.isWorkspaceRoot).map((project) => `<option value="${escapeHtml(project.id)}" ${project.id === task.projectId ? "selected" : ""}>${escapeHtml(project.title)}</option>`).join("")}
+      ${getEditorProjects(state.currentEditorId).filter((project) => !project.isEditorRoot).map((project) => `<option value="${escapeHtml(project.id)}" ${project.id === task.projectId ? "selected" : ""}>${escapeHtml(project.title)}</option>`).join("")}
     </select>
     <select id="taskEditScene" class="comment-filter-select">
       <option value="">General task</option>
@@ -925,12 +926,12 @@ async function editWorkspaceTask(taskId) {
       ${memoryChoices.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === task.memoryLinkId ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
     </select>
     <input id="taskEditHandoff" class="modal-input" type="text" value="${escapeHtml(task.handoffNote || "")}" placeholder="Handoff cue or mention (optional)">
-    <textarea id="taskEditDescription" class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen...">${escapeHtml(task.description || "")}</textarea>
+    <textarea id="taskEditDescription" class="collab-textarea editor-task-description" placeholder="Describe what needs to happen...">${escapeHtml(task.description || "")}</textarea>
     <p id="taskEditTemplateHint" class="modal-copy">${escapeHtml(selectedTemplate.aiInstruction)}</p>
   `;
-  container.dataset.workspaceTemplateApplied = task.templateKey || "custom";
+  container.dataset.editorTemplateApplied = task.templateKey || "custom";
   container.querySelector("#taskEditTemplate")?.addEventListener("change", (event) => {
-    applyWorkspaceTaskTemplateToForm(container, event.target.value);
+    applyEditorTaskTemplateToForm(container, event.target.value);
   });
   const saved = await showModal({
     title: "Edit Task",
@@ -952,7 +953,7 @@ async function editWorkspaceTask(taskId) {
         container.querySelector("#taskEditAiStartManual")?.value || ""
       )
     : "";
-  updateWorkspaceTask(taskId, {
+  updateEditorTask(taskId, {
     templateKey: container.querySelector("#taskEditTemplate")?.value || "custom",
     priority: container.querySelector("#taskEditPriority")?.value || task.priority || "normal",
     title: container.querySelector("#taskEditTitle")?.value?.trim() || task.title,
@@ -982,44 +983,44 @@ async function editWorkspaceTask(taskId) {
   });
 }
 
-async function deleteWorkspaceTask(taskId) {
+async function deleteEditorTask(taskId) {
   const confirmed = await customConfirm("Delete this task and its comments?", "Delete Task");
   if (!confirmed) return;
   clearAiTaskTimer(taskId);
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
-    ...workspace,
-    tasks: (workspace.tasks || []).filter((task) => task.id !== taskId)
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    tasks: (editor.tasks || []).filter((task) => task.id !== taskId)
   }));
   persistProjects(true, { syncInputs: false });
-  renderWorkspaceView();
+  renderEditorView();
   showToast("Task deleted.", "success");
 }
 
-async function commentOnWorkspaceTask(taskId) {
-  const task = getWorkspaceTaskById(taskId);
+async function commentOnEditorTask(taskId) {
+  const task = getEditorTaskById(taskId);
   if (!task) return;
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
-  const assignees = workspaceProject ? getWorkspaceTaskAssignees(workspaceProject).filter((entry) => entry.assigneeType === "human") : [];
+  const editorProject = getEditorRootProject(state.currentEditorId);
+  const assignees = editorProject ? getEditorTaskAssignees(editorProject).filter((entry) => entry.assigneeType === "human") : [];
   const container = document.createElement("div");
-  container.className = "workspace-task-comments";
+  container.className = "editor-task-comments";
   container.innerHTML = `
-    <div class="workspace-task-comment-list">
+    <div class="editor-task-comment-list">
       ${task.comments?.length ? [...task.comments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map((comment) => `
-        <article class="workspace-task-comment">
-          <div class="workspace-task-comment-head">
-            <strong>${escapeHtml(comment.author || "Workspace member")}</strong>
+        <article class="editor-task-comment">
+          <div class="editor-task-comment-head">
+            <strong>${escapeHtml(comment.author || "Editor member")}</strong>
             <span>${escapeHtml(formatDateTime(comment.createdAt))}</span>
           </div>
-          ${comment.mentionLabel ? `<span class="workspace-task-comment-mention">Mentioned ${escapeHtml(comment.mentionLabel)}</span>` : ""}
+          ${comment.mentionLabel ? `<span class="editor-task-comment-mention">Mentioned ${escapeHtml(comment.mentionLabel)}</span>` : ""}
           <p>${escapeHtml(comment.text)}</p>
         </article>
-      `).join("") : '<p class="workspace-home-empty">No task comments yet.</p>'}
+      `).join("") : '<p class="editor-home-empty">No task comments yet.</p>'}
     </div>
-    <select id="workspaceTaskCommentMention" class="comment-filter-select">
+    <select id="editorTaskCommentMention" class="comment-filter-select">
       <option value="">Mention teammate (optional)</option>
       ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
     </select>
-    <textarea id="workspaceTaskCommentText" class="collab-textarea" placeholder="Add a comment..."></textarea>
+    <textarea id="editorTaskCommentText" class="collab-textarea" placeholder="Add a comment..."></textarea>
   `;
   const shouldAdd = await showModal({
     title: task.title,
@@ -1027,75 +1028,108 @@ async function commentOnWorkspaceTask(taskId) {
     confirmLabel: "Add Comment"
   });
   if (!shouldAdd) return;
-  const text = container.querySelector("#workspaceTaskCommentText")?.value?.trim();
+  const text = container.querySelector("#editorTaskCommentText")?.value?.trim();
   if (!text) return;
-  const mentionId = container.querySelector("#workspaceTaskCommentMention")?.value || "";
+  const mentionId = container.querySelector("#editorTaskCommentMention")?.value || "";
   const mention = assignees.find((entry) => entry.id === mentionId);
-  updateWorkspaceTask(taskId, {
+  updateEditorTask(taskId, {
     comments: [
       ...(task.comments || []),
       {
         id: uid("task-comment"),
         text,
-        author: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member",
+        author: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member",
         mentionId,
         mentionLabel: mention?.label || "",
         createdAt: new Date().toISOString()
       }
     ]
   });
-  createWorkspaceNotification({
+  createEditorNotification({
     task,
     category: "comment",
     title: "New task comment",
     message: `${task.title} has a new comment.`,
-    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
   });
   if (mention) {
-    createWorkspaceNotification({
+    createEditorNotification({
       task,
       category: "comment",
       title: "Task mention",
       message: `${task.title} mentioned ${mention.label}.`,
-      actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+      actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
     });
   }
   showToast("Comment added to task.", "success");
 }
 
+function showMentionSuggestions(input, query) {
+  const editorProject = getEditorRootProject(state.currentEditorId);
+  if (!editorProject) return;
+  const assignees = getEditorTaskAssignees(editorProject);
+  const filtered = assignees.filter(a => a.label.toLowerCase().includes(query.toLowerCase()));
+  if (!filtered.length) {
+    hideSuggestionTray();
+    return;
+  }
+
+  const rect = input.getBoundingClientRect();
+  const suggestions = filtered.map(a => ({ label: a.label, value: a.label }));
+
+  state.suggestionContext = {
+    mode: "mention",
+    input: input,
+    query: query
+  };
+
+  renderSuggestionTray("Teammates", suggestions, { rect: {
+    left: rect.left,
+    top: rect.top,
+    bottom: rect.bottom,
+    right: rect.right,
+    width: rect.width,
+    height: rect.height
+  }});
+}
+
 export function bindEvents() {
   syncAiTaskSchedules();
-  applyWorkspaceTaskTemplateToForm(refs.workspaceDashboard, "custom", { force: true });
+  applyEditorTaskTemplateToForm(refs.editorDashboard, "custom", { force: true });
   // Navigation
   refs.newProjectBtn.addEventListener("click", () => {
     launchNewCreationFlow();
   });
 
-  refs.workspaceNewProjectBtn?.addEventListener("click", () => {
-    createProjectInsideCurrentWorkspace();
+  refs.editorNewProjectBtn?.addEventListener("click", () => {
+    createProjectInsideCurrentEditor();
   });
 
-  refs.workspaceBackBtn?.addEventListener("click", () => {
-    state.currentWorkspaceId = null;
+  refs.editorBackBtn?.addEventListener("click", () => {
+    state.currentEditorId = null;
     persistProjects(false, { syncInputs: false });
     showHome();
     renderHome();
   });
 
-  refs.workspaceCloseBtn?.addEventListener("click", () => {
-    state.currentWorkspaceId = null;
+  document.getElementById("editorSaveHomeBtn")?.addEventListener("click", () => {
+    saveAndGoHome();
+  });
+
+  refs.editorCloseBtn?.addEventListener("click", () => {
+    state.currentEditorId = null;
     persistProjects(false, { syncInputs: false });
     showHome();
     renderHome();
   });
 
-  refs.workspaceView?.addEventListener("change", (event) => {
-    const workspaceSwitch = event.target.closest("[data-workspace-switch]");
-    if (!workspaceSwitch) return;
-    openWorkspaceDashboard(workspaceSwitch.value);
+  refs.editorView?.addEventListener("change", (event) => {
+    const editorSwitch = event.target.closest("[data-editor-switch]");
+    if (!editorSwitch) return;
+    openEditorDashboard(editorSwitch.value);
   });
 
-  refs.homeWorkspaceDashboard?.addEventListener("click", (event) => {
+  refs.homeEditorDashboard?.addEventListener("click", (event) => {
     const filterTrigger = event.target.closest("[data-home-project-filter]");
     if (filterTrigger) {
       state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
@@ -1103,16 +1137,16 @@ export function bindEvents() {
     }
   });
 
-  refs.homeWorkspaceDashboard?.addEventListener("change", (event) => {
+  refs.homeEditorDashboard?.addEventListener("change", (event) => {
     const formatSelect = event.target.closest("[data-home-project-format]");
     if (formatSelect) {
       state.homeProjectFormat = formatSelect.value || "all";
       renderHome();
       return;
     }
-    const workspaceSelect = event.target.closest("[data-home-workspace-filter]");
-    if (workspaceSelect) {
-      state.homeWorkspaceFilter = workspaceSelect.value || "all";
+    const editorSelect = event.target.closest("[data-home-editor-filter]");
+    if (editorSelect) {
+      state.homeEditorFilter = editorSelect.value || "all";
       renderHome();
       return;
     }
@@ -1136,9 +1170,9 @@ export function bindEvents() {
       renderHome();
       return;
     }
-    const workspaceSelect = event.target.closest("[data-home-workspace-filter]");
-    if (workspaceSelect) {
-      state.homeWorkspaceFilter = workspaceSelect.value || "all";
+    const editorSelect = event.target.closest("[data-home-editor-filter]");
+    if (editorSelect) {
+      state.homeEditorFilter = editorSelect.value || "all";
       renderHome();
       return;
     }
@@ -1148,7 +1182,7 @@ export function bindEvents() {
     renderHome();
   });
 
-  refs.workspaceDashboard?.addEventListener("click", (event) => {
+  refs.editorDashboard?.addEventListener("click", (event) => {
     const profileTrigger = event.target.closest("[data-profile-uid]");
     if (profileTrigger) {
       showCollabProfile({
@@ -1158,54 +1192,54 @@ export function bindEvents() {
       });
       return;
     }
-    const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
+    const action = event.target.closest("[data-editor-home-action]")?.dataset.editorHomeAction;
     if (!action) return;
     if (action === "new-project") {
-      createProjectInsideCurrentWorkspace();
+      createProjectInsideCurrentEditor();
       return;
     }
     if (action === "open-popup") {
-      showWorkspacePopup();
+      showEditorPopup();
       return;
     }
-    if (action === "add-task") {
-      addWorkspaceTaskFromDashboard();
+    if (action === "add-editor-task") {
+      addEditorTaskFromDashboard();
       return;
     }
     if (action === "mark-all-notifications-read") {
-      markAllWorkspaceNotificationsRead();
+      markAllEditorNotificationsRead();
       return;
     }
     if (action === "mark-notification-read") {
       const notificationId = event.target.closest("[data-notification-id]")?.dataset.notificationId;
-      if (notificationId) markWorkspaceNotificationRead(notificationId, true);
+      if (notificationId) markEditorNotificationRead(notificationId, true);
       return;
     }
     if (action === "set-task-filter") {
-      state.workspaceTaskFilter = event.target.closest("[data-task-filter]")?.dataset.taskFilter || "all";
-      renderWorkspaceView();
+      state.editorTaskFilter = event.target.closest("[data-task-filter]")?.dataset.taskFilter || "all";
+      renderEditorView();
       return;
     }
     if (action === "edit-task") {
       const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
-      if (taskId) editWorkspaceTask(taskId);
+      if (taskId) editEditorTask(taskId);
       return;
     }
     if (action === "delete-task") {
       const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
-      if (taskId) deleteWorkspaceTask(taskId);
+      if (taskId) deleteEditorTask(taskId);
       return;
     }
     if (action === "comment-task") {
       const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
-      if (taskId) commentOnWorkspaceTask(taskId);
+      if (taskId) commentOnEditorTask(taskId);
       return;
     }
     if (action === "open-task-project") {
       const trigger = event.target.closest("[data-task-project-id]");
       const projectId = trigger?.dataset.taskProjectId;
       const taskId = trigger?.dataset.taskId;
-      const task = taskId ? getWorkspaceTaskById(taskId) : null;
+      const task = taskId ? getEditorTaskById(taskId) : null;
       if (projectId) {
         openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       }
@@ -1226,12 +1260,12 @@ export function bindEvents() {
       const trigger = event.target.closest("[data-notification-id]");
       const projectId = trigger?.dataset.taskProjectId;
       const notificationId = trigger?.dataset.notificationId;
-      if (notificationId && !notificationId.startsWith("due-")) markWorkspaceNotificationRead(notificationId, true);
+      if (notificationId && !notificationId.startsWith("due-")) markEditorNotificationRead(notificationId, true);
       if (projectId) {
-        const notification = getWorkspaceNotifications().find((item) => item.id === notificationId);
+        const notification = getEditorNotifications().find((item) => item.id === notificationId);
         const task = notification?.taskId
-          ? getWorkspaceTaskById(notification.taskId)
-          : (trigger?.dataset.taskId ? getWorkspaceTaskById(trigger.dataset.taskId) : null);
+          ? getEditorTaskById(notification.taskId)
+          : (trigger?.dataset.taskId ? getEditorTaskById(trigger.dataset.taskId) : null);
         openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       }
       return;
@@ -1258,21 +1292,35 @@ export function bindEvents() {
     }
   });
 
-  refs.workspaceDashboard?.addEventListener("change", (event) => {
-    const templateSelect = event.target.closest("[data-workspace-task-template]");
+  refs.editorDashboard?.addEventListener("input", (event) => {
+    const titleInput = event.target.closest("[data-editor-task-title]");
+    const descInput = event.target.closest("[data-editor-task-description]");
+    if (titleInput || descInput) {
+      const target = titleInput || descInput;
+      const text = target.value;
+      const cursor = target.selectionStart;
+      const lastAt = text.lastIndexOf("@", cursor - 1);
+      if (lastAt !== -1 && !/\s/.test(text.slice(lastAt + 1, cursor))) {
+        showMentionSuggestions(target, text.slice(lastAt + 1, cursor));
+      } else {
+        hideSuggestionTray();
+      }
+    }
+
+    const templateSelect = event.target.closest("[data-editor-task-template]");
     if (templateSelect) {
-      applyWorkspaceTaskTemplateToForm(refs.workspaceDashboard, templateSelect.value);
+      applyEditorTaskTemplateToForm(refs.editorDashboard, templateSelect.value);
       return;
     }
-    const taskSortSelect = event.target.closest("[data-workspace-home-action='set-task-sort']");
+    const taskSortSelect = event.target.closest("[data-editor-home-action='set-task-sort']");
     if (taskSortSelect) {
-      state.workspaceTaskSort = taskSortSelect.value || "latest";
-      renderWorkspaceView();
+      state.editorTaskSort = taskSortSelect.value || "latest";
+      renderEditorView();
       return;
     }
-    const statusSelect = event.target.closest("[data-workspace-task-status]");
+    const statusSelect = event.target.closest("[data-editor-task-status]");
     if (statusSelect) {
-      updateWorkspaceTask(statusSelect.dataset.workspaceTaskStatus, { status: statusSelect.value });
+      updateEditorTask(statusSelect.dataset.editorTaskStatus, { status: statusSelect.value });
     }
   });
 
@@ -1544,65 +1592,65 @@ export function bindEvents() {
     }
   });
 
-  window.addEventListener("workspaceInviteRequested", async (event) => {
+  window.addEventListener("editorInviteRequested", async (event) => {
     const email = event.detail?.email;
     const role = event.detail?.role || "editor";
     if (!email) {
       return;
     }
     const result = await inviteCollaborator(email, role);
-    window.dispatchEvent(new CustomEvent("workspaceInviteResult", { detail: result }));
+    window.dispatchEvent(new CustomEvent("editorInviteResult", { detail: result }));
     if (result?.ok) {
-      await customAlert("Workspace invite sent.", "Workspace");
+      await customAlert("Editor invite sent.", "Editor");
     } else if (result?.reason) {
-      await customAlert(result.reason, "Workspace");
+      await customAlert(result.reason, "Editor");
     }
   });
 
-  window.addEventListener("workspaceRenameRequested", async (event) => {
-    const result = await renameWorkspace(event.detail?.projectId, event.detail?.name);
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
-      detail: { ...result, message: result.ok ? "Workspace name saved." : "" }
+  window.addEventListener("editorRenameRequested", async (event) => {
+    const result = await renameEditor(event.detail?.projectId, event.detail?.name);
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
+      detail: { ...result, message: result.ok ? "Editor name saved." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("workspaceRoleChangeRequested", async (event) => {
+  window.addEventListener("editorRoleChangeRequested", async (event) => {
     const result = await updateCollaboratorRole(event.detail?.projectId, event.detail?.collaboratorUid, event.detail?.role);
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
       detail: { ...result, message: result.ok ? "Member role updated." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("workspaceReminderRequested", async (event) => {
-    const result = await addWorkspaceReminder(event.detail?.projectId, {
+  window.addEventListener("editorReminderRequested", async (event) => {
+    const result = await addEditorReminder(event.detail?.projectId, {
       text: event.detail?.text,
       dueAt: event.detail?.dueAt
     });
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
       detail: { ...result, message: result.ok ? "Reminder added." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("workspaceReminderToggleRequested", async (event) => {
-    const result = await toggleWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+  window.addEventListener("editorReminderToggleRequested", async (event) => {
+    const result = await toggleEditorReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
       detail: { ...result, message: result.ok ? "Reminder updated." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("workspaceReminderDeleteRequested", async (event) => {
-    const result = await deleteWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+  window.addEventListener("editorReminderDeleteRequested", async (event) => {
+    const result = await deleteEditorReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
       detail: { ...result, message: result.ok ? "Reminder deleted." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("workspaceMemberProfileRequested", (event) => {
+  window.addEventListener("editorMemberProfileRequested", (event) => {
     showCollabProfile({
       uid: event.detail?.uid || "",
       name: event.detail?.name || "",
@@ -1645,7 +1693,7 @@ export function bindEvents() {
     if (taskMarker) {
       const [firstTaskId] = String(taskMarker.dataset.taskIds || "").split(",").filter(Boolean);
       if (firstTaskId) {
-        await commentOnWorkspaceTask(firstTaskId);
+        await commentOnEditorTask(firstTaskId);
       }
       return;
     }
@@ -1778,11 +1826,28 @@ export function bindEvents() {
           renderHome();
           return;
       }
-      const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
-      if (workspaceTrigger) {
-          openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
+      const editorTrigger = e.target.closest("[data-open-editor-id]");
+      if (editorTrigger) {
+          openEditorDashboard(editorTrigger.dataset.openEditorId);
           return;
       }
+      const card = e.target.closest(".project-card");
+      if (!card) return;
+      const projectId = card.dataset.projectId;
+
+      if (e.target.closest(".project-delete")) {
+          removeProject(projectId);
+      } else if (e.target.closest('[data-project-action="rename"]')) {
+          renameProjectById(projectId);
+      } else if (e.target.closest('[data-project-action="duplicate"]')) {
+          duplicateProjectById(projectId);
+      } else {
+          openProject(projectId);
+      }
+  });
+
+  // Editor Project Grid (Delegated)
+  refs.editorProjectGrid?.addEventListener("click", (e) => {
       const card = e.target.closest(".project-card");
       if (!card) return;
       const projectId = card.dataset.projectId;
@@ -1918,13 +1983,13 @@ export function bindEvents() {
 export function openProject(projectId, options = {}) {
     const project = state.projects.find((item) => item.id === projectId);
     if (!project) return;
-    if (project.isWorkspaceRoot) {
-      openWorkspaceDashboard(project.workspace?.id || project.id);
+    if (project.isEditorRoot) {
+      openEditorDashboard(project.editor?.id || project.id);
       return;
     }
     const projectLoadToast = options.silentLoadToast ? null : showToast("Opening project...", "loading", { duration: 0 });
     state.currentProjectId = project.id;
-  state.currentWorkspaceId = project.workspace?.id !== project.id ? project.workspace?.id || null : null;
+  state.currentEditorId = project.editor?.id !== project.id ? project.editor?.id || null : null;
   hasShownReadOnlyNotice = false;
 
   // Reset history for the new project
@@ -2042,7 +2107,7 @@ function canEditCurrentProjectWithNotice() {
 
   if (!hasShownReadOnlyNotice) {
     hasShownReadOnlyNotice = true;
-    customAlert("Viewer access is read-only. Ask the workspace owner to promote you to Editor if you need to make changes.", "Read-only Workspace");
+    customAlert("Viewer access is read-only. Ask the editor owner to promote you to Editor if you need to make changes.", "Read-only Editor");
   }
 
   return false;
@@ -2461,6 +2526,19 @@ function toggleSceneCollapse(sceneId) {
 }
 
 function applySuggestion(value) {
+  if (state.suggestionContext?.mode === "mention" && state.suggestionContext.input) {
+    const input = state.suggestionContext.input;
+    const text = input.value;
+    const cursor = input.selectionStart;
+    const lastAt = text.lastIndexOf("@", cursor - 1);
+    input.value = text.slice(0, lastAt) + "@" + value + " " + text.slice(cursor);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+    hideSuggestionTray();
+    clearSuggestionContext();
+    return;
+  }
+
   const line = getLine(state.activeBlockId);
   const project = getCurrentProject();
   if (!line || !project) return;
@@ -2763,8 +2841,8 @@ function handleMenuAction(action) {
     case "pick-story-memory":
       showStoryMemoryPicker();
       break;
-    case "open-workspace":
-      showWorkspacePopup();
+    case "open-editor":
+      showEditorPopup();
       break;
     case "open-analytics": {
       const container = document.createElement("div");
@@ -2800,14 +2878,14 @@ function execEditorCommand(command) {
 function saveAndGoHome() {
   if (isDisposableUntitledDraft()) {
     discardUntitledDraftIfNeeded().then(() => {
-      state.currentWorkspaceId = null;
+      state.currentEditorId = null;
       showHome();
       renderHome();
     });
     return;
   }
   persistProjects(true);
-  state.currentWorkspaceId = null;
+  state.currentEditorId = null;
   showHome();
   renderHome();
 }
@@ -3046,6 +3124,12 @@ function setButtonGlyph(button, entity) {
 async function renameCurrentProject() {
   const project = getCurrentProject();
   if (!project) return;
+
+  if (!canManageEditor(project)) {
+    await customAlert("Only the owner can rename a collaborated file.", "Rename Restricted");
+    return;
+  }
+
   const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (nextTitle === null) return;
   project.title = nextTitle.trim() || "Untitled Script";
@@ -3055,8 +3139,12 @@ async function renameCurrentProject() {
   queueSave();
 }
 
-function duplicateProject() {
+async function duplicateProject() {
   const current = getCurrentProject();
+  if (!current) return;
+  const confirmed = await customPrompt(`Type 'yes' to duplicate "${current.title}":`, "", "Duplicate Project");
+  if (confirmed?.toLowerCase() !== 'yes') return;
+
   const copy = cloneProject({ ...current, title: `${current.title} Copy` }, true);
   upsertProject(copy);
   openProject(copy.id);
@@ -3066,6 +3154,12 @@ function duplicateProject() {
 async function renameProjectById(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
+
+  if (!canManageEditor(project)) {
+    await customAlert("Only the owner can rename a collaborated file.", "Rename Restricted");
+    return;
+  }
+
   const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (!nextTitle || !nextTitle.trim()) return;
   project.title = nextTitle.trim();
@@ -3078,9 +3172,12 @@ async function renameProjectById(projectId) {
   }
 }
 
-function duplicateProjectById(projectId) {
+async function duplicateProjectById(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
+  const confirmed = await customPrompt(`Type 'yes' to duplicate "${project.title}":`, "", "Duplicate Project");
+  if (confirmed?.toLowerCase() !== 'yes') return;
+
   const copy = cloneProject({ ...project, title: `${project.title} Copy` }, true);
   upsertProject(copy);
   persistProjects(true, { syncInputs: false });
@@ -3096,7 +3193,7 @@ async function removeProject(id) {
   const target = state.projects.find((item) => item.id === id);
   if (!target) return;
 
-  const entityLabel = target.isWorkspaceRoot ? "workspace" : "project";
+  const entityLabel = target.isEditorRoot ? "editor" : "project";
   const confirmation = await customPrompt(`This will permanently delete the ${entityLabel} "${target.title}".\n\nTo confirm, please retype the ${entityLabel} name below:`, "", "Confirm Deletion");
 
   if (confirmation !== target.title) {
@@ -3106,10 +3203,10 @@ async function removeProject(id) {
     return;
   }
 
-  const workspaceId = target.workspace?.id || target.id;
+  const editorId = target.editor?.id || target.id;
   state.projects = state.projects.filter((item) => {
-    if (target.isWorkspaceRoot) {
-      return item.workspace?.id !== workspaceId;
+    if (target.isEditorRoot) {
+      return item.editor?.id !== editorId;
     }
     return item.id !== id;
   });
@@ -3117,8 +3214,8 @@ async function removeProject(id) {
     const fallback = createProjectWithOptions();
     state.projects = [fallback];
   }
-  if (target.isWorkspaceRoot || state.currentWorkspaceId === workspaceId) {
-    state.currentWorkspaceId = null;
+  if (target.isEditorRoot || state.currentEditorId === editorId) {
+    state.currentEditorId = null;
   }
   state.currentProjectId = state.projects[0].id;
   persistProjects(true, { syncInputs: false });
