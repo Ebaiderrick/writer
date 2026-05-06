@@ -5870,6 +5870,11 @@ html[data-theme="white"] .user-trigger {
   text-align: left;
 }
 
+.profile-action-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .profile-identity-row {
   display: grid;
   gap: 6px;

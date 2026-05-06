@@ -51,7 +51,8 @@ import {
   hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel,
   canEditProject, updateCollaboratorRole, addWorkspaceReminder,
   toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace,
-  showCollabProfile
+  showCollabProfile, leaveCollaboration, deleteSharedProjectEverywhere,
+  addWorkspaceAIAssist, kickCollaborator, workspaceHasAIAssist
 } from './collaborate.js';
 
 let studioSidebarRefreshFrame = 0;
@@ -161,6 +162,14 @@ function getWorkspaceTaskTemplate(templateKey) {
   return WORKSPACE_TASK_TEMPLATES.find((template) => template.key === templateKey) || WORKSPACE_TASK_TEMPLATES[0];
 }
 
+function getWorkspaceProjectForAi(workspaceProject) {
+  return workspaceProject || getWorkspaceRootProject(state.currentWorkspaceId);
+}
+
+function workspaceSupportsAi(workspaceProject = null) {
+  return workspaceHasAIAssist(getWorkspaceProjectForAi(workspaceProject));
+}
+
 function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = false } = {}) {
   if (!container) return;
   const template = getWorkspaceTaskTemplate(templateKey);
@@ -251,6 +260,18 @@ function openWorkspaceDashboard(workspaceId) {
   renderWorkspaceView();
 }
 
+function openWorkspaceEditor() {
+  if (!state.currentWorkspaceId) return;
+  const workspaceProjects = getWorkspaceProjects(state.currentWorkspaceId).filter((project) => !project.isWorkspaceRoot);
+  const activeProject = state.projects.find((project) => project.id === state.currentProjectId && project.workspace?.id === state.currentWorkspaceId && !project.isWorkspaceRoot);
+  const target = activeProject || workspaceProjects[0] || null;
+  if (!target) {
+    customAlert("Create a project in this workspace first to open the editor.", "Workspace");
+    return;
+  }
+  openProject(target.id);
+}
+
 async function createProjectInsideCurrentWorkspace() {
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId) || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId);
   if (!workspaceProject) {
@@ -323,11 +344,14 @@ function getWorkspaceTaskAssignees(workspaceProject) {
     label: person.name || person.email || "Collaborator",
     assigneeType: "human"
   }));
-  return [
+  const assignees = [
     { id: ownerUid, label: ownerLabel, assigneeType: "human" },
-    ...collaboratorEntries,
-    { id: "ai_assist", label: "@AIassist", assigneeType: "system" }
+    ...collaboratorEntries
   ];
+  if (workspaceSupportsAi(workspaceProject)) {
+    assignees.push({ id: "ai_assist", label: "@AIassist", assigneeType: "system" });
+  }
+  return assignees;
 }
 
 function getWorkspaceTaskSceneChoices(workspaceId = state.currentWorkspaceId) {
@@ -622,6 +646,10 @@ function addWorkspaceTaskFromContainer(container) {
   const lineChoice = getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null;
   const assignedTo = assigneeSelect?.value || "";
   const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
+  if (assignee?.assigneeType === "system" && !workspaceSupportsAi(workspaceProject)) {
+    customAlert("Add Eya as @AIassist in this workspace before assigning AI tasks here.", "Workspace AI");
+    return;
+  }
   const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
   const aiStartChoice = aiStartSelect?.value || "now";
   const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
@@ -716,6 +744,10 @@ function addWorkspaceTaskFromDashboard() {
   const lineChoice = getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null;
   const assignedTo = assigneeSelect?.value || "";
   const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
+  if (assignee?.assigneeType === "system" && !workspaceSupportsAi(workspaceProject)) {
+    customAlert("Add Eya as @AIassist in this workspace before assigning AI tasks here.", "Workspace AI");
+    return;
+  }
   const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
   const aiStartChoice = aiStartSelect?.value || "now";
   const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
@@ -828,6 +860,12 @@ function updateWorkspaceTask(taskId, patch) {
 async function runAiTask(taskId) {
   const task = getWorkspaceTaskById(taskId);
   if (!task || task.assigneeType !== "system" || task.aiState === "running") return;
+  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  if (!workspaceSupportsAi(workspaceProject)) {
+    updateWorkspaceTask(taskId, { aiState: "failed", aiError: "Add @AIassist to this workspace before running AI tasks." });
+    showToast("Add @AIassist to this workspace before running AI tasks.", "error");
+    return;
+  }
   const taskToastId = `ai-task-${taskId}`;
   const project = state.projects.find((item) => item.id === task.projectId) || getCurrentProject();
   if (!project) {
@@ -1177,6 +1215,10 @@ export function bindEvents() {
     renderHome();
   });
 
+  refs.workspaceEditorBtn?.addEventListener("click", () => {
+    openWorkspaceEditor();
+  });
+
   refs.workspaceCloseBtn?.addEventListener("click", () => {
     persistProjects(true, { syncInputs: false });
     state.currentWorkspaceId = null;
@@ -1199,7 +1241,10 @@ export function bindEvents() {
     const card = e.target.closest(".project-card");
     if (!card) return;
     const projectId = card.dataset.projectId;
-    if (e.target.closest(".project-delete")) {
+    const destructiveAction = e.target.closest(".project-delete")?.dataset.projectDestructiveAction;
+    if (destructiveAction === "leave") {
+      leaveProject(projectId);
+    } else if (destructiveAction === "delete") {
       removeProject(projectId);
     } else if (e.target.closest('[data-project-action="rename"]')) {
       renameProjectById(projectId);
@@ -1785,6 +1830,17 @@ export function bindEvents() {
     if (result.ok) renderStudio();
   });
 
+  window.addEventListener("workspaceKickRequested", async (event) => {
+    const projectId = event.detail?.projectId;
+    const collaboratorUid = event.detail?.collaboratorUid;
+    if (!projectId || !collaboratorUid) return;
+    const result = await kickCollaborator(projectId, collaboratorUid)
+      .then(() => ({ ok: true, message: "Member removed from the workspace." }))
+      .catch((error) => ({ ok: false, reason: error?.message || "Unable to remove this member right now." }));
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", { detail: result }));
+    if (result.ok) renderStudio();
+  });
+
   window.addEventListener("workspaceReminderRequested", async (event) => {
     const result = await addWorkspaceReminder(event.detail?.projectId, {
       text: event.detail?.text,
@@ -1996,8 +2052,10 @@ export function bindEvents() {
       const card = e.target.closest(".project-card");
       if (!card) return;
       const projectId = card.dataset.projectId;
-
-      if (e.target.closest(".project-delete")) {
+      const destructiveAction = e.target.closest(".project-delete")?.dataset.projectDestructiveAction;
+      if (destructiveAction === "leave") {
+          leaveProject(projectId);
+      } else if (destructiveAction === "delete") {
           removeProject(projectId);
       } else if (e.target.closest('[data-project-action="rename"]')) {
           renameProjectById(projectId);
@@ -2124,26 +2182,18 @@ export function bindEvents() {
   });
 
   // Add AIassist (Eya) to workspace when requested
-  window.addEventListener("workspaceAddAIAssist", ({ detail }) => {
+  window.addEventListener("workspaceAddAIAssist", async ({ detail }) => {
     const projectId = detail?.projectId;
     if (!projectId) return;
-    updateWorkspaceAcrossProjects(state.currentWorkspaceId || projectId, (workspace) => workspace);
-    const project = state.projects.find((p) => p.id === projectId);
-    if (!project) return;
-    if (!project.collaborators) project.collaborators = {};
-    if (!project.collaborators["ai_assist"]) {
-      project.collaborators["ai_assist"] = {
-        role: "editor",
-        name: "Eya",
-        email: "ai@eyawriter.app",
-        username: "AIassist",
-        isAIAssist: true,
-        photoURL: ""
-      };
-      upsertProject(project);
-      persistProjects(true, { syncInputs: false });
-      showToast("@AIassist (Eya) added to the workspace. AI features are now available to all members.", "success");
+    const result = await addWorkspaceAIAssist(projectId);
+    if (!result?.ok) {
+      showToast(result?.reason || "Unable to add @AIassist right now.", "error");
+      return;
     }
+    persistProjects(true, { syncInputs: false });
+    renderStudio();
+    renderHome();
+    showToast(result.message || "@AIassist (Eya) added to the workspace. AI features are now available to all members.", "success");
   });
 
   // @mention dropdown for workspace task inputs
@@ -2165,9 +2215,11 @@ function getWorkspaceMemberList() {
     ...Object.entries(workspaceProject.collaborators || {}).map(([uid, person]) => {
       const name = person.username || person.name || person.email || "Collaborator";
       return { id: uid, handle: `@${name.replace(/\s+/g, "")}`, label: name };
-    }),
-    { id: "ai_assist", handle: "@AIassist", label: "Eya · AI Assistant" }
+    })
   ];
+  if (workspaceSupportsAi(workspaceProject) && !members.some((member) => member.id === "ai_assist")) {
+    members.push({ id: "ai_assist", handle: "@AIassist", label: "Eya · AI Assistant" });
+  }
   return members;
 }
 
@@ -2252,7 +2304,7 @@ export function openProject(projectId, options = {}) {
     }
     const projectLoadToast = options.silentLoadToast ? null : showToast("Opening project...", "loading", { duration: 0 });
     state.currentProjectId = project.id;
-  state.currentWorkspaceId = project.workspace?.id !== project.id ? project.workspace?.id || null : null;
+  state.currentWorkspaceId = options.keepWorkspaceContext ? (project.workspace?.id || null) : null;
   hasShownReadOnlyNotice = false;
 
   // Reset history for the new project
@@ -3436,6 +3488,20 @@ async function duplicateProjectById(projectId) {
   renderHome();
 }
 
+async function leaveProject(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  const confirmed = await customConfirm(`Leave the collaboration on "${project.title}"?`, "Leave Collaboration");
+  if (!confirmed) return;
+  const result = await leaveCollaboration(projectId);
+  if (!result?.ok) {
+    await customAlert(result?.reason || "Unable to leave this collaboration right now.", "Leave Collaboration");
+    return;
+  }
+  showHome();
+  renderHome();
+}
+
 function deleteProject() {
   const current = getCurrentProject();
   if (current) removeProject(current.id);
@@ -3446,13 +3512,38 @@ async function removeProject(id) {
   if (!target) return;
 
   const entityLabel = target.isWorkspaceRoot ? "workspace" : "project";
-  const confirmation = await customPrompt(`This will permanently delete the ${entityLabel} "${target.title}".\n\nTo confirm, please retype the ${entityLabel} name below:`, "", "Confirm Deletion");
-
-  if (confirmation !== target.title) {
-    if (confirmation !== null) {
-      await customAlert("Deletion cancelled. The name you typed did not match.", "Cancelled");
-    }
+  const currentUid = auth.currentUser?.uid || "";
+  const isOwnerDeletingShared = Boolean(target.isShared && target.ownerId && target.ownerId === currentUid);
+  const container = document.createElement("div");
+  container.innerHTML = `
+    <p class="modal-copy">This will permanently delete the ${entityLabel} "${escapeHtml(target.title)}".</p>
+    <label class="generic-field">
+      <span>Retype the ${entityLabel} name to confirm</span>
+      <input id="deleteProjectNameConfirm" class="modal-input" type="text" value="">
+    </label>
+    ${isOwnerDeletingShared ? '<label class="workspace-reminder-main"><input id="deleteForCollaboratorsToggle" type="checkbox"><span>delete too for collaborators?</span></label>' : ''}
+  `;
+  const confirmed = await showModal({
+    title: "Confirm Deletion",
+    message: container,
+    confirmLabel: "Delete",
+    cancelLabel: "Cancel"
+  });
+  if (!confirmed) {
     return;
+  }
+  const confirmation = container.querySelector("#deleteProjectNameConfirm")?.value || "";
+  if (confirmation !== target.title) {
+    await customAlert("Deletion cancelled. The name you typed did not match.", "Cancelled");
+    return;
+  }
+  const deleteForCollaborators = Boolean(container.querySelector("#deleteForCollaboratorsToggle")?.checked);
+  if (deleteForCollaborators) {
+    const result = await deleteSharedProjectEverywhere(id);
+    if (!result?.ok) {
+      await customAlert(result?.reason || "Unable to delete this shared project for collaborators.", "Delete Project");
+      return;
+    }
   }
 
   const workspaceId = target.workspace?.id || target.id;

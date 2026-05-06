@@ -122,6 +122,10 @@ export function canManageWorkspace(project = getCurrentProject(), user = auth.cu
   return getUserProjectRole(project, user) === WORKSPACE_ROLES.owner;
 }
 
+export function workspaceHasAIAssist(project = getCurrentProject()) {
+  return Boolean(project?.collaborators?.ai_assist?.isAIAssist || project?.collaborators?.ai_assist);
+}
+
 function updateCollabBadge(count) {
   document.querySelectorAll('.collab-badge').forEach(b => {
     b.textContent = count || '';
@@ -411,6 +415,73 @@ export async function renameWorkspace(projectId, name) {
   await logActivity(projectId, `Renamed the workspace to ${nextName}.`);
   persistProjects(false);
   renderHome();
+  return { ok: true };
+}
+
+export async function addWorkspaceAIAssist(projectId) {
+  const user = auth.currentUser;
+  const project = state.projects.find((p) => p.id === projectId) || getCurrentProject();
+  if (!user || !project) return { ok: false, reason: 'No workspace found.' };
+  if (!canManageWorkspace(project, user)) {
+    return { ok: false, reason: 'Only the workspace owner can add @AIassist.' };
+  }
+  if (!project.collaborators) project.collaborators = {};
+  if (project.collaborators.ai_assist) {
+    return { ok: true, message: '@AIassist is already in this workspace.' };
+  }
+
+  const collaborator = {
+    role: WORKSPACE_ROLES.editor,
+    name: 'Eya',
+    email: 'ai@eyawriter.app',
+    username: 'AIassist',
+    isAIAssist: true,
+    photoURL: 'logo.png'
+  };
+
+  await updateDoc(doc(db, 'sharedProjects', projectId), {
+    'collaborators.ai_assist': collaborator,
+    updatedBy: user.uid,
+    lastEditorName: user.displayName || user.email
+  });
+
+  project.collaborators.ai_assist = collaborator;
+  persistProjects(false);
+  renderCollaboratorList();
+  renderHome();
+  return { ok: true };
+}
+
+export async function leaveCollaboration(projectId) {
+  const user = auth.currentUser;
+  const project = state.projects.find((p) => p.id === projectId) || getCurrentProject();
+  if (!user || !project) return { ok: false, reason: 'No shared project found.' };
+  if (!project.isShared || !project.collaborators?.[user.uid]) {
+    return { ok: false, reason: 'You are not a collaborator on this project.' };
+  }
+
+  const nextCollaborators = { ...(project.collaborators || {}) };
+  delete nextCollaborators[user.uid];
+
+  await updateDoc(doc(db, 'sharedProjects', projectId), {
+    collaborators: nextCollaborators,
+    updatedBy: user.uid,
+    lastEditorName: user.displayName || user.email
+  });
+
+  handleSharedProjectRemoved(projectId);
+  return { ok: true };
+}
+
+export async function deleteSharedProjectEverywhere(projectId) {
+  const user = auth.currentUser;
+  const project = state.projects.find((p) => p.id === projectId) || getCurrentProject();
+  if (!user || !project) return { ok: false, reason: 'No shared project found.' };
+  if (!canManageWorkspace(project, user)) {
+    return { ok: false, reason: 'Only the workspace owner can delete this shared project for collaborators.' };
+  }
+
+  await deleteDoc(doc(db, 'sharedProjects', projectId));
   return { ok: true };
 }
 
@@ -793,9 +864,19 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
   const emailEl = document.getElementById('collab-profile-email');
   const bioEl = document.getElementById('collab-profile-bio');
   const closeBtn = document.getElementById('close-collab-profile');
+  const kickBtn = document.getElementById('collab-profile-kick-btn');
   if (!popup) return;
 
   const displayName = name || email || 'User';
+  const currentProject = getCurrentProject();
+  const canKick = Boolean(
+    kickBtn
+    && currentProject
+    && canManageWorkspace(currentProject, auth.currentUser)
+    && uid
+    && uid !== currentProject.ownerId
+    && uid !== auth.currentUser?.uid
+  );
   nameEl.textContent = formatCollaboratorHandle(displayName);
   if (emailEl) {
     emailEl.textContent = '';
@@ -803,6 +884,9 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
   }
   bioEl.textContent = '—';
   imgEl.src = photoURL || generateCollabAvatar(displayName);
+  if (kickBtn) {
+    kickBtn.hidden = !canKick;
+  }
 
   // Eya – AI assistant profile
   const isEya = uid === "ai_assist" || String(name || "").toLowerCase().includes("aiassist") || String(name || "").toLowerCase() === "eya";
@@ -819,11 +903,22 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
     popup.classList.remove('active');
     popup.removeEventListener('click', onOverlayClick);
     closeBtn.removeEventListener('click', closePopup);
+    kickBtn?.removeEventListener('click', onKick);
     document.removeEventListener('keydown', onEsc);
   };
   const onOverlayClick = (e) => { if (e.target === popup) closePopup(); };
   const onEsc = (e) => { if (e.key === 'Escape') closePopup(); };
+  const onKick = async () => {
+    if (!currentProject || !uid) return;
+    const confirmed = await customConfirm(`Kick ${displayName} out of "${currentProject.title}"?`, 'Kick Out');
+    if (!confirmed) return;
+    await kickCollaborator(currentProject.id, uid);
+    closePopup();
+  };
   closeBtn.addEventListener('click', closePopup);
+  if (canKick) {
+    kickBtn?.addEventListener('click', onKick);
+  }
   popup.addEventListener('click', onOverlayClick);
   document.addEventListener('keydown', onEsc);
 
@@ -847,8 +942,7 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
 }
 
 function generateEyaAvatar() {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><defs><linearGradient id="eg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient></defs><circle cx="48" cy="48" r="48" fill="url(#eg)"/><text x="48" y="56" text-anchor="middle" font-family="system-ui,sans-serif" font-size="28" font-weight="700" fill="white" opacity="0.92">AI</text></svg>`;
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  return 'logo.png';
 }
 
 function generateCollabAvatar(name) {

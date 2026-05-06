@@ -21,6 +21,32 @@ function getProjectCollaborationLabel(project) {
     : "Private";
 }
 
+function isProjectOwnedByCurrentUser(project) {
+  const currentUid = auth.currentUser?.uid || "";
+  return !project?.ownerId || project.ownerId === currentUid;
+}
+
+function applyProjectCardActionState(node, project) {
+  if (!node || !project) return;
+  const deleteButton = node.querySelector(".project-delete");
+  const renameButton = node.querySelector('[data-project-action="rename"]');
+  const isOwned = isProjectOwnedByCurrentUser(project);
+  const isSharedCollaborator = Boolean(project.isShared && !isOwned);
+
+  if (renameButton) {
+    renameButton.hidden = Boolean(project.isShared && !isOwned);
+  }
+
+  if (deleteButton) {
+    deleteButton.dataset.projectDestructiveAction = isSharedCollaborator ? "leave" : "delete";
+    deleteButton.setAttribute("aria-label", isSharedCollaborator ? "Leave collaboration" : "Delete script");
+    deleteButton.setAttribute("title", isSharedCollaborator ? "Leave collaboration" : "Delete script");
+    deleteButton.innerHTML = isSharedCollaborator
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6m4-6v6"/></svg>';
+  }
+}
+
 function getProjectFormatValue(project) {
   return project.type || project.workType || "film-script";
 }
@@ -358,9 +384,11 @@ export function renderWorkspaceView() {
   const inboxItems = allTaskItems.filter((task) => task.status === "done" || task.aiState === "review" || task.aiState === "failed").slice(0, 6);
   const assignees = [
     { id: workspaceLead.ownerId || "workspace_owner", label: ownerLabel },
-    ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
-    { id: "ai_assist", label: "@AIassist" }
+    ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) }))
   ];
+  if (workspaceLead.collaborators?.ai_assist) {
+    assignees.push({ id: "ai_assist", label: "@AIassist" });
+  }
   const sceneOptions = projects.flatMap((project) => (project.lines || [])
     .filter((line) => line.type === "scene" && line.text.trim())
     .map((line) => ({
@@ -799,6 +827,7 @@ export function renderWorkspaceView() {
       const node = template.content.firstElementChild.cloneNode(true);
       const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
       const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+      const collaborationLabel = getProjectCollaborationLabel(project);
       node.querySelector(".project-card-title").textContent = project.title;
       node.querySelector(".project-script-id").textContent = project.scriptId;
       node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
@@ -807,6 +836,7 @@ export function renderWorkspaceView() {
       node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} � ${collaborationLabel}`;
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
+      applyProjectCardActionState(node, project);
       refs.workspaceProjectGrid.appendChild(node);
     });
   }
@@ -923,9 +953,11 @@ export function renderHome() {
     const taskItems = [...(workspaceLead.workspace?.tasks || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
     const assignees = [
       { id: workspaceLead.ownerId || "workspace_owner", label: ownerLabel },
-      ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
-      { id: "ai_assist", label: "@AIassist" }
+      ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) }))
     ];
+    if (workspaceLead.collaborators?.ai_assist) {
+      assignees.push({ id: "ai_assist", label: "@AIassist" });
+    }
 
     refs.homeHero.hidden = true;
     refs.workspaceBackBtn.hidden = false;
@@ -1098,6 +1130,7 @@ export function renderHome() {
       node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} � ${collaborationLabel}`;
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
+      applyProjectCardActionState(node, project);
       return node;
     };
 
@@ -1138,6 +1171,7 @@ export function renderHome() {
     // Note: Event listeners will be bound in events.js, but we need the IDs here
     node.dataset.projectId = project.id;
     node.querySelector(".project-card-open").dataset.projectId = project.id;
+    applyProjectCardActionState(node, project);
 
     refs.projectGrid.appendChild(node);
   });
@@ -2254,7 +2288,7 @@ export async function showWorkspacePopup() {
     </section>
     <section class="workspace-popup-section">
       <h4>Sharing</h4>
-      <p>Invite collaborators by email or share a workspace link, then assign Editor or Viewer access.</p>
+      <p>Invite collaborators by email or share a workspace link, then assign Editor or Viewer access. Add Eya as @AIassist to unlock workspace AI features for everyone.</p>
       <div class="workspace-share-row">
         <input class="modal-input workspace-link-input" type="text" value="${escapeHtml(inviteLink)}" readonly>
         <button class="ghost-button workspace-inline-button" type="button" data-workspace-action="copy-link">Copy Link</button>
@@ -2292,6 +2326,7 @@ export async function showWorkspacePopup() {
                       <option value="editor" ${(person.role || "editor") === "editor" ? "selected" : ""}>Editor</option>
                       <option value="viewer" ${(person.role || "editor") === "viewer" ? "selected" : ""}>Viewer</option>
                     </select>
+                    <button class="ghost-button workspace-inline-button danger-text" type="button" data-workspace-kick="${escapeHtml(uid)}">Kick Out</button>
                   ` : `<span class="role-badge">${escapeHtml((person.role || "editor").replace(/^./, (char) => char.toUpperCase()))}</span>`}
                 </div>
               </div>
@@ -2348,6 +2383,13 @@ export async function showWorkspacePopup() {
           name: profileTrigger.dataset.profileName || "",
           photoURL: profileTrigger.dataset.profilePhotourl || ""
         }
+      }));
+      return;
+    }
+    const kickTrigger = event.target.closest("[data-workspace-kick]");
+    if (kickTrigger) {
+      window.dispatchEvent(new CustomEvent("workspaceKickRequested", {
+        detail: { projectId: project.id, collaboratorUid: kickTrigger.dataset.workspaceKick }
       }));
       return;
     }
