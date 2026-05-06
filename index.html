@@ -215,7 +215,7 @@
         </div>
       </header>
 
-      <section class="home-hero">
+      <section id="homeHero" class="home-hero">
         <img class="home-logo" src="logo.png" alt="EyaWriter logo">
         <h1>EyaWriter</h1>
         <p class="home-tagline">Where your stories take flight.</p>
@@ -223,20 +223,54 @@
 
       <section class="home-projects">
         <div class="home-projects-head">
-          <h2>Scripts:</h2>
-          <button id="newProjectBtn" class="primary-button" type="button">New Script</button>
+          <div class="home-projects-copy">
+            <h2 id="homeProjectsTitle">Scripts:</h2>
+            <p id="homeProjectsSubtitle" class="home-projects-subtitle">Start a new screenplay or reopen one already in motion.</p>
+          </div>
+          <div class="home-projects-actions">
+            <button id="newProjectBtn" class="primary-button" type="button">New Project</button>
+          </div>
         </div>
         <div id="projectGrid" class="project-grid"></div>
       </section>
     </section>
 
+    <section id="editorView" class="editor-view" hidden>
+      <header class="editor-view-header">
+        <div class="nav-stack">
+          <div class="editor-view-brand editor-view-header-content">
+            <strong id="editorViewTitle">Editor</strong>
+            <span id="editorViewSubtitle">Projects, members, and delegation live here.</span>
+          </div>
+        </div>
+        <div class="home-projects-actions">
+          <button id="editorBackBtn" class="ghost-button" type="button">All Projects</button>
+          <div id="editorDigitalClock" class="editor-digital-clock" style="margin: 0 15px; font-family: monospace; font-size: 1.1rem; color: var(--accent-strong); font-weight: bold;">00:00:00</div>
+          <button id="editorSaveHomeBtn" class="primary-button" type="button">Save & Home</button>
+          <button id="editorCloseBtn" class="icon-button editor-close-button" type="button" aria-label="Close Editor" style="display:none">✕</button>
+        </div>
+      </header>
+      <section class="editor-view-body">
+        <section id="editorDashboard" class="editor-home"></section>
+        <section class="editor-projects">
+          <div class="home-projects-head editor-projects-head">
+            <div class="home-projects-copy">
+              <h2>Editor Projects</h2>
+              <p class="home-projects-subtitle">Every script in this editor stays connected to the same team context.</p>
+            </div>
+          </div>
+          <div id="editorProjectGrid" class="project-grid"></div>
+        </section>
+      </section>
+    </section>
+
     <section id="studioView" class="studio-view" hidden>
       <header class="studio-topbar">
-        <div class="workspace-brand">
+        <div class="editor-brand">
           <img src="logo.png" alt="EyaWriter logo">
           <div>
             <strong>EyaWriter</strong>
-            <span>Workspace</span>
+            <span>Editor</span>
           </div>
         </div>
 
@@ -417,7 +451,7 @@
               <summary class="menu-group-summary">Tools</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
-                <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Workspace</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-editor">Editor</button>
               </div>
             </details>
 
@@ -452,9 +486,9 @@
           </div>
 
           <div id="studioCollabMenu" class="nav-menu nav-menu-wide" hidden>
-            <div class="nav-menu-label">Workspace</div>
+            <div class="nav-menu-label">Editor</div>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Invite Collaborator</summary>
+              <summary class="menu-group-summary">Invite Teammate</summary>
               <div class="menu-group-body">
                 <div class="collab-invite-row">
                   <input id="collabInviteEmail" type="email" class="collab-input" placeholder="collaborator@email.com">
@@ -533,10 +567,31 @@
         </div>
 
         <div class="topbar-actions">
-          <div class="save-status-stack">
-            <span id="saveBadge" class="save-badge">Saved</span>
-            <span id="currentScriptIdFlag" class="script-id-flag" hidden></span>
-          </div>
+          <details class="quick-display">
+            <summary id="quickDisplayBtn" class="ghost-button quick-display-button">Quick Display</summary>
+            <div class="quick-display-menu">
+              <label class="quick-display-row">
+                <span>Background animation</span>
+                <input id="quickDisplayBg" type="checkbox">
+              </label>
+              <label class="quick-display-row">
+                <span>Active Block</span>
+                <input id="quickDisplayActiveBlock" type="checkbox">
+              </label>
+              <label class="quick-display-row">
+                <span>Full screen</span>
+                <input id="quickDisplayFullscreen" type="checkbox">
+              </label>
+              <label class="quick-display-row">
+                <span>Preview</span>
+                <input id="quickDisplayPreview" type="checkbox">
+              </label>
+              <label class="quick-display-row">
+                <span>Focus mode</span>
+                <input id="quickDisplayFocusMode" type="checkbox">
+              </label>
+            </div>
+          </details>
           <button id="goHomeBtn" class="ghost-button" type="button">Save &amp; Home</button>
           <button class="user-trigger open-profile-btn" aria-label="Open profile">
             <div class="user-avatar-circle">
@@ -550,7 +605,14 @@
       <section id="toolStrip" class="tool-strip">
         <div class="tool-strip-row">
           <div class="strip-start-controls">
-            <button id="leftRailToggle" class="collapse-arrow" type="button" aria-label="Collapse left pane">◀</button>
+            <div class="studio-inline-project">
+              <strong id="studioProjectTitle">Untitled Project</strong>
+              <div class="save-status-stack save-status-stack-inline">
+                <span id="currentScriptIdFlag" class="script-id-flag" hidden></span>
+                <span id="saveBadge" class="save-badge is-saved">Saved</span>
+                <span id="saveMetaText" class="save-meta-text">All changes synced.</span>
+              </div>
+            </div>
           </div>
 
           <div class="tool-groups">
@@ -641,7 +703,6 @@
 
           <div class="strip-end-controls">
             <button id="toolStripToggle" class="collapse-arrow" type="button" aria-label="Collapse function bar upward">▲</button>
-            <button id="rightRailToggle" class="collapse-arrow" type="button" aria-label="Collapse right pane">▶</button>
           </div>
         </div>
 
@@ -705,16 +766,16 @@
                 </div>
               </section>
 
-              <section class="panel section-workspace" data-left-pane-block="workspace" data-left-pane-label="Team Workspace" hidden>
+              <section class="panel section-editor" data-left-pane-block="editor" data-left-pane-label="Team Editor" hidden>
                 <div class="panel-head">
                   <div>
-                    <h3>Team Workspace</h3>
+                    <h3>Team Editor</h3>
                     <p>Shared access, roles, comments, and activity</p>
                   </div>
-                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Team Workspace">â–¼</button>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="editor" aria-label="Collapse Team Editor">â–¼</button>
                 </div>
                 <div class="panel-section-body">
-                  <button class="ghost-button btn-sm" data-menu-action="open-workspace">Open Workspace</button>
+                  <button class="ghost-button btn-sm" data-menu-action="open-editor">Open Editor</button>
                 </div>
               </section>
 
@@ -1006,11 +1067,19 @@
           <h3 class="project-card-title"></h3>
           <span class="project-script-id script-id-flag"></span>
         </div>
-        <button class="project-delete" type="button" aria-label="Delete script">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6m4-6v6"/></svg>
-        </button>
+        <div class="project-card-actions">
+          <button class="project-quick-action" type="button" data-project-action="rename">Rename</button>
+          <button class="project-quick-action" type="button" data-project-action="duplicate">Duplicate</button>
+          <button class="project-delete" type="button" aria-label="Delete script">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6m4-6v6"/></svg>
+          </button>
+        </div>
       </div>
       <button class="project-card-open" type="button">
+        <div class="project-card-context-row">
+          <span class="project-card-context"></span>
+          <span class="project-card-context-action" role="button" tabindex="0">Open Editor</span>
+        </div>
         <div class="project-meta-row">
           <span class="project-scenes"></span>
           <span class="project-characters"></span>
@@ -1176,7 +1245,7 @@
           <img src="" alt="Profile" class="avatar" id="collab-profile-img">
         </div>
         <h2 class="profile-name" id="collab-profile-name"></h2>
-        <p class="profile-email" id="collab-profile-email"></p>
+        <p class="profile-email" id="collab-profile-email" hidden></p>
       </div>
       <div class="profile-bio-container">
         <label class="bio-label">About me</label>
@@ -1207,7 +1276,13 @@
           <input type="file" id="profile-upload" accept="image/*" hidden>
         </div>
         <h2 class="profile-name" id="profile-name">Jane Doe</h2>
-        <p class="profile-email" id="profile-email">jane@example.com</p>
+        <p class="profile-email" id="profile-email" hidden>jane@example.com</p>
+      </div>
+
+      <div class="profile-identity-row">
+        <label class="bio-label" for="profile-username">Username</label>
+        <input id="profile-username" class="modal-input profile-username-input" type="text" minlength="4" maxlength="20" spellcheck="false" disabled>
+        <p class="profile-username-hint" id="profile-username-hint">At least 4 characters. You can change it once every 3 months.</p>
       </div>
 
       <!-- Profile Writeup -->

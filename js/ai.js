@@ -1,4 +1,4 @@
-import { state } from "./config.js";
+import { state, EDITOR_TASK_TEMPLATES } from "./config.js";
 import { refs } from "./dom.js";
 import { getCurrentProject, getLine, getLineIndex, queueSave } from "./project.js";
 import { renderStudio, addBlock } from "./events.js";
@@ -670,7 +670,18 @@ export const AI = (() => {
       }
     } else {
       openMenu(blockRow);
+      showInput(action);
     }
+  }
+
+  function triggerSelectionAction(action) {
+    const selectedBlock = document.activeElement?.closest?.(".script-block")
+      || document.querySelector(".script-block-row.is-active .script-block")
+      || refs.screenplayEditor?.querySelector(".script-block");
+    if (!selectedBlock) return;
+    const row = selectedBlock.closest(".script-block-row");
+    if (!row) return;
+    triggerAction(row, action);
   }
 
   function triggerSmartProofread() {
@@ -1478,7 +1489,45 @@ export const AI = (() => {
     }
   }
 
-  return { init, triggerAction, triggerSmartProofread, triggerAssistant };
+  function getEditorTaskTemplate(templateKey) {
+    return EDITOR_TASK_TEMPLATES.find((template) => template.key === templateKey) || EDITOR_TASK_TEMPLATES[0];
+  }
+
+  async function runEditorTaskAssistant(task, project) {
+    const projectContext = project?.lines?.map((line) => `[${line.type.toUpperCase()}] ${line.text}`).join("\n") || "";
+    const sceneContext = task.sceneId
+      ? (() => {
+          const sceneIndex = project?.lines?.findIndex((line) => line.id === task.sceneId) ?? -1;
+          if (sceneIndex < 0) return "";
+          const chunk = [];
+          for (let index = sceneIndex; index < (project?.lines?.length || 0); index += 1) {
+            const line = project.lines[index];
+            if (index !== sceneIndex && line.type === "scene") break;
+            chunk.push(`[${line.type.toUpperCase()}] ${line.text}`);
+          }
+          return chunk.join("\n");
+        })()
+      : "";
+    const storyMemory = buildStoryMemoryContext(project);
+    const context = sceneContext || projectContext;
+    const template = getEditorTaskTemplate(task.templateKey);
+    const instruction = [
+      "You are @AIassist inside a screenplay editor.",
+      "Complete the assigned writing task and return screenplay-ready text only.",
+      "Do not explain your answer. Do not include markdown fences.",
+      "Preserve screenplay formatting with sensible line breaks.",
+      task.sceneId ? "Focus on the linked scene context first." : "Use the broader script context where helpful.",
+      `Template: ${template.label}.`,
+      template.aiInstruction
+    ].join(" ");
+    return requestAiText({
+      action: "Improve",
+      instruction: `${storyMemory}${instruction}`,
+      input: `TASK TEMPLATE: ${template.label}\nTASK TITLE: ${task.title}\nTASK DESCRIPTION: ${task.description || template.description || "No extra description provided."}\nREFERENCE: ${task.reference || "None"}\n\nSCRIPT CONTEXT:\n${context}`.trim()
+    });
+  }
+
+  return { init, triggerAction, triggerSelectionAction, triggerSmartProofread, triggerAssistant, runEditorTaskAssistant };
 })();
 
 function getSelectedTextInBlock(block) {

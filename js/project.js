@@ -7,6 +7,7 @@ import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic
 
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const RECOVERY_KEY = `${STORAGE_KEY}:recovery`;
 
 function generateScriptId() {
   const bytes = new Uint8Array(6);
@@ -28,6 +29,91 @@ function normalizeScriptId(scriptId) {
 function queueFirestoreSync() {
   clearTimeout(firestoreSyncTimer);
   firestoreSyncTimer = setTimeout(syncCurrentProjectToFirestore, 1500);
+}
+
+function buildPersistencePayload(savedAt = new Date().toISOString()) {
+  return {
+    savedAt,
+    currentProjectId: state.currentProjectId,
+    currentEditorId: state.currentEditorId,
+    projects: state.projects,
+    aiAssist: state.aiAssist,
+    toolStripCollapsed: state.toolStripCollapsed,
+    autoNumberScenes: state.autoNumberScenes,
+    backgroundAnimation: state.backgroundAnimation,
+    theme: state.theme,
+    language: state.language,
+    writingLanguage: state.writingLanguage,
+    grammarCheck: state.grammarCheck,
+    localBackupEnabled: state.localBackupEnabled,
+    localSaveIntervalMinutes: state.localSaveIntervalMinutes,
+    backupPrompted: state.backupPrompted,
+    viewOptions: state.viewOptions,
+    leftPaneBlocks: state.leftPaneBlocks,
+    leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
+    rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
+  };
+}
+
+function parseStoredPayload(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.error(`Unable to parse storage payload for ${key}`, error);
+    return null;
+  }
+}
+
+function chooseLatestPayload(primary, recovery) {
+  const primaryAt = new Date(primary?.savedAt || 0).getTime() || 0;
+  const recoveryAt = new Date(recovery?.savedAt || 0).getTime() || 0;
+  if (recoveryAt > primaryAt) {
+    state.pendingRecoveryNotice = true;
+    return recovery;
+  }
+  state.pendingRecoveryNotice = false;
+  return primary;
+}
+
+function updateSaveBadge(mode = "saved", savedAt = state.lastSavedAt) {
+  if (!refs.saveBadge) return;
+  refs.saveBadge.classList.remove("saving", "is-saved", "is-local");
+  const formattedTime = savedAt
+    ? new Date(savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : "";
+  if (mode === "saving") {
+    refs.saveBadge.textContent = t("save.saving");
+    refs.saveBadge.classList.add("saving");
+  } else {
+    refs.saveBadge.textContent = mode === "local" ? t("save.savedLocal") : t("save.saved");
+    refs.saveBadge.classList.add("is-saved");
+    if (mode === "local") refs.saveBadge.classList.add("is-local");
+  }
+  refs.saveBadge.title = savedAt
+    ? `Last saved ${new Date(savedAt).toLocaleString()}`
+    : "";
+  if (refs.saveMetaText) {
+    if (mode === "saving") {
+      refs.saveMetaText.textContent = formattedTime
+        ? `Saving changes... Last saved at ${formattedTime}.`
+        : "Saving changes...";
+    } else if (mode === "local") {
+      refs.saveMetaText.textContent = formattedTime
+        ? `Saved locally at ${formattedTime}.`
+        : "Saved locally.";
+    } else {
+      refs.saveMetaText.textContent = formattedTime
+        ? `Saved at ${formattedTime}.`
+        : "All changes synced.";
+    }
+  }
+}
+
+function writeRecoverySnapshot({ syncInputs = false } = {}) {
+  if (syncInputs) syncProjectFromInputs();
+  const savedAt = new Date().toISOString();
+  localStorage.setItem(RECOVERY_KEY, JSON.stringify(buildPersistencePayload(savedAt)));
 }
 
 async function syncCurrentProjectToFirestore() {
@@ -72,7 +158,7 @@ async function syncCurrentProjectToFirestore() {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
       'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
-      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace'];
+      'activityLog', 'lastEditorName', 'lastActivityAt', 'editor'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
       );
@@ -92,6 +178,8 @@ async function syncCurrentProjectToFirestore() {
       parsed.projects = state.projects;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
+    state.lastSaveSource = "remote";
+    updateSaveBadge("saved", state.lastSavedAt || now);
     window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
 
   } catch (err) {
@@ -126,13 +214,14 @@ export async function deleteProjectFromCloud(projectId) {
 export function setProjectsFromCloud(cloudProjects) {
   state.projects = cloudProjects.length > 0 ? cloudProjects : [cloneProject(sampleProject, true)];
   state.currentProjectId = state.projects[0].id;
+  state.currentEditorId = null;
+  const savedAt = new Date().toISOString();
+  state.lastSavedAt = savedAt;
+  state.lastSaveSource = "remote";
   try {
-    const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      ...existing,
-      currentProjectId: state.currentProjectId,
-      projects: state.projects
-    }));
+    const payload = buildPersistencePayload(savedAt);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload));
   } catch (err) {
     console.error('Failed to cache cloud projects locally', err);
   }
@@ -164,12 +253,12 @@ export const sampleProject = {
 
 export function loadProjects() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
+    const parsed = chooseLatestPayload(parseStoredPayload(STORAGE_KEY), parseStoredPayload(RECOVERY_KEY));
     state.projects = Array.isArray(parsed?.projects) && parsed.projects.length
       ? parsed.projects.map(sanitizeProject)
       : [cloneProject(sampleProject, true)];
     state.currentProjectId = parsed?.currentProjectId || state.projects[0].id;
+    state.currentEditorId = typeof parsed?.currentEditorId === "string" ? parsed.currentEditorId : null;
     state.aiAssist = Boolean(parsed?.aiAssist);
       state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
       state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
@@ -182,6 +271,8 @@ export function loadProjects() {
       state.localSaveIntervalMinutes = [5, 10, 60].includes(parsed?.localSaveIntervalMinutes) ? parsed.localSaveIntervalMinutes : 5;
       state.backupPrompted = Boolean(parsed?.backupPrompted);
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
+    state.lastSavedAt = parsed?.savedAt || "";
+    state.lastSaveSource = state.localBackupEnabled ? "local" : "remote";
     state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
     document.documentElement.style.setProperty("--right-pane-width", `${clamp(parsed?.rightWidth || 324, 260, 520)}px`);
@@ -189,6 +280,7 @@ export function loadProjects() {
     console.error("Unable to load projects", error);
       state.projects = [cloneProject(sampleProject, true)];
       state.currentProjectId = state.projects[0].id;
+      state.currentEditorId = null;
       state.backgroundAnimation = false;
       state.language = "en";
       state.writingLanguage = "en";
@@ -203,6 +295,9 @@ export function sanitizeProject(project) {
     id: project.id || uid("project"),
     scriptId: normalizeScriptId(project.scriptId),
     title: project.title || "Untitled Script",
+    workType: project.workType === "prose-poetry" ? "prose-poetry" : "film-script",
+    creationKind: project.creationKind === "editor" ? "editor" : "project",
+    isEditorRoot: Boolean(project.isEditorRoot),
     author: project.author || "",
     contact: project.contact || "",
     company: project.company || "",
@@ -219,7 +314,7 @@ export function sanitizeProject(project) {
     ownerPhotoURL: project.ownerPhotoURL || "",
     lastEditorName: project.lastEditorName || "",
     lastActivityAt: project.lastActivityAt || project.updatedAt || new Date().toISOString(),
-    workspace: sanitizeWorkspace(project.workspace, project),
+    editor: sanitizeEditor(project.editor, project),
     collaborators: sanitizeCollaborators(project.collaborators),
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     wordCountHistory: Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [],
@@ -258,9 +353,39 @@ export function cloneProject(project, withNewId) {
 }
 
 export function createProject() {
+  return createProjectWithOptions();
+}
+
+export function createProjectWithOptions(options = {}) {
+  const creationKind = options.creationKind === "editor" ? "editor" : "project";
+  const workType = options.workType === "prose-poetry" ? "prose-poetry" : "film-script";
+  const isEditorRoot = Boolean(options.isEditorRoot);
+  const editorSeed = options.editor && typeof options.editor === "object" ? options.editor : null;
+  const peerProjects = state.projects.filter((project) => {
+    if (creationKind === "editor" || isEditorRoot) {
+      return project.isEditorRoot;
+    }
+    if (editorSeed?.id) {
+      return !project.isEditorRoot && project.editor?.id === editorSeed.id;
+    }
+    return !project.isEditorRoot && project.editor?.id === project.id;
+  });
+  const index = peerProjects.length + 1;
+  const defaultTitle = creationKind === "editor"
+    ? `Film Editor ${index}`
+    : `Film Script ${index}`;
   const project = sanitizeProject({
     id: uid("project"),
-    title: `Script Name ${state.projects.length + 1}`,
+    title: options.title || defaultTitle,
+    workType,
+    creationKind,
+    isEditorRoot,
+    editor: editorSeed ? {
+      ...editorSeed,
+      name: options.editorName || editorSeed.name || `Editor ${index}`
+    } : {
+      name: options.editorName || (creationKind === "editor" ? defaultTitle : `Editor ${index}`)
+    },
     lines: [{ id: uid(), type: "action", text: "" }]
   });
   upsertProject(project);
@@ -270,6 +395,31 @@ export function createProject() {
 
 export function getCurrentProject() {
   return state.projects.find((project) => project.id === state.currentProjectId) || null;
+}
+
+export function getEditorProjects(editorId) {
+  return state.projects.filter((project) => project.editor?.id === editorId);
+}
+
+export function getEditorRootProject(editorId) {
+  return state.projects.find((project) => project.editor?.id === editorId && project.isEditorRoot) || null;
+}
+
+export function updateEditorAcrossProjects(editorId, updater) {
+  let changed = false;
+  state.projects = state.projects.map((project) => {
+    if (project.editor?.id !== editorId) {
+      return project;
+    }
+    const nextEditor = updater({ ...(project.editor || {}) }, project);
+    changed = true;
+    return sanitizeProject({
+      ...project,
+      editor: nextEditor || project.editor,
+      updatedAt: new Date().toISOString()
+    });
+  });
+  return changed;
 }
 
 export function getLine(id) {
@@ -293,42 +443,24 @@ export function upsertProject(project) {
 
 export function persistProjects(forceSavedBadge = false, { syncInputs = true } = {}) {
   if (syncInputs) syncProjectFromInputs();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    currentProjectId: state.currentProjectId,
-    projects: state.projects,
-    aiAssist: state.aiAssist,
-    toolStripCollapsed: state.toolStripCollapsed,
-      autoNumberScenes: state.autoNumberScenes,
-      backgroundAnimation: state.backgroundAnimation,
-      theme: state.theme,
-      language: state.language,
-      writingLanguage: state.writingLanguage,
-      grammarCheck: state.grammarCheck,
-      localBackupEnabled: state.localBackupEnabled,
-      localSaveIntervalMinutes: state.localSaveIntervalMinutes,
-      backupPrompted: state.backupPrompted,
-      viewOptions: state.viewOptions,
-    leftPaneBlocks: state.leftPaneBlocks,
-    leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
-    rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
-  }));
-  if (refs.saveBadge) {
-      refs.saveBadge.textContent = forceSavedBadge ? t("save.savedLocal") : t("save.saved");
-      refs.saveBadge.classList.remove("saving");
-  }
+  const savedAt = new Date().toISOString();
+  const payload = buildPersistencePayload(savedAt);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload));
+  state.lastSavedAt = savedAt;
+  state.lastSaveSource = "local";
+  updateSaveBadge("local", savedAt);
   queueFirestoreSync();
 }
 
 export function queueSave() {
-  if (refs.saveBadge) {
-      refs.saveBadge.textContent = t("save.saving");
-      refs.saveBadge.classList.add("saving");
-  }
+  updateSaveBadge("saving");
+  writeRecoverySnapshot();
   clearTimeout(state.saveTimer);
   state.saveTimer = window.setTimeout(() => {
     persistProjects(false);
     pushHistory();
-  }, 200);
+  }, 1200);
 }
 
 export function pushHistory() {
@@ -453,17 +585,19 @@ function sanitizeStoryMemory(storyMemory) {
   };
 }
 
-function sanitizeWorkspace(workspace, project) {
+function sanitizeEditor(editor, project) {
   return {
-    id: workspace?.id || project.id || uid("workspace"),
-    name: String(workspace?.name || project.title || "Team Workspace").trim() || "Team Workspace",
-    inviteCode: String(workspace?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
-    reminders: sanitizeWorkspaceReminders(workspace?.reminders),
-    targets: sanitizeWorkspaceTargets(workspace?.targets)
+    id: editor?.id || project.id || uid("editor"),
+    name: String(editor?.name || project.title || "Team Editor").trim() || "Team Editor",
+    inviteCode: String(editor?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
+    reminders: sanitizeEditorReminders(editor?.reminders),
+    targets: sanitizeEditorTargets(editor?.targets),
+    tasks: sanitizeEditorTasks(editor?.tasks),
+    notifications: sanitizeEditorNotifications(editor?.notifications)
   };
 }
 
-function sanitizeWorkspaceReminders(reminders) {
+function sanitizeEditorReminders(reminders) {
   if (!Array.isArray(reminders)) {
     return [];
   }
@@ -479,12 +613,78 @@ function sanitizeWorkspaceReminders(reminders) {
   })).filter((reminder) => reminder.text);
 }
 
-function sanitizeWorkspaceTargets(targets) {
+function sanitizeEditorTargets(targets) {
   return {
     scenes: clamp(Number(targets?.scenes || 0), 0, 9999),
     pages: clamp(Number(targets?.pages || 0), 0, 9999),
     lines: clamp(Number(targets?.lines || 0), 0, 99999)
   };
+}
+
+function sanitizeEditorTasks(tasks) {
+  if (!Array.isArray(tasks)) {
+    return [];
+  }
+
+  return tasks.map((task, index) => ({
+    id: task?.id || uid(`task-${index}`),
+    templateKey: String(task?.templateKey || "custom").trim() || "custom",
+    priority: ["low", "normal", "high"].includes(task?.priority) ? task.priority : "normal",
+    title: String(task?.title || "").trim(),
+    description: String(task?.description || "").trim(),
+    status: ["todo", "in-progress", "done"].includes(task?.status) ? task.status : "todo",
+    dueAt: task?.dueAt || "",
+    assignedTo: String(task?.assignedTo || "").trim(),
+    assignedLabel: String(task?.assignedLabel || "").trim(),
+    assigneeType: task?.assigneeType === "system" ? "system" : "human",
+    handoffNote: String(task?.handoffNote || "").trim(),
+    projectId: String(task?.projectId || "").trim(),
+    reference: String(task?.reference || "").trim(),
+    sceneId: String(task?.sceneId || "").trim(),
+    sceneLabel: String(task?.sceneLabel || "").trim(),
+    lineId: String(task?.lineId || "").trim(),
+    lineLabel: String(task?.lineLabel || "").trim(),
+    memoryLinkType: String(task?.memoryLinkType || "").trim(),
+    memoryLinkId: String(task?.memoryLinkId || "").trim(),
+    memoryLinkName: String(task?.memoryLinkName || "").trim(),
+    memoryProjectId: String(task?.memoryProjectId || "").trim(),
+    comments: Array.isArray(task?.comments) ? task.comments.map((comment, commentIndex) => ({
+      id: comment?.id || uid(`task-comment-${commentIndex}`),
+      text: String(comment?.text || "").trim(),
+      author: String(comment?.author || "").trim(),
+      mentionId: String(comment?.mentionId || "").trim(),
+      mentionLabel: String(comment?.mentionLabel || "").trim(),
+      createdAt: comment?.createdAt || new Date().toISOString()
+    })).filter((comment) => comment.text) : [],
+    aiState: ["idle", "scheduled", "ready", "running", "review", "applied", "dismissed", "failed"].includes(task?.aiState) ? task.aiState : "idle",
+    aiStartAt: task?.aiStartAt || "",
+    aiLastRunAt: task?.aiLastRunAt || "",
+    aiResultText: String(task?.aiResultText || "").trim(),
+    aiResultSummary: String(task?.aiResultSummary || "").trim(),
+    aiError: String(task?.aiError || "").trim(),
+    lastApplyMode: ["insert-below", "replace-target", "append-scene"].includes(task?.lastApplyMode) ? task.lastApplyMode : "insert-below",
+    createdAt: task?.createdAt || new Date().toISOString(),
+    updatedAt: task?.updatedAt || task?.createdAt || new Date().toISOString(),
+    createdByName: String(task?.createdByName || "").trim()
+  })).filter((task) => task.title);
+}
+
+function sanitizeEditorNotifications(notifications) {
+  if (!Array.isArray(notifications)) {
+    return [];
+  }
+
+  return notifications.map((notification, index) => ({
+    id: notification?.id || uid(`note-${index}`),
+    taskId: String(notification?.taskId || "").trim(),
+    projectId: String(notification?.projectId || "").trim(),
+    category: String(notification?.category || "update").trim() || "update",
+    title: String(notification?.title || "").trim(),
+    message: String(notification?.message || "").trim(),
+    actor: String(notification?.actor || "").trim(),
+    createdAt: notification?.createdAt || new Date().toISOString(),
+    read: Boolean(notification?.read)
+  })).filter((notification) => notification.title || notification.message);
 }
 
 function sanitizeCollaborators(collaborators) {

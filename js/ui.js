@@ -1,4 +1,4 @@
-import { state, LEFT_PANE_BLOCK_DEFS } from './config.js';
+import { state, LEFT_PANE_BLOCK_DEFS, EDITOR_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
@@ -15,8 +15,270 @@ const MENU_GLYPHS = {
   down: "&#9660;"
 };
 
+function getProjectCollaborationLabel(project) {
+  return project.isShared || Object.keys(project.collaborators || {}).length
+    ? "Shared"
+    : "Private";
+}
+
+function getProjectFormatValue(project) {
+  return project.type || project.workType || "film-script";
+}
+
+function getProjectFormatLabel(project) {
+  const format = getProjectFormatValue(project);
+  if (format === "prose-poetry" || format === "prose" || format === "poetry") {
+    return "Prose / Poetry";
+  }
+  return "Film Script";
+}
+
+function getUserHandle(value, fallback = "user") {
+  const raw = String(value || "").trim();
+  const base = raw.replace(/^@/, "") || fallback;
+  return `@${base}`;
+}
+
+function getMemberDisplayName(member = {}, fallback = "Collaborator") {
+  return member.username || member.name || member.email || fallback;
+}
+
+function buildProfileTriggerMarkup({ uid = "", name = "", photoURL = "", className = "" } = {}) {
+  const classes = ["editor-profile-trigger", className].filter(Boolean).join(" ");
+  return `<button class="${escapeHtml(classes)}" type="button" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(photoURL)}">${escapeHtml(getUserHandle(name, "user"))}</button>`;
+}
+
+function buildProfileAvatarMarkup({ uid = "", name = "", photoURL = "", className = "" } = {}) {
+  const classes = ["editor-profile-trigger", "editor-profile-avatar", className].filter(Boolean).join(" ");
+  const source = String(name || "").trim().replace(/^@/, "");
+  const initials = source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "W";
+  return `<button class="${escapeHtml(classes)}" type="button" title="${escapeHtml(getUserHandle(name, "user"))}" aria-label="${escapeHtml(getUserHandle(name, "user"))}" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(photoURL)}">${escapeHtml(initials)}</button>`;
+}
+
+function buildEditorTaskAssigneeMarkup(task, currentUid) {
+  const label = task.assignedLabel || "Unassigned";
+  const source = task.assigneeType === "system" ? "AI" : label.replace(/^@/, "");
+  const initials = source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || (task.assigneeType === "system" ? "AI" : "U");
+  const ownershipLabel = task.assignedTo === currentUid
+    ? "Assigned to you"
+    : task.assigneeType === "system"
+      ? "Assigned to AI"
+      : `Assigned to ${label}`;
+  return `
+    <div class="editor-task-assignee-row">
+      <span class="editor-task-assignee-avatar ${task.assigneeType === "system" ? "is-system" : ""}">${escapeHtml(initials)}</span>
+      <div class="editor-task-assignee-copy">
+        <strong>${escapeHtml(ownershipLabel)}</strong>
+        <span>${escapeHtml(label)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function sortProjectsForHome(projects) {
+  const sorted = [...projects];
+  if (state.homeProjectSort === "title") {
+    sorted.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+    return sorted;
+  }
+  if (state.homeProjectSort === "scenes") {
+    sorted.sort((a, b) => {
+      const aCount = (a.lines || []).filter((line) => line.type === "scene" && line.text.trim()).length;
+      const bCount = (b.lines || []).filter((line) => line.type === "scene" && line.text.trim()).length;
+      return bCount - aCount || new Date(b.updatedAt) - new Date(a.updatedAt);
+    });
+    return sorted;
+  }
+  sorted.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  return sorted;
+}
+
+function buildProjectGroups(projects) {
+  const grouped = new Map();
+  projects.forEach((project) => {
+    const editorId = project.editor?.id || project.id;
+    const editorName = project.editor?.name || "Personal Editor";
+    const collaborationLabel = getProjectCollaborationLabel(project);
+    const key = `${editorId}::${editorName}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        editorId,
+        editorName,
+        collaborationLabel,
+        projects: []
+      });
+    }
+    grouped.get(key).projects.push(project);
+  });
+  return [...grouped.values()].sort((a, b) => a.editorName.localeCompare(b.editorName));
+}
+
+function buildProjectLibraryGroups(projects) {
+  return buildProjectGroups(projects);
+}
+
+function getTaskStatusCountLabel(tasks) {
+  const openCount = tasks.filter((task) => task.status !== "done").length;
+  const doneCount = tasks.filter((task) => task.status === "done").length;
+  return { openCount, doneCount };
+}
+
+function formatTaskDueLabel(task) {
+  if (!task?.dueAt) return "";
+  return `Due ${formatDateTime(task.dueAt)}`;
+}
+
+function getTaskDueState(task) {
+  if (!task?.dueAt || task.status === "done") return "";
+  const dueAt = new Date(task.dueAt).getTime();
+  if (Number.isNaN(dueAt)) return "";
+  const diff = dueAt - Date.now();
+  if (diff < 0) return "overdue";
+  if (diff <= 24 * 60 * 60 * 1000) return "today";
+  if (diff <= 48 * 60 * 60 * 1000) return "soon";
+  return "";
+}
+
+function getTaskDueLabel(task) {
+  const stateLabel = getTaskDueState(task);
+  if (stateLabel === "overdue") return "Overdue";
+  if (stateLabel === "today") return "Due today";
+  if (stateLabel === "soon") return "Due soon";
+  return formatTaskDueLabel(task);
+}
+
+function getTaskTargetLabel(task) {
+  return task.lineLabel || task.sceneLabel || task.reference || "General editor task";
+}
+
+function buildEditorDueNotifications(tasks, projects) {
+  return tasks
+    .filter((task) => task.dueAt && task.status !== "done")
+    .map((task) => {
+      const dueState = getTaskDueState(task);
+      if (!dueState) return null;
+      const projectTitle = projects.find((project) => project.id === task.projectId)?.title || "Linked Project";
+      return {
+        id: `due-${task.id}-${dueState}`,
+        taskId: task.id,
+        projectId: task.projectId,
+        category: dueState === "overdue" ? "overdue" : "due-soon",
+        title: dueState === "overdue" ? "Task overdue" : "Task due soon",
+        message: `${task.title} in ${projectTitle} is ${dueState === "overdue" ? "past due" : `due ${formatDateTime(task.dueAt)}`}.`,
+        actor: task.assignedLabel || "Editor",
+        createdAt: task.dueAt,
+        read: false,
+        synthetic: true
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+}
+
+function buildEditorPersonalInbox(tasks, currentUid) {
+  return tasks.flatMap((task) => {
+    const items = [];
+    const dueState = getTaskDueState(task);
+    if (task.assignedTo === currentUid && task.status !== "done") {
+      items.push({
+        id: `${task.id}-assignment`,
+        type: dueState === "overdue" ? "overdue" : dueState === "soon" || dueState === "today" ? "due" : "assigned",
+        label: dueState === "overdue" ? "Overdue for you" : dueState === "soon" || dueState === "today" ? "Due for you" : "Assigned to you",
+        message: task.title,
+        task
+      });
+    }
+    if (task.comments?.some((comment) => comment.mentionId === currentUid)) {
+      const latestMention = [...task.comments].reverse().find((comment) => comment.mentionId === currentUid);
+      items.push({
+        id: `${task.id}-mention`,
+        type: "mention",
+        label: "Mentioned",
+        message: latestMention?.text || task.title,
+        task
+      });
+    }
+    if (task.assigneeType === "system" && task.aiState === "review") {
+      items.push({
+        id: `${task.id}-review`,
+        type: "review",
+        label: "Review ready",
+        message: task.title,
+        task
+      });
+    }
+    return items;
+  }).slice(0, 8);
+}
+
+function formatRelativeTaskTime(task) {
+  if (!task.aiStartAt) return "";
+  const diffMs = new Date(task.aiStartAt).getTime() - Date.now();
+  if (Number.isNaN(diffMs)) return "";
+  const minutes = Math.max(0, Math.round(diffMs / 60000));
+  if (minutes <= 0) return "Ready now";
+  if (minutes === 1) return "Starts in 1 min";
+  return `Starts in ${minutes} mins`;
+}
+
+function getAiTaskStateLabel(task) {
+  const stateLabel = task.aiState || "idle";
+  if (stateLabel === "scheduled") return formatRelativeTaskTime(task) || "Scheduled";
+  if (stateLabel === "ready") return "Ready";
+  if (stateLabel === "running") return "AI working";
+  if (stateLabel === "review") return "Review result";
+  if (stateLabel === "applied") return "Applied";
+  if (stateLabel === "dismissed") return "Dismissed";
+  if (stateLabel === "failed") return task.aiError || "AI failed";
+  return "AI task";
+}
+
+function getEditorTaskTemplate(templateKey) {
+  return EDITOR_TASK_TEMPLATES.find((template) => template.key === templateKey) || EDITOR_TASK_TEMPLATES[0];
+}
+
+function sortEditorTasks(tasks) {
+  const sorted = [...tasks];
+  if (state.editorTaskSort === "due") {
+    sorted.sort((a, b) => {
+      const aDue = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const bDue = b.dueAt ? new Date(b.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      return aDue - bDue || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+    });
+    return sorted;
+  }
+  if (state.editorTaskSort === "status") {
+    const weight = { "in-progress": 0, todo: 1, done: 2 };
+    sorted.sort((a, b) => {
+      const diff = (weight[a.status] ?? 99) - (weight[b.status] ?? 99);
+      return diff || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+    });
+    return sorted;
+  }
+  if (state.editorTaskSort === "comments") {
+    sorted.sort((a, b) => (b.comments?.length || 0) - (a.comments?.length || 0)
+      || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    return sorted;
+  }
+  sorted.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  return sorted;
+}
+
 export function showAuth() {
   refs.homeView.hidden = true;
+  refs.editorView.hidden = true;
   refs.studioView.hidden = true;
   refs.authView.hidden = false;
 }
@@ -24,16 +286,583 @@ export function showAuth() {
 export function showHome() {
   refs.authView.hidden = true;
   refs.homeView.hidden = false;
+  refs.editorView.hidden = true;
   refs.studioView.hidden = true;
+  if (window.editorClockInterval) {
+    clearInterval(window.editorClockInterval);
+    window.editorClockInterval = null;
+  }
+}
+
+export function showEditorView() {
+  refs.authView.hidden = true;
+  refs.homeView.hidden = false;
+  refs.editorView.hidden = false;
+  refs.studioView.hidden = true;
+  startEditorClock();
+}
+
+function startEditorClock() {
+  const clockEl = document.getElementById("editorDigitalClock");
+  if (!clockEl) return;
+  const update = () => {
+    const now = new Date();
+    clockEl.textContent = now.toLocaleTimeString([], { hour12: false });
+  };
+  update();
+  if (window.editorClockInterval) clearInterval(window.editorClockInterval);
+  window.editorClockInterval = setInterval(update, 1000);
 }
 
 export function showStudio() {
   refs.homeView.hidden = true;
+  refs.editorView.hidden = true;
   refs.studioView.hidden = false;
+  if (window.editorClockInterval) {
+    clearInterval(window.editorClockInterval);
+    window.editorClockInterval = null;
+  }
+}
+
+export function renderEditorView() {
+  const editorId = state.currentEditorId;
+  state.editorTaskFilter = state.editorTaskFilter || "all";
+  state.editorTaskSort = state.editorTaskSort || "latest";
+  const allProjects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  const editorOptions = buildProjectGroups(allProjects.filter((project) => !project.isEditorRoot));
+  const editorLead = allProjects.find((project) => project.editor?.id === editorId && project.isEditorRoot)
+    || allProjects.find((project) => project.editor?.id === editorId)
+    || null;
+
+  if (!editorLead) {
+    state.currentEditorId = null;
+    showHome();
+    renderHome();
+    return;
+  }
+
+  const projects = allProjects.filter((project) => project.editor?.id === editorId && !project.isEditorRoot);
+  const ownerLabel = getMemberDisplayName({ name: editorLead.ownerName, email: editorLead.ownerEmail }, "Editor Owner");
+  const memberEntries = [
+    ownerLabel,
+    ...Object.values(editorLead.collaborators || {}).map((member) => getMemberDisplayName(member))
+  ].filter(Boolean);
+  const uniqueMembers = [...new Set(memberEntries)];
+  const activityItems = (editorLead.activityLog || []).slice(-3).reverse();
+  const allTaskItems = sortEditorTasks(editorLead.editor?.tasks || []);
+  const persistedNotifications = [...(editorLead.editor?.notifications || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const notifications = [...buildEditorDueNotifications(allTaskItems, projects), ...persistedNotifications]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const unreadNotifications = notifications.filter((notification) => !notification.read);
+  const inboxItems = allTaskItems.filter((task) => task.status === "done" || task.aiState === "review" || task.aiState === "failed").slice(0, 6);
+  const assignees = [
+    { id: editorLead.ownerId || "editor_owner", label: ownerLabel },
+    ...Object.entries(editorLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
+    { id: "ai_assist", label: "@AIassist" }
+  ];
+  const sceneOptions = projects.flatMap((project) => (project.lines || [])
+    .filter((line) => line.type === "scene" && line.text.trim())
+    .map((line) => ({
+      projectId: project.id,
+      sceneId: line.id,
+      label: `${project.title} - ${line.text.trim()}`
+    })));
+  const lineOptions = projects.flatMap((project) => (project.lines || [])
+    .filter((line) => line.text.trim() && line.type !== "scene")
+    .map((line, index) => {
+      const owningSceneId = getSceneIdForIndex(index, project);
+      const owningScene = owningSceneId
+        ? project.lines.find((entry) => entry.id === owningSceneId)?.text?.trim() || "Scene"
+        : "General";
+      return {
+        projectId: project.id,
+        lineId: line.id,
+        sceneId: owningSceneId,
+        label: `${project.title} - ${owningScene} - ${formatLineText(line.text, line.type).slice(0, 56)}`
+      };
+    }));
+  const currentUid = auth.currentUser?.uid || "";
+  const myAssignedTasks = allTaskItems.filter((task) => task.assignedTo === currentUid);
+  const dueSoonCount = allTaskItems.filter((task) => ["soon", "today"].includes(getTaskDueState(task))).length;
+  const overdueCount = allTaskItems.filter((task) => getTaskDueState(task) === "overdue").length;
+  const personalInboxItems = buildEditorPersonalInbox(allTaskItems, currentUid);
+  const memberTaskSummary = assignees
+    .filter((assignee) => assignee.id !== "ai_assist")
+    .map((assignee) => {
+      const memberTasks = allTaskItems.filter((task) => task.assignedTo === assignee.id);
+      return {
+        ...assignee,
+        openCount: memberTasks.filter((task) => task.status !== "done").length,
+        doneCount: memberTasks.filter((task) => task.status === "done").length
+      };
+    })
+    .filter((entry) => entry.openCount || entry.doneCount);
+  const projectWorkload = projects.map((project) => {
+    const projectTasks = allTaskItems.filter((task) => task.projectId === project.id);
+    return {
+      id: project.id,
+      title: project.title,
+      openCount: projectTasks.filter((task) => task.status !== "done").length,
+      doneCount: projectTasks.filter((task) => task.status === "done").length,
+      dueSoonCount: projectTasks.filter((task) => task.dueAt && task.status !== "done" && (new Date(task.dueAt).getTime() - Date.now()) <= (48 * 60 * 60 * 1000)).length
+    };
+  }).filter((entry) => entry.openCount || entry.doneCount);
+  const storyMemoryLinks = projects.flatMap((project) => Object.entries(project.storyMemory || {})
+    .filter(([, items]) => Array.isArray(items) && items.length)
+    .flatMap(([bucket, items]) => items.map((item) => ({
+      projectId: project.id,
+      bucket,
+      id: item.id,
+      name: item.name || "Untitled",
+      label: `${project.title} · ${bucket.replace(/^./, (value) => value.toUpperCase())}`
+    }))));
+  const taskSummary = {
+    todo: allTaskItems.filter((task) => task.status === "todo").length,
+    inProgress: allTaskItems.filter((task) => task.status === "in-progress").length,
+    done: allTaskItems.filter((task) => task.status === "done").length
+  };
+  const taskStatusSummary = getTaskStatusCountLabel(allTaskItems);
+  const taskItems = allTaskItems.filter((task) => {
+    if (state.editorTaskFilter === "mine") {
+      return task.assignedTo === currentUid;
+    }
+    if (state.editorTaskFilter === "ai") {
+      return task.assignedTo === "ai_assist";
+    }
+    if (state.editorTaskFilter === "due-soon") {
+      return ["soon", "today"].includes(getTaskDueState(task));
+    }
+    if (state.editorTaskFilter === "overdue") {
+      return getTaskDueState(task) === "overdue";
+    }
+    if (state.editorTaskFilter === "open") {
+      return task.status !== "done";
+    }
+    if (state.editorTaskFilter === "done") {
+      return task.status === "done";
+    }
+    return true;
+  });
+
+  if (refs.editorViewTitle) refs.editorViewTitle.textContent = editorLead.editor?.name || editorLead.title || "Editor";
+  if (refs.editorViewSubtitle) refs.editorViewSubtitle.textContent = `${projects.length} project${projects.length === 1 ? "" : "s"}, ${allTaskItems.length} task${allTaskItems.length === 1 ? "" : "s"}, and shared activity in one calm view.`;
+
+  refs.editorDashboard.innerHTML = `
+    <div class="editor-home-shell">
+      <section class="editor-home-hero-card">
+        <div class="editor-home-hero-copy">
+          <h3>${escapeHtml(editorLead.editor?.name || editorLead.title || "Editor")}</h3>
+          <p>${escapeHtml(editorLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
+          ${editorOptions.length > 1 ? `
+            <div class="editor-switch-row">
+              <span>Editor</span>
+              <select class="comment-filter-select editor-switch-select" data-editor-switch aria-label="Switch Editor">
+                ${editorOptions.map((group) => `<option value="${escapeHtml(group.editorId)}" ${group.editorId === editorId ? "selected" : ""}>${escapeHtml(group.editorName)}</option>`).join("")}
+              </select>
+            </div>
+          ` : ""}
+        </div>
+        <div class="editor-home-hero-metrics">
+          <div class="editor-home-metric"><span>Projects</span><strong>${projects.length}</strong></div>
+          <div class="editor-home-metric"><span>Members</span><strong>${uniqueMembers.length}</strong></div>
+          <div class="editor-home-metric"><span>Tasks</span><strong>${allTaskItems.length}</strong></div>
+          <div class="editor-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(editorLead.lastActivityAt || editorLead.updatedAt))}</strong></div>
+        </div>
+      </section>
+      <div class="editor-home-grid">
+        <section class="editor-home-panel">
+          <div class="editor-home-panel-head">
+            <h4>Members</h4>
+            <button class="ghost-button btn-sm" type="button" data-editor-home-action="open-popup">Open Editor</button>
+          </div>
+          <div class="editor-home-members">
+            ${[
+              buildProfileAvatarMarkup({ uid: editorLead.ownerId || "", name: ownerLabel, photoURL: editorLead.ownerPhotoURL || "", className: "editor-home-member-pill" }),
+              ...Object.entries(editorLead.collaborators || {}).map(([uid, person]) => buildProfileAvatarMarkup({
+                uid,
+                name: getMemberDisplayName(person),
+                photoURL: person.photoURL || "",
+                className: "editor-home-member-pill"
+              }))
+            ].join("")}
+          </div>
+        </section>
+        <section class="editor-home-panel">
+          <div class="editor-home-panel-head">
+            <h4>Recent activity</h4>
+          </div>
+          <div class="editor-home-activity editor-home-activity-timeline">
+            ${activityItems.length ? activityItems.map((item) => `
+              <article class="editor-home-activity-item">
+                <strong>${escapeHtml(item.label || item.message || "Editor updated")}</strong>
+                <span>${escapeHtml(item.actor || "Editor")}</span>
+                <small>${escapeHtml(formatDateTime(item.at || item.timestamp || editorLead.updatedAt))}</small>
+              </article>
+            `).join("") : '<p class="editor-home-empty">No activity yet. The next change here will start the trail.</p>'}
+          </div>
+        </section>
+        <section class="editor-home-panel">
+          <div class="editor-home-panel-head">
+            <h4>Team progress</h4>
+            <span class="editor-home-panel-meta">${memberTaskSummary.length} active</span>
+          </div>
+          <div class="editor-summary-list">
+            ${memberTaskSummary.map((entry) => `
+              <article class="editor-summary-item">
+                <strong>${escapeHtml(entry.label)}</strong>
+                <span>Open ${entry.openCount}</span>
+                <span>Done ${entry.doneCount}</span>
+              </article>
+            `).join("") || '<p class="editor-home-empty">Assign tasks to teammates to see progress here.</p>'}
+          </div>
+        </section>
+        <section class="editor-home-panel">
+          <div class="editor-home-panel-head">
+            <h4>My Inbox</h4>
+            <span class="editor-home-panel-meta">${personalInboxItems.length} active</span>
+          </div>
+          <div class="editor-inbox-list">
+            ${personalInboxItems.map((item) => `
+              <article class="editor-inbox-item editor-inbox-item-${escapeHtml(item.type)}">
+                <div class="editor-inbox-copy">
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <span>${escapeHtml(item.message)}</span>
+                  <small>${escapeHtml(item.task.assignedLabel || "Editor task")}</small>
+                </div>
+                <div class="editor-notification-actions">
+                  <button class="ghost-button btn-sm" type="button" data-editor-home-action="${item.type === "mention" ? "comment-task" : "open-task-project"}" data-task-id="${escapeHtml(item.task.id)}" data-task-project-id="${escapeHtml(item.task.projectId || "")}">${item.type === "mention" ? "Open Thread" : item.task.lineId ? "Open Line" : item.task.sceneId ? "Open Scene" : "Open Project"}</button>
+                </div>
+              </article>
+            `).join("") || '<p class="editor-home-empty">Assignments, mentions, and review items for you will collect here.</p>'}
+          </div>
+        </section>
+        <section class="editor-home-panel">
+          <div class="editor-home-panel-head">
+            <h4>Notifications</h4>
+            <button class="ghost-button btn-sm" type="button" data-editor-home-action="mark-all-notifications-read">Mark all read</button>
+          </div>
+          <div class="editor-task-summary">
+            <span class="editor-task-summary-chip">Unread ${unreadNotifications.length}</span>
+            <span class="editor-task-summary-chip">Total ${notifications.length}</span>
+          </div>
+          <div class="editor-notification-list">
+            ${notifications.slice(0, 6).map((notification) => `
+              <article class="editor-notification-item${notification.read ? "" : " is-unread"}${notification.category === "overdue" || notification.category === "due-soon" ? " editor-notification-item-due" : ""}">
+                <div class="editor-notification-copy">
+                  <strong>${escapeHtml(notification.title)}</strong>
+                  <span>${escapeHtml(notification.message || notification.actor || "Editor update")}</span>
+                  <small>${escapeHtml(formatDateTime(notification.createdAt))}</small>
+                </div>
+                <div class="editor-notification-actions">
+                  ${notification.projectId ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="open-notification" data-notification-id="${escapeHtml(notification.id)}" data-task-id="${escapeHtml(notification.taskId || "")}" data-task-project-id="${escapeHtml(notification.projectId)}">Open</button>` : ""}
+                  ${!notification.synthetic && !notification.read ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="mark-notification-read" data-notification-id="${escapeHtml(notification.id)}">Read</button>` : ""}
+                </div>
+              </article>
+            `).join("") || '<p class="editor-home-empty">No notifications yet.</p>'}
+          </div>
+        </section>
+        <section class="editor-home-panel">
+          <div class="editor-home-panel-head">
+            <h4>Completed & Review</h4>
+            <span class="editor-home-panel-meta">${inboxItems.length} item${inboxItems.length === 1 ? "" : "s"}</span>
+          </div>
+          <div class="editor-inbox-list">
+            ${inboxItems.map((task) => `
+              <article class="editor-inbox-item">
+                <div class="editor-inbox-copy">
+                  <strong>${escapeHtml(task.title)}</strong>
+                  <span>${escapeHtml(task.aiState === "review" ? "Waiting for AI review" : task.aiState === "failed" ? "Needs retry" : "Completed task")}</span>
+                  <small>${escapeHtml(task.assignedLabel || "Editor")}</small>
+                </div>
+                <div class="editor-notification-actions">
+                  ${task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
+                  ${task.aiState === "failed" ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">Retry</button>` : ""}
+                  ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
+                </div>
+              </article>
+            `).join("") || '<p class="editor-home-empty">Completed work and AI review items will collect here.</p>'}
+          </div>
+        </section>
+        <section class="editor-home-panel editor-home-panel-wide">
+          <div class="editor-home-panel-head">
+            <h4>Tasks & Delegation</h4>
+          </div>
+          <div class="editor-task-filters" role="tablist" aria-label="Editor tasks filter">
+            <button class="editor-filter-chip ${state.editorTaskFilter === "all" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
+            <button class="editor-filter-chip ${state.editorTaskFilter === "mine" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="mine">My Tasks</button>
+            <button class="editor-filter-chip ${state.editorTaskFilter === "ai" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
+            <button class="editor-filter-chip ${state.editorTaskFilter === "due-soon" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="due-soon">Due Soon</button>
+            <button class="editor-filter-chip ${state.editorTaskFilter === "overdue" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="overdue">Overdue</button>
+            <button class="editor-filter-chip ${state.editorTaskFilter === "open" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="open">Open</button>
+            <button class="editor-filter-chip ${state.editorTaskFilter === "done" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="done">Done</button>
+            <select class="comment-filter-select editor-task-sort-select" data-editor-home-action="set-task-sort" aria-label="Sort tasks">
+              <option value="latest" ${state.editorTaskSort === "latest" ? "selected" : ""}>Latest</option>
+              <option value="due" ${state.editorTaskSort === "due" ? "selected" : ""}>Due Date</option>
+              <option value="status" ${state.editorTaskSort === "status" ? "selected" : ""}>By Status</option>
+              <option value="comments" ${state.editorTaskSort === "comments" ? "selected" : ""}>Most Discussed</option>
+            </select>
+          </div>
+          <div class="editor-task-summary">
+            <span class="editor-task-summary-chip">To Do ${taskSummary.todo}</span>
+            <span class="editor-task-summary-chip">In Progress ${taskSummary.inProgress}</span>
+            <span class="editor-task-summary-chip">Done ${taskSummary.done}</span>
+            <span class="editor-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
+            <span class="editor-task-summary-chip">Assigned to you ${myAssignedTasks.length}</span>
+            <span class="editor-task-summary-chip">Due soon ${dueSoonCount}</span>
+            <span class="editor-task-summary-chip">Overdue ${overdueCount}</span>
+          </div>
+          <div class="editor-task-form">
+            <label class="editor-task-field">
+              <span>Template</span>
+              <select class="comment-filter-select" data-editor-task-template>
+                ${EDITOR_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="editor-task-field editor-task-field-wide">
+              <span>Task</span>
+              <input class="modal-input" type="text" placeholder="Task title" data-editor-task-title>
+            </label>
+            <label class="editor-task-field">
+              <span>Project</span>
+              <select class="comment-filter-select" data-editor-task-project>
+                ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="editor-task-field">
+              <span>Scene</span>
+              <select class="comment-filter-select" data-editor-task-scene>
+                <option value="">General task</option>
+                ${sceneOptions.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" data-scene-project-id="${escapeHtml(scene.projectId)}">${escapeHtml(scene.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="editor-task-field">
+              <span>Line</span>
+              <select class="comment-filter-select" data-editor-task-line>
+                <option value="">Scene level</option>
+                ${lineOptions.map((line) => `<option value="${escapeHtml(line.lineId)}" data-line-project-id="${escapeHtml(line.projectId)}" data-line-scene-id="${escapeHtml(line.sceneId || "")}">${escapeHtml(line.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="editor-task-field">
+              <span>Assign to</span>
+              <select class="comment-filter-select" data-editor-task-assignee>
+                ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="editor-task-field">
+              <span>Status</span>
+              <select class="comment-filter-select" data-editor-task-status-new>
+                <option value="todo">To Do</option>
+                <option value="in-progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+            </label>
+            <label class="editor-task-field">
+              <span>Priority</span>
+              <select class="comment-filter-select" data-editor-task-priority>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+            <label class="editor-task-field">
+              <span>Due</span>
+              <input class="modal-input" type="datetime-local" data-editor-task-due>
+            </label>
+            <label class="editor-task-field">
+              <span>AI start</span>
+              <select class="comment-filter-select" data-editor-task-ai-start>
+                <option value="now">Run now</option>
+                <option value="in-3m">In 3 mins</option>
+                <option value="in-10m">In 10 mins</option>
+                <option value="manual">Custom time</option>
+              </select>
+            </label>
+            <label class="editor-task-field">
+              <span>Custom time</span>
+              <input class="modal-input" type="datetime-local" data-editor-task-ai-start-manual>
+            </label>
+            <label class="editor-task-field">
+              <span>Reference</span>
+              <input class="modal-input" type="text" placeholder="Scene / block reference" data-editor-task-reference>
+            </label>
+            <label class="editor-task-field">
+              <span>Story memory</span>
+              <select class="comment-filter-select" data-editor-task-memory>
+                <option value="">None</option>
+                ${storyMemoryLinks.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)} · ${escapeHtml(item.name)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="editor-task-field editor-task-field-wide">
+              <span>Handoff cue</span>
+              <input class="modal-input" type="text" placeholder="@mention note or handoff cue" data-editor-task-handoff>
+            </label>
+            <textarea class="collab-textarea editor-task-description" placeholder="Describe what needs to happen..." data-editor-task-description></textarea>
+            <p class="editor-task-template-hint" data-editor-task-template-hint>${escapeHtml(getEditorTaskTemplate("custom").aiInstruction)}</p>
+            <button class="primary-button btn-sm" type="button" data-editor-home-action="add-editor-task">Create Task</button>
+          </div>
+          <div class="editor-home-subgrid">
+            <section class="editor-home-panel editor-home-panel-soft">
+              <div class="editor-home-panel-head">
+                <h4>Project workload</h4>
+                <span class="editor-home-panel-meta">${projectWorkload.length} tracked</span>
+              </div>
+              <div class="editor-summary-list">
+                ${projectWorkload.map((entry) => `
+                  <article class="editor-summary-item">
+                    <strong>${escapeHtml(entry.title)}</strong>
+                    <span>Open ${entry.openCount}</span>
+                    <span>Done ${entry.doneCount}</span>
+                    <span>Due soon ${entry.dueSoonCount}</span>
+                  </article>
+                `).join("") || '<p class="editor-home-empty">Create linked tasks to see workload by project.</p>'}
+              </div>
+            </section>
+            <section class="editor-home-panel editor-home-panel-soft">
+              <div class="editor-home-panel-head">
+                <h4>Story links</h4>
+                <span class="editor-home-panel-meta">${storyMemoryLinks.length} memory links</span>
+              </div>
+              <div class="editor-summary-list">
+                ${storyMemoryLinks.slice(0, 6).map((item) => `
+                  <article class="editor-summary-item editor-summary-item-action">
+                    <strong>${escapeHtml(item.name)}</strong>
+                    <span>${escapeHtml(item.label)}</span>
+                    <button class="ghost-button btn-sm" type="button" data-editor-home-action="open-task-memory" data-memory-id="${escapeHtml(item.id)}" data-memory-project-id="${escapeHtml(item.projectId)}">Open Memory</button>
+                  </article>
+                `).join("") || '<p class="editor-home-empty">Add story memory to scripts and link tasks back to those elements.</p>'}
+              </div>
+            </section>
+          </div>
+          <div class="editor-task-list">
+            ${taskItems.length ? taskItems.map((task) => `
+                <article class="editor-task-card ${task.assignedTo === currentUid ? "is-owned-by-you" : ""} ${task.assigneeType === "system" ? "is-ai-task" : ""}">
+                  <div class="editor-task-head">
+                    <div>
+                      <strong>${escapeHtml(task.title)}</strong>
+                      <span>${escapeHtml(getTaskTargetLabel(task))}</span>
+                    </div>
+                    <select class="comment-filter-select editor-task-status-select" data-editor-task-status="${escapeHtml(task.id)}">
+                      <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
+                      <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+                      <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
+                    </select>
+                  </div>
+                  ${task.description ? `<p class="editor-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  ${buildEditorTaskAssigneeMarkup(task, currentUid)}
+                  <div class="editor-task-chip-row">
+                    <span class="editor-task-tag">${escapeHtml(getEditorTaskTemplate(task.templateKey).label)}</span>
+                    <span class="editor-task-tag editor-task-tag-priority editor-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
+                    ${task.assignedTo === currentUid ? '<span class="editor-task-tag editor-task-tag-focus">Assigned to you</span>' : ""}
+                    ${getTaskDueState(task) ? `<span class="editor-task-tag editor-task-tag-${escapeHtml(getTaskDueState(task))}">${escapeHtml(getTaskDueLabel(task))}</span>` : ""}
+                    <span class="editor-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
+                    <span class="editor-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
+                    ${task.assigneeType === "system" ? `<span class="editor-task-tag editor-task-tag-ai">${escapeHtml(getAiTaskStateLabel(task))}</span>` : ""}
+                    ${task.projectId ? `<span class="editor-task-tag">${escapeHtml(projects.find((project) => project.id === task.projectId)?.title || "Linked Project")}</span>` : ""}
+                    ${task.lineLabel ? `<span class="editor-task-tag">${escapeHtml(task.lineLabel)}</span>` : ""}
+                    ${task.dueAt && !getTaskDueState(task) ? `<span class="editor-task-tag">${escapeHtml(formatTaskDueLabel(task))}</span>` : ""}
+                    ${task.memoryLinkName ? `<span class="editor-task-tag">${escapeHtml(task.memoryLinkName)}</span>` : ""}
+                    ${task.comments?.length ? `<span class="editor-task-tag">${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}</span>` : ""}
+                  </div>
+                  ${task.aiResultText ? `<p class="editor-task-comment-preview">AI suggestion ready. Review before applying it to the script.</p>` : ""}
+                  ${task.assigneeType === "system" && task.aiError ? `<p class="editor-task-comment-preview">Last AI run: ${escapeHtml(task.aiError)}</p>` : ""}
+                  ${task.handoffNote ? `<p class="editor-task-comment-preview">Handoff: ${escapeHtml(task.handoffNote)}</p>` : ""}
+                  ${task.comments?.length ? `<p class="editor-task-comment-preview">Latest comment by ${escapeHtml(task.comments[task.comments.length - 1].author || "Editor member")}: ${escapeHtml(task.comments[task.comments.length - 1].text)}</p>` : ""}
+                  <div class="editor-task-meta">
+                    <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
+                    <div class="editor-task-actions">
+                      ${task.assigneeType === "system" && ["ready", "scheduled", "failed"].includes(task.aiState) ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">${task.aiState === "failed" ? "Retry AI" : "Run AI"}</button>` : ""}
+                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
+                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="apply-ai-task" data-task-id="${escapeHtml(task.id)}">Apply</button>` : ""}
+                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="dismiss-ai-task" data-task-id="${escapeHtml(task.id)}">Dismiss</button>` : ""}
+                      <button class="ghost-button btn-sm" type="button" data-editor-home-action="edit-task" data-task-id="${escapeHtml(task.id)}">Edit</button>
+                      <button class="ghost-button btn-sm" type="button" data-editor-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
+                      ${task.memoryLinkId ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="open-task-memory" data-task-id="${escapeHtml(task.id)}" data-memory-id="${escapeHtml(task.memoryLinkId)}" data-memory-project-id="${escapeHtml(task.memoryProjectId || task.projectId)}">Open Memory</button>` : ""}
+                      <button class="ghost-button btn-sm" type="button" data-editor-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
+                      ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.lineId ? "Open Line" : task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
+                    </div>
+                  </div>
+                </article>
+              `).join("") : '<p class="editor-home-empty">No matching tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  refs.editorProjectGrid.innerHTML = "";
+  const template = document.querySelector("#projectCardTemplate");
+  if (!projects.length) {
+    refs.editorProjectGrid.innerHTML = '<article class="editor-projects-empty">No projects yet. Create the first project in this editor to start writing.</article>';
+  } else {
+    projects.forEach((project) => {
+      const node = template.content.firstElementChild.cloneNode(true);
+      const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+      const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+      node.querySelector(".project-card-title").textContent = project.title;
+      node.querySelector(".project-script-id").textContent = project.scriptId;
+      node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
+      node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
+      node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
+      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })}   ${collaborationLabel}`;
+      node.dataset.projectId = project.id;
+      node.querySelector(".project-card-open").dataset.projectId = project.id;
+      refs.editorProjectGrid.appendChild(node);
+    });
+  }
+
+  applyTranslations();
+}
+
+export function showNewCreationFlow() {
+  return new Promise((resolve) => {
+    const container = document.createElement("div");
+    container.className = "creation-flow";
+
+    function finish(result = null) {
+      modalRefs.dialog?.close();
+      resolve(result);
+    }
+
+    container.innerHTML = `
+      <div class="creation-flow-header">
+        <span class="creation-flow-step">Start Writing</span>
+        <h4>What do you want to create?</h4>
+        <p>Choose a writing format. We'll place it in your editor automatically.</p>
+      </div>
+      <div class="creation-flow-grid">
+        <button class="creation-option-card is-primary" type="button" data-create-work-type="film-script">
+          <span class="creation-option-icon">FILM</span>
+          <strong>Film Script</strong>
+          <small>Scene-driven writing with screenplay tools, collaboration, and story memory.</small>
+        </button>
+        <button class="creation-option-card is-disabled" type="button" disabled>
+          <span class="creation-option-icon">TEXT</span>
+          <strong>Prose / Poetry</strong>
+          <small>Coming soon. This path will open after the film workflow is fully polished.</small>
+          <span class="creation-option-badge">Soon</span>
+        </button>
+      </div>
+    `;
+
+    container.querySelector('[data-create-work-type="film-script"]')?.addEventListener("click", () => {
+      finish({
+        workType: "film-script"
+      });
+    });
+
+
+    showModal({
+      title: "Create New",
+      message: container,
+      showConfirm: false,
+      showCancel: true,
+      cancelLabel: "Close",
+      contentClass: "modal-content-create-new"
+    }).then(() => resolve(null));
+  });
 }
 
 export function renderHome() {
-  // Populate user info in home topbar
   try {
     const session = JSON.parse(localStorage.getItem('eyawriter_session') || 'null');
     if (session?.loggedIn && refs.homeUserName && refs.homeUserEmail) {
@@ -44,21 +873,266 @@ export function renderHome() {
 
   refs.projectGrid.innerHTML = "";
   const template = document.querySelector("#projectCardTemplate");
-  const projects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  state.homeProjectSort = state.homeProjectSort || "latest";
+  state.homeProjectFormat = state.homeProjectFormat || "all";
+  state.homeEditorFilter = state.homeEditorFilter || "all";
+  let projects = sortProjectsForHome(state.projects);
+  let editorLead = null;
+  const currentUid = auth.currentUser?.uid || "";
+  const editorOptions = buildProjectGroups(state.projects.filter((project) => !project.isEditorRoot));
+  if (state.homeEditorFilter !== "all" && !editorOptions.some((group) => group.editorId === state.homeEditorFilter)) {
+    state.homeEditorFilter = "all";
+  }
+
+  if (state.currentEditorId) {
+    editorLead = projects.find((project) => project.editor?.id === state.currentEditorId && project.isEditorRoot)
+      || projects.find((project) => project.editor?.id === state.currentEditorId)
+      || null;
+    projects = projects.filter((project) => project.editor?.id === state.currentEditorId && !project.isEditorRoot);
+    if (!editorLead) {
+      state.currentEditorId = null;
+      if (refs.homeEditorDashboard) refs.homeEditorDashboard.hidden = true;
+    }
+  } else {
+    projects = projects.filter((project) => !project.isEditorRoot);
+    if (state.homeProjectFilter === "mine") {
+      projects = projects.filter((project) => {
+        const ownerId = project.ownerId || "";
+        return !project.isShared || (ownerId && ownerId === currentUid);
+      });
+    } else if (state.homeProjectFilter === "shared") {
+      projects = projects.filter((project) => project.isShared || Object.keys(project.collaborators || {}).length > 0);
+    }
+    if (state.homeEditorFilter !== "all") {
+      projects = projects.filter((project) => (project.editor?.id || project.id) === state.homeEditorFilter);
+    }
+    if (state.homeProjectFormat !== "all") {
+      projects = projects.filter((project) => getProjectFormatValue(project) === state.homeProjectFormat);
+    }
+  }
+
+  if (state.currentEditorId && editorLead) {
+    const ownerLabel = getMemberDisplayName({ name: editorLead.ownerName, email: editorLead.ownerEmail }, "Editor Owner");
+    const memberEntries = [
+      ownerLabel,
+      ...Object.values(editorLead.collaborators || {}).map((member) => getMemberDisplayName(member))
+    ].filter(Boolean);
+    const uniqueMembers = [...new Set(memberEntries)];
+    const activityItems = (editorLead.activityLog || []).slice(-3).reverse();
+    const taskItems = [...(editorLead.editor?.tasks || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    const assignees = [
+      { id: editorLead.ownerId || "editor_owner", label: ownerLabel },
+      ...Object.entries(editorLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
+      { id: "ai_assist", label: "@AIassist" }
+    ];
+
+    refs.homeHero.hidden = true;
+    refs.editorBackBtn.hidden = false;
+    refs.homeProjectsTitle.textContent = editorLead.editor?.name || editorLead.title || "Editor";
+    refs.homeProjectsSubtitle.textContent = "A focused studio view for projects, members, tasks, and recent movement inside this editor.";
+    if (refs.homeEditorDashboard) {
+      refs.homeEditorDashboard.hidden = false;
+      refs.homeEditorDashboard.innerHTML = `
+      <div class="editor-home-shell">
+        <section class="editor-home-hero-card">
+          <div class="editor-home-hero-copy">
+          <h3>${escapeHtml(editorLead.editor?.name || editorLead.title || "Editor")}</h3>
+          <p>${escapeHtml(editorLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
+        </div>
+          <div class="editor-home-hero-metrics">
+            <div class="editor-home-metric">
+              <span>Projects</span>
+              <strong>${projects.length}</strong>
+            </div>
+            <div class="editor-home-metric">
+              <span>Members</span>
+              <strong>${uniqueMembers.length}</strong>
+            </div>
+            <div class="editor-home-metric">
+              <span>Tasks</span>
+              <strong>${taskItems.length}</strong>
+            </div>
+            <div class="editor-home-metric">
+              <span>Last activity</span>
+              <strong>${escapeHtml(formatDateTime(editorLead.lastActivityAt || editorLead.updatedAt))}</strong>
+            </div>
+          </div>
+        </section>
+        <div class="editor-home-grid">
+          <section class="editor-home-panel">
+            <div class="editor-home-panel-head">
+              <h4>Members</h4>
+              <button class="ghost-button btn-sm" type="button" data-editor-home-action="open-popup">Open Editor</button>
+            </div>
+            <div class="editor-home-members">
+              ${[
+                buildProfileTriggerMarkup({ uid: editorLead.ownerId || "", name: ownerLabel, photoURL: editorLead.ownerPhotoURL || "", className: "editor-home-member-pill" }),
+                ...Object.entries(editorLead.collaborators || {}).map(([uid, person]) => buildProfileTriggerMarkup({
+                  uid,
+                  name: getMemberDisplayName(person),
+                  photoURL: person.photoURL || "",
+                  className: "editor-home-member-pill"
+                }))
+              ].join("")}
+            </div>
+          </section>
+          <section class="editor-home-panel">
+            <div class="editor-home-panel-head">
+              <h4>Recent activity</h4>
+              <button class="primary-button btn-sm" type="button" data-editor-home-action="new-project">New Project</button>
+            </div>
+            <div class="editor-home-activity">
+              ${activityItems.length ? activityItems.map((item) => `
+                <article class="editor-home-activity-item">
+                  <strong>${escapeHtml(item.label || item.message || "Editor updated")}</strong>
+                  <span>${escapeHtml(formatDateTime(item.at || item.timestamp || editorLead.updatedAt))}</span>
+                </article>
+              `).join("") : '<p class="editor-home-empty">No activity yet. The next change here will start the trail.</p>'}
+            </div>
+          </section>
+          <section class="editor-home-panel editor-home-panel-wide">
+            <div class="editor-home-panel-head">
+              <h4>Tasks & Delegation</h4>
+              <button class="ghost-button btn-sm" type="button" data-editor-home-action="new-project">Add Script</button>
+            </div>
+            <div class="editor-task-form">
+              <input class="modal-input" type="text" placeholder="Task title" data-editor-task-title>
+              <select class="comment-filter-select" data-editor-task-project>
+                ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
+              </select>
+              <select class="comment-filter-select" data-editor-task-assignee>
+                ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+              </select>
+              <select class="comment-filter-select" data-editor-task-status-new>
+                <option value="todo">To Do</option>
+                <option value="in-progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+              <input class="modal-input" type="text" placeholder="Scene / block reference (optional)" data-editor-task-reference>
+              <textarea class="collab-textarea editor-task-description" placeholder="Describe what needs to happen..." data-editor-task-description></textarea>
+              <button class="primary-button btn-sm" type="button" data-editor-home-action="add-editor-task">Create Task</button>
+            </div>
+            <div class="editor-task-list">
+              ${taskItems.length ? taskItems.map((task) => `
+                <article class="editor-task-card ${task.assignedTo === currentUid ? "is-owned-by-you" : ""} ${task.assigneeType === "system" ? "is-ai-task" : ""}">
+                  <div class="editor-task-head">
+                    <div>
+                      <strong>${escapeHtml(task.title)}</strong>
+                      <span>${escapeHtml(task.assignedLabel || "Unassigned")} · ${escapeHtml(task.reference || "General editor task")}</span>
+                    </div>
+                    <select class="comment-filter-select editor-task-status-select" data-editor-task-status="${escapeHtml(task.id)}">
+                      <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
+                      <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+                      <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
+                    </select>
+                  </div>
+                  ${task.description ? `<p class="editor-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  ${buildEditorTaskAssigneeMarkup(task, currentUid)}
+                  <div class="editor-task-meta">
+                    <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
+                    ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="open-task-project" data-task-project-id="${escapeHtml(task.projectId)}">Open Project</button>` : ""}
+                  </div>
+                </article>
+              `).join("") : '<p class="editor-home-empty">No tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
+            </div>
+          </section>
+        </div>
+      </div>
+    `;
+    }
+  } else {
+    refs.homeHero.hidden = false;
+    refs.editorBackBtn.hidden = true;
+    refs.homeProjectsTitle.textContent = "Projects";
+    refs.homeProjectsSubtitle.innerHTML = `
+      <div class="project-toolbar">
+        <div class="project-toolbar-main">
+          <div class="project-filter-row project-filter-row-inline" role="tablist" aria-label="Project filters">
+            <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
+            <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
+            <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+          </div>
+          <div class="project-toolbar-selects">
+            ${editorOptions.length > 1 ? `
+              <select class="comment-filter-select project-editor-select" data-home-editor-filter aria-label="Editor filter">
+                <option value="all">All Editors</option>
+                ${editorOptions.map((group) => `<option value="${escapeHtml(group.editorId)}" ${state.homeEditorFilter === group.editorId ? "selected" : ""}>${escapeHtml(group.editorName)}</option>`).join("")}
+              </select>
+            ` : ""}
+            <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
+              <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>Format</option>
+              <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film</option>
+              <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose</option>
+            </select>
+            <select class="comment-filter-select project-format-select project-sort-select" data-home-project-sort aria-label="Project sort">
+              <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
+              <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
+              <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Scenes</option>
+            </select>
+          </div>
+        </div>
+        <span class="project-toolbar-note">${editorOptions.length > 1 ? `${editorOptions.length} Editors connected` : "Your projects stay tied to one Editor context."}</span>
+      </div>`;
+    if (refs.homeEditorDashboard) {
+      refs.homeEditorDashboard.hidden = false;
+      refs.homeEditorDashboard.innerHTML = "";
+    }
+  }
+
+  if (!state.currentEditorId) {
+    const appendProjectCard = (project) => {
+      const node = template.content.firstElementChild.cloneNode(true);
+      const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+      const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+      const editorLabel = project.editor?.name || "Personal Editor";
+      const collaborationLabel = getProjectCollaborationLabel(project);
+
+      node.querySelector(".project-card-title").textContent = project.title;
+      node.querySelector(".project-script-id").textContent = project.scriptId;
+      node.querySelector(".project-card-context-action").dataset.openEditorId = project.editor?.id || project.id;
+      node.querySelector(".project-card-context").textContent = editorLabel;
+      node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
+      node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
+      node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
+      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })}   ${collaborationLabel}`;
+      node.dataset.projectId = project.id;
+      node.querySelector(".project-card-open").dataset.projectId = project.id;
+      return node;
+    };
+
+    if (!projects.length) {
+      refs.projectGrid.innerHTML = `
+        <article class="project-library-empty">
+          <strong>No projects match this view yet.</strong>
+          <p>Create a new film script or switch filters to bring more work into view.</p>
+        </article>
+      `;
+    } else {
+      projects.forEach((project) => refs.projectGrid.appendChild(appendProjectCard(project)));
+    }
+
+    renderRecentProjectMenus();
+    applyTranslations();
+    return;
+  }
 
   projects.forEach((project) => {
     const node = template.content.firstElementChild.cloneNode(true);
-    const openButton = node.querySelector(".project-card-open");
-    const deleteButton = node.querySelector(".project-delete");
     const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
     const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+    const editorLabel = project.editor?.name || "Personal Editor";
+    const collaborationLabel = project.isShared || Object.keys(project.collaborators || {}).length
+      ? "Shared"
+      : "Private";
 
     node.querySelector(".project-card-title").textContent = project.title;
     node.querySelector(".project-script-id").textContent = project.scriptId;
+    node.querySelector(".project-card-context-action").dataset.openEditorId = project.editor?.id || project.id;
+    node.querySelector(".project-card-context").textContent = editorLabel;
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
     node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-    node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
+    node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })}   ${collaborationLabel}`;
 
     // Note: Event listeners will be bound in events.js, but we need the IDs here
     node.dataset.projectId = project.id;
@@ -78,6 +1152,7 @@ export function renderRecentProjectMenus() {
   }
 
   const projects = [...state.projects]
+    .filter((project) => !project.isEditorRoot)
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
     .slice(0, 5);
 
@@ -93,6 +1168,23 @@ export function renderRecentProjectMenus() {
       container.appendChild(button);
     });
   });
+}
+
+export function renderStudioProjectContext() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const editorLabel = project.editor?.name || "Personal Editor";
+  const collaborationLabel = project.isShared || Object.keys(project.collaborators || {}).length
+    ? "Shared"
+    : "Private";
+  const lastEdited = project.lastEditorName || project.ownerName || project.ownerEmail || project.author || "You";
+
+  if (refs.studioProjectTitle) {
+    refs.studioProjectTitle.textContent = project.title || "Untitled Project";
+  }
+  if (refs.studioProjectMeta) {
+    refs.studioProjectMeta.textContent = `${editorLabel} · ${project.scriptId || "Draft"} · ${collaborationLabel} · Last edited by ${lastEdited}`;
+  }
 }
 
 export function renderSceneList() {
@@ -316,7 +1408,7 @@ function getLeftPaneBlockLabel(key) {
   const meta = getLeftPaneBlockMeta(key);
   const translationKeys = {
     current: "pane.currentScript",
-    workspace: "Team Workspace",
+    editor: "Team Editor",
     tools: "pane.projectTools",
     scenes: "pane.scenes",
     characters: "pane.characters",
@@ -335,7 +1427,7 @@ function getLeftPaneBlockLabel(key) {
 
 function getCustomizerGroupLabel(key) {
   if (key === "current") return "Core";
-  if (["workspace", "comments"].includes(key)) return "Workspace";
+  if (["editor", "comments"].includes(key)) return "Editor";
   if (["notepad"].includes(key)) return "Tools";
   if (["scenes", "characters"].includes(key)) return "Writing";
   if (["ai-assistant", "story-memory", "smart-proofread"].includes(key)) return "AI";
@@ -530,12 +1622,18 @@ export function updateMenuStateButtons() {
 }
 
 export function applyViewState() {
-  document.body.classList.remove("show-ruler");
-  document.body.classList.remove("outline-hidden");
-  document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
-  refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
-  updateMenuStateButtons();
-}
+    document.body.classList.remove("show-ruler");
+    document.body.classList.remove("outline-hidden");
+    document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
+    document.body.classList.toggle("focus-mode-enabled", Boolean(state.viewOptions.focusMode));
+    refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+    if (refs.quickDisplayBg) refs.quickDisplayBg.checked = Boolean(state.backgroundAnimation);
+    if (refs.quickDisplayActiveBlock) refs.quickDisplayActiveBlock.checked = !refs.leftPane?.classList.contains("is-hidden");
+    if (refs.quickDisplayPreview) refs.quickDisplayPreview.checked = !refs.rightPane?.classList.contains("is-hidden");
+    if (refs.quickDisplayFullscreen) refs.quickDisplayFullscreen.checked = Boolean(document.fullscreenElement);
+    if (refs.quickDisplayFocusMode) refs.quickDisplayFocusMode.checked = Boolean(state.viewOptions.focusMode);
+    updateMenuStateButtons();
+  }
 
 export function setTheme(theme) {
   state.theme = theme === "rose" ? "cedar" : theme;
@@ -643,7 +1741,7 @@ export async function showCustomizeActiveBlocksModal() {
   const container = document.createElement("div");
   container.className = "active-block-config-modal";
   container.innerHTML = `
-    <p class="modal-copy">Choose what appears in the Active Block column and reorder it for a clearer workspace.</p>
+    <p class="modal-copy">Choose what appears in the Active Block column and reorder it for a clearer editor.</p>
     <div class="active-block-config-body">${buildCustomizerRowsMarkup()}</div>
   `;
 
@@ -1177,138 +2275,159 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
   await showModal({ title: "Characters", message: container, showConfirm: false, cancelLabel: "Close" });
 }
 
-export async function showWorkspacePopup() {
+export async function showEditorPopup() {
   const project = getCurrentProject();
   if (!project) {
     return;
   }
 
-  const ownerLabel = project.ownerName || project.ownerEmail || project.author || "Workspace owner";
+  const ownerLabel = getMemberDisplayName({ name: project.ownerName, email: project.ownerEmail }, "Editor owner");
   const collaborators = Object.entries(project.collaborators || {});
-  const activeUsers = [ownerLabel, ...collaborators.map(([, person]) => person.name || person.email)].filter(Boolean);
+  const activeUsers = [ownerLabel, ...collaborators.map(([, person]) => getMemberDisplayName(person))].filter(Boolean);
   const inviteLink = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(project.id)}&script=${encodeURIComponent(project.scriptId || "")}`;
   const lastEditedBy = project.lastEditorName || ownerLabel;
-  const workspace = project.workspace || { name: project.title || "Team Workspace", reminders: [] };
-  const reminders = workspace.reminders || [];
+  const editor = project.editor || { name: project.title || "Team Editor", reminders: [] };
+  const reminders = editor.reminders || [];
   const activity = [...(project.activityLog || [])].slice(-5).reverse();
   const ownerCanManage = !project.ownerId || project.ownerId === auth.currentUser?.uid;
   const lastActivity = project.lastActivityAt || project.updatedAt;
 
   const container = document.createElement("div");
-  container.className = "workspace-popup";
+  container.className = "editor-popup";
   container.innerHTML = `
-    <section class="workspace-popup-section">
-      <h4>Team Workspace</h4>
-      <p>Create shared writing spaces where projects belong to the workspace, not just one user.</p>
-      <div class="workspace-title-row">
-        <input id="workspaceNameInput" class="modal-input" type="text" value="${escapeHtml(workspace.name || project.title || 'Team Workspace')}" ${ownerCanManage ? '' : 'readonly'}>
-        ${ownerCanManage ? '<button class="ghost-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
+    <section class="editor-popup-section">
+      <h4>Team Editor</h4>
+      <p>Create shared writing spaces where projects belong to the editor, not just one user.</p>
+      <div class="editor-title-row">
+        <input id="editorNameInput" class="modal-input" type="text" value="${escapeHtml(editor.name || project.title || 'Team Editor')}" ${ownerCanManage ? '' : 'readonly'}>
+        ${ownerCanManage ? '<button class="ghost-button" type="button" data-editor-action="rename">Save Name</button>' : ''}
       </div>
-      <div class="metric-grid workspace-metric-grid">
-        <div><span>Owner</span><strong>${escapeHtml(ownerLabel)}</strong></div>
-        <div><span>Members</span><strong>${collaborators.length}</strong></div>
-        <div><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
-        <div><span>Last Edited By</span><strong>${escapeHtml(lastEditedBy)}</strong></div>
-        <div><span>Last Activity</span><strong>${escapeHtml(formatDateTime(lastActivity))}</strong></div>
-        <div><span>Workspace Code</span><strong>${escapeHtml(workspace.inviteCode || project.scriptId || "")}</strong></div>
+      <div class="editor-metric-columns">
+        <div class="editor-metric-row"><span>Owner</span><strong>${escapeHtml(getUserHandle(ownerLabel, "owner"))}</strong></div>
+        <div class="editor-metric-row"><span>Members</span><strong>${collaborators.length}</strong></div>
+        <div class="editor-metric-row"><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
+        <div class="editor-metric-row"><span>Last Edited By</span><strong>${escapeHtml(getUserHandle(lastEditedBy, "editor"))}</strong></div>
+        <div class="editor-metric-row"><span>Last Activity</span><strong>${escapeHtml(formatDateTime(lastActivity))}</strong></div>
+        <div class="editor-metric-row"><span>Editor Code</span><strong>${escapeHtml(editor.inviteCode || project.scriptId || "")}</strong></div>
       </div>
     </section>
-    <section class="workspace-popup-section">
+    <section class="editor-popup-section">
       <h4>Sharing</h4>
-      <p>Invite collaborators by email or share a workspace link, then assign Editor or Viewer access.</p>
-      <div class="workspace-share-row">
-        <input class="modal-input" type="text" value="${escapeHtml(inviteLink)}" readonly>
-        <button class="ghost-button" type="button" data-workspace-action="copy-link">Copy Link</button>
+      <p>Invite collaborators by email or share a Editor link, then assign Editor or Viewer access.</p>
+      <div class="editor-share-row">
+        <input class="modal-input editor-link-input" type="text" value="${escapeHtml(inviteLink)}" readonly>
+        <button class="ghost-button editor-inline-button" type="button" data-editor-action="copy-link">Copy Link</button>
       </div>
-      <div class="workspace-share-row">
-        <input id="workspaceInviteEmail" class="modal-input" type="email" placeholder="collaborator@email.com">
-        <select id="workspaceInviteRole" class="comment-filter-select">
+      <div class="editor-share-row editor-share-row-compact">
+        <input id="editorInviteEmail" class="modal-input" type="email" placeholder="collaborator@email.com">
+        <select id="editorInviteRole" class="comment-filter-select editor-inline-role">
           <option value="editor">Editor</option>
           <option value="viewer">Viewer</option>
         </select>
-        <button class="ghost-button" type="button" data-workspace-action="invite">Invite by Email</button>
+        <button class="ghost-button editor-inline-button" type="button" data-editor-action="invite">Invite by Email</button>
       </div>
-      <p class="collab-status-msg" data-workspace-status></p>
+      <p class="collab-status-msg" data-editor-status></p>
     </section>
-    <section class="workspace-popup-section">
+    <section class="editor-popup-section">
       <h4>Roles</h4>
-      <div class="list-stack">
-        <div class="list-item"><span class="list-item-title">Owner</span><span class="list-item-meta">${escapeHtml(ownerLabel)}</span></div>
-        ${collaborators.map(([uid, person]) => `
-          <div class="list-item workspace-member-row">
-            <div>
-              <span class="list-item-title">${escapeHtml(person.name || person.email || "Collaborator")}</span>
-              <span class="list-item-meta">${escapeHtml(person.email || "")}</span>
+        <div class="list-stack">
+          <div class="list-item editor-member-row">
+            <div class="editor-member-copy">
+              <span class="list-item-title">Owner</span>
+              <div class="editor-member-meta-row">
+                ${buildProfileTriggerMarkup({ uid: project.ownerId || "", name: ownerLabel, photoURL: project.ownerPhotoURL || "", className: "editor-member-button" })}
+                <span class="role-badge">Owner</span>
+              </div>
             </div>
-            ${ownerCanManage ? `
-              <select class="comment-filter-select workspace-role-select" data-member-role="${escapeHtml(uid)}">
-                <option value="editor" ${(person.role || "editor") === "editor" ? "selected" : ""}>Editor</option>
-                <option value="viewer" ${(person.role || "editor") === "viewer" ? "selected" : ""}>Viewer</option>
-              </select>
-            ` : `<span class="role-badge">${escapeHtml((person.role || "editor").replace(/^./, (char) => char.toUpperCase()))}</span>`}
           </div>
-        `).join("") || '<p class="collab-empty">No editors added yet.</p>'}
-      </div>
+          ${collaborators.map(([uid, person]) => `
+            <div class="list-item editor-member-row">
+              <div class="editor-member-copy">
+                <span class="list-item-title">${escapeHtml(getUserHandle(getMemberDisplayName(person), "user"))}</span>
+                <div class="editor-member-meta-row">
+                  ${buildProfileTriggerMarkup({ uid, name: getMemberDisplayName(person), photoURL: person.photoURL || "", className: "editor-member-button" })}
+                  ${ownerCanManage ? `
+                    <select class="comment-filter-select editor-role-select" data-member-role="${escapeHtml(uid)}">
+                      <option value="editor" ${(person.role || "editor") === "editor" ? "selected" : ""}>Editor</option>
+                      <option value="viewer" ${(person.role || "editor") === "viewer" ? "selected" : ""}>Viewer</option>
+                    </select>
+                  ` : `<span class="role-badge">${escapeHtml((person.role || "editor").replace(/^./, (char) => char.toUpperCase()))}</span>`}
+                </div>
+              </div>
+            </div>
+          `).join("") || '<p class="collab-empty">No editors added yet.</p>'}
+        </div>
     </section>
-    <section class="workspace-popup-section">
+    <section class="editor-popup-section">
       <h4>Reminders</h4>
-      <div class="workspace-share-row">
-        <input id="workspaceReminderText" class="modal-input" type="text" placeholder="Prepare scene board, review act two, share draft…">
-        <input id="workspaceReminderDue" class="modal-input" type="datetime-local">
-        <button class="ghost-button" type="button" data-workspace-action="add-reminder">Add Reminder</button>
+      <div class="editor-share-row">
+        <input id="editorReminderText" class="modal-input" type="text" placeholder="Prepare scene board, review act two, share draft…">
+        <input id="editorReminderDue" class="modal-input" type="datetime-local">
+        <button class="ghost-button" type="button" data-editor-action="add-reminder">Add Reminder</button>
       </div>
       <div class="list-stack">
         ${reminders.map((reminder) => `
-          <div class="list-item workspace-reminder-item${reminder.completed ? ' is-complete' : ''}">
-            <label class="workspace-reminder-main">
-              <input type="checkbox" data-workspace-reminder-toggle="${escapeHtml(reminder.id)}" ${reminder.completed ? 'checked' : ''}>
+          <div class="list-item editor-reminder-item${reminder.completed ? ' is-complete' : ''}">
+            <label class="editor-reminder-main">
+              <input type="checkbox" data-editor-reminder-toggle="${escapeHtml(reminder.id)}" ${reminder.completed ? 'checked' : ''}>
               <span>
                 <span class="list-item-title">${escapeHtml(reminder.text)}</span>
                 <span class="list-item-meta">${escapeHtml(reminder.dueAt ? `Due ${formatDateTime(reminder.dueAt)}` : `Added by ${reminder.createdByName || 'team member'}`)}</span>
               </span>
             </label>
-            <button class="ghost-button btn-sm danger-text" type="button" data-workspace-reminder-delete="${escapeHtml(reminder.id)}">Delete</button>
+            <button class="ghost-button btn-sm danger-text" type="button" data-editor-reminder-delete="${escapeHtml(reminder.id)}">Delete</button>
           </div>
         `).join("") || '<p class="collab-empty">No reminders yet.</p>'}
       </div>
     </section>
-    <section class="workspace-popup-section">
+    <section class="editor-popup-section">
       <h4>Recent Activity</h4>
       <div class="list-stack">
         ${activity.map((entry) => `
-          <div class="list-item workspace-activity-item">
+          <div class="list-item editor-activity-item">
             <span class="list-item-title">${escapeHtml(entry.user)}</span>
             <span class="list-item-meta">${escapeHtml(entry.message)} • ${escapeHtml(formatDateTime(entry.timestamp))}</span>
           </div>
         `).join("") || '<p class="collab-empty">No activity recorded yet.</p>'}
       </div>
-      <div class="workspace-action-row">
-        <button class="ghost-button" type="button" data-workspace-action="comments">Open Comments</button>
+      <div class="editor-action-row">
+        <button class="ghost-button" type="button" data-editor-action="comments">Open Comments</button>
       </div>
     </section>
   `;
 
   container.addEventListener("click", async (event) => {
-    const action = event.target.closest("[data-workspace-action]")?.dataset.workspaceAction;
-    const status = container.querySelector("[data-workspace-status]");
+    const action = event.target.closest("[data-editor-action]")?.dataset.editorAction;
+    const status = container.querySelector("[data-editor-status]");
+    const profileTrigger = event.target.closest("[data-profile-uid]");
+    if (profileTrigger) {
+      window.dispatchEvent(new CustomEvent("editorMemberProfileRequested", {
+        detail: {
+          uid: profileTrigger.dataset.profileUid || "",
+          name: profileTrigger.dataset.profileName || "",
+          photoURL: profileTrigger.dataset.profilePhotourl || ""
+        }
+      }));
+      return;
+    }
     if (!action) {
       return;
     }
 
     if (action === "copy-link") {
       await navigator.clipboard?.writeText(inviteLink);
-      if (status) status.textContent = "Workspace link copied.";
+      if (status) status.textContent = "Editor link copied.";
       return;
     }
 
     if (action === "rename") {
-      const name = container.querySelector("#workspaceNameInput")?.value?.trim();
+      const name = container.querySelector("#editorNameInput")?.value?.trim();
       if (!name) {
-        if (status) status.textContent = "Enter a workspace name first.";
+        if (status) status.textContent = "Enter a Editor name first.";
         return;
       }
-      if (status) status.textContent = "Saving workspace name...";
-      window.dispatchEvent(new CustomEvent("workspaceRenameRequested", {
+      if (status) status.textContent = "Saving Editor name...";
+      window.dispatchEvent(new CustomEvent("editorRenameRequested", {
         detail: { projectId: project.id, name }
       }));
       return;
@@ -1321,26 +2440,26 @@ export async function showWorkspacePopup() {
     }
 
     if (action === "invite") {
-      const email = container.querySelector("#workspaceInviteEmail")?.value?.trim();
-      const role = container.querySelector("#workspaceInviteRole")?.value || "editor";
+      const email = container.querySelector("#editorInviteEmail")?.value?.trim();
+      const role = container.querySelector("#editorInviteRole")?.value || "editor";
       if (!email) {
         if (status) status.textContent = "Enter an email address first.";
         return;
       }
       if (status) status.textContent = "Sending invite...";
-      window.dispatchEvent(new CustomEvent("workspaceInviteRequested", { detail: { email, role } }));
+      window.dispatchEvent(new CustomEvent("editorInviteRequested", { detail: { email, role } }));
       return;
     }
 
     if (action === "add-reminder") {
-      const text = container.querySelector("#workspaceReminderText")?.value?.trim();
-      const dueAt = container.querySelector("#workspaceReminderDue")?.value || "";
+      const text = container.querySelector("#editorReminderText")?.value?.trim();
+      const dueAt = container.querySelector("#editorReminderDue")?.value || "";
       if (!text) {
         if (status) status.textContent = "Enter a reminder first.";
         return;
       }
       if (status) status.textContent = "Adding reminder...";
-      window.dispatchEvent(new CustomEvent("workspaceReminderRequested", {
+      window.dispatchEvent(new CustomEvent("editorReminderRequested", {
         detail: { projectId: project.id, text, dueAt }
       }));
     }
@@ -1349,55 +2468,55 @@ export async function showWorkspacePopup() {
   container.addEventListener("change", (event) => {
     const roleTarget = event.target.closest("[data-member-role]");
     if (roleTarget) {
-      window.dispatchEvent(new CustomEvent("workspaceRoleChangeRequested", {
+      window.dispatchEvent(new CustomEvent("editorRoleChangeRequested", {
         detail: { projectId: project.id, collaboratorUid: roleTarget.dataset.memberRole, role: roleTarget.value }
       }));
       return;
     }
 
-    const reminderToggle = event.target.closest("[data-workspace-reminder-toggle]");
+    const reminderToggle = event.target.closest("[data-editor-reminder-toggle]");
     if (reminderToggle) {
-      window.dispatchEvent(new CustomEvent("workspaceReminderToggleRequested", {
-        detail: { projectId: project.id, reminderId: reminderToggle.dataset.workspaceReminderToggle }
+      window.dispatchEvent(new CustomEvent("editorReminderToggleRequested", {
+        detail: { projectId: project.id, reminderId: reminderToggle.dataset.editorReminderToggle }
       }));
     }
   });
 
-  container.querySelectorAll("[data-workspace-reminder-delete]").forEach((button) => {
+  container.querySelectorAll("[data-editor-reminder-delete]").forEach((button) => {
     button.addEventListener("click", () => {
-      window.dispatchEvent(new CustomEvent("workspaceReminderDeleteRequested", {
-        detail: { projectId: project.id, reminderId: button.dataset.workspaceReminderDelete }
+      window.dispatchEvent(new CustomEvent("editorReminderDeleteRequested", {
+        detail: { projectId: project.id, reminderId: button.dataset.editorReminderDelete }
       }));
     });
   });
 
   const handleInviteResult = (event) => {
-    const status = container.querySelector("[data-workspace-status]");
+    const status = container.querySelector("[data-editor-status]");
     if (!status) {
       return;
     }
     status.textContent = event.detail?.ok ? "Invitation sent." : (event.detail?.reason || "Unable to send invite.");
   };
   const handleMutationResult = (event) => {
-    const status = container.querySelector("[data-workspace-status]");
+    const status = container.querySelector("[data-editor-status]");
     if (!status) {
       return;
     }
-    status.textContent = event.detail?.ok ? (event.detail?.message || "Workspace updated.") : (event.detail?.reason || "Unable to update workspace.");
+    status.textContent = event.detail?.ok ? (event.detail?.message || "Editor updated.") : (event.detail?.reason || "Unable to update editor.");
   };
-  window.addEventListener("workspaceInviteResult", handleInviteResult);
-  window.addEventListener("workspaceMutationResult", handleMutationResult);
+  window.addEventListener("editorInviteResult", handleInviteResult);
+  window.addEventListener("editorMutationResult", handleMutationResult);
 
   await showModal({
-    title: "Workspace",
+    title: "Editor",
     message: container,
-    contentClass: "modal-content-wide modal-content-workspace",
+    contentClass: "modal-content-wide modal-content-editor",
     showConfirm: false,
     cancelLabel: "Close"
   });
 
-  window.removeEventListener("workspaceInviteResult", handleInviteResult);
-  window.removeEventListener("workspaceMutationResult", handleMutationResult);
+  window.removeEventListener("editorInviteResult", handleInviteResult);
+  window.removeEventListener("editorMutationResult", handleMutationResult);
 }
 
 export function renderMetrics() {
@@ -1444,6 +2563,10 @@ export function renderCurrentScriptId() {
     editorFlag.hidden = false;
   } else {
     editorFlag.hidden = true;
+  }
+
+  if (refs.saveBadge && state.lastSavedAt && !refs.saveBadge.classList.contains("saving")) {
+    refs.saveBadge.title = `Last saved ${new Date(state.lastSavedAt).toLocaleString()}`;
   }
 }
 
@@ -1953,7 +3076,7 @@ export async function showWorkTracking() {
   const lines = project.lines.filter((line) => line.text.trim()).length;
   const words = (serializeScript(project).match(/\b[\w'-]+\b/g) || []).length;
   const pages = Math.max(1, Math.round((words / 180) * 10) / 10);
-  const targets = project.workspace?.targets || { scenes: 0, pages: 0, lines: 0 };
+  const targets = project.editor?.targets || { scenes: 0, pages: 0, lines: 0 };
   const completion = buildCompletionMetrics({ scenes, pages, lines }, targets);
   const contributions = buildCollaboratorContributionSummary(project);
 
@@ -2023,8 +3146,8 @@ export async function showWorkTracking() {
   });
 
   if (saved) {
-    project.workspace = {
-      ...(project.workspace || {}),
+    project.editor = {
+      ...(project.editor || {}),
       targets: {
         scenes: Number(container.querySelector("#workTargetScenes")?.value || 0),
         pages: Number(container.querySelector("#workTargetPages")?.value || 0),
@@ -2465,7 +3588,7 @@ export function revealMetricsPanel() {
     // This needs togglePane from events.js, but ui.js shouldn't depend on events.js
     // We can just manipulate the classes directly here or emit an event.
     refs.leftPane.classList.remove("is-hidden");
-    refs.leftRailToggle.innerHTML = MENU_GLYPHS.left;
+    if (refs.leftRailToggle) refs.leftRailToggle.innerHTML = MENU_GLYPHS.left;
     refs.studioLayout.classList.remove("left-pane-hidden");
     if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
   }
@@ -2491,6 +3614,96 @@ const modalRefs = {
 };
 
 let _modalEpoch = 0;
+const toastTimers = new Map();
+
+function ensureToastHost() {
+    let host = document.querySelector("#toastHost");
+    if (host) return host;
+    host = document.createElement("div");
+    host.id = "toastHost";
+    host.className = "toast-host";
+    document.body.appendChild(host);
+    return host;
+}
+
+export function showToast(message, type = "success", { duration = 2600, id = uid("toast") } = {}) {
+    if (!message) return id;
+    const host = ensureToastHost();
+    let toast = host.querySelector(`[data-toast-id="${id}"]`);
+    if (!toast) {
+        toast = document.createElement("article");
+        toast.dataset.toastId = id;
+        toast.className = "app-toast";
+        toast.innerHTML = `
+          <div class="app-toast-copy">
+            <strong class="app-toast-title"></strong>
+            <span class="app-toast-message"></span>
+          </div>
+          <button class="app-toast-close" type="button" aria-label="Dismiss notification">×</button>
+        `;
+        host.appendChild(toast);
+        toast.querySelector(".app-toast-close")?.addEventListener("click", () => dismissToast(id));
+    }
+    toast.className = `app-toast is-${type}`;
+    toast.querySelector(".app-toast-title").textContent = type === "error"
+      ? "Something went wrong"
+      : type === "loading"
+        ? "Working"
+        : "Done";
+    toast.querySelector(".app-toast-message").textContent = message;
+
+    const existingTimer = toastTimers.get(id);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+        toastTimers.delete(id);
+    }
+    if (duration > 0) {
+        toastTimers.set(id, window.setTimeout(() => dismissToast(id), duration));
+    }
+    return id;
+}
+
+export function dismissToast(id) {
+    const host = document.querySelector("#toastHost");
+    const toast = host?.querySelector(`[data-toast-id="${id}"]`);
+    const timer = toastTimers.get(id);
+    if (timer) {
+        clearTimeout(timer);
+        toastTimers.delete(id);
+    }
+    toast?.remove();
+}
+
+export function updateToast(id, message, type = "success", options = {}) {
+    return showToast(message, type, { ...options, id });
+}
+
+export function setButtonBusy(button, busy, {
+    label = "Working...",
+    restoreLabel = "",
+    minWidth = ""
+} = {}) {
+    if (!button) return;
+    if (busy) {
+        if (!button.dataset.busyOriginalLabel) {
+            button.dataset.busyOriginalLabel = button.textContent || "";
+        }
+        if (minWidth) {
+            button.style.minWidth = minWidth;
+        }
+        button.disabled = true;
+        button.classList.add("is-busy");
+        button.textContent = label;
+        return;
+    }
+    button.disabled = false;
+    button.classList.remove("is-busy");
+    button.textContent = restoreLabel || button.dataset.busyOriginalLabel || button.textContent;
+    delete button.dataset.busyOriginalLabel;
+    if (minWidth) {
+        button.style.minWidth = "";
+    }
+}
 
 export function showModal({
     title,
@@ -2595,3 +3808,6 @@ window.addEventListener('scriptIdUpdated', () => {
     renderCurrentScriptId();
     renderHome();
 });
+
+
+

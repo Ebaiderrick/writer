@@ -1,9 +1,10 @@
-import { state, TYPE_SEQUENCE, TYPE_LABELS } from './config.js';
+import { state, TYPE_SEQUENCE, TYPE_LABELS, EDITOR_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
-  createProject, upsertProject, sanitizeProject, cloneProject,
+  createProject, createProjectWithOptions, upsertProject, sanitizeProject, cloneProject,
+  getEditorProjects, getEditorRootProject, updateEditorAcrossProjects,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
   deleteProjectFromCloud
@@ -11,22 +12,24 @@ import {
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
-  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
+  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray,
+  renderSuggestionTray
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
 import { buildWordDocxBlob, DOCX_MIME_TYPE } from './docxExport.js';
 import { paginateScriptLines } from './pagination.js';
+import { auth } from './firebase.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
-  showStudio, showHome, applyViewState, setTheme, toggleMenu,
+  showStudio, showHome, showEditorView, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
-  showModal,
+  showModal, showToast, updateToast,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
-  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal,
-  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder
+  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderEditorView, renderStudioProjectContext,
+  showStoryMemoryPopup, showEditorPopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -47,18 +50,1278 @@ import {
 import {
   inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
   hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel,
-  canEditProject, updateCollaboratorRole, addWorkspaceReminder,
-  toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace
+  canEditProject, updateCollaboratorRole, addEditorReminder,
+  toggleEditorReminder, deleteEditorReminder, renameEditor,
+  showCollabProfile
 } from './collaborate.js';
 
 let studioSidebarRefreshFrame = 0;
+let previewRefreshTimer = 0;
+let focusModeTimer = 0;
 let hasShownReadOnlyNotice = false;
+const aiTaskTimers = new Map();
+const INLINE_SELECTION_TOOLS = [
+  { label: "Improve", action: "Improve", requiresAi: true },
+  { label: "Rewrite", action: "Rephrase", requiresAi: true },
+  { label: "Fix Grammar", action: "Grammar", requiresGrammar: true }
+];
+
+function ensureSelectionToolbar() {
+  let toolbar = document.getElementById("selectionAiToolbar");
+  if (toolbar) return toolbar;
+  toolbar = document.createElement("div");
+  toolbar.id = "selectionAiToolbar";
+  toolbar.className = "selection-ai-toolbar";
+  toolbar.hidden = true;
+  toolbar.innerHTML = `
+    <div class="selection-ai-toolbar-actions">
+      ${INLINE_SELECTION_TOOLS.map((tool) => `<button class="selection-ai-toolbar-btn" type="button" data-selection-ai-action="${tool.action}" data-requires-ai="${tool.requiresAi ? "true" : "false"}" data-requires-grammar="${tool.requiresGrammar ? "true" : "false"}">${tool.label}</button>`).join("")}
+    </div>
+  `;
+  toolbar.addEventListener("mousedown", (event) => event.preventDefault());
+  toolbar.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-selection-ai-action]");
+    if (!button) return;
+    hideSelectionToolbar();
+    AI.triggerSelectionAction(button.dataset.selectionAiAction);
+  });
+  document.body.appendChild(toolbar);
+  return toolbar;
+}
+
+function hideSelectionToolbar() {
+  const toolbar = document.getElementById("selectionAiToolbar");
+  if (!toolbar) return;
+  toolbar.hidden = true;
+  toolbar.classList.remove("is-visible");
+}
+
+function updateSelectionToolbar() {
+  const toolbar = ensureSelectionToolbar();
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    hideSelectionToolbar();
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  const block = range.commonAncestorContainer?.nodeType === Node.TEXT_NODE
+    ? range.commonAncestorContainer.parentElement?.closest(".script-block")
+    : range.commonAncestorContainer?.closest?.(".script-block");
+  if (!block || !refs.screenplayEditor?.contains(block)) {
+    hideSelectionToolbar();
+    return;
+  }
+
+  const buttons = [...toolbar.querySelectorAll("[data-selection-ai-action]")];
+  let visibleCount = 0;
+  buttons.forEach((button) => {
+    const needsAi = button.dataset.requiresAi === "true";
+    const needsGrammar = button.dataset.requiresGrammar === "true";
+    const shouldShow = (!needsAi || state.aiAssist) && (!needsGrammar || state.grammarCheck);
+    button.hidden = !shouldShow;
+    if (shouldShow) visibleCount += 1;
+  });
+  if (!visibleCount) {
+    hideSelectionToolbar();
+    return;
+  }
+
+  const rect = range.getBoundingClientRect();
+  if (!rect || (!rect.width && !rect.height)) {
+    hideSelectionToolbar();
+    return;
+  }
+
+  toolbar.style.top = `${Math.max(window.scrollY + 12, window.scrollY + rect.top - 52)}px`;
+  toolbar.style.left = `${window.scrollX + rect.left + (rect.width / 2)}px`;
+  toolbar.hidden = false;
+  toolbar.classList.add("is-visible");
+}
+
+function setTypingFocusModeActive() {
+  if (!state.viewOptions.focusMode) return;
+  document.body.classList.add("focus-mode-active");
+  clearTimeout(focusModeTimer);
+  focusModeTimer = window.setTimeout(() => {
+    document.body.classList.remove("focus-mode-active");
+  }, 1500);
+}
+
+function schedulePreviewRefresh({ includeCover = false } = {}) {
+  clearTimeout(previewRefreshTimer);
+  previewRefreshTimer = window.setTimeout(() => {
+    if (includeCover) {
+      renderCoverPreview();
+    }
+    renderPreview();
+  }, 90);
+}
+
+function getEditorTaskTemplate(templateKey) {
+  return EDITOR_TASK_TEMPLATES.find((template) => template.key === templateKey) || EDITOR_TASK_TEMPLATES[0];
+}
+
+function applyEditorTaskTemplateToForm(container, templateKey, { force = false } = {}) {
+  if (!container) return;
+  const template = getEditorTaskTemplate(templateKey);
+  const titleInput = container.querySelector('[data-editor-task-title], #taskEditTitle');
+  const descriptionInput = container.querySelector('[data-editor-task-description], #taskEditDescription');
+  const templateInput = container.querySelector('[data-editor-task-template], #taskEditTemplate');
+  const hint = container.querySelector('[data-editor-task-template-hint], #taskEditTemplateHint');
+  const previousKey = container.dataset.editorTemplateApplied || "custom";
+  const previousTemplate = getEditorTaskTemplate(previousKey);
+
+  if (templateInput) {
+    templateInput.value = template.key;
+  }
+  if (titleInput) {
+    const currentTitle = titleInput.value.trim();
+    if (force || !currentTitle || currentTitle === previousTemplate.title) {
+      titleInput.value = template.title;
+    }
+  }
+  if (descriptionInput) {
+    const currentDescription = descriptionInput.value.trim();
+    if (force || !currentDescription || currentDescription === previousTemplate.description) {
+      descriptionInput.value = template.description;
+    }
+  }
+  if (hint) {
+    hint.textContent = template.aiInstruction;
+  }
+  container.dataset.editorTemplateApplied = template.key;
+}
+
+function ensureDefaultEditorRoot() {
+  const currentEditorRoot = state.currentEditorId
+    ? getEditorRootProject(state.currentEditorId)
+    : null;
+  if (currentEditorRoot) return currentEditorRoot;
+
+  const existingEditorRoot = state.projects.find((project) => project.isEditorRoot);
+  if (existingEditorRoot) return existingEditorRoot;
+
+  return createProjectWithOptions({
+    creationKind: "editor",
+    workType: "film-script",
+    isEditorRoot: true,
+    title: "My Editor",
+    editorName: "My Editor"
+  });
+}
+
+async function launchNewCreationFlow() {
+  const selection = await showNewCreationFlow();
+  if (!selection || selection.workType !== "film-script") {
+    return;
+  }
+
+  const projectName = await customPrompt("Name this project before creating it.", "", "New Project");
+  if (!projectName || !projectName.trim()) {
+    await customAlert("A project name is required before creation.", "Project Not Created");
+    return;
+  }
+  const editorRoot = ensureDefaultEditorRoot();
+  const project = createProjectWithOptions({
+    creationKind: "project",
+    workType: selection.workType,
+    title: projectName.trim(),
+    editor: {
+      id: editorRoot.editor?.id || editorRoot.id,
+      name: editorRoot.editor?.name || editorRoot.title,
+      inviteCode: editorRoot.editor?.inviteCode,
+      reminders: editorRoot.editor?.reminders || [],
+      targets: editorRoot.editor?.targets || {},
+      tasks: editorRoot.editor?.tasks || []
+    }
+  });
+  openProject(project.id, { silentLoadToast: true });
+  showToast("Project created.", "success");
+}
+
+function openEditorDashboard(editorId) {
+  if (!editorId) return;
+  const editorRoot = getEditorRootProject(editorId) || getEditorProjects(editorId)[0] || null;
+  state.currentEditorId = editorId;
+  if (editorRoot) {
+    state.currentProjectId = editorRoot.id;
+  }
+  persistProjects(false, { syncInputs: false });
+  showEditorView();
+  renderEditorView();
+}
+
+async function createProjectInsideCurrentEditor() {
+  const editorProject = getEditorRootProject(state.currentEditorId) || state.projects.find((project) => project.editor?.id === state.currentEditorId);
+  if (!editorProject) {
+    launchNewCreationFlow();
+    return;
+  }
+  const projectName = await customPrompt("Name this project before creating it.", "", "New Project");
+  if (!projectName || !projectName.trim()) {
+    await customAlert("A project name is required before creation.", "Project Not Created");
+    return;
+  }
+  const project = createProjectWithOptions({
+    creationKind: "project",
+    workType: "film-script",
+    title: projectName.trim(),
+    isShared: editorProject.isShared,
+    ownerId: editorProject.ownerId,
+    ownerName: editorProject.ownerName,
+    ownerEmail: editorProject.ownerEmail,
+    ownerPhotoURL: editorProject.ownerPhotoURL,
+    collaborators: editorProject.collaborators,
+    activityLog: editorProject.activityLog,
+    lastEditorName: editorProject.lastEditorName,
+    lastActivityAt: editorProject.lastActivityAt,
+    editor: {
+      id: editorProject.editor?.id,
+      name: editorProject.editor?.name || editorProject.title,
+      inviteCode: editorProject.editor?.inviteCode,
+      reminders: editorProject.editor?.reminders || [],
+      targets: editorProject.editor?.targets || {},
+      tasks: editorProject.editor?.tasks || []
+    }
+  });
+  openProject(project.id, { silentLoadToast: true });
+  showToast("Project created.", "success");
+}
+
+function isDisposableUntitledDraft(project = getCurrentProject()) {
+  if (!project || project.isEditorRoot) return false;
+  const defaultLikeTitle = /^(Untitled Script|Film Script \d+)$/i.test(String(project.title || "").trim());
+  const hasMeta = [project.author, project.contact, project.company, project.details, project.logline].some((value) => String(value || "").trim());
+  const hasContent = (project.lines || []).some((line) => String(line?.text || "").trim() || String(line?.secondary || "").trim());
+  return defaultLikeTitle && !hasMeta && !hasContent;
+}
+
+async function discardUntitledDraftIfNeeded() {
+  if (refs.studioView?.hidden) return false;
+  const project = getCurrentProject();
+  if (!isDisposableUntitledDraft(project)) return false;
+  const editorId = project.editor?.id || project.id;
+  state.projects = state.projects.filter((item) => item.id !== project.id);
+  if (!state.projects.length) {
+    const fallback = createProjectWithOptions();
+    state.projects = [fallback];
+  }
+  if (state.currentEditorId === editorId && project.editor?.id !== project.id) {
+    state.currentEditorId = editorId;
+  }
+  state.currentProjectId = state.projects[0].id;
+  persistProjects(true, { syncInputs: false });
+  await customAlert("This project was not created because no project name or content was added.", "Project Not Created");
+  return true;
+}
+
+function getEditorTaskAssignees(editorProject) {
+  const ownerUid = editorProject.ownerId || "editor_owner";
+  const ownerLabel = editorProject.ownerName || editorProject.ownerEmail || editorProject.author || "Editor Owner";
+  const collaboratorEntries = Object.entries(editorProject.collaborators || {}).map(([uid, person]) => ({
+    id: uid,
+    label: person.name || person.email || "Collaborator",
+    assigneeType: "human"
+  }));
+  return [
+    { id: ownerUid, label: ownerLabel, assigneeType: "human" },
+    ...collaboratorEntries,
+    { id: "ai_assist", label: "@AIassist", assigneeType: "system" }
+  ];
+}
+
+function getEditorTaskSceneChoices(editorId = state.currentEditorId) {
+  return getEditorProjects(editorId)
+    .filter((project) => !project.isEditorRoot)
+    .flatMap((project) => (project.lines || [])
+      .filter((line) => line.type === "scene" && line.text.trim())
+      .map((line) => ({
+        projectId: project.id,
+        sceneId: line.id,
+        lineId: line.id,
+        label: `${project.title} - ${line.text.trim()}`
+      })));
+}
+
+function getEditorTaskLineChoices(editorId = state.currentEditorId) {
+  return getEditorProjects(editorId)
+    .filter((project) => !project.isEditorRoot)
+    .flatMap((project) => (project.lines || [])
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => line.type !== "scene" && line.text.trim())
+      .map(({ line, index }) => {
+        const sceneId = getSceneIdForIndex(index, project);
+        const sceneLine = sceneId ? project.lines.find((entry) => entry.id === sceneId) : null;
+        return {
+          projectId: project.id,
+          lineId: line.id,
+          sceneId: sceneId || "",
+          sceneLabel: sceneLine?.text?.trim() || "",
+          lineLabel: formatLineText(line.text, line.type).slice(0, 80),
+          label: `${project.title} - ${(sceneLine?.text?.trim() || "General")} - ${formatLineText(line.text, line.type).slice(0, 56)}`
+        };
+      }));
+}
+
+function getEditorStoryMemoryChoices(editorId = state.currentEditorId) {
+  const bucketLabels = {
+    characters: "Character",
+    locations: "Location",
+    scenes: "Scene",
+    themes: "Theme"
+  };
+  return getEditorProjects(editorId)
+    .filter((project) => !project.isEditorRoot)
+    .flatMap((project) => Object.entries(project.storyMemory || {})
+      .filter(([bucket]) => bucketLabels[bucket])
+      .flatMap(([bucket, items]) => (Array.isArray(items) ? items : []).map((item) => ({
+        projectId: project.id,
+        type: bucket,
+        id: item.id,
+        name: item.name || bucketLabels[bucket],
+        label: `${project.title} · ${bucketLabels[bucket]} · ${item.name || "Untitled"}`
+      }))));
+}
+
+function getEditorTaskById(taskId) {
+  return getEditorRootProject(state.currentEditorId)?.editor?.tasks?.find((task) => task.id === taskId) || null;
+}
+
+function getEditorNotifications(editorId = state.currentEditorId) {
+  return [...(getEditorRootProject(editorId)?.editor?.notifications || [])]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function createEditorNotification({ editorId = state.currentEditorId, task = null, category = "update", title = "", message = "", actor = "" } = {}) {
+  if (!editorId || !title) return;
+  updateEditorAcrossProjects(editorId, (editor) => ({
+    ...editor,
+    notifications: [
+      {
+        id: uid("notif"),
+        taskId: task?.id || "",
+        projectId: task?.projectId || "",
+        category,
+        title,
+        message,
+        actor,
+        createdAt: new Date().toISOString(),
+        read: false
+      },
+      ...(editor.notifications || [])
+    ].slice(0, 40)
+  }));
+}
+
+function markEditorNotificationRead(notificationId, read = true) {
+  if (!state.currentEditorId || !notificationId) return;
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    notifications: (editor.notifications || []).map((notification) => notification.id === notificationId
+      ? { ...notification, read }
+      : notification)
+  }));
+  persistProjects(true, { syncInputs: false });
+  renderEditorView();
+}
+
+function markAllEditorNotificationsRead() {
+  if (!state.currentEditorId) return;
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    notifications: (editor.notifications || []).map((notification) => ({ ...notification, read: true }))
+  }));
+  persistProjects(true, { syncInputs: false });
+  renderEditorView();
+}
+
+function resolveAiTaskStart(choice, manualValue = "") {
+  const now = Date.now();
+  if (choice === "in-3m") return new Date(now + (3 * 60 * 1000)).toISOString();
+  if (choice === "in-10m") return new Date(now + (10 * 60 * 1000)).toISOString();
+  if (choice === "manual" && manualValue) {
+    const parsed = new Date(manualValue);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+  }
+  return "";
+}
+
+function getAiTaskDisplayState(task) {
+  if (task.assigneeType !== "system") return "";
+  if (task.aiState === "scheduled" && task.aiStartAt) {
+    return new Date(task.aiStartAt).getTime() <= Date.now() ? "ready" : "scheduled";
+  }
+  return task.aiState || "idle";
+}
+
+function clearAiTaskTimer(taskId) {
+  const timer = aiTaskTimers.get(taskId);
+  if (timer) {
+    clearTimeout(timer);
+    aiTaskTimers.delete(taskId);
+  }
+}
+
+function scheduleAiTaskRun(task) {
+  clearAiTaskTimer(task.id);
+  if (!task || task.assigneeType !== "system" || !["scheduled", "ready"].includes(task.aiState)) {
+    return;
+  }
+  const startAtMs = task.aiStartAt ? new Date(task.aiStartAt).getTime() : Date.now();
+  const delay = Math.max(0, startAtMs - Date.now());
+  const timer = setTimeout(() => {
+    aiTaskTimers.delete(task.id);
+    runAiTask(task.id);
+  }, delay);
+  aiTaskTimers.set(task.id, timer);
+}
+
+function syncAiTaskSchedules(editorId = state.currentEditorId) {
+  const root = getEditorRootProject(editorId);
+  const tasks = root?.editor?.tasks || [];
+  const validIds = new Set(tasks.map((task) => task.id));
+  [...aiTaskTimers.keys()].forEach((taskId) => {
+    if (!validIds.has(taskId)) clearAiTaskTimer(taskId);
+  });
+  tasks.forEach((task) => scheduleAiTaskRun(task));
+}
+
+function insertAiTaskResultIntoProject(task, resultText) {
+  return insertAiTaskResultIntoProjectWithMode(task, resultText, task.lastApplyMode || "insert-below");
+}
+
+function getProjectSceneRange(project, task) {
+  if (!project || !Array.isArray(project.lines) || !project.lines.length) {
+    return null;
+  }
+  const explicitSceneIndex = task.sceneId
+    ? project.lines.findIndex((line) => line.id === task.sceneId)
+    : -1;
+  let startIndex = explicitSceneIndex;
+  if (startIndex < 0 && task.lineId) {
+    const lineIndex = project.lines.findIndex((line) => line.id === task.lineId);
+    if (lineIndex >= 0) {
+      for (let index = lineIndex; index >= 0; index -= 1) {
+        if (project.lines[index]?.type === "scene") {
+          startIndex = index;
+          break;
+        }
+      }
+    }
+  }
+  if (startIndex < 0) return null;
+  let endIndex = project.lines.length - 1;
+  for (let index = startIndex + 1; index < project.lines.length; index += 1) {
+    if (project.lines[index]?.type === "scene") {
+      endIndex = index - 1;
+      break;
+    }
+  }
+  return { startIndex, endIndex };
+}
+
+function getAiTaskTargetContext(task) {
+  const project = state.projects.find((item) => item.id === task.projectId);
+  if (!project?.lines?.length) {
+    return {
+      projectTitle: "Linked Project",
+      targetLabel: task.sceneLabel || task.reference || "Project context",
+      originalText: "No linked script context was found for this task."
+    };
+  }
+  const sceneRange = getProjectSceneRange(project, task);
+  const lineIndex = task.lineId
+    ? project.lines.findIndex((line) => line.id === task.lineId)
+    : -1;
+  const sourceLines = [];
+  let targetLabel = task.sceneLabel || task.reference || project.title;
+  if (lineIndex >= 0) {
+    const start = Math.max(0, lineIndex - 1);
+    const end = Math.min(project.lines.length - 1, lineIndex + 2);
+    for (let index = start; index <= end; index += 1) {
+      sourceLines.push(project.lines[index]);
+    }
+    targetLabel = task.reference || task.sceneLabel || "Linked line";
+  } else if (sceneRange) {
+    const limit = Math.min(sceneRange.endIndex, sceneRange.startIndex + 7);
+    for (let index = sceneRange.startIndex; index <= limit; index += 1) {
+      sourceLines.push(project.lines[index]);
+    }
+    targetLabel = task.sceneLabel || "Linked scene";
+  } else {
+    sourceLines.push(...project.lines.slice(Math.max(0, project.lines.length - 6)));
+  }
+  const originalText = sourceLines.map((line) => formatLineText(line)).join("\n").trim() || "No source context available.";
+  return {
+    projectTitle: project.title,
+    targetLabel,
+    originalText
+  };
+}
+
+function insertAiTaskResultIntoProjectWithMode(task, resultText, mode = "insert-below") {
+  const project = state.projects.find((item) => item.id === task.projectId);
+  if (!project) return false;
+  const generatedLines = parseTextToLines(resultText);
+  if (!generatedLines.length) return false;
+  const lineIndex = task.lineId ? project.lines.findIndex((line) => line.id === task.lineId) : -1;
+  const sceneRange = getProjectSceneRange(project, task);
+
+  if (mode === "replace-target") {
+    if (lineIndex >= 0) {
+      project.lines.splice(lineIndex, 1, ...generatedLines);
+    } else if (sceneRange) {
+      project.lines.splice(sceneRange.startIndex, (sceneRange.endIndex - sceneRange.startIndex) + 1, ...generatedLines);
+    } else {
+      project.lines.splice(project.lines.length, 0, ...generatedLines);
+    }
+  } else if (mode === "append-scene") {
+    const insertIndex = sceneRange ? sceneRange.endIndex + 1 : project.lines.length;
+    project.lines.splice(insertIndex, 0, ...generatedLines);
+  } else {
+    const anchorId = task.lineId || task.sceneId || "";
+    let insertIndex = anchorId ? project.lines.findIndex((line) => line.id === anchorId) + 1 : project.lines.length;
+    if (insertIndex <= 0) insertIndex = project.lines.length;
+    project.lines.splice(insertIndex, 0, ...generatedLines);
+  }
+
+  project.updatedAt = new Date().toISOString();
+  upsertProject(project);
+  return true;
+}
+
+function addEditorTaskFromDashboard() {
+  const editorProject = getEditorRootProject(state.currentEditorId);
+  if (!editorProject || !refs.editorDashboard) return;
+  const templateSelect = refs.editorDashboard.querySelector('[data-editor-task-template]');
+  const titleInput = refs.editorDashboard.querySelector('[data-editor-task-title]');
+  const descriptionInput = refs.editorDashboard.querySelector('[data-editor-task-description]');
+  const projectSelect = refs.editorDashboard.querySelector('[data-editor-task-project]');
+  const sceneSelect = refs.editorDashboard.querySelector('[data-editor-task-scene]');
+  const lineSelect = refs.editorDashboard.querySelector('[data-editor-task-line]');
+  const assigneeSelect = refs.editorDashboard.querySelector('[data-editor-task-assignee]');
+  const referenceInput = refs.editorDashboard.querySelector('[data-editor-task-reference]');
+  const statusSelect = refs.editorDashboard.querySelector('[data-editor-task-status-new]');
+  const prioritySelect = refs.editorDashboard.querySelector('[data-editor-task-priority]');
+  const dueInput = refs.editorDashboard.querySelector('[data-editor-task-due]');
+  const handoffInput = refs.editorDashboard.querySelector('[data-editor-task-handoff]');
+  const memorySelect = refs.editorDashboard.querySelector('[data-editor-task-memory]');
+  const aiStartSelect = refs.editorDashboard.querySelector('[data-editor-task-ai-start]');
+  const aiStartManual = refs.editorDashboard.querySelector('[data-editor-task-ai-start-manual]');
+  const templateKey = templateSelect?.value || "custom";
+  const title = titleInput?.value?.trim();
+  if (!title) {
+    customAlert("Enter a task title first.", "Editor Tasks");
+    return;
+  }
+  const projectId = projectSelect?.value || "";
+  const sceneId = sceneSelect?.value || "";
+  const lineId = lineSelect?.value || "";
+  const sceneChoice = getEditorTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
+  const lineChoice = getEditorTaskLineChoices().find((line) => line.lineId === lineId) || null;
+  const assignedTo = assigneeSelect?.value || "";
+  const assignee = getEditorTaskAssignees(editorProject).find((entry) => entry.id === assignedTo);
+  const memoryChoice = getEditorStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
+  const aiStartChoice = aiStartSelect?.value || "now";
+  const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
+  const initialAiState = assignee?.assigneeType === "system"
+    ? (aiStartAt ? "scheduled" : "ready")
+    : "idle";
+  const nextTask = {
+    id: uid("task"),
+    templateKey,
+    priority: prioritySelect?.value || "normal",
+    title,
+    description: descriptionInput?.value?.trim() || "",
+    status: statusSelect?.value || "todo",
+    dueAt: dueInput?.value ? new Date(dueInput.value).toISOString() : "",
+    assignedTo,
+    assignedLabel: assignee?.label || "Unassigned",
+    assigneeType: assignee?.assigneeType || "human",
+    handoffNote: handoffInput?.value?.trim() || "",
+    projectId: lineChoice?.projectId || sceneChoice?.projectId || projectId,
+    reference: referenceInput?.value?.trim() || "",
+    sceneId: lineChoice?.sceneId || sceneChoice?.sceneId || "",
+    sceneLabel: lineChoice?.sceneLabel || sceneChoice?.label || "",
+    lineId: lineChoice?.lineId || sceneChoice?.lineId || "",
+    lineLabel: lineChoice?.lineLabel || "",
+    memoryLinkType: memoryChoice?.type || "",
+    memoryLinkId: memoryChoice?.id || "",
+    memoryLinkName: memoryChoice?.name || "",
+    memoryProjectId: memoryChoice?.projectId || "",
+    comments: [],
+    aiState: initialAiState,
+    aiStartAt,
+    aiLastRunAt: "",
+    aiResultText: "",
+    aiResultSummary: "",
+    aiError: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+  };
+
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    tasks: [...(editor.tasks || []), nextTask]
+  }));
+  createEditorNotification({
+    task: nextTask,
+    category: assignee?.assigneeType === "system" ? "ai" : "task",
+    title: assignee?.assigneeType === "system" ? "AI task queued" : "New task created",
+    message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the editor"}.`}`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+  });
+  persistProjects(true, { syncInputs: false });
+  scheduleAiTaskRun(nextTask);
+  renderEditorView();
+  showToast(
+    assignee?.assigneeType === "system"
+      ? `AI task queued for ${nextTask.assignedLabel}.`
+      : `${nextTask.title} assigned to ${nextTask.assignedLabel || "the editor"}.`,
+    "success"
+  );
+}
+
+function updateEditorTask(taskId, patch) {
+  if (!state.currentEditorId || !taskId) return;
+  const previousTask = getEditorTaskById(taskId);
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    tasks: (editor.tasks || []).map((task) => task.id === taskId
+      ? { ...task, ...patch, updatedAt: new Date().toISOString() }
+      : task)
+  }));
+  persistProjects(true, { syncInputs: false });
+  const task = getEditorTaskById(taskId);
+  if (task && previousTask) {
+    if (patch.status && patch.status !== previousTask.status) {
+      showToast(`${task.title} moved to ${patch.status === "in-progress" ? "In Progress" : patch.status === "done" ? "Done" : "To Do"}.`, "success");
+      createEditorNotification({
+        task,
+        category: patch.status === "done" ? "completed" : "task",
+        title: patch.status === "done" ? "Task completed" : "Task status updated",
+        message: `${task.title} is now ${patch.status === "in-progress" ? "in progress" : patch.status.replace("-", " ")}.`,
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+      });
+    }
+    if (patch.assignedTo && patch.assignedTo !== previousTask.assignedTo) {
+      showToast(`${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`, "success");
+      createEditorNotification({
+        task,
+        category: task.assigneeType === "system" ? "ai" : "task",
+        title: "Task reassigned",
+        message: `${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`,
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+      });
+    }
+    if (patch.dueAt && patch.dueAt !== previousTask.dueAt) {
+      showToast(`${task.title} due date updated.`, "success");
+      createEditorNotification({
+        task,
+        category: "task",
+        title: "Task due date updated",
+        message: `${task.title} is due ${new Date(task.dueAt).toLocaleString()}.`,
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+      });
+    }
+  }
+  if (task) scheduleAiTaskRun(task);
+  renderEditorView();
+}
+
+async function runAiTask(taskId) {
+  const task = getEditorTaskById(taskId);
+  if (!task || task.assigneeType !== "system" || task.aiState === "running") return;
+  const taskToastId = `ai-task-${taskId}`;
+  const project = state.projects.find((item) => item.id === task.projectId) || getCurrentProject();
+  if (!project) {
+    updateEditorTask(taskId, { aiState: "failed", aiError: "The linked project could not be found." });
+    updateToast(taskToastId, "AI task could not find its linked project.", "error", { duration: 4200 });
+    createEditorNotification({
+      task,
+      category: "ai",
+      title: "AI task needs relinking",
+      message: `${task.title} could not run because its linked project is missing.`,
+      actor: "@AIassist"
+    });
+    return;
+  }
+  updateEditorTask(taskId, {
+    aiState: "running",
+    aiError: "",
+    status: task.status === "done" ? "done" : "in-progress",
+    aiLastRunAt: new Date().toISOString()
+  });
+  updateToast(taskToastId, `${task.title} is processing...`, "loading", { duration: 0 });
+  try {
+    const resultText = String(await AI.runEditorTaskAssistant(task, project) || "").trim();
+    if (!resultText) {
+      throw new Error("AI returned no usable result.");
+    }
+    updateEditorTask(taskId, {
+      aiState: "review",
+      aiResultText: resultText,
+      aiResultSummary: task.title,
+      aiError: ""
+    });
+    updateToast(taskToastId, "AI task finished.", "success");
+    createEditorNotification({
+      task: { ...task, aiResultText: resultText },
+      category: "review",
+      title: "AI result ready for review",
+      message: `${task.title} has a suggested result ready to review.`,
+      actor: "@AIassist"
+    });
+  } catch (error) {
+    updateEditorTask(taskId, {
+      aiState: "failed",
+      aiError: error instanceof Error ? error.message : "AI task failed."
+    });
+    updateToast(taskToastId, "AI task failed.", "error", { duration: 4200 });
+    createEditorNotification({
+      task,
+      category: "ai",
+      title: "AI task failed",
+      message: `${task.title} needs attention before it can run successfully again. ${String(error instanceof Error ? error.message : "AI task failed.").trim()}`,
+      actor: "@AIassist"
+    });
+  }
+}
+
+async function reviewAiTaskResult(taskId) {
+  const task = getEditorTaskById(taskId);
+  if (!task?.aiResultText) return;
+  const context = getAiTaskTargetContext(task);
+  const container = document.createElement("div");
+  container.className = "editor-ai-review";
+  container.innerHTML = `
+    <div class="editor-ai-review-head">
+      <span class="editor-task-tag">AI Suggestion</span>
+      <span class="editor-task-tag">${escapeHtml(task.assignedLabel || "@AIassist")}</span>
+      <span class="editor-task-tag editor-task-tag-priority editor-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
+    </div>
+    <div class="editor-ai-review-summary">
+      <p class="modal-copy">${escapeHtml(task.title)}</p>
+      <p class="editor-ai-review-caption">${escapeHtml(context.projectTitle)} · ${escapeHtml(context.targetLabel)}</p>
+    </div>
+    <div class="editor-ai-review-grid">
+      <div class="editor-ai-review-panel">
+        <span class="editor-ai-review-label">Current Script Context</span>
+        <div class="editor-ai-review-body">${escapeHtml(context.originalText).replace(/\n/g, "<br>")}</div>
+      </div>
+      <div class="editor-ai-review-panel">
+        <span class="editor-ai-review-label">AI Suggestion</span>
+        <div class="editor-ai-review-body">${escapeHtml(task.aiResultText).replace(/\n/g, "<br>")}</div>
+      </div>
+    </div>
+    <label class="editor-ai-apply-row">
+      <span class="editor-ai-review-label">Apply Result As</span>
+      <select class="comment-filter-select" id="editorAiApplyMode">
+        <option value="insert-below" ${(task.lastApplyMode || "insert-below") === "insert-below" ? "selected" : ""}>Insert below target</option>
+        <option value="replace-target" ${task.lastApplyMode === "replace-target" ? "selected" : ""}>Replace target</option>
+        <option value="append-scene" ${task.lastApplyMode === "append-scene" ? "selected" : ""}>Append to scene</option>
+      </select>
+    </label>
+  `;
+  const shouldApply = await showModal({
+    title: "AI Task Result",
+    message: container,
+    confirmLabel: "Apply",
+    cancelLabel: "Close",
+    contentClass: "editor-ai-review-modal"
+  });
+  if (!shouldApply) return;
+  const applyMode = container.querySelector("#editorAiApplyMode")?.value || task.lastApplyMode || "insert-below";
+  await applyAiTaskResult(taskId, applyMode);
+}
+
+async function applyAiTaskResult(taskId, applyMode = null) {
+  const task = getEditorTaskById(taskId);
+  if (!task?.aiResultText) return;
+  const finalMode = applyMode || task.lastApplyMode || "insert-below";
+  const applied = insertAiTaskResultIntoProjectWithMode(task, task.aiResultText, finalMode);
+  if (!applied) {
+    await customAlert("The AI result could not be inserted into the project.", "AI Task");
+    return;
+  }
+  updateEditorTask(taskId, { aiState: "applied", status: "done", lastApplyMode: finalMode });
+  createEditorNotification({
+    task,
+    category: "completed",
+    title: "AI result applied",
+    message: `${task.title} was applied to the script with ${finalMode.replace("-", " ")} mode.`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+  });
+  openProject(task.projectId, { focusLineId: task.lineId || task.sceneId || "" });
+  showToast("AI result applied to the script.", "success");
+}
+
+function dismissAiTaskResult(taskId) {
+  const task = getEditorTaskById(taskId);
+  if (!task) return;
+  updateEditorTask(taskId, { aiState: "dismissed" });
+  createEditorNotification({
+    task,
+    category: "review",
+    title: "AI result dismissed",
+    message: `${task.title} was reviewed and dismissed.`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+  });
+  showToast("AI result dismissed.", "success");
+}
+
+async function editEditorTask(taskId) {
+  const editorProject = getEditorRootProject(state.currentEditorId);
+  const task = getEditorTaskById(taskId);
+  if (!editorProject || !task) return;
+  const assignees = getEditorTaskAssignees(editorProject);
+  const scenes = getEditorTaskSceneChoices();
+  const lines = getEditorTaskLineChoices();
+  const memoryChoices = getEditorStoryMemoryChoices();
+  const selectedTemplate = getEditorTaskTemplate(task.templateKey);
+  const container = document.createElement("div");
+  container.className = "editor-task-form editor-task-form-modal";
+  container.innerHTML = `
+    <select id="taskEditTemplate" class="comment-filter-select">
+      ${EDITOR_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}" ${template.key === (task.templateKey || "custom") ? "selected" : ""}>${escapeHtml(template.label)}</option>`).join("")}
+    </select>
+    <input id="taskEditTitle" class="modal-input" type="text" value="${task.title}">
+    <select id="taskEditProject" class="comment-filter-select">
+      ${getEditorProjects(state.currentEditorId).filter((project) => !project.isEditorRoot).map((project) => `<option value="${escapeHtml(project.id)}" ${project.id === task.projectId ? "selected" : ""}>${escapeHtml(project.title)}</option>`).join("")}
+    </select>
+    <select id="taskEditScene" class="comment-filter-select">
+      <option value="">General task</option>
+      ${scenes.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" ${scene.sceneId === task.sceneId ? "selected" : ""}>${escapeHtml(scene.label)}</option>`).join("")}
+    </select>
+    <select id="taskEditLine" class="comment-filter-select">
+      <option value="">Scene level</option>
+      ${lines.map((line) => `<option value="${escapeHtml(line.lineId)}" ${line.lineId === task.lineId ? "selected" : ""}>${escapeHtml(line.label)}</option>`).join("")}
+    </select>
+    <select id="taskEditAssignee" class="comment-filter-select">
+      ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}" ${assignee.id === task.assignedTo ? "selected" : ""}>${escapeHtml(assignee.label)}</option>`).join("")}
+    </select>
+    <select id="taskEditStatus" class="comment-filter-select">
+      <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
+      <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+      <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
+    </select>
+    <select id="taskEditPriority" class="comment-filter-select">
+      <option value="normal" ${(task.priority || "normal") === "normal" ? "selected" : ""}>Priority: Normal</option>
+      <option value="high" ${(task.priority || "normal") === "high" ? "selected" : ""}>Priority: High</option>
+      <option value="low" ${(task.priority || "normal") === "low" ? "selected" : ""}>Priority: Low</option>
+    </select>
+    <input id="taskEditDueAt" class="modal-input" type="datetime-local" value="${task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : ""}">
+    <select id="taskEditAiStart" class="comment-filter-select">
+      <option value="now" ${!task.aiStartAt ? "selected" : ""}>Run now</option>
+      <option value="in-3m">In 3 mins</option>
+      <option value="in-10m">In 10 mins</option>
+      <option value="manual" ${task.aiStartAt ? "selected" : ""}>Custom time</option>
+    </select>
+    <input id="taskEditAiStartManual" class="modal-input" type="datetime-local" value="${task.aiStartAt ? new Date(task.aiStartAt).toISOString().slice(0, 16) : ""}">
+    <input id="taskEditReference" class="modal-input" type="text" value="${escapeHtml(task.reference || "")}" placeholder="Scene / block reference (optional)">
+    <select id="taskEditMemory" class="comment-filter-select">
+      <option value="">Story memory link (optional)</option>
+      ${memoryChoices.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === task.memoryLinkId ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+    </select>
+    <input id="taskEditHandoff" class="modal-input" type="text" value="${escapeHtml(task.handoffNote || "")}" placeholder="Handoff cue or mention (optional)">
+    <textarea id="taskEditDescription" class="collab-textarea editor-task-description" placeholder="Describe what needs to happen...">${escapeHtml(task.description || "")}</textarea>
+    <p id="taskEditTemplateHint" class="modal-copy">${escapeHtml(selectedTemplate.aiInstruction)}</p>
+  `;
+  container.dataset.editorTemplateApplied = task.templateKey || "custom";
+  container.querySelector("#taskEditTemplate")?.addEventListener("change", (event) => {
+    applyEditorTaskTemplateToForm(container, event.target.value);
+  });
+  const saved = await showModal({
+    title: "Edit Task",
+    message: container,
+    confirmLabel: "Save"
+  });
+  if (!saved) return;
+  const sceneId = container.querySelector("#taskEditScene")?.value || "";
+  const lineId = container.querySelector("#taskEditLine")?.value || "";
+  const sceneChoice = scenes.find((scene) => scene.sceneId === sceneId) || null;
+  const lineChoice = lines.find((line) => line.lineId === lineId) || null;
+  const assignedTo = container.querySelector("#taskEditAssignee")?.value || "";
+  const assignee = assignees.find((entry) => entry.id === assignedTo);
+  const memoryId = container.querySelector("#taskEditMemory")?.value || "";
+  const memoryChoice = memoryChoices.find((entry) => entry.id === memoryId) || null;
+  const aiStartAt = assignee?.assigneeType === "system"
+    ? resolveAiTaskStart(
+        container.querySelector("#taskEditAiStart")?.value || "now",
+        container.querySelector("#taskEditAiStartManual")?.value || ""
+      )
+    : "";
+  updateEditorTask(taskId, {
+    templateKey: container.querySelector("#taskEditTemplate")?.value || "custom",
+    priority: container.querySelector("#taskEditPriority")?.value || task.priority || "normal",
+    title: container.querySelector("#taskEditTitle")?.value?.trim() || task.title,
+    description: container.querySelector("#taskEditDescription")?.value?.trim() || "",
+    dueAt: container.querySelector("#taskEditDueAt")?.value ? new Date(container.querySelector("#taskEditDueAt").value).toISOString() : "",
+    projectId: lineChoice?.projectId || sceneChoice?.projectId || container.querySelector("#taskEditProject")?.value || task.projectId,
+    sceneId: lineChoice?.sceneId || sceneChoice?.sceneId || "",
+    sceneLabel: lineChoice?.sceneLabel || sceneChoice?.label || "",
+    lineId: lineChoice?.lineId || sceneChoice?.lineId || "",
+    lineLabel: lineChoice?.lineLabel || "",
+    assignedTo,
+    assignedLabel: assignee?.label || "Unassigned",
+    assigneeType: assignee?.assigneeType || "human",
+    handoffNote: container.querySelector("#taskEditHandoff")?.value?.trim() || "",
+    memoryLinkType: memoryChoice?.type || "",
+    memoryLinkId: memoryChoice?.id || "",
+    memoryLinkName: memoryChoice?.name || "",
+    memoryProjectId: memoryChoice?.projectId || "",
+    aiStartAt,
+    aiState: assignee?.assigneeType === "system"
+      ? (task.aiState === "review" || task.aiState === "applied" || task.aiState === "dismissed"
+          ? task.aiState
+          : (aiStartAt ? "scheduled" : "ready"))
+      : "idle",
+    status: container.querySelector("#taskEditStatus")?.value || task.status,
+    reference: container.querySelector("#taskEditReference")?.value?.trim() || ""
+  });
+}
+
+async function deleteEditorTask(taskId) {
+  const confirmed = await customConfirm("Delete this task and its comments?", "Delete Task");
+  if (!confirmed) return;
+  clearAiTaskTimer(taskId);
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    tasks: (editor.tasks || []).filter((task) => task.id !== taskId)
+  }));
+  persistProjects(true, { syncInputs: false });
+  renderEditorView();
+  showToast("Task deleted.", "success");
+}
+
+async function commentOnEditorTask(taskId) {
+  const task = getEditorTaskById(taskId);
+  if (!task) return;
+  const editorProject = getEditorRootProject(state.currentEditorId);
+  const assignees = editorProject ? getEditorTaskAssignees(editorProject).filter((entry) => entry.assigneeType === "human") : [];
+  const container = document.createElement("div");
+  container.className = "editor-task-comments";
+  container.innerHTML = `
+    <div class="editor-task-comment-list">
+      ${task.comments?.length ? [...task.comments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map((comment) => `
+        <article class="editor-task-comment">
+          <div class="editor-task-comment-head">
+            <strong>${escapeHtml(comment.author || "Editor member")}</strong>
+            <span>${escapeHtml(formatDateTime(comment.createdAt))}</span>
+          </div>
+          ${comment.mentionLabel ? `<span class="editor-task-comment-mention">Mentioned ${escapeHtml(comment.mentionLabel)}</span>` : ""}
+          <p>${escapeHtml(comment.text)}</p>
+        </article>
+      `).join("") : '<p class="editor-home-empty">No task comments yet.</p>'}
+    </div>
+    <select id="editorTaskCommentMention" class="comment-filter-select">
+      <option value="">Mention teammate (optional)</option>
+      ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+    </select>
+    <textarea id="editorTaskCommentText" class="collab-textarea" placeholder="Add a comment..."></textarea>
+  `;
+  const shouldAdd = await showModal({
+    title: task.title,
+    message: container,
+    confirmLabel: "Add Comment"
+  });
+  if (!shouldAdd) return;
+  const text = container.querySelector("#editorTaskCommentText")?.value?.trim();
+  if (!text) return;
+  const mentionId = container.querySelector("#editorTaskCommentMention")?.value || "";
+  const mention = assignees.find((entry) => entry.id === mentionId);
+  updateEditorTask(taskId, {
+    comments: [
+      ...(task.comments || []),
+      {
+        id: uid("task-comment"),
+        text,
+        author: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member",
+        mentionId,
+        mentionLabel: mention?.label || "",
+        createdAt: new Date().toISOString()
+      }
+    ]
+  });
+  createEditorNotification({
+    task,
+    category: "comment",
+    title: "New task comment",
+    message: `${task.title} has a new comment.`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+  });
+  if (mention) {
+    createEditorNotification({
+      task,
+      category: "comment",
+      title: "Task mention",
+      message: `${task.title} mentioned ${mention.label}.`,
+      actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+    });
+  }
+  showToast("Comment added to task.", "success");
+}
+
+function showMentionSuggestions(input, query) {
+  const editorProject = getEditorRootProject(state.currentEditorId);
+  if (!editorProject) return;
+  const assignees = getEditorTaskAssignees(editorProject);
+  const filtered = assignees.filter(a => a.label.toLowerCase().includes(query.toLowerCase()));
+  if (!filtered.length) {
+    hideSuggestionTray();
+    return;
+  }
+
+  const rect = input.getBoundingClientRect();
+  const suggestions = filtered.map(a => ({ label: a.label, value: a.label }));
+
+  state.suggestionContext = {
+    mode: "mention",
+    input: input,
+    query: query
+  };
+
+  renderSuggestionTray("Teammates", suggestions, { rect: {
+    left: rect.left,
+    top: rect.top,
+    bottom: rect.bottom,
+    right: rect.right,
+    width: rect.width,
+    height: rect.height
+  }});
+}
 
 export function bindEvents() {
+  syncAiTaskSchedules();
+  applyEditorTaskTemplateToForm(refs.editorDashboard, "custom", { force: true });
   // Navigation
   refs.newProjectBtn.addEventListener("click", () => {
-    const project = createProject();
-    openProject(project.id);
+    launchNewCreationFlow();
+  });
+
+  refs.editorNewProjectBtn?.addEventListener("click", () => {
+    createProjectInsideCurrentEditor();
+  });
+
+  refs.editorBackBtn?.addEventListener("click", () => {
+    state.currentEditorId = null;
+    persistProjects(false, { syncInputs: false });
+    showHome();
+    renderHome();
+  });
+
+  document.getElementById("editorSaveHomeBtn")?.addEventListener("click", () => {
+    saveAndGoHome();
+  });
+
+  refs.editorCloseBtn?.addEventListener("click", () => {
+    state.currentEditorId = null;
+    persistProjects(false, { syncInputs: false });
+    showHome();
+    renderHome();
+  });
+
+  refs.editorView?.addEventListener("change", (event) => {
+    const editorSwitch = event.target.closest("[data-editor-switch]");
+    if (!editorSwitch) return;
+    openEditorDashboard(editorSwitch.value);
+  });
+
+  refs.homeEditorDashboard?.addEventListener("click", (event) => {
+    const filterTrigger = event.target.closest("[data-home-project-filter]");
+    if (filterTrigger) {
+      state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
+      renderHome();
+    }
+  });
+
+  refs.homeEditorDashboard?.addEventListener("change", (event) => {
+    const formatSelect = event.target.closest("[data-home-project-format]");
+    if (formatSelect) {
+      state.homeProjectFormat = formatSelect.value || "all";
+      renderHome();
+      return;
+    }
+    const editorSelect = event.target.closest("[data-home-editor-filter]");
+    if (editorSelect) {
+      state.homeEditorFilter = editorSelect.value || "all";
+      renderHome();
+      return;
+    }
+    const sortSelect = event.target.closest("[data-home-project-sort]");
+    if (!sortSelect) return;
+    state.homeProjectSort = sortSelect.value || "latest";
+    renderHome();
+  });
+
+  refs.homeProjectsSubtitle?.addEventListener("click", (event) => {
+    const filterTrigger = event.target.closest("[data-home-project-filter]");
+    if (!filterTrigger) return;
+    state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
+    renderHome();
+  });
+
+  refs.homeProjectsSubtitle?.addEventListener("change", (event) => {
+    const formatSelect = event.target.closest("[data-home-project-format]");
+    if (formatSelect) {
+      state.homeProjectFormat = formatSelect.value || "all";
+      renderHome();
+      return;
+    }
+    const editorSelect = event.target.closest("[data-home-editor-filter]");
+    if (editorSelect) {
+      state.homeEditorFilter = editorSelect.value || "all";
+      renderHome();
+      return;
+    }
+    const sortSelect = event.target.closest("[data-home-project-sort]");
+    if (!sortSelect) return;
+    state.homeProjectSort = sortSelect.value || "latest";
+    renderHome();
+  });
+
+  refs.editorDashboard?.addEventListener("click", (event) => {
+    const profileTrigger = event.target.closest("[data-profile-uid]");
+    if (profileTrigger) {
+      showCollabProfile({
+        uid: profileTrigger.dataset.profileUid || "",
+        name: profileTrigger.dataset.profileName || "",
+        photoURL: profileTrigger.dataset.profilePhotourl || ""
+      });
+      return;
+    }
+    const action = event.target.closest("[data-editor-home-action]")?.dataset.editorHomeAction;
+    if (!action) return;
+    if (action === "new-project") {
+      createProjectInsideCurrentEditor();
+      return;
+    }
+    if (action === "open-popup") {
+      showEditorPopup();
+      return;
+    }
+    if (action === "add-editor-task") {
+      addEditorTaskFromDashboard();
+      return;
+    }
+    if (action === "mark-all-notifications-read") {
+      markAllEditorNotificationsRead();
+      return;
+    }
+    if (action === "mark-notification-read") {
+      const notificationId = event.target.closest("[data-notification-id]")?.dataset.notificationId;
+      if (notificationId) markEditorNotificationRead(notificationId, true);
+      return;
+    }
+    if (action === "set-task-filter") {
+      state.editorTaskFilter = event.target.closest("[data-task-filter]")?.dataset.taskFilter || "all";
+      renderEditorView();
+      return;
+    }
+    if (action === "edit-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) editEditorTask(taskId);
+      return;
+    }
+    if (action === "delete-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) deleteEditorTask(taskId);
+      return;
+    }
+    if (action === "comment-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) commentOnEditorTask(taskId);
+      return;
+    }
+    if (action === "open-task-project") {
+      const trigger = event.target.closest("[data-task-project-id]");
+      const projectId = trigger?.dataset.taskProjectId;
+      const taskId = trigger?.dataset.taskId;
+      const task = taskId ? getEditorTaskById(taskId) : null;
+      if (projectId) {
+        openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+      }
+      return;
+    }
+    if (action === "open-task-memory") {
+      const trigger = event.target.closest("[data-memory-project-id]");
+      const projectId = trigger?.dataset.memoryProjectId;
+      if (projectId) {
+        openProject(projectId);
+      }
+      setTimeout(() => {
+        showStoryMemoryPopup();
+      }, 60);
+      return;
+    }
+    if (action === "open-notification") {
+      const trigger = event.target.closest("[data-notification-id]");
+      const projectId = trigger?.dataset.taskProjectId;
+      const notificationId = trigger?.dataset.notificationId;
+      if (notificationId && !notificationId.startsWith("due-")) markEditorNotificationRead(notificationId, true);
+      if (projectId) {
+        const notification = getEditorNotifications().find((item) => item.id === notificationId);
+        const task = notification?.taskId
+          ? getEditorTaskById(notification.taskId)
+          : (trigger?.dataset.taskId ? getEditorTaskById(trigger.dataset.taskId) : null);
+        openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+      }
+      return;
+    }
+    if (action === "run-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) runAiTask(taskId);
+      return;
+    }
+    if (action === "review-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) reviewAiTaskResult(taskId);
+      return;
+    }
+    if (action === "apply-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) applyAiTaskResult(taskId);
+      return;
+    }
+    if (action === "dismiss-ai-task") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) dismissAiTaskResult(taskId);
+      return;
+    }
+  });
+
+  refs.editorDashboard?.addEventListener("input", (event) => {
+    const titleInput = event.target.closest("[data-editor-task-title]");
+    const descInput = event.target.closest("[data-editor-task-description]");
+    if (titleInput || descInput) {
+      const target = titleInput || descInput;
+      const text = target.value;
+      const cursor = target.selectionStart;
+      const lastAt = text.lastIndexOf("@", cursor - 1);
+      if (lastAt !== -1 && !/\s/.test(text.slice(lastAt + 1, cursor))) {
+        showMentionSuggestions(target, text.slice(lastAt + 1, cursor));
+      } else {
+        hideSuggestionTray();
+      }
+    }
+
+    const templateSelect = event.target.closest("[data-editor-task-template]");
+    if (templateSelect) {
+      applyEditorTaskTemplateToForm(refs.editorDashboard, templateSelect.value);
+      return;
+    }
+    const taskSortSelect = event.target.closest("[data-editor-home-action='set-task-sort']");
+    if (taskSortSelect) {
+      state.editorTaskSort = taskSortSelect.value || "latest";
+      renderEditorView();
+      return;
+    }
+    const statusSelect = event.target.closest("[data-editor-task-status]");
+    if (statusSelect) {
+      updateEditorTask(statusSelect.dataset.editorTaskStatus, { status: statusSelect.value });
+    }
   });
 
   refs.goHomeBtn.addEventListener("click", () => {
@@ -72,6 +1335,11 @@ export function bindEvents() {
   document.getElementById("smartProofreadBtn")?.addEventListener("click", () => {
     AI.triggerSmartProofread();
   });
+  document.addEventListener("selectionchange", () => {
+    window.requestAnimationFrame(updateSelectionToolbar);
+  });
+  window.addEventListener("resize", hideSelectionToolbar);
+  refs.screenplayEditor?.addEventListener("scroll", hideSelectionToolbar);
 
   // Meta Inputs
   [refs.titleInput, refs.authorInput, refs.contactInput, refs.companyInput, refs.detailsInput, refs.loglineInput]
@@ -226,21 +1494,23 @@ export function bindEvents() {
     refs.aiPanel.hidden = !state.aiAssist;
     applyToolbarState();
     queueSave();
+    updateSelectionToolbar();
   });
 
   refs.grammarCheckToggle.addEventListener("change", () => {
     setGrammarCheck(refs.grammarCheckToggle.checked);
     queueSave();
+    updateSelectionToolbar();
   });
 
   refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);
 
   // Layout Toggles
-  refs.leftRailToggle.addEventListener("click", () => {
+  refs.leftRailToggle?.addEventListener("click", () => {
     togglePane("left");
     setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
   });
-  refs.rightRailToggle.addEventListener("click", () => {
+  refs.rightRailToggle?.addEventListener("click", () => {
     togglePane("right");
     setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
   });
@@ -250,6 +1520,47 @@ export function bindEvents() {
         setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "&#9660;" : "&#9650;");
         persistProjects(false);
     });
+
+  refs.quickDisplayBg?.addEventListener("change", () => {
+    state.backgroundAnimation = refs.quickDisplayBg.checked;
+    applyToolbarState();
+    persistProjects(false);
+  });
+  refs.quickDisplayActiveBlock?.addEventListener("change", () => {
+    const shouldShow = refs.quickDisplayActiveBlock.checked;
+    refs.leftPane.classList.toggle("is-hidden", !shouldShow);
+    refs.leftResize?.classList.toggle("is-hidden", !shouldShow);
+    refs.studioLayout.classList.toggle("left-pane-hidden", !shouldShow);
+    applyViewState();
+    persistProjects(false);
+  });
+  refs.quickDisplayPreview?.addEventListener("change", () => {
+    const shouldShow = refs.quickDisplayPreview.checked;
+    refs.rightPane.classList.toggle("is-hidden", !shouldShow);
+    refs.rightResize?.classList.toggle("is-hidden", !shouldShow);
+    refs.studioLayout.classList.toggle("right-pane-hidden", !shouldShow);
+    applyViewState();
+    persistProjects(false);
+  });
+  refs.quickDisplayFocusMode?.addEventListener("change", () => {
+    state.viewOptions.focusMode = refs.quickDisplayFocusMode.checked;
+    if (!state.viewOptions.focusMode) {
+      clearTimeout(focusModeTimer);
+      document.body.classList.remove("focus-mode-active");
+    }
+    applyViewState();
+    persistProjects(false);
+  });
+  refs.quickDisplayFullscreen?.addEventListener("change", () => {
+    if (refs.quickDisplayFullscreen.checked) {
+      document.documentElement.requestFullscreen?.();
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+    }
+  });
+  document.addEventListener("fullscreenchange", () => {
+    applyViewState();
+  });
 
   refs.leftPaneSectionToggle.addEventListener("click", () => {
     togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle);
@@ -281,62 +1592,70 @@ export function bindEvents() {
     }
   });
 
-  window.addEventListener("workspaceInviteRequested", async (event) => {
+  window.addEventListener("editorInviteRequested", async (event) => {
     const email = event.detail?.email;
     const role = event.detail?.role || "editor";
     if (!email) {
       return;
     }
     const result = await inviteCollaborator(email, role);
-    window.dispatchEvent(new CustomEvent("workspaceInviteResult", { detail: result }));
+    window.dispatchEvent(new CustomEvent("editorInviteResult", { detail: result }));
     if (result?.ok) {
-      await customAlert("Workspace invite sent.", "Workspace");
+      await customAlert("Editor invite sent.", "Editor");
     } else if (result?.reason) {
-      await customAlert(result.reason, "Workspace");
+      await customAlert(result.reason, "Editor");
     }
   });
 
-  window.addEventListener("workspaceRenameRequested", async (event) => {
-    const result = await renameWorkspace(event.detail?.projectId, event.detail?.name);
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
-      detail: { ...result, message: result.ok ? "Workspace name saved." : "" }
+  window.addEventListener("editorRenameRequested", async (event) => {
+    const result = await renameEditor(event.detail?.projectId, event.detail?.name);
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
+      detail: { ...result, message: result.ok ? "Editor name saved." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("workspaceRoleChangeRequested", async (event) => {
+  window.addEventListener("editorRoleChangeRequested", async (event) => {
     const result = await updateCollaboratorRole(event.detail?.projectId, event.detail?.collaboratorUid, event.detail?.role);
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
       detail: { ...result, message: result.ok ? "Member role updated." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("workspaceReminderRequested", async (event) => {
-    const result = await addWorkspaceReminder(event.detail?.projectId, {
+  window.addEventListener("editorReminderRequested", async (event) => {
+    const result = await addEditorReminder(event.detail?.projectId, {
       text: event.detail?.text,
       dueAt: event.detail?.dueAt
     });
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
       detail: { ...result, message: result.ok ? "Reminder added." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("workspaceReminderToggleRequested", async (event) => {
-    const result = await toggleWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+  window.addEventListener("editorReminderToggleRequested", async (event) => {
+    const result = await toggleEditorReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
       detail: { ...result, message: result.ok ? "Reminder updated." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("workspaceReminderDeleteRequested", async (event) => {
-    const result = await deleteWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
-    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+  window.addEventListener("editorReminderDeleteRequested", async (event) => {
+    const result = await deleteEditorReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("editorMutationResult", {
       detail: { ...result, message: result.ok ? "Reminder deleted." : "" }
     }));
     if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("editorMemberProfileRequested", (event) => {
+    showCollabProfile({
+      uid: event.detail?.uid || "",
+      name: event.detail?.name || "",
+      photoURL: event.detail?.photoURL || ""
+    });
   });
 
   refs.duplicateProjectBtn.addEventListener("click", duplicateProject);
@@ -370,6 +1689,14 @@ export function bindEvents() {
   });
 
   refs.screenplayEditor.addEventListener("click", async (e) => {
+    const taskMarker = e.target.closest("[data-script-task-target]");
+    if (taskMarker) {
+      const [firstTaskId] = String(taskMarker.dataset.taskIds || "").split(",").filter(Boolean);
+      if (firstTaskId) {
+        await commentOnEditorTask(firstTaskId);
+      }
+      return;
+    }
     const block = e.target.closest(".script-block");
     if (block) {
         setActiveBlock(block.dataset.id);
@@ -487,12 +1814,50 @@ export function bindEvents() {
 
   // Project Grid (Delegated)
   refs.projectGrid.addEventListener("click", (e) => {
+      const filterTrigger = e.target.closest("[data-home-project-filter]");
+      if (filterTrigger) {
+          state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
+          renderHome();
+          return;
+      }
+      const formatSelect = e.target.closest("[data-home-project-format]");
+      if (formatSelect) {
+          state.homeProjectFormat = formatSelect.value || "all";
+          renderHome();
+          return;
+      }
+      const editorTrigger = e.target.closest("[data-open-editor-id]");
+      if (editorTrigger) {
+          openEditorDashboard(editorTrigger.dataset.openEditorId);
+          return;
+      }
       const card = e.target.closest(".project-card");
       if (!card) return;
       const projectId = card.dataset.projectId;
 
       if (e.target.closest(".project-delete")) {
           removeProject(projectId);
+      } else if (e.target.closest('[data-project-action="rename"]')) {
+          renameProjectById(projectId);
+      } else if (e.target.closest('[data-project-action="duplicate"]')) {
+          duplicateProjectById(projectId);
+      } else {
+          openProject(projectId);
+      }
+  });
+
+  // Editor Project Grid (Delegated)
+  refs.editorProjectGrid?.addEventListener("click", (e) => {
+      const card = e.target.closest(".project-card");
+      if (!card) return;
+      const projectId = card.dataset.projectId;
+
+      if (e.target.closest(".project-delete")) {
+          removeProject(projectId);
+      } else if (e.target.closest('[data-project-action="rename"]')) {
+          renameProjectById(projectId);
+      } else if (e.target.closest('[data-project-action="duplicate"]')) {
+          duplicateProjectById(projectId);
       } else {
           openProject(projectId);
       }
@@ -502,11 +1867,11 @@ export function bindEvents() {
   [refs.homeRecentProjects, refs.studioRecentProjects].forEach(container => {
       if (!container) return;
       container.addEventListener("click", (e) => {
-          const btn = e.target.closest(".recent-project-button");
-          if (btn) {
-              openProject(btn.dataset.projectId);
-              closeMenus();
-          }
+        const btn = e.target.closest(".recent-project-button");
+        if (btn) {
+            openProject(btn.dataset.projectId);
+            closeMenus();
+        }
       });
   });
 
@@ -615,10 +1980,16 @@ export function bindEvents() {
 }
 
 // Action Handlers
-export function openProject(projectId) {
-  const project = state.projects.find((item) => item.id === projectId);
-  if (!project) return;
-  state.currentProjectId = project.id;
+export function openProject(projectId, options = {}) {
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!project) return;
+    if (project.isEditorRoot) {
+      openEditorDashboard(project.editor?.id || project.id);
+      return;
+    }
+    const projectLoadToast = options.silentLoadToast ? null : showToast("Opening project...", "loading", { duration: 0 });
+    state.currentProjectId = project.id;
+  state.currentEditorId = project.editor?.id !== project.id ? project.editor?.id || null : null;
   hasShownReadOnlyNotice = false;
 
   // Reset history for the new project
@@ -643,18 +2014,24 @@ export function openProject(projectId) {
   showStudio();
   renderStudio();
   onStudioEnter(projectId);
-  primeSpellingDictionary();
-  if (state.activeBlockId) {
-    focusBlock(state.activeBlockId);
-  }
+    primeSpellingDictionary();
+    if (options.focusLineId) {
+      focusBlock(options.focusLineId);
+    } else if (state.activeBlockId) {
+      focusBlock(state.activeBlockId);
+    }
 
-  checkFirstWorkBackup();
+    checkFirstWorkBackup();
+    if (projectLoadToast) {
+      updateToast(projectLoadToast, "Project opened.", "success", { duration: 1200 });
+    }
 }
 
 export function renderStudio() {
   const project = getCurrentProject();
   if (!project) return;
   syncInputsFromProject(project);
+  renderStudioProjectContext();
   renderEditor();
   renderCoverPreview();
   renderPreview();
@@ -667,8 +2044,12 @@ export function renderStudio() {
   renderLeftPaneLayout();
   applyViewState();
   applyToolbarState();
-  setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
-  setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+  if (refs.leftRailToggle) {
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
+  }
+  if (refs.rightRailToggle) {
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+  }
   setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   applyTranslations();
@@ -693,9 +2074,8 @@ export function duplicateActiveBlock() {
 
 function handleMetaInput() {
   syncProjectFromInputs();
-  renderCoverPreview();
-  renderPreview();
-  scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: false });
+  schedulePreviewRefresh({ includeCover: true });
+  scheduleStudioSidebarRefresh({ includeHome: false, includeAnalytics: false });
   queueSave();
 }
 
@@ -727,13 +2107,13 @@ function canEditCurrentProjectWithNotice() {
 
   if (!hasShownReadOnlyNotice) {
     hasShownReadOnlyNotice = true;
-    customAlert("Viewer access is read-only. Ask the workspace owner to promote you to Editor if you need to make changes.", "Read-only Workspace");
+    customAlert("Viewer access is read-only. Ask the editor owner to promote you to Editor if you need to make changes.", "Read-only Editor");
   }
 
   return false;
 }
 
-function scheduleStudioSidebarRefresh({ includeHome = true, includeAnalytics = true } = {}) {
+function scheduleStudioSidebarRefresh({ includeHome = false, includeAnalytics = true } = {}) {
   if (studioSidebarRefreshFrame) {
     return;
   }
@@ -768,9 +2148,10 @@ function handleBlockInput(id, element) {
     line.secondary = normalized;
     project.updatedAt = new Date().toISOString();
     setActiveBlock(id);
-    renderPreview();
-    scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: true });
+    schedulePreviewRefresh();
+    scheduleStudioSidebarRefresh({ includeHome: false, includeAnalytics: true });
     updateSuggestions();
+    setTypingFocusModeActive();
     queueSave();
     return;
   }
@@ -824,13 +2205,14 @@ function handleBlockInput(id, element) {
   }
 
   setActiveBlock(id);
-  renderPreview();
-  scheduleStudioSidebarRefresh({ includeHome: true, includeAnalytics: true });
+  schedulePreviewRefresh();
+  scheduleStudioSidebarRefresh({ includeHome: false, includeAnalytics: true });
   if (line.type === "scene") {
     hideSuggestionTray(true);
   } else {
     updateSuggestions();
   }
+  setTypingFocusModeActive();
   queueSave();
 }
 
@@ -1144,6 +2526,19 @@ function toggleSceneCollapse(sceneId) {
 }
 
 function applySuggestion(value) {
+  if (state.suggestionContext?.mode === "mention" && state.suggestionContext.input) {
+    const input = state.suggestionContext.input;
+    const text = input.value;
+    const cursor = input.selectionStart;
+    const lastAt = text.lastIndexOf("@", cursor - 1);
+    input.value = text.slice(0, lastAt) + "@" + value + " " + text.slice(cursor);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+    hideSuggestionTray();
+    clearSuggestionContext();
+    return;
+  }
+
   const line = getLine(state.activeBlockId);
   const project = getCurrentProject();
   if (!line || !project) return;
@@ -1240,7 +2635,7 @@ function initResizeHandle(handle, side) {
 function handleMenuAction(action) {
   switch (action) {
     case "new-project":
-      openProject(createProject().id);
+      launchNewCreationFlow();
       break;
     case "open-projects":
       persistProjects(true);
@@ -1449,8 +2844,8 @@ function handleMenuAction(action) {
     case "pick-story-memory":
       showStoryMemoryPicker();
       break;
-    case "open-workspace":
-      showWorkspacePopup();
+    case "open-editor":
+      showEditorPopup();
       break;
     case "open-analytics": {
       const container = document.createElement("div");
@@ -1484,7 +2879,16 @@ function execEditorCommand(command) {
 }
 
 function saveAndGoHome() {
+  if (isDisposableUntitledDraft()) {
+    discardUntitledDraftIfNeeded().then(() => {
+      state.currentEditorId = null;
+      showHome();
+      renderHome();
+    });
+    return;
+  }
   persistProjects(true);
+  state.currentEditorId = null;
   showHome();
   renderHome();
 }
@@ -1723,6 +3127,12 @@ function setButtonGlyph(button, entity) {
 async function renameCurrentProject() {
   const project = getCurrentProject();
   if (!project) return;
+
+  if (!canManageEditor(project)) {
+    await customAlert("Only the owner can rename a collaborated file.", "Rename Restricted");
+    return;
+  }
+
   const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (nextTitle === null) return;
   project.title = nextTitle.trim() || "Untitled Script";
@@ -1732,12 +3142,49 @@ async function renameCurrentProject() {
   queueSave();
 }
 
-function duplicateProject() {
+async function duplicateProject() {
   const current = getCurrentProject();
+  if (!current) return;
+  const confirmed = await customPrompt(`Type 'yes' to duplicate "${current.title}":`, "", "Duplicate Project");
+  if (confirmed?.toLowerCase() !== 'yes') return;
+
   const copy = cloneProject({ ...current, title: `${current.title} Copy` }, true);
   upsertProject(copy);
   openProject(copy.id);
   persistProjects(true);
+}
+
+async function renameProjectById(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+
+  if (!canManageEditor(project)) {
+    await customAlert("Only the owner can rename a collaborated file.", "Rename Restricted");
+    return;
+  }
+
+  const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
+  if (!nextTitle || !nextTitle.trim()) return;
+  project.title = nextTitle.trim();
+  project.updatedAt = new Date().toISOString();
+  upsertProject(project);
+  persistProjects(true, { syncInputs: false });
+  renderHome();
+  if (state.currentProjectId === project.id) {
+    renderStudio();
+  }
+}
+
+async function duplicateProjectById(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  const confirmed = await customPrompt(`Type 'yes' to duplicate "${project.title}":`, "", "Duplicate Project");
+  if (confirmed?.toLowerCase() !== 'yes') return;
+
+  const copy = cloneProject({ ...project, title: `${project.title} Copy` }, true);
+  upsertProject(copy);
+  persistProjects(true, { syncInputs: false });
+  renderHome();
 }
 
 function deleteProject() {
@@ -1749,7 +3196,8 @@ async function removeProject(id) {
   const target = state.projects.find((item) => item.id === id);
   if (!target) return;
 
-  const confirmation = await customPrompt(`This will permanently delete the script "${target.title}".\n\nTo confirm, please retype the project name below:`, "", "Confirm Deletion");
+  const entityLabel = target.isEditorRoot ? "editor" : "project";
+  const confirmation = await customPrompt(`This will permanently delete the ${entityLabel} "${target.title}".\n\nTo confirm, please retype the ${entityLabel} name below:`, "", "Confirm Deletion");
 
   if (confirmation !== target.title) {
     if (confirmation !== null) {
@@ -1758,12 +3206,22 @@ async function removeProject(id) {
     return;
   }
 
-  state.projects = state.projects.filter((item) => item.id !== id);
+  const editorId = target.editor?.id || target.id;
+  state.projects = state.projects.filter((item) => {
+    if (target.isEditorRoot) {
+      return item.editor?.id !== editorId;
+    }
+    return item.id !== id;
+  });
   if (!state.projects.length) {
-    state.projects = [createProject()];
+    const fallback = createProjectWithOptions();
+    state.projects = [fallback];
+  }
+  if (target.isEditorRoot || state.currentEditorId === editorId) {
+    state.currentEditorId = null;
   }
   state.currentProjectId = state.projects[0].id;
-  persistProjects(true);
+  persistProjects(true, { syncInputs: false });
   deleteProjectFromCloud(id);
   showHome();
   renderHome();
@@ -1925,8 +3383,8 @@ function clearScriptFilter() {
 }
 
 function exportTxt() {
-  const project = syncProjectFromInputs() || getCurrentProject();
-  if (!project) return;
+    const project = syncProjectFromInputs() || getCurrentProject();
+    if (!project) return;
 
   const preparedLines = buildPreparedExportLines(project);
 
@@ -1939,31 +3397,38 @@ function exportTxt() {
   const cover = coverParts.join("\n\n");
 
   const pageBreak = "\n\n" + "-".repeat(60) + "\n\n";
-  const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
+    const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
 
-  const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
-  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+    const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
+    downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+    showToast("Export complete.", "success");
 }
 
 function exportJson() {
-  const project = syncProjectFromInputs() || getCurrentProject();
-  downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+    const project = syncProjectFromInputs() || getCurrentProject();
+    downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+    showToast("Export complete.", "success");
 }
 
 async function exportWord() {
-    const project = syncProjectFromInputs() || getCurrentProject();
-    if (!project) return;
+      const project = syncProjectFromInputs() || getCurrentProject();
+      if (!project) return;
+      const exportToast = showToast("Preparing Word export...", "loading", { duration: 0 });
 
-    try {
-      const blob = await buildWordDocxBlob(project);
-      downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
-    } catch (error) {
-      console.error("DOCX export failed", error);
-      customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
-    }
+      try {
+        const blob = await buildWordDocxBlob(project);
+        downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
+        updateToast(exportToast, "Export complete.", "success");
+      } catch (error) {
+        console.error("DOCX export failed", error);
+        updateToast(exportToast, "Word export failed.", "error", { duration: 4200 });
+        customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
+      }
 }
 
-function exportPdf() { printWithHiddenFrame(); }
+function exportPdf() {
+  printWithHiddenFrame();
+}
 
 function openPreviewWindow(autoPrint) {
   const project = syncProjectFromInputs() || getCurrentProject();
@@ -1982,6 +3447,7 @@ function openPreviewWindow(autoPrint) {
 function printWithHiddenFrame() {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
+  const exportToast = showToast("Preparing PDF export...", "loading", { duration: 0 });
 
   const existingFrame = document.querySelector("#printExportFrame");
   if (existingFrame) {
@@ -2002,21 +3468,24 @@ function printWithHiddenFrame() {
   const cleanup = () => window.setTimeout(() => frame.remove(), 1500);
   frame.onload = () => {
     const frameWindow = frame.contentWindow;
-    if (!frameWindow) {
-      cleanup();
-      customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
-      return;
-    }
+      if (!frameWindow) {
+        cleanup();
+        updateToast(exportToast, "PDF export failed.", "error", { duration: 4200 });
+        customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+        return;
+      }
 
     frameWindow.focus();
-    window.setTimeout(() => {
-      try {
-        frameWindow.print();
-      } catch (error) {
-        console.error("Unable to start PDF print flow", error);
-        customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
-      } finally {
-        cleanup();
+      window.setTimeout(() => {
+        try {
+          frameWindow.print();
+          updateToast(exportToast, "Print dialog opened.", "success", { duration: 2400 });
+        } catch (error) {
+          console.error("Unable to start PDF print flow", error);
+          updateToast(exportToast, "PDF export failed.", "error", { duration: 4200 });
+          customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
+        } finally {
+          cleanup();
       }
     }, 350);
   };
