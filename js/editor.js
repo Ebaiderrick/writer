@@ -19,7 +19,7 @@ import { canEditProject } from './collaborate.js';
 let _renderingEditor = false;
 
 function getLineLinkedTasks(project, lineId, sceneOwnerId, lineType) {
-  const tasks = project?.workspace?.tasks || [];
+  const tasks = project?.editor?.tasks || [];
   return tasks.filter((task) => {
     if (task.projectId && task.projectId !== project.id) return false;
     if (task.lineId) return task.lineId === lineId;
@@ -405,7 +405,7 @@ export function hideSuggestionTray(clearSuggestions = false) {
   }
 }
 
-function renderSuggestionTray(title, suggestions, anchor = null) {
+export function renderSuggestionTray(title, suggestions, anchor = null) {
   state.visibleSuggestions = suggestions.slice(0, 9);
   refs.suggestionList.innerHTML = "";
 
