@@ -235,36 +235,38 @@
       </section>
     </section>
 
-    <section id="workspaceView" class="workspace-view" hidden>
-      <header class="home-topbar workspace-topbar">
+    <section id="editorView" class="editor-view" hidden>
+      <header class="editor-view-header">
         <div class="nav-stack">
-          <div class="workspace-view-brand">
-            <strong id="workspaceViewTitle">Workspace</strong>
-            <span id="workspaceViewSubtitle">Projects, members, and delegation live here.</span>
+          <div class="editor-view-brand editor-view-header-content">
+            <strong id="editorViewTitle">Editor</strong>
+            <span id="editorViewSubtitle">Projects, members, and delegation live here.</span>
           </div>
         </div>
         <div class="home-projects-actions">
-          <button id="workspaceBackBtn" class="ghost-button" type="button">All Projects</button>
-          <button id="workspaceCloseBtn" class="icon-button workspace-close-button" type="button" aria-label="Close workspace">✕</button>
+          <button id="editorBackBtn" class="ghost-button" type="button">All Projects</button>
+          <div id="editorDigitalClock" class="editor-digital-clock" style="margin: 0 15px; font-family: monospace; font-size: 1.1rem; color: var(--accent-strong); font-weight: bold;">00:00:00</div>
+          <button id="editorSaveHomeBtn" class="primary-button" type="button">Save & Home</button>
+          <button id="editorCloseBtn" class="icon-button editor-close-button" type="button" aria-label="Close Editor" style="display:none">✕</button>
         </div>
       </header>
-      <section class="workspace-view-body">
-        <section id="workspaceDashboard" class="workspace-home"></section>
-        <section class="workspace-projects">
-          <div class="home-projects-head workspace-projects-head">
+      <section class="editor-view-body">
+        <section id="editorDashboard" class="editor-home"></section>
+        <section class="editor-projects">
+          <div class="home-projects-head editor-projects-head">
             <div class="home-projects-copy">
-              <h2>Workspace Projects</h2>
-              <p class="home-projects-subtitle">Every script in this workspace stays connected to the same team context.</p>
+              <h2>Editor Projects</h2>
+              <p class="home-projects-subtitle">Every script in this editor stays connected to the same team context.</p>
             </div>
           </div>
-          <div id="workspaceProjectGrid" class="project-grid"></div>
+          <div id="editorProjectGrid" class="project-grid"></div>
         </section>
       </section>
     </section>
 
     <section id="studioView" class="studio-view" hidden>
       <header class="studio-topbar">
-        <div class="workspace-brand">
+        <div class="editor-brand">
           <img src="logo.png" alt="EyaWriter logo">
           <div>
             <strong>EyaWriter</strong>
@@ -449,7 +451,7 @@
               <summary class="menu-group-summary">Tools</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
-                <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Workspace</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-editor">Editor</button>
               </div>
             </details>
 
@@ -484,9 +486,9 @@
           </div>
 
           <div id="studioCollabMenu" class="nav-menu nav-menu-wide" hidden>
-            <div class="nav-menu-label">Workspace</div>
+            <div class="nav-menu-label">Editor</div>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Invite Collaborator</summary>
+              <summary class="menu-group-summary">Invite Teammate</summary>
               <div class="menu-group-body">
                 <div class="collab-invite-row">
                   <input id="collabInviteEmail" type="email" class="collab-input" placeholder="collaborator@email.com">
@@ -764,16 +766,16 @@
                 </div>
               </section>
 
-              <section class="panel section-workspace" data-left-pane-block="workspace" data-left-pane-label="Team Workspace" hidden>
+              <section class="panel section-editor" data-left-pane-block="editor" data-left-pane-label="Team Editor" hidden>
                 <div class="panel-head">
                   <div>
-                    <h3>Team Workspace</h3>
+                    <h3>Team Editor</h3>
                     <p>Shared access, roles, comments, and activity</p>
                   </div>
-                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Team Workspace">â–¼</button>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="editor" aria-label="Collapse Team Editor">â–¼</button>
                 </div>
                 <div class="panel-section-body">
-                  <button class="ghost-button btn-sm" data-menu-action="open-workspace">Open Workspace</button>
+                  <button class="ghost-button btn-sm" data-menu-action="open-editor">Open Editor</button>
                 </div>
               </section>
 
@@ -1076,7 +1078,7 @@
       <button class="project-card-open" type="button">
         <div class="project-card-context-row">
           <span class="project-card-context"></span>
-          <span class="project-card-context-action" role="button" tabindex="0">Open Workspace</span>
+          <span class="project-card-context-action" role="button" tabindex="0">Open Editor</span>
         </div>
         <div class="project-meta-row">
           <span class="project-scenes"></span>
