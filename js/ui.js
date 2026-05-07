@@ -2,7 +2,7 @@ import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
-import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
+import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode, uid } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
 import { calculateAnalytics } from './analytics.js';
@@ -475,6 +475,8 @@ export function renderWorkspaceView() {
 
   if (refs.workspaceViewTitle) refs.workspaceViewTitle.textContent = workspaceLead.workspace?.name || workspaceLead.title || "Workspace";
   if (refs.workspaceViewSubtitle) refs.workspaceViewSubtitle.textContent = `${projects.length} project${projects.length === 1 ? "" : "s"}, ${allTaskItems.length} task${allTaskItems.length === 1 ? "" : "s"}, and shared activity in one calm view.`;
+  refs.workspaceDashboard.dataset.workspaceId = workspaceId;
+  refs.workspaceProjectGrid.dataset.workspaceId = workspaceId;
 
   refs.workspaceDashboard.innerHTML = `
     <div class="workspace-home-shell">
@@ -965,6 +967,7 @@ export function renderHome() {
     refs.homeProjectsSubtitle.textContent = "A focused studio view for projects, members, tasks, and recent movement inside this workspace.";
     if (refs.homeWorkspaceDashboard) {
       refs.homeWorkspaceDashboard.hidden = false;
+      refs.homeWorkspaceDashboard.dataset.workspaceId = workspaceLead.workspace?.id || workspaceLead.id;
       refs.homeWorkspaceDashboard.innerHTML = `
       <div class="workspace-home-shell">
         <section class="workspace-home-hero-card">
@@ -1108,6 +1111,7 @@ export function renderHome() {
       </div>`;
     if (refs.homeWorkspaceDashboard) {
       refs.homeWorkspaceDashboard.hidden = false;
+      delete refs.homeWorkspaceDashboard.dataset.workspaceId;
       refs.homeWorkspaceDashboard.innerHTML = "";
     }
   }

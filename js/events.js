@@ -11,7 +11,7 @@ import {
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
-  getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
+  getOwningSceneId, getSceneIdForIndex, getCharacterAutocomplete, updateSuggestions,
   showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
@@ -178,6 +178,45 @@ function getWorkspaceLeadProject(workspaceId = state.currentWorkspaceId) {
     || null;
 }
 
+function resolveWorkspaceId(container = null) {
+  return container?.dataset?.workspaceId
+    || state.currentWorkspaceId
+    || getCurrentProject()?.workspace?.id
+    || "";
+}
+
+function handleProjectCardGridClick(event) {
+  const workspaceTrigger = event.target.closest("[data-open-workspace-id]");
+  if (workspaceTrigger?.dataset.openWorkspaceId) {
+    openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
+    return true;
+  }
+  const card = event.target.closest(".project-card");
+  if (!card?.dataset.projectId) {
+    return false;
+  }
+  const projectId = card.dataset.projectId;
+  const destructiveAction = event.target.closest(".project-delete")?.dataset.projectDestructiveAction;
+  if (destructiveAction === "leave") {
+    leaveProject(projectId);
+    return true;
+  }
+  if (destructiveAction === "delete") {
+    removeProject(projectId);
+    return true;
+  }
+  if (event.target.closest('[data-project-action="rename"]')) {
+    renameProjectById(projectId);
+    return true;
+  }
+  if (event.target.closest('[data-project-action="duplicate"]')) {
+    duplicateProjectById(projectId);
+    return true;
+  }
+  openProject(projectId, { keepWorkspaceContext: Boolean(resolveWorkspaceId(card.closest("[data-workspace-id]"))) });
+  return true;
+}
+
 function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = false } = {}) {
   if (!container) return;
   const template = getWorkspaceTaskTemplate(templateKey);
@@ -269,15 +308,46 @@ function openWorkspaceDashboard(workspaceId) {
 }
 
 function openWorkspaceEditor() {
-  if (!state.currentWorkspaceId) return;
-  const workspaceProjects = getWorkspaceProjects(state.currentWorkspaceId).filter((project) => !project.isWorkspaceRoot);
-  const activeProject = state.projects.find((project) => project.id === state.currentProjectId && project.workspace?.id === state.currentWorkspaceId && !project.isWorkspaceRoot);
-  const target = activeProject || workspaceProjects[0] || getWorkspaceLeadProject(state.currentWorkspaceId) || null;
+  const workspaceId = resolveWorkspaceId(refs.workspaceDashboard);
+  if (!workspaceId) return;
+  const workspaceLead = getWorkspaceLeadProject(workspaceId);
+  const workspaceProjects = getWorkspaceProjects(workspaceId).filter((project) => !project.isWorkspaceRoot);
+  const activeProject = state.projects.find((project) => (
+    project.id === state.currentProjectId
+    && project.workspace?.id === workspaceId
+    && !project.isWorkspaceRoot
+  ));
+  let target = activeProject || workspaceProjects[0] || null;
+  if (!target && workspaceLead) {
+    target = createProjectWithOptions({
+      creationKind: "project",
+      workType: "film-script",
+      title: `Film Script ${workspaceProjects.length + 1}`,
+      isShared: workspaceLead.isShared,
+      ownerId: workspaceLead.ownerId,
+      ownerName: workspaceLead.ownerName,
+      ownerEmail: workspaceLead.ownerEmail,
+      ownerPhotoURL: workspaceLead.ownerPhotoURL,
+      collaborators: workspaceLead.collaborators,
+      activityLog: workspaceLead.activityLog,
+      lastEditorName: workspaceLead.lastEditorName,
+      lastActivityAt: workspaceLead.lastActivityAt,
+      workspace: {
+        id: workspaceLead.workspace?.id,
+        name: workspaceLead.workspace?.name || workspaceLead.title,
+        inviteCode: workspaceLead.workspace?.inviteCode,
+        reminders: workspaceLead.workspace?.reminders || [],
+        targets: workspaceLead.workspace?.targets || {},
+        tasks: workspaceLead.workspace?.tasks || [],
+        notifications: workspaceLead.workspace?.notifications || []
+      }
+    });
+  }
   if (!target) {
     customAlert("Create a project in this workspace first to open the editor.", "Workspace");
     return;
   }
-  openProject(target.id);
+  openProject(target.id, { keepWorkspaceContext: true, silentLoadToast: true });
 }
 
 async function createProjectInsideCurrentWorkspace() {
@@ -624,7 +694,8 @@ function insertAiTaskResultIntoProjectWithMode(task, resultText, mode = "insert-
 
 function addWorkspaceTaskFromContainer(container) {
   if (!container) return addWorkspaceTaskFromDashboard();
-  const workspaceProject = getWorkspaceLeadProject(state.currentWorkspaceId);
+  const workspaceId = resolveWorkspaceId(container);
+  const workspaceProject = getWorkspaceLeadProject(workspaceId);
   if (!workspaceProject) return;
   const templateSelect = container.querySelector('[data-workspace-task-template]');
   const titleInput = container.querySelector('[data-workspace-task-title]');
@@ -650,15 +721,15 @@ function addWorkspaceTaskFromContainer(container) {
   const projectId = projectSelect?.value || "";
   const sceneId = sceneSelect?.value || "";
   const lineId = lineSelect?.value || "";
-  const sceneChoice = getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
-  const lineChoice = getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null;
+  const sceneChoice = getWorkspaceTaskSceneChoices(workspaceId).find((scene) => scene.sceneId === sceneId) || null;
+  const lineChoice = getWorkspaceTaskLineChoices(workspaceId).find((line) => line.lineId === lineId) || null;
   const assignedTo = assigneeSelect?.value || "";
   const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
   if (assignee?.assigneeType === "system" && !workspaceSupportsAi(workspaceProject)) {
     customAlert("Add Eya as @AIassist in this workspace before assigning AI tasks here.", "Workspace AI");
     return;
   }
-  const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
+  const memoryChoice = getWorkspaceStoryMemoryChoices(workspaceId).find((entry) => entry.id === (memorySelect?.value || "")) || null;
   const aiStartChoice = aiStartSelect?.value || "now";
   const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
   const initialAiState = assignee?.assigneeType === "system" ? (aiStartAt ? "scheduled" : "ready") : "idle";
@@ -695,7 +766,7 @@ function addWorkspaceTaskFromContainer(container) {
     updatedAt: new Date().toISOString(),
     createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   };
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+  updateWorkspaceAcrossProjects(workspaceId, (workspace) => ({
     ...workspace,
     tasks: [...(workspace.tasks || []), nextTask]
   }));
@@ -722,7 +793,8 @@ function addWorkspaceTaskFromContainer(container) {
 }
 
 function addWorkspaceTaskFromDashboard() {
-  const workspaceProject = getWorkspaceLeadProject(state.currentWorkspaceId);
+  const workspaceId = resolveWorkspaceId(refs.workspaceDashboard);
+  const workspaceProject = getWorkspaceLeadProject(workspaceId);
   if (!workspaceProject || !refs.workspaceDashboard) return;
   const templateSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-template]');
   const titleInput = refs.workspaceDashboard.querySelector('[data-workspace-task-title]');
@@ -748,15 +820,15 @@ function addWorkspaceTaskFromDashboard() {
   const projectId = projectSelect?.value || "";
   const sceneId = sceneSelect?.value || "";
   const lineId = lineSelect?.value || "";
-  const sceneChoice = getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
-  const lineChoice = getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null;
+  const sceneChoice = getWorkspaceTaskSceneChoices(workspaceId).find((scene) => scene.sceneId === sceneId) || null;
+  const lineChoice = getWorkspaceTaskLineChoices(workspaceId).find((line) => line.lineId === lineId) || null;
   const assignedTo = assigneeSelect?.value || "";
   const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
   if (assignee?.assigneeType === "system" && !workspaceSupportsAi(workspaceProject)) {
     customAlert("Add Eya as @AIassist in this workspace before assigning AI tasks here.", "Workspace AI");
     return;
   }
-  const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
+  const memoryChoice = getWorkspaceStoryMemoryChoices(workspaceId).find((entry) => entry.id === (memorySelect?.value || "")) || null;
   const aiStartChoice = aiStartSelect?.value || "now";
   const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
   const initialAiState = assignee?.assigneeType === "system"
@@ -796,7 +868,7 @@ function addWorkspaceTaskFromDashboard() {
     createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   };
 
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+  updateWorkspaceAcrossProjects(workspaceId, (workspace) => ({
     ...workspace,
     tasks: [...(workspace.tasks || []), nextTask]
   }));
@@ -1236,31 +1308,7 @@ export function bindEvents() {
 
   // Workspace project grid – open project cards inside the workspace view
   refs.workspaceProjectGrid?.addEventListener("click", (e) => {
-    const openBtn = e.target.closest(".project-card-open");
-    if (openBtn && openBtn.dataset.projectId) {
-      openProject(openBtn.dataset.projectId);
-      return;
-    }
-    const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
-    if (workspaceTrigger) {
-      openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
-      return;
-    }
-    const card = e.target.closest(".project-card");
-    if (!card) return;
-    const projectId = card.dataset.projectId;
-    const destructiveAction = e.target.closest(".project-delete")?.dataset.projectDestructiveAction;
-    if (destructiveAction === "leave") {
-      leaveProject(projectId);
-    } else if (destructiveAction === "delete") {
-      removeProject(projectId);
-    } else if (e.target.closest('[data-project-action="rename"]')) {
-      renameProjectById(projectId);
-    } else if (e.target.closest('[data-project-action="duplicate"]')) {
-      duplicateProjectById(projectId);
-    } else {
-      openProject(projectId);
-    }
+    handleProjectCardGridClick(e);
   });
 
   refs.workspaceView?.addEventListener("change", (event) => {
@@ -2052,26 +2100,7 @@ export function bindEvents() {
           renderHome();
           return;
       }
-      const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
-      if (workspaceTrigger) {
-          openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
-          return;
-      }
-      const card = e.target.closest(".project-card");
-      if (!card) return;
-      const projectId = card.dataset.projectId;
-      const destructiveAction = e.target.closest(".project-delete")?.dataset.projectDestructiveAction;
-      if (destructiveAction === "leave") {
-          leaveProject(projectId);
-      } else if (destructiveAction === "delete") {
-          removeProject(projectId);
-      } else if (e.target.closest('[data-project-action="rename"]')) {
-          renameProjectById(projectId);
-      } else if (e.target.closest('[data-project-action="duplicate"]')) {
-          duplicateProjectById(projectId);
-      } else {
-          openProject(projectId);
-      }
+      handleProjectCardGridClick(e);
   });
 
   // Recent Projects (Delegated)
