@@ -7,17 +7,53 @@ import { state } from './config.js';
 import { logActivity } from './activity.js';
 import { getCurrentProject, sanitizeProject, upsertProject, persistProjects, deleteProjectFromCloud } from './project.js';
 import { uid as makeId } from './utils.js';
-import { customAlert, customConfirm, showHome, renderHome } from './ui.js';
+import { customAlert, customConfirm, showHome, renderHome, renderWorkspaceView } from './ui.js';
 
 // Comment filter state
 let commentFilter = { user: 'all', sort: 'line', status: 'all' };
 let allComments = [];
 
 const MAX_COLLABORATORS = 5;
+const INVITE_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_PROFILE_INVITE_HISTORY = 6;
+const PRESENCE_STALE_MS = 20 * 1000;
 export const WORKSPACE_ROLES = {
   owner: 'owner',
+  admin: 'admin',
   editor: 'editor',
   viewer: 'viewer'
+};
+export const WORKSPACE_MEMBER_STATUSES = {
+  pending: 'pending',
+  active: 'active',
+  removed: 'removed',
+  suspended: 'suspended'
+};
+export const INVITATION_STATUSES = {
+  pending: 'pending',
+  accepted: 'accepted',
+  expired: 'expired',
+  revoked: 'revoked'
+};
+const ADMIN_ASSIGNABLE_ROLES = new Set([
+  WORKSPACE_ROLES.editor,
+  WORKSPACE_ROLES.viewer
+]);
+const OWNER_ASSIGNABLE_ROLES = new Set([
+  WORKSPACE_ROLES.admin,
+  WORKSPACE_ROLES.editor,
+  WORKSPACE_ROLES.viewer
+]);
+export const AI_ASSIST_UID = 'ai_assist';
+const AI_ASSIST_PROFILE = {
+  uid: AI_ASSIST_UID,
+  name: 'Eya',
+  username: '@AIassist',
+  email: '',
+  photoURL: '',
+  role: WORKSPACE_ROLES.editor,
+  type: 'system',
+  bio: 'Eya is Wraita\'s quiet AI studio partner, here to help refine scenes, unblock drafts, and keep the writing moving.'
 };
 const EMAILJS_SERVICE = 'service_j18y8zo';
 const EMAILJS_TEMPLATE = 'template_6qr97mn';
@@ -27,7 +63,12 @@ let unsubInvites = null;
 let unsubSentInvites = null;
 let unsubComments = null;
 let unsubSharedProject = null;
+let unsubPresence = null;
 let sharedProjectWatchers = new Map();
+let presenceHeartbeatTimer = 0;
+let typingPresenceTimer = 0;
+let activePresenceProjectId = '';
+const realtimePresenceByProject = new Map();
 
 // ── Comments collection path ──────────────────────────────────
 // Personal projects → users/{uid}/projects/{id}/comments
@@ -47,6 +88,227 @@ function commentDocRef(project, commentId) {
   return doc(db, 'users', user.uid, 'projects', project.id, 'comments', commentId);
 }
 
+function presenceDocRef(projectId, userId = auth.currentUser?.uid) {
+  if (!projectId || !userId) return null;
+  return doc(db, 'sharedProjects', projectId, 'presence', userId);
+}
+
+function presenceCollectionRef(projectId) {
+  return collection(db, 'sharedProjects', projectId, 'presence');
+}
+
+function versionsCollectionRef(projectId) {
+  return collection(db, 'sharedProjects', projectId, 'versions');
+}
+
+function getWorkspaceId(project) {
+  return project?.workspace?.id || project?.id || '';
+}
+
+function workspaceMemberDocId(workspaceId, userId) {
+  return `${workspaceId}__${userId}`;
+}
+
+function workspaceMemberRef(workspaceId, userId) {
+  return doc(db, 'workspace_members', workspaceMemberDocId(workspaceId, userId));
+}
+
+function buildWorkspaceMemberRecord({
+  userId,
+  workspaceId,
+  role,
+  invitedBy = '',
+  joinedAt = '',
+  status = WORKSPACE_MEMBER_STATUSES.active,
+  name = '',
+  email = '',
+  photoURL = ''
+}) {
+  return {
+    user_id: userId,
+    workspace_id: workspaceId,
+    role: normalizeWorkspaceRole(role),
+    invited_by: invitedBy || '',
+    joined_at: joinedAt || '',
+    status,
+    name: name || '',
+    email: email || '',
+    photoURL: photoURL || '',
+    updated_at: new Date().toISOString()
+  };
+}
+
+async function upsertWorkspaceMemberRecord(record) {
+  if (!record?.workspace_id || !record?.user_id) return;
+  await setDoc(
+    workspaceMemberRef(record.workspace_id, record.user_id),
+    buildWorkspaceMemberRecord(record),
+    { merge: true }
+  );
+}
+
+async function appendInviteHistoryEntry(userId, entry) {
+  if (!userId || !entry) return;
+  const profileRef = doc(db, 'users', userId, 'profile', 'data');
+  const profileSnap = await getDoc(profileRef);
+  const existing = profileSnap.exists() && Array.isArray(profileSnap.data().recentInvitations)
+    ? profileSnap.data().recentInvitations
+    : [];
+  const next = [
+    {
+      email: entry.email || '',
+      workspaceId: entry.workspaceId || '',
+      projectTitle: entry.projectTitle || '',
+      role: normalizeWorkspaceRole(entry.role),
+      status: entry.status || INVITATION_STATUSES.pending,
+      timestamp: entry.timestamp || new Date().toISOString()
+    },
+    ...existing
+  ].slice(0, MAX_PROFILE_INVITE_HISTORY);
+  await setDoc(profileRef, { recentInvitations: next }, { merge: true });
+}
+
+function getInviteExpiryTimestamp(createdAt = new Date().toISOString()) {
+  return new Date(new Date(createdAt).getTime() + INVITE_EXPIRATION_MS).toISOString();
+}
+
+function isInvitationExpired(invite) {
+  if (!invite) return false;
+  if (invite.status !== INVITATION_STATUSES.pending) return false;
+  const expiresAt = invite.expiresAt || getInviteExpiryTimestamp(invite.createdAt);
+  return new Date(expiresAt).getTime() <= Date.now();
+}
+
+async function expireInvitationIfNeeded(invite) {
+  if (!invite?.id || !isInvitationExpired(invite)) return invite;
+  const expiredAt = new Date().toISOString();
+  await updateDoc(doc(db, 'invitations', invite.id), {
+    status: INVITATION_STATUSES.expired,
+    expiredAt,
+    updatedAt: expiredAt
+  });
+  return {
+    ...invite,
+    status: INVITATION_STATUSES.expired,
+    expiredAt,
+    updatedAt: expiredAt
+  };
+}
+
+function getInvitationStatusLabel(invite) {
+  if (invite.status === INVITATION_STATUSES.accepted) return 'Accepted';
+  if (invite.status === INVITATION_STATUSES.expired) return 'Expired';
+  if (invite.status === INVITATION_STATUSES.revoked) {
+    return invite.revokedReason === 'declined' ? 'Declined' : 'Canceled';
+  }
+  return 'Pending';
+}
+
+function isPresenceFresh(presence) {
+  if (!presence?.lastSeenAt) return false;
+  return (Date.now() - new Date(presence.lastSeenAt).getTime()) <= PRESENCE_STALE_MS;
+}
+
+function clearPresenceHeartbeat() {
+  if (presenceHeartbeatTimer) {
+    clearInterval(presenceHeartbeatTimer);
+    presenceHeartbeatTimer = 0;
+  }
+}
+
+export function getRealtimePresence(projectId = getCurrentProject()?.id) {
+  return realtimePresenceByProject.get(projectId) || {};
+}
+
+function getRealtimeLineLabel(project, lineId) {
+  if (!project || !lineId) return '';
+  const line = project.lines?.find((entry) => entry.id === lineId);
+  if (!line?.text?.trim()) return '';
+  const trimmed = line.text.trim();
+  return trimmed.length > 48 ? `${trimmed.slice(0, 48)}...` : trimmed;
+}
+
+async function persistRealtimePresence(projectId, patch = {}) {
+  const user = auth.currentUser;
+  const project = state.projects.find((entry) => entry.id === projectId);
+  if (!user || !project?.isShared) return;
+  const ref = presenceDocRef(projectId, user.uid);
+  if (!ref) return;
+  activePresenceProjectId = projectId;
+  await setDoc(ref, {
+    uid: user.uid,
+    name: user.displayName || user.email || 'Workspace member',
+    email: user.email || '',
+    photoURL: user.photoURL || '',
+    role: getUserProjectRole(project, user),
+    lineId: patch.lineId || '',
+    lineLabel: patch.lineId ? getRealtimeLineLabel(project, patch.lineId) : (patch.lineLabel || ''),
+    isTyping: Boolean(patch.isTyping),
+    status: patch.status || (patch.isTyping ? 'typing' : 'viewing'),
+    lastSeenAt: new Date().toISOString()
+  }, { merge: true });
+}
+
+export function noteRealtimeActivity(lineId = '', { isTyping = false } = {}) {
+  const project = getCurrentProject();
+  if (!project?.isShared) return;
+  persistRealtimePresence(project.id, { lineId, isTyping }).catch(() => {});
+  clearPresenceHeartbeat();
+  presenceHeartbeatTimer = window.setInterval(() => {
+    persistRealtimePresence(project.id, {
+      lineId: lineId || state.activeBlockId || '',
+      isTyping: false,
+      status: 'viewing'
+    }).catch(() => {});
+  }, Math.max(5000, Math.floor(PRESENCE_STALE_MS / 2)));
+  if (typingPresenceTimer) clearTimeout(typingPresenceTimer);
+  if (isTyping) {
+    typingPresenceTimer = window.setTimeout(() => {
+      persistRealtimePresence(project.id, {
+        lineId: lineId || state.activeBlockId || '',
+        isTyping: false,
+        status: 'viewing'
+      }).catch(() => {});
+    }, 1600);
+  }
+}
+
+async function clearRealtimePresence(projectId = activePresenceProjectId) {
+  if (typingPresenceTimer) {
+    clearTimeout(typingPresenceTimer);
+    typingPresenceTimer = 0;
+  }
+  clearPresenceHeartbeat();
+  const ref = presenceDocRef(projectId);
+  activePresenceProjectId = '';
+  if (!ref) return;
+  try {
+    await deleteDoc(ref);
+  } catch (error) {
+    console.warn('Unable to clear presence state', error);
+  }
+}
+
+function subscribeToPresence(projectId) {
+  if (unsubPresence) {
+    unsubPresence();
+    unsubPresence = null;
+  }
+  if (!projectId) return;
+  unsubPresence = onSnapshot(presenceCollectionRef(projectId), (snapshot) => {
+    const entries = {};
+    snapshot.docs.forEach((docSnap) => {
+      const value = docSnap.data();
+      if (!isPresenceFresh(value)) return;
+      entries[docSnap.id] = value;
+    });
+    realtimePresenceByProject.set(projectId, entries);
+    if (state.currentProjectId === projectId) {
+      renderCollaboratorList();
+    }
+  }, (error) => console.error('[presence]', error));
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────
 
 export function initCollaboration() {
@@ -64,6 +326,7 @@ export function initCollaboration() {
 
   unsubInvites = onSnapshot(qRec, snap => {
     const invitations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    invitations.forEach(invite => { expireInvitationIfNeeded(invite).catch(() => {}); });
     updateCollabBadge(invitations.length);
     renderCollabRequests(invitations);
   });
@@ -76,6 +339,7 @@ export function initCollaboration() {
 
   unsubSentInvites = onSnapshot(qSent, snap => {
     const invitations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    invitations.forEach(invite => { expireInvitationIfNeeded(invite).catch(() => {}); });
     renderSentInvites(invitations);
   });
 
@@ -83,10 +347,12 @@ export function initCollaboration() {
 }
 
 export function cleanupCollaboration() {
-  [unsubInvites, unsubSentInvites, unsubComments, unsubSharedProject].forEach(fn => fn?.());
-  unsubInvites = unsubSentInvites = unsubComments = unsubSharedProject = null;
+  [unsubInvites, unsubSentInvites, unsubComments, unsubSharedProject, unsubPresence].forEach(fn => fn?.());
+  unsubInvites = unsubSentInvites = unsubComments = unsubSharedProject = unsubPresence = null;
   sharedProjectWatchers.forEach(fn => fn?.());
   sharedProjectWatchers.clear();
+  realtimePresenceByProject.clear();
+  clearRealtimePresence().catch(() => {});
 }
 
 export function onStudioEnter(projectId) {
@@ -95,8 +361,13 @@ export function onStudioEnter(projectId) {
   renderCollaboratorList();
   if (project.isShared) {
     subscribeToSharedProject(projectId);
+    subscribeToPresence(projectId);
+    noteRealtimeActivity(state.activeBlockId || '', { isTyping: false });
   } else {
     if (unsubSharedProject) { unsubSharedProject(); unsubSharedProject = null; }
+    if (unsubPresence) { unsubPresence(); unsubPresence = null; }
+    realtimePresenceByProject.delete(projectId);
+    clearRealtimePresence().catch(() => {});
   }
   syncSharedProjectWatchers();
   subscribeToComments(project);
@@ -111,11 +382,118 @@ export function getUserProjectRole(project = getCurrentProject(), user = auth.cu
     return WORKSPACE_ROLES.owner;
   }
 
-  return project.collaborators?.[user.uid]?.role || WORKSPACE_ROLES.editor;
+  return normalizeWorkspaceRole(project.collaborators?.[user.uid]?.role);
+}
+
+export function normalizeWorkspaceRole(role, fallback = WORKSPACE_ROLES.editor) {
+  if (role === WORKSPACE_ROLES.owner) return WORKSPACE_ROLES.owner;
+  if (role === WORKSPACE_ROLES.admin) return WORKSPACE_ROLES.admin;
+  if (role === WORKSPACE_ROLES.viewer) return WORKSPACE_ROLES.viewer;
+  return fallback;
+}
+
+export function getWorkspacePermissions(project = getCurrentProject(), user = auth.currentUser) {
+  const role = getUserProjectRole(project, user);
+  const isOwner = role === WORKSPACE_ROLES.owner;
+  const isAdmin = role === WORKSPACE_ROLES.admin;
+  const isEditor = role === WORKSPACE_ROLES.editor;
+  const isViewer = role === WORKSPACE_ROLES.viewer;
+  const viewerCommentsEnabled = Boolean(project?.workspace?.commentingEnabled);
+
+  return {
+    role,
+    isOwner,
+    isAdmin,
+    isEditor,
+    isViewer,
+    canEditContent: !isViewer,
+    canComment: !isViewer || viewerCommentsEnabled,
+    canCreateDrafts: isOwner || isAdmin || isEditor,
+    canInviteUsers: isOwner || isAdmin,
+    canRemoveCollaborators: isOwner || isAdmin,
+    canManageProjects: isOwner || isAdmin,
+    canEditWorkspaceSettings: isOwner || isAdmin,
+    canTransferOwnership: isOwner,
+    canDeleteWorkspace: isOwner,
+    canManageBilling: isOwner,
+    canChangeVisibility: isOwner
+  };
+}
+
+export function getAssignableWorkspaceRoles(project = getCurrentProject(), user = auth.currentUser, collaboratorUid = null) {
+  const permissions = getWorkspacePermissions(project, user);
+  if (permissions.isOwner) {
+    return [WORKSPACE_ROLES.admin, WORKSPACE_ROLES.editor, WORKSPACE_ROLES.viewer];
+  }
+  if (!permissions.isAdmin) {
+    return [];
+  }
+
+  const targetRole = collaboratorUid
+    ? normalizeWorkspaceRole(project?.collaborators?.[collaboratorUid]?.role)
+    : null;
+
+  return targetRole === WORKSPACE_ROLES.admin
+    ? []
+    : [WORKSPACE_ROLES.editor, WORKSPACE_ROLES.viewer];
+}
+
+export function canUpdateCollaboratorRole(project = getCurrentProject(), user = auth.currentUser, collaboratorUid, role) {
+  const collaborator = project?.collaborators?.[collaboratorUid];
+  if (!collaborator) return false;
+
+  const permissions = getWorkspacePermissions(project, user);
+  const nextRole = normalizeWorkspaceRole(role);
+  const targetRole = normalizeWorkspaceRole(collaborator.role);
+
+  if (permissions.isOwner) {
+    return OWNER_ASSIGNABLE_ROLES.has(nextRole);
+  }
+
+  if (!permissions.isAdmin) {
+    return false;
+  }
+
+  return targetRole !== WORKSPACE_ROLES.admin && ADMIN_ASSIGNABLE_ROLES.has(nextRole);
+}
+
+export function canRemoveCollaborator(project = getCurrentProject(), user = auth.currentUser, collaboratorUid) {
+  const collaborator = project?.collaborators?.[collaboratorUid];
+  if (!collaborator) return false;
+
+  const permissions = getWorkspacePermissions(project, user);
+  if (permissions.isOwner) {
+    return true;
+  }
+  if (!permissions.isAdmin) {
+    return false;
+  }
+
+  return normalizeWorkspaceRole(collaborator.role) !== WORKSPACE_ROLES.admin;
+}
+
+export function canInviteToWorkspace(project = getCurrentProject(), user = auth.currentUser) {
+  return getWorkspacePermissions(project, user).canInviteUsers;
+}
+
+export function canManageWorkspaceProjects(project = getCurrentProject(), user = auth.currentUser) {
+  return getWorkspacePermissions(project, user).canManageProjects;
+}
+
+export function canEditWorkspaceSettings(project = getCurrentProject(), user = auth.currentUser) {
+  return getWorkspacePermissions(project, user).canEditWorkspaceSettings;
+}
+
+export function canCommentOnProject(project = getCurrentProject(), user = auth.currentUser) {
+  return getWorkspacePermissions(project, user).canComment;
+}
+
+export function canDeleteWorkspace(project = getCurrentProject(), user = auth.currentUser) {
+  return getWorkspacePermissions(project, user).canDeleteWorkspace;
 }
 
 export function canEditProject(project = getCurrentProject(), user = auth.currentUser) {
-  return getUserProjectRole(project, user) !== WORKSPACE_ROLES.viewer;
+  return getWorkspacePermissions(project, user).canEditContent;
 }
 
 export function canManageWorkspace(project = getCurrentProject(), user = auth.currentUser) {
@@ -138,8 +516,8 @@ export async function inviteCollaborator(email, role = WORKSPACE_ROLES.editor) {
 
     const project = getCurrentProject();
     if (!project) return { ok: false, reason: 'No project open. Open a project first.' };
-    if (!canManageWorkspace(project, user)) {
-      return { ok: false, reason: 'Only the workspace owner can invite teammates.' };
+    if (!canInviteToWorkspace(project, user)) {
+      return { ok: false, reason: 'Only workspace owners and admins can invite teammates.' };
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -185,21 +563,55 @@ export async function inviteCollaborator(email, role = WORKSPACE_ROLES.editor) {
     await ensureSharedProject(project, user);
 
     const inviteId = makeId('inv');
+    const requestedRole = normalizeWorkspaceRole(role);
+    const allowedRoles = getAssignableWorkspaceRoles(project, user);
+    const inviteRole = allowedRoles.includes(requestedRole)
+      ? requestedRole
+      : WORKSPACE_ROLES.editor;
+
     const inviteData = {
       id: inviteId,
       fromUid: user.uid,
       fromName: user.displayName || user.email,
       fromEmail: user.email,
+      invitedBy: user.uid,
+      workspaceId: getWorkspaceId(project),
       toEmail: normalizedEmail,
-      role: role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor,
+      toUid: userSnap.data().uid || '',
+      toName: userSnap.data().name || normalizedEmail,
+      role: inviteRole,
       projectId: project.id,
       projectTitle: project.title,
-      status: 'pending',
-      createdAt: new Date().toISOString()
+      status: INVITATION_STATUSES.pending,
+      createdAt: new Date().toISOString(),
+      lastSentAt: new Date().toISOString(),
+      expiresAt: getInviteExpiryTimestamp()
     };
 
     await setDoc(doc(db, 'invitations', inviteId), inviteData);
-    await logActivity(project.id, `Invited ${normalizedEmail} as ${inviteData.role}.`);
+    await upsertWorkspaceMemberRecord({
+      userId: inviteData.toUid,
+      workspaceId: inviteData.workspaceId,
+      role: inviteRole,
+      invitedBy: user.uid,
+      joinedAt: '',
+      status: WORKSPACE_MEMBER_STATUSES.pending,
+      name: inviteData.toName,
+      email: normalizedEmail
+    });
+    await appendInviteHistoryEntry(user.uid, {
+      email: normalizedEmail,
+      workspaceId: inviteData.workspaceId,
+      projectTitle: inviteData.projectTitle,
+      role: inviteRole,
+      status: INVITATION_STATUSES.pending,
+      timestamp: inviteData.createdAt
+    });
+    await logActivity(project.id, `Invited ${normalizedEmail} as ${inviteData.role}.`, {
+      action: 'invite.sent',
+      target: normalizedEmail,
+      workspaceId: getWorkspaceId(project)
+    });
 
     // Send email notification (best-effort)
     if (window.emailjs) {
@@ -240,7 +652,8 @@ async function ensureSharedProject(project, user) {
         id: project.id,
         name: project.title || 'Team Workspace',
         inviteCode: project.scriptId || '',
-        reminders: []
+        reminders: [],
+        commentingEnabled: false
       },
       collaborators: {},
       isShared: true,
@@ -254,6 +667,17 @@ async function ensureSharedProject(project, user) {
   project.ownerEmail = user.email;
   project.ownerPhotoURL = user.photoURL || "";
   project.collaborators = project.collaborators || {};
+  await upsertWorkspaceMemberRecord({
+    userId: user.uid,
+    workspaceId: getWorkspaceId(project),
+    role: WORKSPACE_ROLES.owner,
+    invitedBy: user.uid,
+    joinedAt: project.createdAt || new Date().toISOString(),
+    status: WORKSPACE_MEMBER_STATUSES.active,
+    name: user.displayName || user.email,
+    email: user.email,
+    photoURL: user.photoURL || ''
+  });
   persistProjects(false);
   syncSharedProjectWatchers();
 }
@@ -267,6 +691,15 @@ export async function acceptInvitation(inviteId) {
   const invSnap = await getDoc(doc(db, 'invitations', inviteId));
   if (!invSnap.exists()) return;
   const inv = invSnap.data();
+  if (isInvitationExpired(inv)) {
+    await expireInvitationIfNeeded({ id: inviteId, ...inv });
+    await customAlert('This invitation has expired. Ask the workspace owner or admin to resend it.', 'Invitation Expired');
+    return;
+  }
+  if (inv.status !== INVITATION_STATUSES.pending) {
+    await customAlert('This invitation is no longer active.', 'Invitation');
+    return;
+  }
 
   const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
   const profileData = profileSnap.exists() ? profileSnap.data() : {};
@@ -282,15 +715,34 @@ export async function acceptInvitation(inviteId) {
       email: user.email,
       photoURL: profileData.photoURL || user.photoURL || '',
       addedAt: new Date().toISOString(),
-      role: inv.role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor
+      role: normalizeWorkspaceRole(inv.role)
     },
     updatedBy: user.uid
   });
 
   // Step 2: Mark invitation accepted (recipient can always update their own invite).
-  await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
+  const acceptedAt = new Date().toISOString();
+  await updateDoc(doc(db, 'invitations', inviteId), {
+    status: INVITATION_STATUSES.accepted,
+    respondedAt: acceptedAt,
+    updatedAt: acceptedAt
+  });
+  await upsertWorkspaceMemberRecord({
+    userId: user.uid,
+    workspaceId: inv.workspaceId || inv.projectId,
+    role: normalizeWorkspaceRole(inv.role),
+    invitedBy: inv.invitedBy || inv.fromUid,
+    joinedAt: acceptedAt,
+    status: WORKSPACE_MEMBER_STATUSES.active,
+    name: user.displayName || user.email,
+    email: user.email,
+    photoURL: profileData.photoURL || user.photoURL || ''
+  });
 
-  await logActivity(inv.projectId, `Joined project as ${inv.role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`);
+  await logActivity(inv.projectId, `Joined project as ${normalizeWorkspaceRole(inv.role).replace(/^./, (char) => char.toUpperCase())}.`, {
+    action: 'invite.accepted',
+    workspaceId: inv.workspaceId || inv.projectId
+  });
 
   // Step 3: Now read the shared project — user is a collaborator so read is allowed.
   const projSnap = await getDoc(sharedRef);
@@ -312,7 +764,30 @@ export async function acceptInvitation(inviteId) {
 }
 
 export async function declineInvitation(inviteId) {
-  await updateDoc(doc(db, 'invitations', inviteId), { status: 'declined' });
+  const inviteRef = doc(db, 'invitations', inviteId);
+  const inviteSnap = await getDoc(inviteRef);
+  if (!inviteSnap.exists()) return;
+  const invite = inviteSnap.data();
+  const revokedAt = new Date().toISOString();
+  await updateDoc(inviteRef, {
+    status: INVITATION_STATUSES.revoked,
+    revokedReason: 'declined',
+    revokedAt,
+    respondedAt: revokedAt,
+    updatedAt: revokedAt
+  });
+  if (invite.toUid) {
+    await upsertWorkspaceMemberRecord({
+      userId: invite.toUid,
+      workspaceId: invite.workspaceId || invite.projectId,
+      role: normalizeWorkspaceRole(invite.role),
+      invitedBy: invite.invitedBy || invite.fromUid,
+      joinedAt: '',
+      status: WORKSPACE_MEMBER_STATUSES.removed,
+      name: invite.toName || invite.toEmail || '',
+      email: invite.toEmail || ''
+    });
+  }
 }
 
 // ── Kick ──────────────────────────────────────────────────────
@@ -324,12 +799,13 @@ export async function kickCollaborator(projectId, collaboratorUid) {
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
   if (!project) return;
 
-  if (!canManageWorkspace(project, user)) {
-    await customAlert('Only the project owner can remove collaborators.', 'Not Authorized');
+  if (!canRemoveCollaborator(project, user, collaboratorUid)) {
+    await customAlert('Only owners can remove admins, and admins can only remove editors or viewers.', 'Not Authorized');
     return;
   }
 
   const newCollaborators = { ...(project.collaborators || {}) };
+  const removedCollaborator = newCollaborators[collaboratorUid];
   delete newCollaborators[collaboratorUid];
 
   // updatedBy set to owner so the kicked user's listener fires and shows the change.
@@ -340,7 +816,21 @@ export async function kickCollaborator(projectId, collaboratorUid) {
   });
 
   project.collaborators = newCollaborators;
-  await logActivity(projectId, 'Removed a collaborator from the workspace.');
+  await upsertWorkspaceMemberRecord({
+    userId: collaboratorUid,
+    workspaceId: getWorkspaceId(project),
+    role: normalizeWorkspaceRole(removedCollaborator?.role),
+    invitedBy: user.uid,
+    joinedAt: removedCollaborator?.addedAt || '',
+    status: WORKSPACE_MEMBER_STATUSES.removed,
+    name: removedCollaborator?.name || removedCollaborator?.email || '',
+    email: removedCollaborator?.email || '',
+    photoURL: removedCollaborator?.photoURL || ''
+  });
+  await logActivity(projectId, 'Removed a collaborator from the workspace.', {
+    action: 'member.removed',
+    workspaceId: getWorkspaceId(project)
+  });
   persistProjects(false);
   renderCollaboratorList();
   renderHome();
@@ -353,16 +843,16 @@ export async function updateCollaboratorRole(projectId, collaboratorUid, role) {
 
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
   if (!project) return { ok: false, reason: 'No project found.' };
-  if (!canManageWorkspace(project, user)) {
-    return { ok: false, reason: 'Only the workspace owner can change roles.' };
-  }
-
   const collaborator = project.collaborators?.[collaboratorUid];
   if (!collaborator) {
     return { ok: false, reason: 'Collaborator not found.' };
   }
 
-  const nextRole = role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor;
+  if (!canUpdateCollaboratorRole(project, user, collaboratorUid, role)) {
+    return { ok: false, reason: 'Only owners can assign admins. Admins can change editors and viewers only.' };
+  }
+
+  const nextRole = normalizeWorkspaceRole(role);
   if (collaborator.role === nextRole) {
     return { ok: true };
   }
@@ -376,7 +866,22 @@ export async function updateCollaboratorRole(projectId, collaboratorUid, role) {
     ...collaborator,
     role: nextRole
   };
-  await logActivity(projectId, `Changed ${collaborator.name || collaborator.email} to ${nextRole}.`);
+  await upsertWorkspaceMemberRecord({
+    userId: collaboratorUid,
+    workspaceId: getWorkspaceId(project),
+    role: nextRole,
+    invitedBy: user.uid,
+    joinedAt: collaborator.addedAt || '',
+    status: WORKSPACE_MEMBER_STATUSES.active,
+    name: collaborator.name || collaborator.email || '',
+    email: collaborator.email || '',
+    photoURL: collaborator.photoURL || ''
+  });
+  await logActivity(projectId, `Changed ${collaborator.name || collaborator.email} to ${nextRole}.`, {
+    action: 'role.changed',
+    target: collaborator.name || collaborator.email || collaboratorUid,
+    workspaceId: getWorkspaceId(project)
+  });
   persistProjects(false);
   renderCollaboratorList();
   renderHome();
@@ -387,8 +892,8 @@ export async function renameWorkspace(projectId, name) {
   const user = auth.currentUser;
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
   if (!user || !project) return { ok: false, reason: 'No workspace found.' };
-  if (!canManageWorkspace(project, user)) {
-    return { ok: false, reason: 'Only the workspace owner can rename the workspace.' };
+  if (!canEditWorkspaceSettings(project, user)) {
+    return { ok: false, reason: 'Only workspace owners and admins can update workspace settings.' };
   }
 
   const nextName = String(name || '').trim();
@@ -408,9 +913,93 @@ export async function renameWorkspace(projectId, name) {
     workspace: project.workspace,
     updatedBy: user.uid
   });
-  await logActivity(projectId, `Renamed the workspace to ${nextName}.`);
+  await logActivity(projectId, `Renamed the workspace to ${nextName}.`, {
+    action: 'workspace.renamed',
+    workspaceId: getWorkspaceId(project)
+  });
   persistProjects(false);
   renderHome();
+  return { ok: true };
+}
+
+export async function resendInvitation(inviteId) {
+  const user = auth.currentUser;
+  if (!user) return { ok: false, reason: 'Not signed in.' };
+  const inviteRef = doc(db, 'invitations', inviteId);
+  const inviteSnap = await getDoc(inviteRef);
+  if (!inviteSnap.exists()) return { ok: false, reason: 'Invitation not found.' };
+  const invite = inviteSnap.data();
+  const project = state.projects.find((item) => item.id === invite.projectId) || getCurrentProject();
+  if (!project) return { ok: false, reason: 'Workspace not found.' };
+  if (!canInviteToWorkspace(project, user)) {
+    return { ok: false, reason: 'Only workspace owners and admins can resend invites.' };
+  }
+
+  const resentAt = new Date().toISOString();
+  await updateDoc(inviteRef, {
+    status: INVITATION_STATUSES.pending,
+    role: normalizeWorkspaceRole(invite.role),
+    invitedBy: user.uid,
+    fromUid: user.uid,
+    fromName: user.displayName || user.email,
+    fromEmail: user.email,
+    lastSentAt: resentAt,
+    expiresAt: getInviteExpiryTimestamp(resentAt),
+    revokedReason: null,
+    revokedAt: null,
+    updatedAt: resentAt
+  });
+  await appendInviteHistoryEntry(user.uid, {
+    email: invite.toEmail,
+    workspaceId: invite.workspaceId || invite.projectId,
+    projectTitle: invite.projectTitle,
+    role: invite.role,
+    status: INVITATION_STATUSES.pending,
+    timestamp: resentAt
+  });
+  return { ok: true };
+}
+
+export async function cancelInvitation(inviteId) {
+  const user = auth.currentUser;
+  if (!user) return { ok: false, reason: 'Not signed in.' };
+  const inviteRef = doc(db, 'invitations', inviteId);
+  const inviteSnap = await getDoc(inviteRef);
+  if (!inviteSnap.exists()) return { ok: false, reason: 'Invitation not found.' };
+  const invite = inviteSnap.data();
+  const project = state.projects.find((item) => item.id === invite.projectId) || getCurrentProject();
+  if (!project) return { ok: false, reason: 'Workspace not found.' };
+  if (!canInviteToWorkspace(project, user)) {
+    return { ok: false, reason: 'Only workspace owners and admins can cancel invites.' };
+  }
+
+  const revokedAt = new Date().toISOString();
+  await updateDoc(inviteRef, {
+    status: INVITATION_STATUSES.revoked,
+    revokedReason: 'canceled',
+    revokedAt,
+    updatedAt: revokedAt
+  });
+  if (invite.toUid) {
+    await upsertWorkspaceMemberRecord({
+      userId: invite.toUid,
+      workspaceId: invite.workspaceId || invite.projectId,
+      role: normalizeWorkspaceRole(invite.role),
+      invitedBy: invite.invitedBy || invite.fromUid,
+      joinedAt: '',
+      status: WORKSPACE_MEMBER_STATUSES.removed,
+      name: invite.toName || invite.toEmail || '',
+      email: invite.toEmail || ''
+    });
+  }
+  await appendInviteHistoryEntry(user.uid, {
+    email: invite.toEmail,
+    workspaceId: invite.workspaceId || invite.projectId,
+    projectTitle: invite.projectTitle,
+    role: invite.role,
+    status: INVITATION_STATUSES.revoked,
+    timestamp: revokedAt
+  });
   return { ok: true };
 }
 
@@ -506,6 +1095,149 @@ export async function deleteWorkspaceReminder(projectId, reminderId) {
   return { ok: true };
 }
 
+export async function syncWorkspaceState(workspaceId = state.currentWorkspaceId) {
+  const user = auth.currentUser;
+  if (!user || !workspaceId) return { ok: false, reason: 'No workspace selected.' };
+
+  const snapshot = await getDocs(query(
+    collection(db, 'sharedProjects'),
+    where('workspace.id', '==', workspaceId)
+  ));
+
+  const remoteProjects = snapshot.docs.map((docSnap) => sanitizeProject(docSnap.data()));
+  const remoteIds = new Set(remoteProjects.map((project) => project.id));
+  if (!remoteProjects.length) {
+    return { ok: false, reason: 'Workspace data is not available.' };
+  }
+
+  state.projects = state.projects.filter((project) => (
+    !(project.isShared && project.workspace?.id === workspaceId) || remoteIds.has(project.id)
+  ));
+  remoteProjects.forEach((project) => upsertProject(project));
+
+  const workspaceLead = remoteProjects.find((project) => project.isWorkspaceRoot)
+    || remoteProjects[0];
+  state.currentWorkspaceId = workspaceId;
+  if (!state.projects.some((project) => project.id === state.currentProjectId && project.workspace?.id === workspaceId)) {
+    state.currentProjectId = workspaceLead.id;
+  }
+  persistProjects(false, { syncInputs: false });
+  syncSharedProjectWatchers();
+  if (state.currentWorkspaceId === workspaceId) {
+    renderHome();
+    renderWorkspaceView();
+  }
+  return { ok: true, count: remoteProjects.length };
+}
+
+export async function leaveWorkspace(workspaceId = state.currentWorkspaceId) {
+  const user = auth.currentUser;
+  if (!user || !workspaceId) return { ok: false, reason: 'No workspace selected.' };
+  const workspaceProjects = state.projects.filter((project) => project.isShared && project.workspace?.id === workspaceId);
+  const workspaceLead = getWorkspaceRootProject(workspaceId) || workspaceProjects[0] || null;
+  if (!workspaceLead) return { ok: false, reason: 'Workspace not found.' };
+  if (workspaceLead.ownerId === user.uid) {
+    return { ok: false, reason: 'Transfer ownership or delete the workspace before leaving it.' };
+  }
+  if (!workspaceLead.collaborators?.[user.uid]) {
+    return { ok: false, reason: 'You are not an active collaborator in this workspace.' };
+  }
+
+  await logActivity(workspaceLead.id, `${user.displayName || user.email || 'A collaborator'} left the workspace.`, {
+    action: 'workspace.leave',
+    workspaceId
+  });
+
+  for (const project of workspaceProjects) {
+    if (!project.collaborators?.[user.uid]) continue;
+    const nextCollaborators = { ...(project.collaborators || {}) };
+    delete nextCollaborators[user.uid];
+    await updateDoc(doc(db, 'sharedProjects', project.id), {
+      collaborators: nextCollaborators,
+      updatedBy: user.uid,
+      lastEditorName: user.displayName || user.email || 'Workspace member'
+    });
+    await deleteProjectFromCloud(project.id);
+    if (state.currentProjectId === project.id) {
+      await clearRealtimePresence(project.id);
+    }
+  }
+
+  await upsertWorkspaceMemberRecord({
+    userId: user.uid,
+    workspaceId,
+    role: WORKSPACE_ROLES.viewer,
+    invitedBy: workspaceLead.ownerId || '',
+    joinedAt: workspaceLead.collaborators?.[user.uid]?.addedAt || '',
+    status: WORKSPACE_MEMBER_STATUSES.removed,
+    name: user.displayName || user.email || '',
+    email: user.email || '',
+    photoURL: user.photoURL || ''
+  });
+
+  state.projects = state.projects.filter((project) => !(project.isShared && project.workspace?.id === workspaceId));
+  if (!state.projects.length) {
+    state.projects = [sanitizeProject({ title: 'Untitled Script' })];
+  }
+  state.currentWorkspaceId = null;
+  state.currentProjectId = state.projects[0]?.id || null;
+  persistProjects(false, { syncInputs: false });
+  renderHome();
+  showHome();
+  syncSharedProjectWatchers();
+  return { ok: true };
+}
+
+export async function deleteWorkspaceData(workspaceId) {
+  const user = auth.currentUser;
+  if (!user || !workspaceId) return { ok: false, reason: 'No workspace selected.' };
+  const workspaceLead = getWorkspaceRootProject(workspaceId) || state.projects.find((project) => project.workspace?.id === workspaceId) || null;
+  if (!workspaceLead) return { ok: false, reason: 'Workspace not found.' };
+  if (!canDeleteWorkspace(workspaceLead, user)) {
+    return { ok: false, reason: 'Only the workspace owner can delete this workspace.' };
+  }
+
+  const sharedSnapshot = await getDocs(query(
+    collection(db, 'sharedProjects'),
+    where('workspace.id', '==', workspaceId)
+  ));
+  for (const projectDoc of sharedSnapshot.docs) {
+    const projectId = projectDoc.id;
+    const commentsSnapshot = await getDocs(collection(db, 'sharedProjects', projectId, 'comments'));
+    for (const commentDoc of commentsSnapshot.docs) {
+      await deleteDoc(commentDoc.ref);
+    }
+    const presenceSnapshot = await getDocs(collection(db, 'sharedProjects', projectId, 'presence'));
+    for (const presenceDoc of presenceSnapshot.docs) {
+      await deleteDoc(presenceDoc.ref);
+    }
+    const versionsSnapshot = await getDocs(collection(db, 'sharedProjects', projectId, 'versions'));
+    for (const versionDoc of versionsSnapshot.docs) {
+      await deleteDoc(versionDoc.ref);
+    }
+    await deleteDoc(projectDoc.ref);
+  }
+
+  const invitationSnapshot = await getDocs(query(
+    collection(db, 'invitations'),
+    where('workspaceId', '==', workspaceId)
+  ));
+  for (const inviteDoc of invitationSnapshot.docs) {
+    await deleteDoc(inviteDoc.ref);
+  }
+
+  const membersSnapshot = await getDocs(query(
+    collection(db, 'workspace_members'),
+    where('workspace_id', '==', workspaceId)
+  ));
+  for (const memberDoc of membersSnapshot.docs) {
+    await deleteDoc(memberDoc.ref);
+  }
+
+  await clearRealtimePresence(activePresenceProjectId);
+  return { ok: true };
+}
+
 // ── Real-time listeners ───────────────────────────────────────
 
 export function subscribeToSharedProject(projectId) {
@@ -520,6 +1252,9 @@ export function subscribeToSharedProject(projectId) {
       persistProjects(false);
       renderCollaboratorList();
       renderHome();
+      if (state.currentWorkspaceId === updated.workspace?.id) {
+        renderWorkspaceView();
+      }
       syncSharedProjectWatchers();
       if (state.currentProjectId === projectId) {
         window.dispatchEvent(new CustomEvent('sharedProjectUpdated', { detail: { projectId } }));
@@ -570,6 +1305,9 @@ function syncSharedProjectWatchers() {
         upsertProject(sharedProject);
         persistProjects(false);
         renderHome();
+        if (state.currentWorkspaceId === sharedProject.workspace?.id) {
+          renderWorkspaceView();
+        }
         if (state.currentProjectId === projectId) {
           renderCollaboratorList();
           window.dispatchEvent(new CustomEvent('sharedProjectUpdated', { detail: { projectId } }));
@@ -633,8 +1371,8 @@ export async function addComment(projectId, text, { lineId = null, parentId = nu
   if (!text.trim()) return;
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
-  if (!canEditProject(project, user)) {
-    await customAlert('Viewer access is read-only. Ask the owner for Editor access to comment.', 'Read-only Workspace');
+  if (!canCommentOnProject(project, user)) {
+    await customAlert('Viewer access is read-only here. Ask an admin or the owner to enable viewer comments or promote you.', 'Read-only Workspace');
     return;
   }
   const ref = commentDocRef(project, makeId('cmt'));
@@ -697,7 +1435,6 @@ export function renderCollaboratorList() {
   renderActivityLog(project);
 
   const user = auth.currentUser;
-  const isOwner = canManageWorkspace(project, user);
   const collaboratorEntries = Object.entries(project.collaborators || {});
 
   const countEl = document.getElementById('collabCount');
@@ -707,6 +1444,7 @@ export function renderCollaboratorList() {
   }
 
   const ownerDisplay = project.ownerName || project.ownerEmail || 'Owner';
+  const ownerPresence = getPresenceCopy(project, project.ownerId, ownerDisplay);
   const ownerRow = project.ownerId || project.ownerName || project.ownerEmail
     ? `<div class="collaborator-item">
         ${buildCollaboratorAvatarMarkup({
@@ -719,6 +1457,7 @@ export function renderCollaboratorList() {
         <div class="collaborator-info">
           <span class="collaborator-name">${esc(ownerDisplay)} <span class="owner-badge">Owner</span></span>
           <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(project.ownerId || '')}" data-name="${esc(project.ownerName || '')}" data-email="${esc(project.ownerEmail || '')}" data-photourl="${esc(project.ownerPhotoURL || '')}">${esc(project.ownerName || project.ownerEmail || 'Owner')}</button>
+          ${ownerPresence ? `<span class="collaborator-role-copy">${esc(ownerPresence)}</span>` : ''}
         </div>
       </div>`
     : '';
@@ -729,22 +1468,25 @@ export function renderCollaboratorList() {
     return;
   }
 
-  list.innerHTML = ownerRow + collaboratorEntries.map(([uid, c]) => `
+  list.innerHTML = ownerRow + collaboratorEntries.map(([uid, c]) => {
+    const presenceCopy = getPresenceCopy(project, uid, c.name || c.email || 'Collaborator');
+    return `
     <div class="collaborator-item">
       ${buildCollaboratorAvatarMarkup({ uid, name: c.name || c.email, email: c.email || '', photoURL: c.photoURL || '' })}
       <div class="collaborator-info">
         <span class="collaborator-name">${esc(c.name || c.email)} <span class="role-badge">${esc((c.role || WORKSPACE_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))}</span></span>
         <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(uid)}" data-name="${esc(c.name || '')}" data-email="${esc(c.email || '')}" data-photourl="${esc(c.photoURL || '')}">${esc(c.name || c.email || 'Collaborator')}</button>
-        ${isOwner ? `<label class="collab-role-field"><span>Role</span><select class="collab-role-select" data-uid="${esc(uid)}">
-          <option value="editor" ${(c.role || WORKSPACE_ROLES.editor) === WORKSPACE_ROLES.editor ? 'selected' : ''}>Editor</option>
-          <option value="viewer" ${(c.role || WORKSPACE_ROLES.editor) === WORKSPACE_ROLES.viewer ? 'selected' : ''}>Viewer</option>
-        </select></label>` : `<span class="collaborator-role-copy">${esc((c.role || WORKSPACE_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))} access</span>`}
+        ${presenceCopy ? `<span class="collaborator-role-copy">${esc(presenceCopy)}</span>` : ''}
+        ${canUpdateCollaboratorRole(project, user, uid, c.role) ? `<label class="collab-role-field"><span>Role</span><select class="collab-role-select" data-uid="${esc(uid)}">
+          ${getAssignableWorkspaceRoles(project, user, uid).map((option) => `<option value="${esc(option)}" ${normalizeWorkspaceRole(c.role) === option ? 'selected' : ''}>${esc(option.replace(/^./, (char) => char.toUpperCase()))}</option>`).join('')}
+        </select></label>` : `<span class="collaborator-role-copy">${esc(normalizeWorkspaceRole(c.role).replace(/^./, (char) => char.toUpperCase()))} access</span>`}
       </div>
-      ${isOwner ? `<button class="kick-btn" data-uid="${uid}" title="Remove collaborator">
+      ${canRemoveCollaborator(project, user, uid) ? `<button class="kick-btn" data-uid="${uid}" title="Remove collaborator">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   list.querySelectorAll('.kick-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -782,8 +1524,20 @@ function attachCollabProfileTriggers(list) {
 }
 
 function formatCollaboratorHandle(value) {
-  const raw = String(value || '').trim().replace(/^@/, '');
-  return `@${raw || 'user'}`;
+  const raw = String(value || '').trim();
+  return raw || 'User';
+}
+
+function getPresenceCopy(project, uid, fallbackName = 'Workspace member') {
+  const presence = getRealtimePresence(project?.id)?.[uid];
+  if (!isPresenceFresh(presence)) return '';
+  if (presence.isTyping) {
+    return `${fallbackName} is typing...`;
+  }
+  if (presence.lineLabel) {
+    return `Working in "${presence.lineLabel}"`;
+  }
+  return 'Live now';
 }
 
 export async function showCollabProfile({ uid, name, email, photoURL }) {
@@ -823,8 +1577,8 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
       const snap = await getDoc(doc(db, 'users', uid, 'profile', 'data'));
       if (snap.exists()) {
         const data = snap.data();
-        const username = data.username || name || email || 'user';
-        nameEl.textContent = formatCollaboratorHandle(username);
+        const fullName = data.name || name || email || 'User';
+        nameEl.textContent = formatCollaboratorHandle(fullName);
         if (data.bio) bioEl.textContent = data.bio;
         if (data.photoURL) {
           imgEl.src = data.photoURL;
@@ -869,19 +1623,52 @@ function renderSentInvites(invitations) {
   const html = !sorted.length
     ? '<p class="collab-empty">No invites sent.</p>'
     : sorted.map(inv => {
-        const statusLabel = inv.status === 'accepted' ? 'Validated' : inv.status === 'declined' ? 'Declined' : 'Pending';
+        const effectiveInvite = isInvitationExpired(inv)
+          ? { ...inv, status: INVITATION_STATUSES.expired }
+          : inv;
+        const statusLabel = getInvitationStatusLabel(effectiveInvite);
+        const canResend = effectiveInvite.status !== INVITATION_STATUSES.accepted;
+        const canCancel = effectiveInvite.status === INVITATION_STATUSES.pending;
+        const expiresCopy = effectiveInvite.expiresAt
+          ? `Expires ${fmtTime(effectiveInvite.expiresAt)}`
+          : '';
         return `
           <div class="collab-request-item">
             <div class="collab-request-info">
               <span class="collab-request-from">${esc(inv.toEmail)}</span>
-              <span class="collab-request-project">${esc(inv.projectTitle)}</span>
+              <span class="collab-request-project">${esc(inv.projectTitle)}${expiresCopy ? ` - ${esc(expiresCopy)}` : ''}</span>
+              <span class="collab-request-project">${esc((inv.role || WORKSPACE_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))} access</span>
             </div>
-            <span class="status-pill ${inv.status}">${statusLabel}</span>
+            <div class="collab-request-actions">
+              <span class="status-pill ${effectiveInvite.status}">${statusLabel}</span>
+              ${canResend ? `<button class="ghost-button collab-resend-btn" data-invite-id="${inv.id}">Resend</button>` : ''}
+              ${canCancel ? `<button class="ghost-button danger-text collab-cancel-btn" data-invite-id="${inv.id}">Cancel</button>` : ''}
+            </div>
           </div>
         `;
       }).join('');
 
-  containers.forEach(list => { list.innerHTML = html; });
+  containers.forEach(list => {
+    list.innerHTML = html;
+    list.querySelectorAll('.collab-resend-btn').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const result = await resendInvitation(button.dataset.inviteId);
+        if (!result?.ok) {
+          await customAlert(result?.reason || 'Unable to resend the invitation right now.', 'Invitation');
+        }
+      });
+    });
+    list.querySelectorAll('.collab-cancel-btn').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const confirmed = await customConfirm('Cancel this invitation?', 'Cancel Invite');
+        if (!confirmed) return;
+        const result = await cancelInvitation(button.dataset.inviteId);
+        if (!result?.ok) {
+          await customAlert(result?.reason || 'Unable to cancel the invitation right now.', 'Invitation');
+        }
+      });
+    });
+  });
 }
 
 function renderCollabRequests(invitations) {
@@ -899,6 +1686,7 @@ function renderCollabRequests(invitations) {
         <div class="collab-request-info">
           <span class="collab-request-from">${esc(inv.fromName)}</span>
           <span class="collab-request-project">Invited you to: <strong>${esc(inv.projectTitle)}</strong></span>
+          <span class="collab-request-project">Expires ${esc(fmtTime(inv.expiresAt || getInviteExpiryTimestamp(inv.createdAt)))}</span>
         </div>
         <div class="collab-request-actions">
           <button class="ghost-button collab-accept-btn" data-invite-id="${inv.id}">Accept</button>

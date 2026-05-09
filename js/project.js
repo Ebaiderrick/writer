@@ -153,12 +153,15 @@ async function syncCurrentProjectToFirestore() {
     project.wordCountHistory = history;
   }
 
+    const nextVersion = Number(project.version || 0) + 1;
+    project.version = nextVersion;
+    payload.version = nextVersion;
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
       'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
-      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace'];
+      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace', 'version'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
       );
@@ -169,6 +172,17 @@ async function syncCurrentProjectToFirestore() {
         lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
         lastActivityAt: new Date().toISOString()
       }, { merge: true });
+      await setDoc(doc(collection(db, 'sharedProjects', project.id, 'versions')), {
+        version: nextVersion,
+        projectId: project.id,
+        workspaceId: project.workspace?.id || project.id,
+        editorUid: userId,
+        editorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+        createdAt: new Date().toISOString(),
+        title: project.title,
+        updatedAt: project.updatedAt,
+        lines: project.lines
+      });
     }
 
     // Update local storage with the new scriptId and notify UI
@@ -318,6 +332,7 @@ export function sanitizeProject(project) {
     collaborators: sanitizeCollaborators(project.collaborators),
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     wordCountHistory: Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [],
+    version: Number.isFinite(Number(project.version)) ? Number(project.version) : 0,
     lines: Array.isArray(project.lines) && project.lines.length
       ? project.lines.map((line) => {
           const type = TYPE_LABELS[line.type] ? line.type : "action";
@@ -590,6 +605,7 @@ function sanitizeWorkspace(workspace, project) {
     id: workspace?.id || project.id || uid("workspace"),
     name: String(workspace?.name || project.title || "Team Workspace").trim() || "Team Workspace",
     inviteCode: String(workspace?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
+    commentingEnabled: Boolean(workspace?.commentingEnabled),
     reminders: sanitizeWorkspaceReminders(workspace?.reminders),
     targets: sanitizeWorkspaceTargets(workspace?.targets),
     tasks: sanitizeWorkspaceTasks(workspace?.tasks),
@@ -695,7 +711,11 @@ function sanitizeCollaborators(collaborators) {
   return Object.fromEntries(
     Object.entries(collaborators).map(([uid, collaborator]) => [uid, {
       ...collaborator,
-      role: collaborator?.role === "viewer" ? "viewer" : "editor"
+      role: collaborator?.role === "admin"
+        ? "admin"
+        : collaborator?.role === "viewer"
+          ? "viewer"
+          : "editor"
     }])
   );
 }

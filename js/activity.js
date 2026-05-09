@@ -2,7 +2,7 @@ import { auth, db } from './firebase.js';
 import { doc, updateDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { state } from './config.js';
 
-export async function logActivity(projectId, message) {
+export async function logActivity(projectId, message, metadata = {}) {
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
 
@@ -12,6 +12,10 @@ export async function logActivity(projectId, message) {
   const entry = {
     timestamp: new Date().toISOString(),
     user: userName,
+    actorUid: user?.uid || metadata.actorUid || 'system',
+    action: metadata.action || 'update',
+    target: metadata.target || '',
+    workspaceId: metadata.workspaceId || project.workspace?.id || project.id,
     message: message
   };
 

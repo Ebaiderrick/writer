@@ -35,12 +35,11 @@ function getProjectFormatLabel(project) {
 
 function getUserHandle(value, fallback = "user") {
   const raw = String(value || "").trim();
-  const base = raw.replace(/^@/, "") || fallback;
-  return `@${base}`;
+  return raw || fallback;
 }
 
 function getMemberDisplayName(member = {}, fallback = "Collaborator") {
-  return member.username || member.name || member.email || fallback;
+  return member.name || member.email || fallback;
 }
 
 function buildProfileTriggerMarkup({ uid = "", name = "", photoURL = "", className = "" } = {}) {
@@ -2194,6 +2193,61 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
   await showModal({ title: "Characters", message: container, showConfirm: false, cancelLabel: "Close" });
 }
 
+const WORKSPACE_POPUP_ROLE_LABELS = {
+  owner: "Owner",
+  admin: "Admin",
+  editor: "Editor",
+  viewer: "Viewer"
+};
+
+function normalizeWorkspacePopupRole(role, fallback = "editor") {
+  if (role === "owner") return "owner";
+  if (role === "admin") return "admin";
+  if (role === "viewer") return "viewer";
+  return fallback;
+}
+
+function getWorkspacePopupPermissions(project) {
+  const currentUid = auth.currentUser?.uid;
+  const isOwner = !project?.ownerId || project.ownerId === currentUid;
+  const currentRole = isOwner
+    ? "owner"
+    : normalizeWorkspacePopupRole(project?.collaborators?.[currentUid]?.role);
+
+  return {
+    role: currentRole,
+    isOwner,
+    isAdmin: currentRole === "admin",
+    canInvite: isOwner || currentRole === "admin",
+    canManageSettings: isOwner || currentRole === "admin"
+  };
+}
+
+function getWorkspacePopupAssignableRoles(project, collaboratorUid = null) {
+  const permissions = getWorkspacePopupPermissions(project);
+  if (permissions.isOwner) {
+    return ["admin", "editor", "viewer"];
+  }
+  if (!permissions.isAdmin) {
+    return [];
+  }
+
+  const targetRole = collaboratorUid
+    ? normalizeWorkspacePopupRole(project?.collaborators?.[collaboratorUid]?.role)
+    : null;
+
+  return targetRole === "admin" ? [] : ["editor", "viewer"];
+}
+
+function canWorkspacePopupRemoveMember(project, collaboratorUid) {
+  const permissions = getWorkspacePopupPermissions(project);
+  const targetRole = normalizeWorkspacePopupRole(project?.collaborators?.[collaboratorUid]?.role);
+
+  if (permissions.isOwner) return true;
+  if (!permissions.isAdmin) return false;
+  return targetRole !== "admin";
+}
+
 export async function showWorkspacePopup() {
   const project = getCurrentProject();
   if (!project) {
@@ -2208,7 +2262,8 @@ export async function showWorkspacePopup() {
   const workspace = project.workspace || { name: project.title || "Team Workspace", reminders: [] };
   const reminders = workspace.reminders || [];
   const activity = [...(project.activityLog || [])].slice(-5).reverse();
-  const ownerCanManage = !project.ownerId || project.ownerId === auth.currentUser?.uid;
+  const permissions = getWorkspacePopupPermissions(project);
+  const inviteRoleOptions = getWorkspacePopupAssignableRoles(project);
   const lastActivity = project.lastActivityAt || project.updatedAt;
 
   const container = document.createElement("div");
@@ -2218,8 +2273,8 @@ export async function showWorkspacePopup() {
       <h4>Team Workspace</h4>
       <p>Create shared writing spaces where projects belong to the workspace, not just one user.</p>
       <div class="workspace-title-row">
-        <input id="workspaceNameInput" class="modal-input" type="text" value="${escapeHtml(workspace.name || project.title || 'Team Workspace')}" ${ownerCanManage ? '' : 'readonly'}>
-        ${ownerCanManage ? '<button class="ghost-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
+        <input id="workspaceNameInput" class="modal-input" type="text" value="${escapeHtml(workspace.name || project.title || 'Team Workspace')}" ${permissions.canManageSettings ? '' : 'readonly'}>
+        ${permissions.canManageSettings ? '<button class="ghost-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
       </div>
       <div class="workspace-metric-columns">
         <div class="workspace-metric-row"><span>Owner</span><strong>${escapeHtml(getUserHandle(ownerLabel, "owner"))}</strong></div>
@@ -2232,19 +2287,19 @@ export async function showWorkspacePopup() {
     </section>
     <section class="workspace-popup-section">
       <h4>Sharing</h4>
-      <p>Invite collaborators by email or share a workspace link, then assign Editor or Viewer access.</p>
+      <p>Invite collaborators by email or share a workspace link, then assign the right workspace role.</p>
       <div class="workspace-share-row">
         <input class="modal-input workspace-link-input" type="text" value="${escapeHtml(inviteLink)}" readonly>
         <button class="ghost-button workspace-inline-button" type="button" data-workspace-action="copy-link">Copy Link</button>
       </div>
       <div class="workspace-share-row workspace-share-row-compact">
-        <input id="workspaceInviteEmail" class="modal-input" type="email" placeholder="collaborator@email.com">
-        <select id="workspaceInviteRole" class="comment-filter-select workspace-inline-role">
-          <option value="editor">Editor</option>
-          <option value="viewer">Viewer</option>
+        <input id="workspaceInviteEmail" class="modal-input" type="email" placeholder="collaborator@email.com" ${permissions.canInvite ? '' : 'disabled'}>
+        <select id="workspaceInviteRole" class="comment-filter-select workspace-inline-role" ${permissions.canInvite ? '' : 'disabled'}>
+          ${inviteRoleOptions.map((role) => `<option value="${escapeHtml(role)}">${escapeHtml(WORKSPACE_POPUP_ROLE_LABELS[role])}</option>`).join("")}
         </select>
-        <button class="ghost-button workspace-inline-button" type="button" data-workspace-action="invite">Invite by Email</button>
+        <button class="ghost-button workspace-inline-button" type="button" data-workspace-action="invite" ${permissions.canInvite ? '' : 'disabled'}>Invite by Email</button>
       </div>
+      ${permissions.canInvite ? '' : '<p class="collab-empty">Only owners and admins can send workspace invites.</p>'}
       <p class="collab-status-msg" data-workspace-status></p>
     </section>
     <section class="workspace-popup-section">
@@ -2259,28 +2314,32 @@ export async function showWorkspacePopup() {
               </div>
             </div>
           </div>
-          ${collaborators.map(([uid, person]) => `
+          ${collaborators.map(([uid, person]) => {
+            const memberRole = normalizeWorkspacePopupRole(person.role);
+            const roleOptions = getWorkspacePopupAssignableRoles(project, uid);
+            return `
             <div class="list-item workspace-member-row">
               <div class="workspace-member-copy">
                 <span class="list-item-title">${escapeHtml(getUserHandle(getMemberDisplayName(person), "user"))}</span>
                 <div class="workspace-member-meta-row">
                   ${buildProfileTriggerMarkup({ uid, name: getMemberDisplayName(person), photoURL: person.photoURL || "", className: "workspace-member-button" })}
-                  ${ownerCanManage ? `
+                  ${roleOptions.length ? `
                     <select class="comment-filter-select workspace-role-select" data-member-role="${escapeHtml(uid)}">
-                      <option value="editor" ${(person.role || "editor") === "editor" ? "selected" : ""}>Editor</option>
-                      <option value="viewer" ${(person.role || "editor") === "viewer" ? "selected" : ""}>Viewer</option>
+                      ${roleOptions.map((role) => `<option value="${escapeHtml(role)}" ${memberRole === role ? 'selected' : ''}>${escapeHtml(WORKSPACE_POPUP_ROLE_LABELS[role])}</option>`).join("")}
                     </select>
-                  ` : `<span class="role-badge">${escapeHtml((person.role || "editor").replace(/^./, (char) => char.toUpperCase()))}</span>`}
+                  ` : `<span class="role-badge">${escapeHtml(WORKSPACE_POPUP_ROLE_LABELS[memberRole] || 'Editor')}</span>`}
+                  ${canWorkspacePopupRemoveMember(project, uid) ? `<button class="ghost-button danger-text workspace-inline-button" type="button" data-member-remove="${escapeHtml(uid)}">Remove</button>` : ''}
                 </div>
               </div>
             </div>
-          `).join("") || '<p class="collab-empty">No editors added yet.</p>'}
+          `;
+          }).join("") || '<p class="collab-empty">No collaborators added yet.</p>'}
         </div>
     </section>
     <section class="workspace-popup-section">
       <h4>Reminders</h4>
       <div class="workspace-share-row">
-        <input id="workspaceReminderText" class="modal-input" type="text" placeholder="Prepare scene board, review act two, share draft…">
+        <input id="workspaceReminderText" class="modal-input" type="text" placeholder="Prepare scene board, review act two, share draft...">
         <input id="workspaceReminderDue" class="modal-input" type="datetime-local">
         <button class="ghost-button" type="button" data-workspace-action="add-reminder">Add Reminder</button>
       </div>
@@ -2305,7 +2364,7 @@ export async function showWorkspacePopup() {
         ${activity.map((entry) => `
           <div class="list-item workspace-activity-item">
             <span class="list-item-title">${escapeHtml(entry.user)}</span>
-            <span class="list-item-meta">${escapeHtml(entry.message)} • ${escapeHtml(formatDateTime(entry.timestamp))}</span>
+            <span class="list-item-meta">${escapeHtml(entry.message)} - ${escapeHtml(formatDateTime(entry.timestamp))}</span>
           </div>
         `).join("") || '<p class="collab-empty">No activity recorded yet.</p>'}
       </div>
@@ -2401,6 +2460,14 @@ export async function showWorkspacePopup() {
     }
   });
 
+  container.querySelectorAll("[data-member-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("workspaceMemberRemoveRequested", {
+        detail: { projectId: project.id, collaboratorUid: button.dataset.memberRemove }
+      }));
+    });
+  });
+
   container.querySelectorAll("[data-workspace-reminder-delete]").forEach((button) => {
     button.addEventListener("click", () => {
       window.dispatchEvent(new CustomEvent("workspaceReminderDeleteRequested", {
@@ -2437,7 +2504,6 @@ export async function showWorkspacePopup() {
   window.removeEventListener("workspaceInviteResult", handleInviteResult);
   window.removeEventListener("workspaceMutationResult", handleMutationResult);
 }
-
 export function renderMetrics() {
   const project = getCurrentProject();
   if (!project) return;

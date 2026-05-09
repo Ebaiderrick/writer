@@ -18,6 +18,8 @@ import { renderPreview, renderCoverPreview, buildPrintableDocument } from './pre
 import { buildWordDocxBlob, DOCX_MIME_TYPE } from './docxExport.js';
 import { paginateScriptLines } from './pagination.js';
 import { auth } from './firebase.js';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { logActivity } from './activity.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
   showStudio, showHome, showWorkspaceView, applyViewState, setTheme, toggleMenu,
@@ -49,9 +51,11 @@ import {
 import {
   inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
   hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel,
-  canEditProject, updateCollaboratorRole, addWorkspaceReminder,
+  canEditProject, canManageWorkspaceProjects, canDeleteWorkspace, getWorkspacePermissions,
+  updateCollaboratorRole, addWorkspaceReminder, kickCollaborator,
   toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace,
-  showCollabProfile
+  showCollabProfile, noteRealtimeActivity, syncWorkspaceState,
+  leaveWorkspace, deleteWorkspaceData
 } from './collaborate.js';
 
 let studioSidebarRefreshFrame = 0;
@@ -239,22 +243,51 @@ async function launchNewCreationFlow() {
   showToast("Project created.", "success");
 }
 
-function openWorkspaceDashboard(workspaceId) {
+function syncWorkspaceHeaderActions() {
+  const refreshBtn = document.getElementById("workspaceRefreshBtn");
+  const leaveBtn = document.getElementById("workspaceLeaveBtn");
+  const deleteBtn = document.getElementById("workspaceDeleteBtn");
+  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId)
+    || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId)
+    || null;
+
+  if (refreshBtn) {
+    refreshBtn.hidden = !workspaceProject;
+  }
+  if (leaveBtn) {
+    leaveBtn.hidden = !workspaceProject || getWorkspacePermissions(workspaceProject).isOwner;
+  }
+  if (deleteBtn) {
+    deleteBtn.hidden = !workspaceProject || !canDeleteWorkspace(workspaceProject);
+  }
+}
+
+async function openWorkspaceDashboard(workspaceId) {
   if (!workspaceId) return;
+  const loadToast = showToast("Refreshing workspace...", "loading", { duration: 0 });
+  state.activeBlockId = null;
+  state.activeType = "action";
   const workspaceRoot = getWorkspaceRootProject(workspaceId) || getWorkspaceProjects(workspaceId)[0] || null;
   state.currentWorkspaceId = workspaceId;
   if (workspaceRoot) {
     state.currentProjectId = workspaceRoot.id;
   }
+  await syncWorkspaceState(workspaceId).catch(() => {});
   persistProjects(false, { syncInputs: false });
   showWorkspaceView();
   renderWorkspaceView();
+  syncWorkspaceHeaderActions();
+  updateToast(loadToast, "Workspace ready.", "success", { duration: 1200 });
 }
 
 async function createProjectInsideCurrentWorkspace() {
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId) || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId);
   if (!workspaceProject) {
     launchNewCreationFlow();
+    return;
+  }
+  if (!canManageWorkspaceProjects(workspaceProject)) {
+    await customAlert("Only workspace owners and admins can create new projects in this workspace.", "Workspace Access");
     return;
   }
   const projectName = await customPrompt("Name this project before creating it.", "", "New Project");
@@ -280,6 +313,7 @@ async function createProjectInsideCurrentWorkspace() {
       name: workspaceProject.workspace?.name || workspaceProject.title,
       inviteCode: workspaceProject.workspace?.inviteCode,
       reminders: workspaceProject.workspace?.reminders || [],
+      commentingEnabled: Boolean(workspaceProject.workspace?.commentingEnabled),
       targets: workspaceProject.workspace?.targets || {},
       tasks: workspaceProject.workspace?.tasks || []
     }
@@ -1089,10 +1123,50 @@ export function bindEvents() {
     renderHome();
   });
 
+  document.getElementById("workspaceRefreshBtn")?.addEventListener("click", async () => {
+    if (!state.currentWorkspaceId) return;
+    await openWorkspaceDashboard(state.currentWorkspaceId);
+  });
+
+  document.getElementById("workspaceLeaveBtn")?.addEventListener("click", async () => {
+    const workspaceId = state.currentWorkspaceId;
+    if (!workspaceId) return;
+    const workspaceProject = getWorkspaceRootProject(workspaceId)
+      || state.projects.find((project) => project.workspace?.id === workspaceId)
+      || null;
+    if (!workspaceProject) return;
+    const confirmed = await customConfirm(
+      `Leave "${workspaceProject.workspace?.name || workspaceProject.title}"? You will lose access to its projects until someone invites you back.`,
+      "Leave Workspace"
+    );
+    if (!confirmed) return;
+    const result = await leaveWorkspace(workspaceId);
+    if (!result.ok) {
+      await customAlert(result.reason || "Unable to leave the workspace right now.", "Leave Workspace");
+      return;
+    }
+    showToast("You left the workspace.", "success");
+    syncWorkspaceHeaderActions();
+  });
+
+  document.getElementById("workspaceDeleteBtn")?.addEventListener("click", async () => {
+    const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId)
+      || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId && project.isWorkspaceRoot)
+      || null;
+    if (!workspaceProject) return;
+    await removeProject(workspaceProject.id);
+    syncWorkspaceHeaderActions();
+  });
+
   refs.workspaceView?.addEventListener("change", (event) => {
     const workspaceSwitch = event.target.closest("[data-workspace-switch]");
     if (!workspaceSwitch) return;
     openWorkspaceDashboard(workspaceSwitch.value);
+  });
+
+  window.addEventListener("sharedProjectUpdated", () => {
+    if (!state.currentWorkspaceId) return;
+    syncWorkspaceHeaderActions();
   });
 
   refs.homeWorkspaceDashboard?.addEventListener("click", (event) => {
@@ -1286,6 +1360,11 @@ export function bindEvents() {
 
   document.getElementById("smartProofreadBtn")?.addEventListener("click", () => {
     AI.triggerSmartProofread();
+  });
+  refs.screenplayEditor?.addEventListener("focusin", (event) => {
+    const block = event.target.closest?.(".script-block");
+    if (!block?.dataset?.id) return;
+    noteRealtimeActivity(block.dataset.id, { isTyping: false });
   });
   document.addEventListener("selectionchange", () => {
     window.requestAnimationFrame(updateSelectionToolbar);
@@ -1553,9 +1632,9 @@ export function bindEvents() {
     const result = await inviteCollaborator(email, role);
     window.dispatchEvent(new CustomEvent("workspaceInviteResult", { detail: result }));
     if (result?.ok) {
-      await customAlert("Workspace invite sent.", "Workspace");
+      showToast("Workspace invite sent.", "success");
     } else if (result?.reason) {
-      await customAlert(result.reason, "Workspace");
+      showToast(result.reason, "error");
     }
   });
 
@@ -1573,6 +1652,27 @@ export function bindEvents() {
       detail: { ...result, message: result.ok ? "Member role updated." : "" }
     }));
     if (result.ok) renderStudio();
+  });
+
+  window.addEventListener("workspaceMemberRemoveRequested", async (event) => {
+    const project = state.projects.find((item) => item.id === event.detail?.projectId);
+    const collaborator = project?.collaborators?.[event.detail?.collaboratorUid];
+    if (!project || !collaborator) {
+      return;
+    }
+    const confirmed = await customConfirm(
+      `Remove ${collaborator.name || collaborator.email || "this collaborator"} from "${project.title}"?`,
+      "Remove Collaborator"
+    );
+    if (!confirmed) {
+      return;
+    }
+    await kickCollaborator(event.detail?.projectId, event.detail?.collaboratorUid);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ok: true, message: "Collaborator removed." }
+    }));
+    showToast("Collaborator removed.", "success");
+    renderStudio();
   });
 
   window.addEventListener("workspaceReminderRequested", async (event) => {
@@ -2042,7 +2142,11 @@ function canEditCurrentProjectWithNotice() {
 
   if (!hasShownReadOnlyNotice) {
     hasShownReadOnlyNotice = true;
-    customAlert("Viewer access is read-only. Ask the workspace owner to promote you to Editor if you need to make changes.", "Read-only Workspace");
+    const permissions = getWorkspacePermissions(project);
+    const message = permissions.isViewer
+      ? "Viewer access is read-only. Ask a workspace admin or the owner if you need editing access."
+      : "You do not have permission to edit this workspace item.";
+    customAlert(message, "Read-only Workspace");
   }
 
   return false;
@@ -2149,6 +2253,7 @@ function handleBlockInput(id, element) {
   }
   setTypingFocusModeActive();
   queueSave();
+  noteRealtimeActivity(id, { isTyping: true });
 }
 
 let lastKeyDownCode = "";
@@ -3092,21 +3197,104 @@ function deleteProject() {
   if (current) removeProject(current.id);
 }
 
+async function confirmWorkspaceDeletion(workspaceProject) {
+  const finalWarningAccepted = await customConfirm(
+    `This will permanently delete the workspace "${workspaceProject.title}" for everyone, including its shared projects, invites, and collaboration records.`,
+    "Final Workspace Warning"
+  );
+  if (!finalWarningAccepted) {
+    return { ok: false, cancelled: true };
+  }
+
+  const nameConfirmation = await customPrompt(
+    `Type the workspace name exactly to continue deleting "${workspaceProject.title}".`,
+    "",
+    "Confirm Workspace Name"
+  );
+  if (nameConfirmation !== workspaceProject.title) {
+    if (nameConfirmation !== null) {
+      await customAlert("Workspace deletion cancelled. The workspace name did not match.", "Cancelled");
+    }
+    return { ok: false, cancelled: true };
+  }
+
+  const user = auth.currentUser;
+  if (!user?.email) {
+    return { ok: false, reason: "A signed-in email account is required to delete a workspace." };
+  }
+  const hasPasswordProvider = user.providerData?.some((provider) => provider?.providerId === "password");
+  if (!hasPasswordProvider) {
+    return { ok: false, reason: "Workspace deletion currently requires an email/password account so the password can be confirmed." };
+  }
+
+  const password = await customPrompt(
+    `Enter the password for ${user.email} to finish deleting this workspace.`,
+    "",
+    "Password Confirmation"
+  );
+  if (password === null) {
+    return { ok: false, cancelled: true };
+  }
+  if (!password) {
+    return { ok: false, reason: "Password confirmation is required." };
+  }
+
+  try {
+    const credential = EmailAuthProvider.credential(user.email, password);
+    await reauthenticateWithCredential(user, credential);
+    return { ok: true };
+  } catch (error) {
+    console.error("Workspace deletion reauthentication failed", error);
+    return { ok: false, reason: "Password confirmation failed. Please try again." };
+  }
+}
+
 async function removeProject(id) {
   const target = state.projects.find((item) => item.id === id);
   if (!target) return;
 
-  const entityLabel = target.isWorkspaceRoot ? "workspace" : "project";
-  const confirmation = await customPrompt(`This will permanently delete the ${entityLabel} "${target.title}".\n\nTo confirm, please retype the ${entityLabel} name below:`, "", "Confirm Deletion");
+  const workspaceId = target.workspace?.id || target.id;
+  const workspaceProject = getWorkspaceRootProject(workspaceId)
+    || state.projects.find((item) => item.id === workspaceId)
+    || target;
 
-  if (confirmation !== target.title) {
-    if (confirmation !== null) {
-      await customAlert("Deletion cancelled. The name you typed did not match.", "Cancelled");
+  if (target.isWorkspaceRoot) {
+    if (!canDeleteWorkspace(workspaceProject)) {
+      await customAlert("Only the workspace owner can delete this workspace.", "Workspace Access");
+      return;
     }
+  } else if (target.isShared && !canManageWorkspaceProjects(workspaceProject)) {
+    await customAlert("Only workspace owners and admins can delete projects inside this workspace.", "Workspace Access");
     return;
   }
 
-  const workspaceId = target.workspace?.id || target.id;
+  if (target.isWorkspaceRoot) {
+    const workspaceDeletion = await confirmWorkspaceDeletion(target);
+    if (!workspaceDeletion.ok) {
+      if (workspaceDeletion.reason) {
+        await customAlert(workspaceDeletion.reason, "Workspace Deletion");
+      }
+      return;
+    }
+    const deleteResult = await deleteWorkspaceData(workspaceId);
+    if (!deleteResult.ok) {
+        await customAlert(deleteResult.reason || "Unable to delete the workspace right now.", "Workspace Deletion");
+        return;
+      }
+  } else {
+    const confirmation = await customPrompt(`This will permanently delete the project "${target.title}".\n\nTo confirm, please retype the project name below:`, "", "Confirm Deletion");
+    if (confirmation !== target.title) {
+      if (confirmation !== null) {
+        await customAlert("Deletion cancelled. The name you typed did not match.", "Cancelled");
+      }
+      return;
+    }
+    await logActivity(target.id, 'Deleted the project.', {
+      action: 'project.delete',
+      workspaceId
+    });
+  }
+
   state.projects = state.projects.filter((item) => {
     if (target.isWorkspaceRoot) {
       return item.workspace?.id !== workspaceId;
@@ -3122,7 +3310,9 @@ async function removeProject(id) {
   }
   state.currentProjectId = state.projects[0].id;
   persistProjects(true, { syncInputs: false });
-  deleteProjectFromCloud(id);
+  if (!target.isWorkspaceRoot) {
+    deleteProjectFromCloud(id);
+  }
   showHome();
   renderHome();
 }
@@ -3301,12 +3491,14 @@ function exportTxt() {
 
     const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
     downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+    logActivity(project.id, "Exported the project as plain text.", { action: "export.txt", workspaceId: project.workspace?.id || project.id }).catch(() => {});
     showToast("Export complete.", "success");
 }
 
 function exportJson() {
     const project = syncProjectFromInputs() || getCurrentProject();
     downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+    logActivity(project.id, "Exported the project as JSON.", { action: "export.json", workspaceId: project.workspace?.id || project.id }).catch(() => {});
     showToast("Export complete.", "success");
 }
 
@@ -3318,6 +3510,7 @@ async function exportWord() {
       try {
         const blob = await buildWordDocxBlob(project);
         downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
+        logActivity(project.id, "Exported the project as Word.", { action: "export.word", workspaceId: project.workspace?.id || project.id }).catch(() => {});
         updateToast(exportToast, "Export complete.", "success");
       } catch (error) {
         console.error("DOCX export failed", error);
@@ -3379,6 +3572,7 @@ function printWithHiddenFrame() {
       window.setTimeout(() => {
         try {
           frameWindow.print();
+          logActivity(project.id, "Opened the project print flow for PDF export.", { action: "export.pdf", workspaceId: project.workspace?.id || project.id }).catch(() => {});
           updateToast(exportToast, "Print dialog opened.", "success", { duration: 2400 });
         } catch (error) {
           console.error("Unable to start PDF print flow", error);
