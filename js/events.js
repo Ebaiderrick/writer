@@ -63,6 +63,8 @@ let previewRefreshTimer = 0;
 let focusModeTimer = 0;
 let hasShownReadOnlyNotice = false;
 const aiTaskTimers = new Map();
+const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
+let projectCardTouchState = null;
 const INLINE_SELECTION_TOOLS = [
   { label: "Improve", action: "Improve", requiresAi: true },
   { label: "Rewrite", action: "Rephrase", requiresAi: true },
@@ -97,6 +99,17 @@ function hideSelectionToolbar() {
   if (!toolbar) return;
   toolbar.hidden = true;
   toolbar.classList.remove("is-visible");
+}
+
+function resetProjectCardTouchState() {
+  projectCardTouchState = null;
+}
+
+function isProjectCardScrollGesture(event) {
+  if (!projectCardTouchState) return false;
+  const changedTouch = [...(event.changedTouches || [])]
+    .find((touch) => touch.identifier === projectCardTouchState.identifier);
+  return Boolean(projectCardTouchState.moved || !changedTouch);
 }
 
 function updateSelectionToolbar() {
@@ -1866,6 +1879,11 @@ export function bindEvents() {
 
   // Project Grid (Delegated)
   refs.projectGrid.addEventListener("click", (e) => {
+      if (isProjectCardScrollGesture(e)) {
+          resetProjectCardTouchState();
+          return;
+      }
+      resetProjectCardTouchState();
       const filterTrigger = e.target.closest("[data-home-project-filter]");
       if (filterTrigger) {
           state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
@@ -1897,6 +1915,42 @@ export function bindEvents() {
           openProject(projectId);
       }
   });
+
+  refs.projectGrid.addEventListener("touchstart", (e) => {
+      const card = e.target.closest(".project-card");
+      const touch = e.changedTouches?.[0];
+      if (!card || !touch) {
+          resetProjectCardTouchState();
+          return;
+      }
+      projectCardTouchState = {
+          identifier: touch.identifier,
+          startX: touch.clientX,
+          startY: touch.clientY,
+          moved: false
+      };
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("touchmove", (e) => {
+      if (!projectCardTouchState) return;
+      const touch = [...(e.changedTouches || [])]
+        .find((entry) => entry.identifier === projectCardTouchState.identifier);
+      if (!touch) return;
+      const deltaX = Math.abs(touch.clientX - projectCardTouchState.startX);
+      const deltaY = Math.abs(touch.clientY - projectCardTouchState.startY);
+      if (deltaX > PROJECT_CARD_TOUCH_SCROLL_THRESHOLD || deltaY > PROJECT_CARD_TOUCH_SCROLL_THRESHOLD) {
+          projectCardTouchState.moved = true;
+      }
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("touchend", (e) => {
+      if (!projectCardTouchState) return;
+      if (isProjectCardScrollGesture(e)) {
+          resetProjectCardTouchState();
+      }
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("touchcancel", resetProjectCardTouchState, { passive: true });
 
   // Recent Projects (Delegated)
   [refs.homeRecentProjects, refs.studioRecentProjects].forEach(container => {

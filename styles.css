@@ -1536,6 +1536,8 @@ html[data-theme="rose"] .mesh-background {
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
   height: 198px;
   overflow: hidden;
+  cursor: pointer;
+  touch-action: pan-y;
 }
 
 .project-card:hover {
@@ -5016,7 +5018,7 @@ body.outline-hidden .section-scenes {
 
 @media (max-width: 1180px) {
   body {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .studio-view {
@@ -5106,6 +5108,12 @@ body.outline-hidden .section-scenes {
 
   .workspace-home-subgrid {
     grid-template-columns: 1fr;
+  }
+
+  .home-view {
+    height: 100dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .workspace-view-body {
