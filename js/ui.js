@@ -1,7 +1,7 @@
 import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
-import { getCurrentProject, persistProjects, serializeScript } from './project.js';
+import { getCurrentProject, persistProjects, serializeScript, getVisibleProjects } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
@@ -156,6 +156,34 @@ function getTaskDueLabel(task) {
   if (stateLabel === "today") return "Due today";
   if (stateLabel === "soon") return "Due soon";
   return formatTaskDueLabel(task);
+}
+
+function projectMatchesSearch(project, searchTerm) {
+  const query = String(searchTerm || "").trim().toLowerCase();
+  if (!query) return true;
+  const collaboratorNames = [
+    project.ownerName,
+    project.ownerEmail,
+    ...Object.values(project.collaborators || {}).flatMap((member) => [member.name, member.email])
+  ].filter(Boolean).join(" ");
+  const sceneText = (project.lines || [])
+    .filter((line) => line.type === "scene" && line.text.trim())
+    .map((line) => line.text)
+    .join(" ");
+  const contentText = (project.lines || [])
+    .map((line) => `${line.type} ${line.text || ""} ${line.secondary || ""}`)
+    .join(" ");
+  const haystack = [
+    project.title,
+    project.logline,
+    project.details,
+    project.workspace?.name,
+    (project.tags || []).join(" "),
+    collaboratorNames,
+    sceneText,
+    contentText
+  ].filter(Boolean).join(" ").toLowerCase();
+  return haystack.includes(query);
 }
 
 function getTaskTargetLabel(task) {
@@ -854,10 +882,11 @@ export function renderHome() {
   state.homeProjectSort = state.homeProjectSort || "latest";
   state.homeProjectFormat = state.homeProjectFormat || "all";
   state.homeWorkspaceFilter = state.homeWorkspaceFilter || "all";
-  let projects = sortProjectsForHome(state.projects);
+  const visibleProjects = getVisibleProjects(state.projects);
+  let projects = sortProjectsForHome(visibleProjects);
   let workspaceLead = null;
   const currentUid = auth.currentUser?.uid || "";
-  const workspaceOptions = buildProjectGroups(state.projects.filter((project) => !project.isWorkspaceRoot));
+  const workspaceOptions = buildProjectGroups(visibleProjects.filter((project) => !project.isWorkspaceRoot && !project.isTrashed));
   if (state.homeWorkspaceFilter !== "all" && !workspaceOptions.some((group) => group.workspaceId === state.homeWorkspaceFilter)) {
     state.homeWorkspaceFilter = "all";
   }
@@ -866,26 +895,36 @@ export function renderHome() {
     workspaceLead = projects.find((project) => project.workspace?.id === state.currentWorkspaceId && project.isWorkspaceRoot)
       || projects.find((project) => project.workspace?.id === state.currentWorkspaceId)
       || null;
-    projects = projects.filter((project) => project.workspace?.id === state.currentWorkspaceId && !project.isWorkspaceRoot);
+    projects = projects.filter((project) => project.workspace?.id === state.currentWorkspaceId && !project.isWorkspaceRoot && !project.isTrashed);
+    if (state.homeProjectSearch) {
+      projects = projects.filter((project) => projectMatchesSearch(project, state.homeProjectSearch));
+    }
     if (!workspaceLead) {
       state.currentWorkspaceId = null;
       if (refs.homeWorkspaceDashboard) refs.homeWorkspaceDashboard.hidden = true;
     }
   } else {
-    projects = projects.filter((project) => !project.isWorkspaceRoot);
-    if (state.homeProjectFilter === "mine") {
-      projects = projects.filter((project) => {
-        const ownerId = project.ownerId || "";
-        return !project.isShared || (ownerId && ownerId === currentUid);
-      });
-    } else if (state.homeProjectFilter === "shared") {
-      projects = projects.filter((project) => project.isShared || Object.keys(project.collaborators || {}).length > 0);
+    if (state.homeProjectFilter === "trash") {
+      projects = projects.filter((project) => !project.isWorkspaceRoot && project.isTrashed);
+    } else {
+      projects = projects.filter((project) => !project.isWorkspaceRoot && !project.isTrashed);
+      if (state.homeProjectFilter === "mine") {
+        projects = projects.filter((project) => {
+          const ownerId = project.ownerId || "";
+          return !project.isShared || (ownerId && ownerId === currentUid);
+        });
+      } else if (state.homeProjectFilter === "shared") {
+        projects = projects.filter((project) => project.isShared || Object.keys(project.collaborators || {}).length > 0);
+      }
     }
     if (state.homeWorkspaceFilter !== "all") {
       projects = projects.filter((project) => (project.workspace?.id || project.id) === state.homeWorkspaceFilter);
     }
     if (state.homeProjectFormat !== "all") {
       projects = projects.filter((project) => getProjectFormatValue(project) === state.homeProjectFormat);
+    }
+    if (state.homeProjectSearch) {
+      projects = projects.filter((project) => projectMatchesSearch(project, state.homeProjectSearch));
     }
   }
 
@@ -1029,8 +1068,10 @@ export function renderHome() {
             <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
             <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
             <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+            <button class="project-filter-chip ${state.homeProjectFilter === "trash" ? "is-active" : ""}" type="button" data-home-project-filter="trash">Trash</button>
           </div>
           <div class="project-toolbar-selects">
+            <input class="modal-input project-search-input" type="search" value="${escapeHtml(state.homeProjectSearch || "")}" placeholder="Search title, tags, collaborators, scenes, content" data-home-project-search aria-label="Search projects">
             ${workspaceOptions.length > 1 ? `
               <select class="comment-filter-select project-workspace-select" data-home-workspace-filter aria-label="Workspace filter">
                 <option value="all">All Workspaces</option>
@@ -1064,6 +1105,7 @@ export function renderHome() {
       const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
       const workspaceLabel = project.workspace?.name || "Personal Workspace";
       const collaborationLabel = getProjectCollaborationLabel(project);
+      const isSelected = state.homeSelectedProjectId === project.id;
 
       node.querySelector(".project-card-title").textContent = project.title;
       node.querySelector(".project-script-id").textContent = project.scriptId;
@@ -1072,9 +1114,28 @@ export function renderHome() {
       node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
       node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
       node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
+      node.querySelector(".project-card-updated").textContent = project.isTrashed ? `In trash until ${formatDateTime(project.restoreUntil || project.trashedAt || project.updatedAt)}` : `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
+      const quickPrimary = node.querySelector("[data-project-action=\"rename\"]");
+      const quickSecondary = node.querySelector("[data-project-action=\"duplicate\"]");
+      const deleteButton = node.querySelector(".project-delete");
+      if (project.isTrashed) {
+        quickPrimary.dataset.projectAction = "restore";
+        quickPrimary.textContent = "Restore";
+        quickSecondary.dataset.projectAction = "delete-now";
+        quickSecondary.textContent = "Delete Now";
+        deleteButton.hidden = true;
+      } else {
+        quickPrimary.dataset.projectAction = "rename";
+        quickPrimary.textContent = "Rename";
+        quickSecondary.dataset.projectAction = "duplicate";
+        quickSecondary.textContent = "Duplicate";
+        deleteButton.hidden = false;
+      }
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
+      node.classList.toggle("is-selected", isSelected);
+      node.setAttribute("aria-selected", isSelected ? "true" : "false");
+      node.setAttribute("aria-label", `${project.title}${project.isTrashed ? " in trash" : ""}`);
       return node;
     };
 
@@ -1102,6 +1163,7 @@ export function renderHome() {
     const collaborationLabel = project.isShared || Object.keys(project.collaborators || {}).length
       ? "Shared"
       : "Private";
+    const isSelected = state.homeSelectedProjectId === project.id;
 
     node.querySelector(".project-card-title").textContent = project.title;
     node.querySelector(".project-script-id").textContent = project.scriptId;
@@ -1115,6 +1177,9 @@ export function renderHome() {
     // Note: Event listeners will be bound in events.js, but we need the IDs here
     node.dataset.projectId = project.id;
     node.querySelector(".project-card-open").dataset.projectId = project.id;
+    node.classList.toggle("is-selected", isSelected);
+    node.setAttribute("aria-selected", isSelected ? "true" : "false");
+    node.setAttribute("aria-label", project.title);
 
     refs.projectGrid.appendChild(node);
   });

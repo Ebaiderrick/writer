@@ -7,7 +7,7 @@ import {
   getWorkspaceProjects, getWorkspaceRootProject, updateWorkspaceAcrossProjects,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
-  deleteProjectFromCloud
+  deleteProjectFromCloud, captureVersionSnapshot, retryFailedSaves
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
@@ -68,6 +68,41 @@ const INLINE_SELECTION_TOOLS = [
   { label: "Rewrite", action: "Rephrase", requiresAi: true },
   { label: "Fix Grammar", action: "Grammar", requiresGrammar: true }
 ];
+const HOME_PROJECT_TOUCH_MOVE_THRESHOLD = 10;
+const HOME_PROJECT_TOUCH_SUPPRESS_MS = 450;
+let homeProjectTouchSession = null;
+let homeProjectTouchSuppressUntil = 0;
+
+function shouldSuppressHomeProjectInteraction() {
+  return Date.now() < homeProjectTouchSuppressUntil;
+}
+
+function selectHomeProjectCard(projectId, options = {}) {
+  if (!projectId) return;
+  if (state.homeSelectedProjectId === projectId && !options.forceRender) {
+    return;
+  }
+  state.homeSelectedProjectId = projectId;
+  renderHome();
+  if (options.focusCard) {
+    requestAnimationFrame(() => {
+      refs.projectGrid?.querySelector(`.project-card[data-project-id="${CSS.escape(projectId)}"]`)?.focus();
+    });
+  }
+}
+
+function handleHomeProjectOpenIntent(projectId) {
+  if (!projectId || shouldSuppressHomeProjectInteraction()) {
+    return;
+  }
+  const project = state.projects.find((item) => item.id === projectId);
+  if (project?.isTrashed) {
+    customAlert("Restore this project before opening it again.", "Project in Trash");
+    return;
+  }
+  state.homeSelectedProjectId = projectId;
+  openProject(projectId);
+}
 
 function ensureSelectionToolbar() {
   let toolbar = document.getElementById("selectionAiToolbar");
@@ -1178,6 +1213,12 @@ export function bindEvents() {
   });
 
   refs.homeWorkspaceDashboard?.addEventListener("change", (event) => {
+    const searchInput = event.target.closest("[data-home-project-search]");
+    if (searchInput) {
+      state.homeProjectSearch = searchInput.value || "";
+      renderHome();
+      return;
+    }
     const formatSelect = event.target.closest("[data-home-project-format]");
     if (formatSelect) {
       state.homeProjectFormat = formatSelect.value || "all";
@@ -1204,6 +1245,12 @@ export function bindEvents() {
   });
 
   refs.homeProjectsSubtitle?.addEventListener("change", (event) => {
+    const searchInput = event.target.closest("[data-home-project-search]");
+    if (searchInput) {
+      state.homeProjectSearch = searchInput.value || "";
+      renderHome();
+      return;
+    }
     const formatSelect = event.target.closest("[data-home-project-format]");
     if (formatSelect) {
       state.homeProjectFormat = formatSelect.value || "all";
@@ -1219,6 +1266,13 @@ export function bindEvents() {
     const sortSelect = event.target.closest("[data-home-project-sort]");
     if (!sortSelect) return;
     state.homeProjectSort = sortSelect.value || "latest";
+    renderHome();
+  });
+
+  refs.homeProjectsSubtitle?.addEventListener("input", (event) => {
+    const searchInput = event.target.closest("[data-home-project-search]");
+    if (!searchInput) return;
+    state.homeProjectSearch = searchInput.value || "";
     renderHome();
   });
 
@@ -1880,6 +1934,10 @@ export function bindEvents() {
       }
       const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
       if (workspaceTrigger) {
+          if (shouldSuppressHomeProjectInteraction()) {
+              e.preventDefault();
+              return;
+          }
           openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
           return;
       }
@@ -1887,15 +1945,90 @@ export function bindEvents() {
       if (!card) return;
       const projectId = card.dataset.projectId;
 
+      if (shouldSuppressHomeProjectInteraction()) {
+          e.preventDefault();
+          return;
+      }
       if (e.target.closest(".project-delete")) {
           removeProject(projectId);
       } else if (e.target.closest('[data-project-action="rename"]')) {
           renameProjectById(projectId);
       } else if (e.target.closest('[data-project-action="duplicate"]')) {
           duplicateProjectById(projectId);
+      } else if (e.target.closest('[data-project-action="restore"]')) {
+          restoreProjectById(projectId);
+      } else if (e.target.closest('[data-project-action="delete-now"]')) {
+          removeProject(projectId, { permanent: true });
+      } else if (e.target.closest(".project-card-open")) {
+          handleHomeProjectOpenIntent(projectId);
       } else {
-          openProject(projectId);
+          selectHomeProjectCard(projectId);
       }
+  });
+
+  refs.projectGrid.addEventListener("keydown", (e) => {
+    const card = e.target.closest(".project-card");
+    if (!card) return;
+    if (e.target.closest("button, input, select, textarea, a")) return;
+    const projectId = card.dataset.projectId;
+    if (!projectId) return;
+
+    if (e.key === " " || e.key === "Spacebar") {
+      e.preventDefault();
+      selectHomeProjectCard(projectId);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleHomeProjectOpenIntent(projectId);
+    }
+  });
+
+  refs.projectGrid.addEventListener("touchstart", (e) => {
+    const card = e.target.closest(".project-card");
+    if (!card) {
+      homeProjectTouchSession = null;
+      return;
+    }
+    const touch = e.touches[0];
+    if (!touch) return;
+    homeProjectTouchSession = {
+      cardId: card.dataset.projectId || "",
+      startX: touch.clientX,
+      startY: touch.clientY,
+      moved: false
+    };
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("touchmove", (e) => {
+    if (!homeProjectTouchSession) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const movedX = Math.abs(touch.clientX - homeProjectTouchSession.startX);
+    const movedY = Math.abs(touch.clientY - homeProjectTouchSession.startY);
+    if (movedX > HOME_PROJECT_TOUCH_MOVE_THRESHOLD || movedY > HOME_PROJECT_TOUCH_MOVE_THRESHOLD) {
+      homeProjectTouchSession.moved = true;
+      homeProjectTouchSuppressUntil = Date.now() + HOME_PROJECT_TOUCH_SUPPRESS_MS;
+    }
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("touchend", () => {
+    if (homeProjectTouchSession?.moved) {
+      homeProjectTouchSuppressUntil = Date.now() + HOME_PROJECT_TOUCH_SUPPRESS_MS;
+    }
+    homeProjectTouchSession = null;
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("touchcancel", () => {
+    homeProjectTouchSession = null;
+    homeProjectTouchSuppressUntil = Date.now() + HOME_PROJECT_TOUCH_SUPPRESS_MS;
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("input", (e) => {
+    const searchInput = e.target.closest("[data-home-project-search]");
+    if (!searchInput) return;
+    state.homeProjectSearch = searchInput.value || "";
+    renderHome();
   });
 
   // Recent Projects (Delegated)
@@ -2018,6 +2151,10 @@ export function bindEvents() {
 export function openProject(projectId, options = {}) {
     const project = state.projects.find((item) => item.id === projectId);
     if (!project) return;
+    if (project.isTrashed) {
+      customAlert("Restore this project from trash before opening it again.", "Project in Trash");
+      return;
+    }
     if (project.isWorkspaceRoot) {
       openWorkspaceDashboard(project.workspace?.id || project.id);
       return;
@@ -2718,6 +2855,19 @@ function handleMenuAction(action) {
       redo();
       renderStudio();
       break;
+    case "version-history":
+      showVersionHistory();
+      break;
+    case "compare-version": {
+      const project = getCurrentProject();
+      const latestSnapshot = project?.versionHistory?.[project.versionHistory.length - 1];
+      if (!latestSnapshot) {
+        customAlert("No version snapshot is available yet.", "Compare Version");
+        break;
+      }
+      compareWithSnapshot(latestSnapshot);
+      break;
+    }
     case "insert-page-break":
       insertMenuBlock("text", "--- PAGE BREAK ---");
       break;
@@ -3197,6 +3347,129 @@ function deleteProject() {
   if (current) removeProject(current.id);
 }
 
+function markProjectAsTrashed(project) {
+  const now = new Date().toISOString();
+  project.isTrashed = true;
+  project.trashedAt = now;
+  project.restoreUntil = new Date(new Date(now).getTime() + (30 * 24 * 60 * 60 * 1000)).toISOString();
+  project.last_edited_by = auth.currentUser?.uid || project.last_edited_by || '';
+  project.last_edited_at = now;
+  project.lastEditedBy = project.last_edited_by;
+  project.lastEditedAt = now;
+  captureVersionSnapshot(project, { force: true, label: "Before trash" });
+  upsertProject(project);
+}
+
+function restoreProjectState(project) {
+  project.isTrashed = false;
+  project.trashedAt = "";
+  project.restoreUntil = "";
+  project.updatedAt = new Date().toISOString();
+  project.last_edited_by = auth.currentUser?.uid || project.last_edited_by || '';
+  project.last_edited_at = project.updatedAt;
+  project.lastEditedBy = project.last_edited_by;
+  project.lastEditedAt = project.updatedAt;
+  upsertProject(project);
+}
+
+async function restoreProjectById(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project?.isTrashed) return;
+  restoreProjectState(project);
+  persistProjects(true, { syncInputs: false });
+  showToast("Project restored.", "success");
+  renderHome();
+}
+
+async function showVersionHistory() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const history = [...(project.versionHistory || [])].reverse();
+  if (!history.length) {
+    await customAlert("No saved snapshots yet. Keep writing and the version trail will appear here.", "Version History");
+    return;
+  }
+  const container = document.createElement("div");
+  container.className = "list-stack";
+  container.innerHTML = history.map((snapshot) => `
+    <article class="list-item workspace-activity-item">
+      <span class="list-item-title">${snapshot.label || "Snapshot"}</span>
+      <span class="list-item-meta">${formatDateTime(snapshot.createdAt)} · v${snapshot.version || 0} · ${snapshot.editorName || "Editor"}</span>
+      <div class="workspace-action-row">
+        <button class="ghost-button btn-sm" type="button" data-version-compare="${snapshot.id}">Compare</button>
+        <button class="ghost-button btn-sm" type="button" data-version-restore="${snapshot.id}">Restore</button>
+      </div>
+    </article>
+  `).join("");
+
+  container.addEventListener("click", async (event) => {
+    const compareId = event.target.closest("[data-version-compare]")?.dataset.versionCompare;
+    if (compareId) {
+      const snapshot = history.find((item) => item.id === compareId);
+      if (snapshot) {
+        await compareWithSnapshot(snapshot);
+      }
+      return;
+    }
+    const restoreId = event.target.closest("[data-version-restore]")?.dataset.versionRestore;
+    if (!restoreId) return;
+    const snapshot = history.find((item) => item.id === restoreId);
+    if (!snapshot) return;
+    const confirmed = await customConfirm(`Restore "${snapshot.label || "this snapshot"}" from ${formatDateTime(snapshot.createdAt)}?`, "Restore Version");
+    if (!confirmed) return;
+    captureVersionSnapshot(project, { force: true, label: "Before restore" });
+    project.title = snapshot.title || project.title;
+    project.logline = snapshot.logline || "";
+    project.details = snapshot.details || "";
+    project.tags = snapshot.tags || [];
+    project.lines = (snapshot.lines || []).map((line) => ({ ...line }));
+    project.updatedAt = new Date().toISOString();
+    project.last_edited_by = auth.currentUser?.uid || project.last_edited_by || '';
+    project.last_edited_at = project.updatedAt;
+    project.lastEditedBy = project.last_edited_by;
+    project.lastEditedAt = project.updatedAt;
+    persistProjects(true);
+    renderStudio();
+    showToast("Version restored.", "success");
+  });
+
+  await showModal({
+    title: "Version History",
+    message: container,
+    showConfirm: false,
+    cancelLabel: "Close"
+  });
+}
+
+async function compareWithSnapshot(snapshot) {
+  const project = getCurrentProject();
+  if (!project || !snapshot) return;
+  const currentText = (project.lines || []).map((line) => line.text || "").join("\n");
+  const snapshotText = (snapshot.lines || []).map((line) => line.text || "").join("\n");
+  const currentWords = currentText.match(/\b[\w'-]+\b/g)?.length || 0;
+  const snapshotWords = snapshotText.match(/\b[\w'-]+\b/g)?.length || 0;
+  const currentScenes = (project.lines || []).filter((line) => line.type === "scene" && line.text.trim()).length;
+  const snapshotScenes = (snapshot.lines || []).filter((line) => line.type === "scene" && line.text.trim()).length;
+  const container = document.createElement("div");
+  container.className = "field-grid";
+  container.innerHTML = `
+    <div class="field field-wide">
+      <span>Snapshot</span>
+      <p>${snapshot.label || "Snapshot"} · ${formatDateTime(snapshot.createdAt)} · v${snapshot.version || 0}</p>
+    </div>
+    <div class="field"><span>Words</span><p>${snapshotWords} → ${currentWords}</p></div>
+    <div class="field"><span>Scenes</span><p>${snapshotScenes} → ${currentScenes}</p></div>
+    <div class="field field-wide"><span>Snapshot Preview</span><textarea readonly>${snapshotText.slice(0, 1800)}</textarea></div>
+    <div class="field field-wide"><span>Current Preview</span><textarea readonly>${currentText.slice(0, 1800)}</textarea></div>
+  `;
+  await showModal({
+    title: "Compare Version",
+    message: container,
+    showConfirm: false,
+    cancelLabel: "Close"
+  });
+}
+
 async function confirmWorkspaceDeletion(workspaceProject) {
   const finalWarningAccepted = await customConfirm(
     `This will permanently delete the workspace "${workspaceProject.title}" for everyone, including its shared projects, invites, and collaboration records.`,
@@ -3249,7 +3522,7 @@ async function confirmWorkspaceDeletion(workspaceProject) {
   }
 }
 
-async function removeProject(id) {
+async function removeProject(id, options = {}) {
   const target = state.projects.find((item) => item.id === id);
   if (!target) return;
 
@@ -3265,6 +3538,17 @@ async function removeProject(id) {
     }
   } else if (target.isShared && !canManageWorkspaceProjects(workspaceProject)) {
     await customAlert("Only workspace owners and admins can delete projects inside this workspace.", "Workspace Access");
+    return;
+  }
+
+  if (!target.isWorkspaceRoot && !options.permanent && !target.isTrashed) {
+    const confirmed = await customConfirm(`Move "${target.title}" to trash? You can restore it for 30 days.`, "Move to Trash");
+    if (!confirmed) return;
+    markProjectAsTrashed(target);
+    persistProjects(true, { syncInputs: false });
+    renderHome();
+    showHome();
+    showToast("Project moved to trash.", "success");
     return;
   }
 
@@ -3289,6 +3573,7 @@ async function removeProject(id) {
       }
       return;
     }
+    captureVersionSnapshot(target, { force: true, label: "Before delete" });
     await logActivity(target.id, 'Deleted the project.', {
       action: 'project.delete',
       workspaceId

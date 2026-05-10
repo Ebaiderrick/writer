@@ -355,6 +355,8 @@
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="undo">Undo</button>
                 <button class="nav-menu-button" type="button" data-menu-action="redo">Redo</button>
+                <button class="nav-menu-button" type="button" data-menu-action="version-history">Version History</button>
+                <button class="nav-menu-button" type="button" data-menu-action="compare-version">Compare Latest Snapshot</button>
                 <button class="nav-menu-button" type="button" data-menu-action="select-all">Select All</button>
               </div>
             </details>
@@ -1062,7 +1064,7 @@
   </div>
 
   <template id="projectCardTemplate">
-    <article class="project-card">
+    <article class="project-card" tabindex="0">
       <div class="project-card-top">
         <div class="project-card-heading">
           <h3 class="project-card-title"></h3>
@@ -1076,10 +1078,10 @@
           </button>
         </div>
       </div>
-      <button class="project-card-open" type="button">
+      <div class="project-card-body">
         <div class="project-card-context-row">
           <span class="project-card-context"></span>
-          <span class="project-card-context-action" role="button" tabindex="0">Open Workspace</span>
+          <button class="project-card-context-action" type="button">Open Workspace</button>
         </div>
         <div class="project-meta-row">
           <span class="project-scenes"></span>
@@ -1087,7 +1089,10 @@
         </div>
         <p class="project-card-logline"></p>
         <p class="project-card-updated"></p>
-      </button>
+        <div class="project-card-footer">
+          <button class="project-card-open" type="button">Open Project</button>
+        </div>
+      </div>
     </article>
   </template>
 

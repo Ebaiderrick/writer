@@ -8,6 +8,9 @@ import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const RECOVERY_KEY = `${STORAGE_KEY}:recovery`;
+const SAVE_RETRY_KEY = `${STORAGE_KEY}:save-retry`;
+const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const SNAPSHOT_INTERVAL_MS = 3 * 60 * 1000;
 
 function generateScriptId() {
   const bytes = new Uint8Array(6);
@@ -50,6 +53,7 @@ function buildPersistencePayload(savedAt = new Date().toISOString()) {
     backupPrompted: state.backupPrompted,
     viewOptions: state.viewOptions,
     leftPaneBlocks: state.leftPaneBlocks,
+    homeProjectSearch: state.homeProjectSearch,
     leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
     rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
   };
@@ -76,15 +80,54 @@ function chooseLatestPayload(primary, recovery) {
   return primary;
 }
 
-function updateSaveBadge(mode = "saved", savedAt = state.lastSavedAt) {
+function loadRetryQueue() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SAVE_RETRY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistRetryQueue(queue) {
+  localStorage.setItem(SAVE_RETRY_KEY, JSON.stringify(queue));
+}
+
+function ensureRetrySaveButton() {
+  if (!refs.saveMetaText?.parentElement) return null;
+  let button = document.getElementById('retrySaveBtn');
+  if (button) return button;
+  button = document.createElement('button');
+  button.id = 'retrySaveBtn';
+  button.type = 'button';
+  button.className = 'ghost-button btn-sm';
+  button.textContent = 'Retry failed save';
+  button.hidden = true;
+  button.addEventListener('click', () => {
+    retryFailedSaves().catch((error) => console.error('Retry save failed', error));
+  });
+  refs.saveMetaText.parentElement.appendChild(button);
+  return button;
+}
+
+function updateSaveBadge(mode = "saved", savedAt = state.lastSavedAt, detail = "") {
   if (!refs.saveBadge) return;
-  refs.saveBadge.classList.remove("saving", "is-saved", "is-local");
+  refs.saveBadge.classList.remove("saving", "is-saved", "is-local", "is-error");
+  const retryButton = ensureRetrySaveButton();
+  if (retryButton) retryButton.hidden = true;
   const formattedTime = savedAt
     ? new Date(savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
   if (mode === "saving") {
     refs.saveBadge.textContent = t("save.saving");
     refs.saveBadge.classList.add("saving");
+  } else if (mode === "offline") {
+    refs.saveBadge.textContent = "Connection lost";
+    refs.saveBadge.classList.add("saving", "is-error");
+  } else if (mode === "failed") {
+    refs.saveBadge.textContent = "Save failed";
+    refs.saveBadge.classList.add("is-error");
+    if (retryButton) retryButton.hidden = false;
   } else {
     refs.saveBadge.textContent = mode === "local" ? t("save.savedLocal") : t("save.saved");
     refs.saveBadge.classList.add("is-saved");
@@ -98,6 +141,10 @@ function updateSaveBadge(mode = "saved", savedAt = state.lastSavedAt) {
       refs.saveMetaText.textContent = formattedTime
         ? `Saving changes... Last saved at ${formattedTime}.`
         : "Saving changes...";
+    } else if (mode === "offline") {
+      refs.saveMetaText.textContent = detail || "Connection lost. Your changes are cached locally and will retry when you reconnect.";
+    } else if (mode === "failed") {
+      refs.saveMetaText.textContent = detail || "A cloud save failed. Your changes are safe locally and waiting to retry.";
     } else if (mode === "local") {
       refs.saveMetaText.textContent = formattedTime
         ? `Saved locally at ${formattedTime}.`
@@ -116,6 +163,66 @@ function writeRecoverySnapshot({ syncInputs = false } = {}) {
   localStorage.setItem(RECOVERY_KEY, JSON.stringify(buildPersistencePayload(savedAt)));
 }
 
+function buildVersionSnapshot(project, label = "Auto snapshot") {
+  return {
+    id: uid('ver'),
+    label,
+    version: Number(project.version || 0),
+    title: project.title || "Untitled Script",
+    logline: project.logline || "",
+    details: project.details || "",
+    tags: Array.isArray(project.tags) ? [...project.tags] : [],
+    lines: Array.isArray(project.lines) ? project.lines.map((line) => ({ ...line })) : [],
+    createdAt: new Date().toISOString(),
+    editorUid: auth.currentUser?.uid || '',
+    editorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown'
+  };
+}
+
+export function captureVersionSnapshot(project = getCurrentProject(), { force = false, label = "Auto snapshot" } = {}) {
+  if (!project) return false;
+  const history = Array.isArray(project.versionHistory) ? project.versionHistory : [];
+  const lastSnapshot = history[history.length - 1];
+  const now = Date.now();
+  const lastAt = lastSnapshot ? new Date(lastSnapshot.createdAt).getTime() : 0;
+  const currentSerialized = JSON.stringify({
+    title: project.title,
+    logline: project.logline,
+    details: project.details,
+    tags: project.tags || [],
+    lines: project.lines || []
+  });
+  const lastSerialized = lastSnapshot ? JSON.stringify({
+    title: lastSnapshot.title,
+    logline: lastSnapshot.logline,
+    details: lastSnapshot.details,
+    tags: lastSnapshot.tags || [],
+    lines: lastSnapshot.lines || []
+  }) : '';
+
+  if (!force) {
+    if (lastSerialized === currentSerialized) return false;
+    if (now - lastAt < SNAPSHOT_INTERVAL_MS) return false;
+  } else if (lastSerialized === currentSerialized) {
+    return false;
+  }
+
+  project.versionHistory = [...history, buildVersionSnapshot(project, label)].slice(-30);
+  project.lastVersionSnapshotAt = new Date().toISOString();
+  return true;
+}
+
+function enqueueFailedSave(project) {
+  if (!project) return;
+  const queue = loadRetryQueue().filter((entry) => entry.projectId !== project.id);
+  queue.push({
+    projectId: project.id,
+    project,
+    failedAt: new Date().toISOString()
+  });
+  persistRetryQueue(queue.slice(-10));
+}
+
 async function syncCurrentProjectToFirestore() {
   const userId = auth.currentUser?.uid;
   if (!userId) return;
@@ -128,6 +235,11 @@ async function syncCurrentProjectToFirestore() {
   }
 
   const payload = { ...project, syncedAt: new Date().toISOString() };
+  if (!navigator.onLine) {
+    enqueueFailedSave(payload);
+    updateSaveBadge("offline", state.lastSavedAt, "Connection lost. Your changes are cached locally and will retry when you reconnect.");
+    return;
+  }
   try {
   // Record word count progress before sync
   const currentWords = serializeScript(project).match(/\b[\w'-]+\b/g)?.length || 0;
@@ -153,15 +265,28 @@ async function syncCurrentProjectToFirestore() {
     project.wordCountHistory = history;
   }
 
+    project.last_edited_by = userId;
+    project.last_edited_at = now;
+    project.lastEditedBy = userId;
+    project.lastEditedAt = now;
+    captureVersionSnapshot(project, { label: "Auto snapshot" });
+
     const nextVersion = Number(project.version || 0) + 1;
     project.version = nextVersion;
     payload.version = nextVersion;
+    payload.last_edited_by = project.last_edited_by;
+    payload.last_edited_at = project.last_edited_at;
+    payload.lastEditedBy = project.lastEditedBy;
+    payload.lastEditedAt = project.lastEditedAt;
+    payload.versionHistory = project.versionHistory || [];
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
       'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
-      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace', 'version'];
+      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace', 'version',
+      'versionHistory', 'created_by', 'last_edited_by', 'last_edited_at', 'visibility', 'tags',
+      'createdBy', 'lastEditedBy', 'lastEditedAt', 'isTrashed', 'trashedAt', 'restoreUntil'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
       );
@@ -194,16 +319,21 @@ async function syncCurrentProjectToFirestore() {
     }
     state.lastSaveSource = "remote";
     updateSaveBadge("saved", state.lastSavedAt || now);
+    persistRetryQueue(loadRetryQueue().filter((entry) => entry.projectId !== project.id));
     window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
 
   } catch (err) {
     console.error('Firestore sync failed', err);
+    enqueueFailedSave(payload);
+    updateSaveBadge("failed", state.lastSavedAt, "A cloud save failed. Your changes are safe locally and waiting to retry.");
   }
 }
 
 export async function fetchCloudProjects(userId) {
   const snapshot = await getDocs(collection(db, 'users', userId, 'projects'));
-  return snapshot.docs.map(d => sanitizeProject(d.data()));
+  return snapshot.docs
+    .map(d => sanitizeProject(d.data()))
+    .filter((project) => canCurrentUserAccessProject(project));
 }
 
 export async function importLocalProjectsToCloud(userId, projects) {
@@ -285,6 +415,7 @@ export function loadProjects() {
       state.localSaveIntervalMinutes = [5, 10, 60].includes(parsed?.localSaveIntervalMinutes) ? parsed.localSaveIntervalMinutes : 5;
       state.backupPrompted = Boolean(parsed?.backupPrompted);
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
+    state.homeProjectSearch = String(parsed?.homeProjectSearch || "");
     state.lastSavedAt = parsed?.savedAt || "";
     state.lastSaveSource = state.localBackupEnabled ? "local" : "remote";
     state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
@@ -300,11 +431,21 @@ export function loadProjects() {
       state.writingLanguage = "en";
       state.grammarCheck = false;
       state.viewOptions = { ...DEFAULT_VIEW_OPTIONS };
+      state.homeProjectSearch = "";
     state.leftPaneBlocks = DEFAULT_LEFT_PANE_BLOCKS.map((block) => ({ ...block }));
   }
 }
 
 export function sanitizeProject(project) {
+  const now = new Date().toISOString();
+  const userId = auth.currentUser?.uid || '';
+  const createdBy = project.created_by || project.createdBy || project.ownerId || userId;
+  const lastEditedBy = project.last_edited_by || project.lastEditedBy || project.ownerId || createdBy;
+  const lastEditedAt = project.last_edited_at || project.lastEditedAt || project.updatedAt || now;
+  const visibility = ['private', 'workspace', 'shared'].includes(project.visibility)
+    ? project.visibility
+    : (project.isShared ? 'shared' : 'private');
+  const trashedAt = project.trashedAt || "";
   return {
     id: project.id || uid("project"),
     scriptId: normalizeScriptId(project.scriptId),
@@ -319,7 +460,18 @@ export function sanitizeProject(project) {
     logline: project.logline || "",
     createdAt: project.createdAt || new Date().toISOString(),
     updatedAt: project.updatedAt || new Date().toISOString(),
+    created_by: createdBy,
+    last_edited_by: lastEditedBy,
+    last_edited_at: lastEditedAt,
+    createdBy,
+    lastEditedBy: lastEditedBy,
+    lastEditedAt,
+    visibility,
+    tags: Array.isArray(project.tags) ? project.tags.map((tag) => String(tag || "").trim()).filter(Boolean).slice(0, 12) : [],
     isShared: Boolean(project.isShared),
+    isTrashed: Boolean(project.isTrashed),
+    trashedAt,
+    restoreUntil: project.restoreUntil || (trashedAt ? new Date(new Date(trashedAt).getTime() + TRASH_RETENTION_MS).toISOString() : ""),
     ownerId: project.ownerId || null,
     storyMemory: sanitizeStoryMemory(project.storyMemory),
     activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
@@ -333,6 +485,8 @@ export function sanitizeProject(project) {
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     wordCountHistory: Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [],
     version: Number.isFinite(Number(project.version)) ? Number(project.version) : 0,
+    versionHistory: Array.isArray(project.versionHistory) ? project.versionHistory : [],
+    lastVersionSnapshotAt: project.lastVersionSnapshotAt || "",
     lines: Array.isArray(project.lines) && project.lines.length
       ? project.lines.map((line) => {
           const type = TYPE_LABELS[line.type] ? line.type : "action";
@@ -372,6 +526,7 @@ export function createProject() {
 }
 
 export function createProjectWithOptions(options = {}) {
+  const currentUser = auth.currentUser;
   const creationKind = options.creationKind === "workspace" ? "workspace" : "project";
   const workType = options.workType === "prose-poetry" ? "prose-poetry" : "film-script";
   const isWorkspaceRoot = Boolean(options.isWorkspaceRoot);
@@ -395,6 +550,11 @@ export function createProjectWithOptions(options = {}) {
     workType,
     creationKind,
     isWorkspaceRoot,
+    created_by: options.created_by || currentUser?.uid || '',
+    last_edited_by: options.last_edited_by || currentUser?.uid || '',
+    last_edited_at: new Date().toISOString(),
+    visibility: options.visibility || (options.isShared ? "shared" : isWorkspaceRoot ? "workspace" : "private"),
+    tags: Array.isArray(options.tags) ? options.tags : [],
     workspace: workspaceSeed ? {
       ...workspaceSeed,
       name: options.workspaceName || workspaceSeed.name || `Workspace ${index}`
@@ -412,12 +572,34 @@ export function getCurrentProject() {
   return state.projects.find((project) => project.id === state.currentProjectId) || null;
 }
 
+export function canCurrentUserAccessProject(project, user = auth.currentUser) {
+  if (!project) return false;
+  if (!user) return !project.isShared;
+  if (!project.isShared) {
+    return !project.ownerId || project.ownerId === user.uid || project.created_by === user.uid || project.createdBy === user.uid;
+  }
+  if (project.ownerId === user.uid || project.created_by === user.uid || project.createdBy === user.uid) {
+    return true;
+  }
+  const collaborator = project.collaborators?.[user.uid];
+  if (!collaborator) return false;
+  return ['owner', 'admin', 'editor', 'viewer'].includes(collaborator.role || 'editor');
+}
+
+export function getVisibleProjects(projects = state.projects, user = auth.currentUser) {
+  const now = Date.now();
+  return projects
+    .map((project) => sanitizeProject(project))
+    .filter((project) => canCurrentUserAccessProject(project, user))
+    .filter((project) => !project.isTrashed || !project.restoreUntil || new Date(project.restoreUntil).getTime() > now);
+}
+
 export function getWorkspaceProjects(workspaceId) {
-  return state.projects.filter((project) => project.workspace?.id === workspaceId);
+  return getVisibleProjects(state.projects).filter((project) => project.workspace?.id === workspaceId);
 }
 
 export function getWorkspaceRootProject(workspaceId) {
-  return state.projects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot) || null;
+  return getVisibleProjects(state.projects).find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot) || null;
 }
 
 export function updateWorkspaceAcrossProjects(workspaceId, updater) {
@@ -448,6 +630,9 @@ export function getLineIndex(id) {
 
 export function upsertProject(project) {
   const next = sanitizeProject(project);
+  if (!canCurrentUserAccessProject(next)) {
+    return;
+  }
   const index = state.projects.findIndex((item) => item.id === next.id);
   if (index >= 0) {
     state.projects.splice(index, 1, next);
@@ -458,6 +643,10 @@ export function upsertProject(project) {
 
 export function persistProjects(forceSavedBadge = false, { syncInputs = true } = {}) {
   if (syncInputs) syncProjectFromInputs();
+  const project = getCurrentProject();
+  if (project) {
+    captureVersionSnapshot(project, { label: forceSavedBadge ? "Manual save" : "Auto snapshot" });
+  }
   const savedAt = new Date().toISOString();
   const payload = buildPersistencePayload(savedAt);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -476,6 +665,52 @@ export function queueSave() {
     persistProjects(false);
     pushHistory();
   }, 1200);
+}
+
+export async function retryFailedSaves() {
+  const queue = loadRetryQueue();
+  if (!queue.length) {
+    updateSaveBadge("saved", state.lastSavedAt);
+    return { ok: true, count: 0 };
+  }
+  if (!navigator.onLine) {
+    updateSaveBadge("offline", state.lastSavedAt, "Connection lost. Your changes are still queued locally.");
+    return { ok: false, reason: "Offline" };
+  }
+
+  const pending = [];
+  for (const entry of queue) {
+    try {
+      const project = sanitizeProject(entry.project);
+      await setDoc(doc(db, 'users', auth.currentUser.uid, 'projects', project.id), project);
+      if (project.isShared) {
+        const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
+          'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
+          'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace', 'version',
+          'versionHistory', 'created_by', 'last_edited_by', 'last_edited_at', 'visibility', 'tags',
+          'createdBy', 'lastEditedBy', 'lastEditedAt', 'isTrashed', 'trashedAt', 'restoreUntil'];
+        const contentPayload = Object.fromEntries(
+          CONTENT_KEYS.filter((key) => key in project).map((key) => [key, project[key]])
+        );
+        await setDoc(doc(db, 'sharedProjects', project.id), {
+          ...contentPayload,
+          syncedAt: new Date().toISOString(),
+          updatedBy: auth.currentUser.uid,
+          lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+          lastActivityAt: new Date().toISOString()
+        }, { merge: true });
+      }
+    } catch (error) {
+      pending.push(entry);
+    }
+  }
+  persistRetryQueue(pending);
+  if (pending.length) {
+    updateSaveBadge("failed", state.lastSavedAt, "Some queued saves still need another retry.");
+    return { ok: false, count: pending.length };
+  }
+  updateSaveBadge("saved", state.lastSavedAt);
+  return { ok: true, count: queue.length };
 }
 
 export function pushHistory() {
@@ -544,6 +779,10 @@ export function syncProjectFromInputs() {
   project.details = refs.detailsInput.value.trim();
   project.logline = refs.loglineInput.value.trim();
   project.updatedAt = new Date().toISOString();
+  project.last_edited_by = auth.currentUser?.uid || project.last_edited_by || '';
+  project.last_edited_at = project.updatedAt;
+  project.lastEditedBy = project.last_edited_by;
+  project.lastEditedAt = project.updatedAt;
   return project;
 }
 
@@ -723,6 +962,14 @@ function sanitizeCollaborators(collaborators) {
 export function serializeScript(project) {
   return project.lines.map((line) => normalizeLineText(line.text, line.type)).filter(Boolean).join("\n\n");
 }
+
+window.addEventListener('online', () => {
+  retryFailedSaves().catch((error) => console.error('Retry queue failed on reconnect', error));
+});
+
+window.addEventListener('offline', () => {
+  updateSaveBadge("offline", state.lastSavedAt, "Connection lost. Your changes are cached locally and will retry when you reconnect.");
+});
 
 export function getDefaultText(type, contextIndex) {
   if (type === "character") {
