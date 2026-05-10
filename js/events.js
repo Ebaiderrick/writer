@@ -64,7 +64,9 @@ let focusModeTimer = 0;
 let hasShownReadOnlyNotice = false;
 const aiTaskTimers = new Map();
 const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
+const PROJECT_CARD_CLICK_SUPPRESSION_MS = 750;
 let projectCardTouchState = null;
+let suppressedProjectCardClick = null;
 const INLINE_SELECTION_TOOLS = [
   { label: "Improve", action: "Improve", requiresAi: true },
   { label: "Rewrite", action: "Rephrase", requiresAi: true },
@@ -105,11 +107,24 @@ function resetProjectCardTouchState() {
   projectCardTouchState = null;
 }
 
-function isProjectCardScrollGesture(event) {
-  if (!projectCardTouchState) return false;
-  const changedTouch = [...(event.changedTouches || [])]
-    .find((touch) => touch.identifier === projectCardTouchState.identifier);
-  return Boolean(projectCardTouchState.moved || !changedTouch);
+function suppressProjectCardClick(projectId) {
+  suppressedProjectCardClick = {
+    projectId,
+    until: Date.now() + PROJECT_CARD_CLICK_SUPPRESSION_MS
+  };
+}
+
+function shouldIgnoreProjectCardClick(projectId) {
+  if (!suppressedProjectCardClick) return false;
+  if (suppressedProjectCardClick.until <= Date.now()) {
+    suppressedProjectCardClick = null;
+    return false;
+  }
+  if (suppressedProjectCardClick.projectId !== projectId) {
+    return false;
+  }
+  suppressedProjectCardClick = null;
+  return true;
 }
 
 function updateSelectionToolbar() {
@@ -1879,11 +1894,6 @@ export function bindEvents() {
 
   // Project Grid (Delegated)
   refs.projectGrid.addEventListener("click", (e) => {
-      if (isProjectCardScrollGesture(e)) {
-          resetProjectCardTouchState();
-          return;
-      }
-      resetProjectCardTouchState();
       const filterTrigger = e.target.closest("[data-home-project-filter]");
       if (filterTrigger) {
           state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
@@ -1904,6 +1914,7 @@ export function bindEvents() {
       const card = e.target.closest(".project-card");
       if (!card) return;
       const projectId = card.dataset.projectId;
+      if (shouldIgnoreProjectCardClick(projectId)) return;
 
       if (e.target.closest(".project-delete")) {
           removeProject(projectId);
@@ -1945,9 +1956,14 @@ export function bindEvents() {
 
   refs.projectGrid.addEventListener("touchend", (e) => {
       if (!projectCardTouchState) return;
-      if (isProjectCardScrollGesture(e)) {
-          resetProjectCardTouchState();
+      const touch = [...(e.changedTouches || [])]
+        .find((entry) => entry.identifier === projectCardTouchState.identifier);
+      const card = e.target.closest(".project-card");
+      const shouldSuppressClick = projectCardTouchState.moved || !touch;
+      if (shouldSuppressClick && card?.dataset.projectId) {
+          suppressProjectCardClick(card.dataset.projectId);
       }
+      resetProjectCardTouchState();
   }, { passive: true });
 
   refs.projectGrid.addEventListener("touchcancel", resetProjectCardTouchState, { passive: true });

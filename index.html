@@ -1064,10 +1064,6 @@
   <template id="projectCardTemplate">
     <article class="project-card">
       <div class="project-card-top">
-        <div class="project-card-heading">
-          <h3 class="project-card-title"></h3>
-          <span class="project-script-id script-id-flag"></span>
-        </div>
         <div class="project-card-actions">
           <button class="project-quick-action" type="button" data-project-action="rename">Rename</button>
           <button class="project-quick-action" type="button" data-project-action="duplicate">Duplicate</button>
@@ -1076,7 +1072,11 @@
           </button>
         </div>
       </div>
-      <button class="project-card-open" type="button">
+      <div class="project-card-open">
+        <div class="project-card-heading">
+          <h3 class="project-card-title"></h3>
+          <span class="project-script-id script-id-flag"></span>
+        </div>
         <div class="project-card-context-row">
           <span class="project-card-context"></span>
           <span class="project-card-context-action" role="button" tabindex="0">Open Workspace</span>
@@ -1087,7 +1087,7 @@
         </div>
         <p class="project-card-logline"></p>
         <p class="project-card-updated"></p>
-      </button>
+      </div>
     </article>
   </template>
 
