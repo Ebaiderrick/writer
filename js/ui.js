@@ -811,7 +811,6 @@ export function renderWorkspaceView() {
       node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
       node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
       node.dataset.projectId = project.id;
-      node.querySelector(".project-card-open").dataset.projectId = project.id;
       refs.workspaceProjectGrid.appendChild(node);
     });
   }
@@ -1132,7 +1131,6 @@ export function renderHome() {
         deleteButton.hidden = false;
       }
       node.dataset.projectId = project.id;
-      node.querySelector(".project-card-open").dataset.projectId = project.id;
       node.classList.toggle("is-selected", isSelected);
       node.setAttribute("aria-selected", isSelected ? "true" : "false");
       node.setAttribute("aria-label", `${project.title}${project.isTrashed ? " in trash" : ""}`);
@@ -1176,7 +1174,6 @@ export function renderHome() {
 
     // Note: Event listeners will be bound in events.js, but we need the IDs here
     node.dataset.projectId = project.id;
-    node.querySelector(".project-card-open").dataset.projectId = project.id;
     node.classList.toggle("is-selected", isSelected);
     node.setAttribute("aria-selected", isSelected ? "true" : "false");
     node.setAttribute("aria-label", project.title);

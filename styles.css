@@ -243,10 +243,13 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .home-view {
-  height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
   padding: 40px 12vw 80px;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .home-topbar,
@@ -1536,6 +1539,7 @@ html[data-theme="rose"] .mesh-background {
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
   height: 198px;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .project-card:focus-visible {
@@ -1771,36 +1775,13 @@ html[data-theme="rose"] .mesh-background {
   line-height: 1.2;
 }
 
-.project-card-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: auto;
-  padding-top: 10px;
-}
-
-.project-card-open {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: 6px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent-soft) 84%, var(--panel));
-  color: var(--accent-strong);
-  font-size: 0.8rem;
-  font-weight: 600;
+.project-card-context-action,
+.project-quick-action,
+.project-delete {
   cursor: pointer;
-  transition: background-color 0.22s ease, border-color 0.22s ease, transform 0.18s ease;
 }
 
-.project-card-open:hover,
-.project-card-open:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 56%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 70%, var(--panel));
-}
-
-.project-card-open:active,
+.project-card:active,
 .project-card-context-action:active {
   transform: scale(0.98);
 }
@@ -5047,12 +5028,14 @@ body.outline-hidden .section-scenes {
 
 @media (max-width: 1180px) {
   body {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .studio-view {
-    height: auto;
+    height: 100dvh;
     grid-template-rows: auto auto auto;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .studio-topbar,

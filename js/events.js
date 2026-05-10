@@ -1959,10 +1959,8 @@ export function bindEvents() {
           restoreProjectById(projectId);
       } else if (e.target.closest('[data-project-action="delete-now"]')) {
           removeProject(projectId, { permanent: true });
-      } else if (e.target.closest(".project-card-open")) {
-          handleHomeProjectOpenIntent(projectId);
       } else {
-          selectHomeProjectCard(projectId);
+          handleHomeProjectOpenIntent(projectId);
       }
   });
 
