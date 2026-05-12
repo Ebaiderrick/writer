@@ -104,6 +104,69 @@ function handleHomeProjectOpenIntent(projectId) {
   openProject(projectId);
 }
 
+function handleProjectGridClick(e) {
+  const filterTrigger = e.target.closest("[data-home-project-filter]");
+  if (filterTrigger) {
+    state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
+    renderHome();
+    return;
+  }
+  const formatSelect = e.target.closest("[data-home-project-format]");
+  if (formatSelect) {
+    state.homeProjectFormat = formatSelect.value || "all";
+    renderHome();
+    return;
+  }
+  const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
+  if (workspaceTrigger) {
+    if (shouldSuppressHomeProjectInteraction()) {
+      e.preventDefault();
+      return;
+    }
+    openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
+    return;
+  }
+  const card = e.target.closest(".project-card");
+  if (!card) return;
+  const projectId = card.dataset.projectId;
+
+  if (shouldSuppressHomeProjectInteraction()) {
+    e.preventDefault();
+    return;
+  }
+  if (e.target.closest(".project-delete")) {
+    removeProject(projectId);
+  } else if (e.target.closest('[data-project-action="rename"]')) {
+    renameProjectById(projectId);
+  } else if (e.target.closest('[data-project-action="duplicate"]')) {
+    duplicateProjectById(projectId);
+  } else if (e.target.closest('[data-project-action="restore"]')) {
+    restoreProjectById(projectId);
+  } else if (e.target.closest('[data-project-action="delete-now"]')) {
+    removeProject(projectId, { permanent: true });
+  } else {
+    handleHomeProjectOpenIntent(projectId);
+  }
+}
+
+function handleProjectGridKeydown(e) {
+  const card = e.target.closest(".project-card");
+  if (!card) return;
+  if (e.target.closest("button, input, select, textarea, a")) return;
+  const projectId = card.dataset.projectId;
+  if (!projectId) return;
+
+  if (e.key === " " || e.key === "Spacebar") {
+    e.preventDefault();
+    selectHomeProjectCard(projectId);
+    return;
+  }
+  if (e.key === "Enter") {
+    e.preventDefault();
+    handleHomeProjectOpenIntent(projectId);
+  }
+}
+
 function ensureSelectionToolbar() {
   let toolbar = document.getElementById("selectionAiToolbar");
   if (toolbar) return toolbar;
@@ -1919,67 +1982,9 @@ export function bindEvents() {
   });
 
   // Project Grid (Delegated)
-  refs.projectGrid.addEventListener("click", (e) => {
-      const filterTrigger = e.target.closest("[data-home-project-filter]");
-      if (filterTrigger) {
-          state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
-          renderHome();
-          return;
-      }
-      const formatSelect = e.target.closest("[data-home-project-format]");
-      if (formatSelect) {
-          state.homeProjectFormat = formatSelect.value || "all";
-          renderHome();
-          return;
-      }
-      const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
-      if (workspaceTrigger) {
-          if (shouldSuppressHomeProjectInteraction()) {
-              e.preventDefault();
-              return;
-          }
-          openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
-          return;
-      }
-      const card = e.target.closest(".project-card");
-      if (!card) return;
-      const projectId = card.dataset.projectId;
-
-      if (shouldSuppressHomeProjectInteraction()) {
-          e.preventDefault();
-          return;
-      }
-      if (e.target.closest(".project-delete")) {
-          removeProject(projectId);
-      } else if (e.target.closest('[data-project-action="rename"]')) {
-          renameProjectById(projectId);
-      } else if (e.target.closest('[data-project-action="duplicate"]')) {
-          duplicateProjectById(projectId);
-      } else if (e.target.closest('[data-project-action="restore"]')) {
-          restoreProjectById(projectId);
-      } else if (e.target.closest('[data-project-action="delete-now"]')) {
-          removeProject(projectId, { permanent: true });
-      } else {
-          handleHomeProjectOpenIntent(projectId);
-      }
-  });
-
-  refs.projectGrid.addEventListener("keydown", (e) => {
-    const card = e.target.closest(".project-card");
-    if (!card) return;
-    if (e.target.closest("button, input, select, textarea, a")) return;
-    const projectId = card.dataset.projectId;
-    if (!projectId) return;
-
-    if (e.key === " " || e.key === "Spacebar") {
-      e.preventDefault();
-      selectHomeProjectCard(projectId);
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleHomeProjectOpenIntent(projectId);
-    }
+  [refs.projectGrid, refs.workspaceProjectGrid].filter(Boolean).forEach((grid) => {
+    grid.addEventListener("click", handleProjectGridClick);
+    grid.addEventListener("keydown", handleProjectGridKeydown);
   });
 
   refs.projectGrid.addEventListener("touchstart", (e) => {
