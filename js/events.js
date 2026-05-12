@@ -105,6 +105,8 @@ function handleHomeProjectOpenIntent(projectId) {
 }
 
 function handleProjectGridClick(e) {
+  const grid = e.target.closest("#projectGrid, #workspaceProjectGrid");
+  if (!grid) return;
   const filterTrigger = e.target.closest("[data-home-project-filter]");
   if (filterTrigger) {
     state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
@@ -150,6 +152,8 @@ function handleProjectGridClick(e) {
 }
 
 function handleProjectGridKeydown(e) {
+  const grid = e.target.closest("#projectGrid, #workspaceProjectGrid");
+  if (!grid) return;
   const card = e.target.closest(".project-card");
   if (!card) return;
   if (e.target.closest("button, input, select, textarea, a")) return;
@@ -1982,10 +1986,8 @@ export function bindEvents() {
   });
 
   // Project Grid (Delegated)
-  [refs.projectGrid, refs.workspaceProjectGrid].filter(Boolean).forEach((grid) => {
-    grid.addEventListener("click", handleProjectGridClick);
-    grid.addEventListener("keydown", handleProjectGridKeydown);
-  });
+  document.addEventListener("click", handleProjectGridClick);
+  document.addEventListener("keydown", handleProjectGridKeydown);
 
   refs.projectGrid.addEventListener("touchstart", (e) => {
     const card = e.target.closest(".project-card");
