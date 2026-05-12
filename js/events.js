@@ -77,6 +77,12 @@ function shouldSuppressHomeProjectInteraction() {
   return Date.now() < homeProjectTouchSuppressUntil;
 }
 
+function getEventElementTarget(event) {
+  const target = event?.target;
+  if (!target) return null;
+  return target.nodeType === Node.TEXT_NODE ? target.parentElement : target;
+}
+
 function selectHomeProjectCard(projectId, options = {}) {
   if (!projectId) return;
   if (state.homeSelectedProjectId === projectId && !options.forceRender) {
@@ -105,21 +111,23 @@ function handleHomeProjectOpenIntent(projectId) {
 }
 
 function handleProjectGridClick(e) {
-  const grid = e.target.closest("#projectGrid, #workspaceProjectGrid");
+  const target = getEventElementTarget(e);
+  if (!target) return;
+  const grid = target.closest("#projectGrid, #workspaceProjectGrid");
   if (!grid) return;
-  const filterTrigger = e.target.closest("[data-home-project-filter]");
+  const filterTrigger = target.closest("[data-home-project-filter]");
   if (filterTrigger) {
     state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
     renderHome();
     return;
   }
-  const formatSelect = e.target.closest("[data-home-project-format]");
+  const formatSelect = target.closest("[data-home-project-format]");
   if (formatSelect) {
     state.homeProjectFormat = formatSelect.value || "all";
     renderHome();
     return;
   }
-  const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
+  const workspaceTrigger = target.closest("[data-open-workspace-id]");
   if (workspaceTrigger) {
     if (shouldSuppressHomeProjectInteraction()) {
       e.preventDefault();
@@ -128,7 +136,7 @@ function handleProjectGridClick(e) {
     openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
     return;
   }
-  const card = e.target.closest(".project-card");
+  const card = target.closest(".project-card");
   if (!card) return;
   const projectId = card.dataset.projectId;
 
@@ -136,27 +144,29 @@ function handleProjectGridClick(e) {
     e.preventDefault();
     return;
   }
-  if (e.target.closest(".project-delete")) {
-    removeProject(projectId);
-  } else if (e.target.closest('[data-project-action="rename"]')) {
-    renameProjectById(projectId);
-  } else if (e.target.closest('[data-project-action="duplicate"]')) {
-    duplicateProjectById(projectId);
-  } else if (e.target.closest('[data-project-action="restore"]')) {
-    restoreProjectById(projectId);
-  } else if (e.target.closest('[data-project-action="delete-now"]')) {
-    removeProject(projectId, { permanent: true });
+  if (target.closest(".project-delete")) {
+      removeProject(projectId);
+  } else if (target.closest('[data-project-action="rename"]')) {
+      renameProjectById(projectId);
+  } else if (target.closest('[data-project-action="duplicate"]')) {
+      duplicateProjectById(projectId);
+  } else if (target.closest('[data-project-action="restore"]')) {
+      restoreProjectById(projectId);
+  } else if (target.closest('[data-project-action="delete-now"]')) {
+      removeProject(projectId, { permanent: true });
   } else {
-    handleHomeProjectOpenIntent(projectId);
+      handleHomeProjectOpenIntent(projectId);
   }
 }
 
 function handleProjectGridKeydown(e) {
-  const grid = e.target.closest("#projectGrid, #workspaceProjectGrid");
+  const target = getEventElementTarget(e);
+  if (!target) return;
+  const grid = target.closest("#projectGrid, #workspaceProjectGrid");
   if (!grid) return;
-  const card = e.target.closest(".project-card");
+  const card = target.closest(".project-card");
   if (!card) return;
-  if (e.target.closest("button, input, select, textarea, a")) return;
+  if (target.closest("button, input, select, textarea, a")) return;
   const projectId = card.dataset.projectId;
   if (!projectId) return;
 
@@ -1845,10 +1855,12 @@ export function bindEvents() {
   // Global Keys & Clicks
   document.addEventListener("keydown", handleGlobalKeydown);
   document.addEventListener("click", (event) => {
-      if (!event.target.closest(".nav-stack")) {
+      const target = getEventElementTarget(event);
+      if (!target) return;
+      if (!target.closest(".nav-stack")) {
         closeMenus();
       }
-      if (!event.target.closest("#suggestionTray") && !event.target.closest(".script-block")) {
+      if (!target.closest("#suggestionTray") && !target.closest(".script-block")) {
         hideSuggestionTray(true);
         clearSuggestionContext();
       }
@@ -2040,7 +2052,8 @@ export function bindEvents() {
   [refs.homeRecentProjects, refs.studioRecentProjects].forEach(container => {
       if (!container) return;
       container.addEventListener("click", (e) => {
-        const btn = e.target.closest(".recent-project-button");
+        const target = getEventElementTarget(e);
+        const btn = target?.closest(".recent-project-button");
         if (btn) {
             openProject(btn.dataset.projectId);
             closeMenus();
