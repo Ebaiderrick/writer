@@ -1132,6 +1132,16 @@ html[data-theme="rose"] .mesh-background {
   line-height: 1.4;
 }
 
+.workspace-task-pending-note {
+  color: color-mix(in srgb, #f59e0b 82%, var(--ink));
+  font-weight: 500;
+}
+
+.workspace-task-summary-chip-awaiting {
+  background: color-mix(in srgb, #f59e0b 18%, var(--surface-strong));
+  color: color-mix(in srgb, #f59e0b 82%, var(--ink));
+}
+
 .workspace-ai-review {
   display: grid;
   gap: 12px;
@@ -1292,6 +1302,11 @@ html[data-theme="rose"] .mesh-background {
 .workspace-inbox-item-due,
 .workspace-notification-item.is-unread.workspace-notification-item-due {
   border-color: color-mix(in srgb, #f59e0b 28%, var(--line));
+}
+
+.workspace-inbox-item-confirm {
+  border-color: color-mix(in srgb, #f59e0b 40%, var(--line));
+  background: color-mix(in srgb, #f59e0b 6%, var(--surface-strong));
 }
 
 .script-task-marker {

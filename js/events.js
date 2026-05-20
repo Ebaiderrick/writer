@@ -580,23 +580,52 @@ function addWorkspaceTaskFromDashboard() {
 function updateWorkspaceTask(taskId, patch) {
   if (!state.currentWorkspaceId || !taskId) return;
   const previousTask = getWorkspaceTaskById(taskId);
+  const currentUid = auth.currentUser?.uid || "";
+  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member";
+
+  // When a non-assignee marks a human task "done", route to pending-confirmation instead.
+  const effectivePatch = { ...patch };
+  if (
+    patch.status === "done" &&
+    !patch._confirmed &&
+    previousTask?.assigneeType !== "system" &&
+    previousTask?.assignedTo &&
+    previousTask.assignedTo !== currentUid
+  ) {
+    effectivePatch.status = "pending-confirmation";
+    effectivePatch.pendingConfirmBy = previousTask.assignedTo;
+    effectivePatch.pendingConfirmRequestedBy = currentUid;
+    effectivePatch.pendingConfirmRequestedByLabel = currentLabel;
+  }
+  delete effectivePatch._confirmed;
+
   updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
     ...workspace,
     tasks: (workspace.tasks || []).map((task) => task.id === taskId
-      ? { ...task, ...patch, updatedAt: new Date().toISOString() }
+      ? { ...task, ...effectivePatch, updatedAt: new Date().toISOString() }
       : task)
   }));
   persistProjects(true, { syncInputs: false });
   const task = getWorkspaceTaskById(taskId);
   if (task && previousTask) {
-    if (patch.status && patch.status !== previousTask.status) {
-      createWorkspaceNotification({
-        task,
-        category: patch.status === "done" ? "completed" : "task",
-        title: patch.status === "done" ? "Task completed" : "Task status updated",
-        message: `${task.title} is now ${patch.status === "in-progress" ? "in progress" : patch.status.replace("-", " ")}.`,
-        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
-      });
+    if (effectivePatch.status && effectivePatch.status !== previousTask.status) {
+      if (effectivePatch.status === "pending-confirmation") {
+        createWorkspaceNotification({
+          task,
+          category: "task",
+          title: "Task awaiting your confirmation",
+          message: `${task.title} was marked done by ${currentLabel}. Please confirm to close it.`,
+          actor: currentLabel
+        });
+      } else {
+        createWorkspaceNotification({
+          task,
+          category: effectivePatch.status === "done" ? "completed" : "task",
+          title: effectivePatch.status === "done" ? "Task completed" : "Task status updated",
+          message: `${task.title} is now ${effectivePatch.status === "in-progress" ? "in progress" : effectivePatch.status.replace(/-/g, " ")}.`,
+          actor: currentLabel
+        });
+      }
     }
     if (patch.assignedTo && patch.assignedTo !== previousTask.assignedTo) {
       createWorkspaceNotification({
@@ -604,7 +633,7 @@ function updateWorkspaceTask(taskId, patch) {
         category: task.assigneeType === "system" ? "ai" : "task",
         title: "Task reassigned",
         message: `${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`,
-        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+        actor: currentLabel
       });
     }
     if (patch.dueAt && patch.dueAt !== previousTask.dueAt) {
@@ -613,11 +642,46 @@ function updateWorkspaceTask(taskId, patch) {
         category: "task",
         title: "Task due date updated",
         message: `${task.title} is due ${new Date(task.dueAt).toLocaleString()}.`,
-        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+        actor: currentLabel
       });
     }
   }
   if (task) scheduleAiTaskRun(task);
+  renderWorkspaceView();
+}
+
+function confirmCompleteTask(taskId) {
+  const task = getWorkspaceTaskById(taskId);
+  if (!task) return;
+  const currentUid = auth.currentUser?.uid || "";
+  if (task.assignedTo !== currentUid && task.pendingConfirmBy !== currentUid) {
+    showToast("Only the assigned member can confirm task completion.", "warning");
+    return;
+  }
+  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member";
+  const requesterLabel = task.pendingConfirmRequestedByLabel || "a teammate";
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    tasks: (workspace.tasks || []).map((t) => t.id === taskId
+      ? {
+          ...t,
+          status: "done",
+          pendingConfirmBy: "",
+          pendingConfirmRequestedBy: "",
+          pendingConfirmRequestedByLabel: "",
+          updatedAt: new Date().toISOString()
+        }
+      : t)
+  }));
+  persistProjects(true, { syncInputs: false });
+  const updatedTask = getWorkspaceTaskById(taskId);
+  createWorkspaceNotification({
+    task: updatedTask || task,
+    category: "completed",
+    title: "Task confirmed complete",
+    message: `${task.title} was confirmed done by ${currentLabel} (requested by ${requesterLabel}).`,
+    actor: currentLabel
+  });
   renderWorkspaceView();
 }
 
@@ -788,6 +852,7 @@ async function editWorkspaceTask(taskId) {
     <select id="taskEditStatus" class="comment-filter-select">
       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
       <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+      <option value="pending-confirmation" ${task.status === "pending-confirmation" ? "selected" : ""}>Awaiting Confirmation</option>
       <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
     </select>
     <select id="taskEditPriority" class="comment-filter-select">
@@ -862,7 +927,8 @@ async function editWorkspaceTask(taskId) {
           : (aiStartAt ? "scheduled" : "ready"))
       : "idle",
     status: container.querySelector("#taskEditStatus")?.value || task.status,
-    reference: container.querySelector("#taskEditReference")?.value?.trim() || ""
+    reference: container.querySelector("#taskEditReference")?.value?.trim() || "",
+    _confirmed: (container.querySelector("#taskEditStatus")?.value || task.status) === "done"
   });
 }
 
@@ -1118,6 +1184,11 @@ export function bindEvents() {
     if (action === "dismiss-ai-task") {
       const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
       if (taskId) dismissAiTaskResult(taskId);
+      return;
+    }
+    if (action === "confirm-complete") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) confirmCompleteTask(taskId);
       return;
     }
   });

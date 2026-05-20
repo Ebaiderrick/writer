@@ -168,8 +168,8 @@ function buildWorkspacePersonalInbox(tasks, currentUid) {
     if (task.assignedTo === currentUid && task.status !== "done") {
       items.push({
         id: `${task.id}-assignment`,
-        type: dueState === "overdue" ? "overdue" : dueState === "soon" || dueState === "today" ? "due" : "assigned",
-        label: dueState === "overdue" ? "Overdue for me" : dueState === "soon" || dueState === "today" ? "Due for me" : "Assigned to me",
+        type: task.status === "pending-confirmation" ? "confirm" : dueState === "overdue" ? "overdue" : dueState === "soon" || dueState === "today" ? "due" : "assigned",
+        label: task.status === "pending-confirmation" ? "Needs your confirmation" : dueState === "overdue" ? "Overdue for me" : dueState === "soon" || dueState === "today" ? "Due for me" : "Assigned to me",
         message: task.title,
         task
       });
@@ -234,7 +234,7 @@ function sortWorkspaceTasks(tasks) {
     return sorted;
   }
   if (state.workspaceTaskSort === "status") {
-    const weight = { "in-progress": 0, todo: 1, done: 2 };
+    const weight = { "in-progress": 0, todo: 1, "pending-confirmation": 2, done: 3 };
     sorted.sort((a, b) => {
       const diff = (weight[a.status] ?? 99) - (weight[b.status] ?? 99);
       return diff || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
@@ -306,7 +306,7 @@ export function renderWorkspaceView() {
   const notifications = [...buildWorkspaceDueNotifications(allTaskItems, projects), ...persistedNotifications]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const unreadNotifications = notifications.filter((notification) => !notification.read);
-  const inboxItems = allTaskItems.filter((task) => task.status === "done" || task.aiState === "review" || task.aiState === "failed").slice(0, 6);
+  const inboxItems = allTaskItems.filter((task) => task.status === "done" || task.status === "pending-confirmation" || task.aiState === "review" || task.aiState === "failed").slice(0, 6);
   const assignees = [
     { id: workspaceLead.ownerId || "workspace_owner", label: ownerLabel },
     ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
@@ -371,6 +371,7 @@ export function renderWorkspaceView() {
   const taskSummary = {
     todo: allTaskItems.filter((task) => task.status === "todo").length,
     inProgress: allTaskItems.filter((task) => task.status === "in-progress").length,
+    awaiting: allTaskItems.filter((task) => task.status === "pending-confirmation").length,
     done: allTaskItems.filter((task) => task.status === "done").length
   };
   const taskStatusSummary = getTaskStatusCountLabel(allTaskItems);
@@ -387,8 +388,11 @@ export function renderWorkspaceView() {
     if (state.workspaceTaskFilter === "overdue") {
       return getTaskDueState(task) === "overdue";
     }
+    if (state.workspaceTaskFilter === "awaiting") {
+      return task.status === "pending-confirmation";
+    }
     if (state.workspaceTaskFilter === "open") {
-      return task.status !== "done";
+      return task.status !== "done" && task.status !== "pending-confirmation";
     }
     if (state.workspaceTaskFilter === "done") {
       return task.status === "done";
@@ -474,6 +478,7 @@ export function renderWorkspaceView() {
                   <small>${escapeHtml(item.task.assignedLabel || "Workspace task")}</small>
                 </div>
                 <div class="workspace-notification-actions">
+                  ${item.type === "confirm" ? `<button class="primary-button btn-sm" type="button" data-workspace-home-action="confirm-complete" data-task-id="${escapeHtml(item.task.id)}">Confirm Complete</button>` : ""}
                   <button class="ghost-button btn-sm" type="button" data-workspace-home-action="${item.type === "mention" ? "comment-task" : "open-task-project"}" data-task-id="${escapeHtml(item.task.id)}" data-task-project-id="${escapeHtml(item.task.projectId || "")}">${item.type === "mention" ? "Open Thread" : item.task.lineId ? "Open Line" : item.task.sceneId ? "Open Scene" : "Open Project"}</button>
                 </div>
               </article>
@@ -537,6 +542,7 @@ export function renderWorkspaceView() {
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "ai" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "due-soon" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="due-soon">Due Soon</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "overdue" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="overdue">Overdue</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "awaiting" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="awaiting">Awaiting</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "open" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="open">Open</button>
             <button class="workspace-filter-chip ${state.workspaceTaskFilter === "done" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="done">Done</button>
             <select class="comment-filter-select workspace-task-sort-select" data-workspace-home-action="set-task-sort" aria-label="Sort tasks">
@@ -549,6 +555,7 @@ export function renderWorkspaceView() {
           <div class="workspace-task-summary">
             <span class="workspace-task-summary-chip">To Do ${taskSummary.todo}</span>
             <span class="workspace-task-summary-chip">In Progress ${taskSummary.inProgress}</span>
+            ${taskSummary.awaiting ? `<span class="workspace-task-summary-chip workspace-task-summary-chip-awaiting">Awaiting ${taskSummary.awaiting}</span>` : ""}
             <span class="workspace-task-summary-chip">Done ${taskSummary.done}</span>
             <span class="workspace-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
             <span class="workspace-task-summary-chip">Assigned to me ${myAssignedTasks.length}</span>
@@ -688,10 +695,12 @@ export function renderWorkspaceView() {
                     <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
                       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
                       <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+                      <option value="pending-confirmation" ${task.status === "pending-confirmation" ? "selected" : ""}>Awaiting Confirmation</option>
                       <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
                     </select>
                   </div>
                   ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  ${task.status === "pending-confirmation" ? `<p class="workspace-task-comment-preview workspace-task-pending-note">Marked done by ${escapeHtml(task.pendingConfirmRequestedByLabel || "a teammate")} — awaiting assignee confirmation.</p>` : ""}
                   <div class="workspace-task-chip-row">
                     <span class="workspace-task-tag">${escapeHtml(getWorkspaceTaskTemplate(task.templateKey).label)}</span>
                     <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
@@ -713,6 +722,7 @@ export function renderWorkspaceView() {
                   <div class="workspace-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
                     <div class="workspace-task-actions">
+                      ${task.status === "pending-confirmation" && (task.assignedTo === currentUid || task.pendingConfirmBy === currentUid) ? `<button class="primary-button btn-sm" type="button" data-workspace-home-action="confirm-complete" data-task-id="${escapeHtml(task.id)}">Confirm Complete</button>` : ""}
                       ${task.assigneeType === "system" && ["ready", "scheduled", "failed"].includes(task.aiState) ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">${task.aiState === "failed" ? "Retry AI" : "Run AI"}</button>` : ""}
                       ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
                       ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="apply-ai-task" data-task-id="${escapeHtml(task.id)}">Apply</button>` : ""}
@@ -958,12 +968,15 @@ export function renderHome() {
                     <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
                       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
                       <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+                      <option value="pending-confirmation" ${task.status === "pending-confirmation" ? "selected" : ""}>Awaiting Confirmation</option>
                       <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
                     </select>
                   </div>
+                  ${task.status === "pending-confirmation" ? `<p class="workspace-task-comment-preview workspace-task-pending-note">Marked done by ${escapeHtml(task.pendingConfirmRequestedByLabel || "a teammate")} — awaiting assignee confirmation.</p>` : ""}
                   ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
                   <div class="workspace-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
+                    ${task.status === "pending-confirmation" && (task.assignedTo === currentUid || task.pendingConfirmBy === currentUid) ? `<button class="primary-button btn-sm" type="button" data-workspace-home-action="confirm-complete" data-task-id="${escapeHtml(task.id)}">Confirm Complete</button>` : ""}
                     ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-project-id="${escapeHtml(task.projectId)}">Open Project</button>` : ""}
                   </div>
                 </article>
