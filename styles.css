@@ -7035,6 +7035,24 @@ html[data-theme="white"] .user-trigger {
   border-color: color-mix(in srgb, #f0b429 42%, var(--line));
 }
 
+/* ── Settings referral row ─────────────────────────────── */
+.settings-referral-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.settings-referral-row .settings-input {
+  flex: 1;
+  font-size: 0.82rem;
+  color: var(--muted);
+  background: var(--control-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
 /* ── AI streaming cursor ───────────────────────────────── */
 .ai-stream-cursor {
   display: inline-block;

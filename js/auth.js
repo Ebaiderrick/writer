@@ -26,6 +26,8 @@ import {
 import { initCollaboration, cleanupCollaboration } from './collaborate.js';
 import { Telemetry } from './telemetry.js';
 import { Logger } from './logger.js';
+import { Funnel } from './funnel.js';
+import { Referral } from './referral.js';
 
 const SESSION_KEY = 'eyawriter_session';
 
@@ -197,6 +199,8 @@ export const Auth = (() => {
         cacheSession(firebaseUser);
         Telemetry.track('login', { method: firebaseUser.providerData?.[0]?.providerId || 'email' });
         await ensureUsersByEmail(firebaseUser);
+        await trackRetention(firebaseUser);
+        Funnel.milestone('first_login');
         await syncProjectsOnLogin(firebaseUser.uid);
         await loadUserProfile(firebaseUser);
         if (refs.authView && !refs.authView.hidden) showHome();
@@ -316,6 +320,9 @@ export const Auth = (() => {
         name: username,
         username
       });
+      await enqueueWelcomeEmail(credential.user);
+      await Referral.processSignup(credential.user.uid);
+      await Funnel.milestone('signed_up', credential.user.uid);
       await sendEmailVerification(credential.user);
       Telemetry.track('signup', { method: 'email' });
       await firebaseSignOut(auth);
@@ -856,6 +863,58 @@ export const Auth = (() => {
 
   function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  // Queue a welcome email sequence in Firestore for backend/webhook consumption
+  async function enqueueWelcomeEmail(user) {
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'emailQueue', 'welcome'), {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || '',
+        sequence: 'welcome',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        steps: [
+          { step: 'welcome',    sendAfterHours: 0,   sent: false },
+          { step: 'tips',       sendAfterHours: 72,  sent: false },
+          { step: 'engagement', sendAfterHours: 168, sent: false },
+        ],
+      });
+    } catch { /* best-effort — never block signup */ }
+  }
+
+  // Update login/retention stats in user profile on each sign-in
+  async function trackRetention(firebaseUser) {
+    try {
+      const ref = doc(db, 'users', firebaseUser.uid, 'profile', 'data');
+      const snap = await getDoc(ref);
+      const profile = snap.exists() ? snap.data() : {};
+
+      const now = new Date();
+      const signupDate = profile.createdAt ? new Date(profile.createdAt) : now;
+      const daysSinceSignup = Math.floor((now - signupDate) / 86_400_000);
+
+      const updates = {
+        lastActiveAt: now.toISOString(),
+        loginCount: (profile.loginCount || 0) + 1,
+      };
+
+      if (daysSinceSignup >= 1 && !profile.retention_d1) {
+        updates.retention_d1 = now.toISOString();
+        Telemetry.track('retention_d1', { daysSinceSignup });
+      }
+      if (daysSinceSignup >= 7 && !profile.retention_d7) {
+        updates.retention_d7 = now.toISOString();
+        Telemetry.track('retention_d7', { daysSinceSignup });
+      }
+      if (daysSinceSignup >= 30 && !profile.retention_d30) {
+        updates.retention_d30 = now.toISOString();
+        Telemetry.track('retention_d30', { daysSinceSignup });
+      }
+
+      await setDoc(ref, updates, { merge: true });
+    } catch { /* silently ignore — tracking is non-blocking */ }
   }
 
   return { init, getSession, signOut: handleSignOut };

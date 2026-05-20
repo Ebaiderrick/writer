@@ -3,7 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EyaWriter</title>
+  <title>EyaWriter — Screenplay Writing Software with AI</title>
+  <meta name="description" content="Write professional screenplays with AI assistance. Collaborate in real-time, export to DOCX and PDF, and bring your stories to life with EyaWriter.">
+  <meta name="keywords" content="screenplay software, script writing app, screenwriter tool, AI writing assistant, film script editor, collaborate on scripts">
+  <link rel="canonical" href="https://eyawriter.com">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://eyawriter.com">
+  <meta property="og:title" content="EyaWriter — Screenplay Writing Software with AI">
+  <meta property="og:description" content="Write professional screenplays with AI assistance. Collaborate in real-time, export to DOCX and PDF, track story memory, and bring your scripts to life.">
+  <meta property="og:image" content="https://eyawriter.com/og-image.png">
+  <meta property="og:site_name" content="EyaWriter">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="EyaWriter — Screenplay Writing Software with AI">
+  <meta name="twitter:description" content="Write professional screenplays with AI assistance. Export, collaborate, and tell your story.">
+  <meta name="twitter:image" content="https://eyawriter.com/og-image.png">
+
+  <!-- Structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "EyaWriter",
+    "applicationCategory": "CreativeWritingApplication",
+    "operatingSystem": "Web",
+    "description": "Professional screenplay writing software with AI assistance, real-time collaboration, and DOCX/PDF export.",
+    "url": "https://eyawriter.com",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "AI writing assistance",
+      "Real-time collaboration",
+      "DOCX and PDF export",
+      "Story memory tracking",
+      "Workspace task management"
+    ]
+  }
+  </script>
+
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
@@ -379,6 +423,14 @@
               </div>
               <div class="settings-actions">
                 <button id="settingsChangePassword" class="ghost-button btn-sm">Send Password Reset Email</button>
+              </div>
+              <div class="settings-group" id="settingsReferralGroup" style="display:none">
+                <label class="settings-label">Invite Friends</label>
+                <p class="settings-hint">Share your personal link — help grow the community.</p>
+                <div class="settings-referral-row">
+                  <input type="text" id="settingsReferralLink" class="settings-input" readonly aria-label="Referral link">
+                  <button id="settingsCopyReferral" class="ghost-button btn-sm">Copy</button>
+                </div>
               </div>
               <div class="settings-danger-zone">
                 <h3>Profile</h3>

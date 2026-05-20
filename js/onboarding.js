@@ -1,4 +1,5 @@
 import { setTheme } from './ui.js';
+import { Funnel } from './funnel.js';
 
 const STORAGE_KEY = 'eyawriter_onboarded_v1';
 
@@ -14,11 +15,13 @@ export const Onboarding = {
     _bindEvents();
     _goTo(0);
     overlay.classList.add('is-active');
+    Funnel.milestone('onboarding_started');
   },
 
-  dismiss() {
+  dismiss(completed = false) {
     localStorage.setItem(STORAGE_KEY, '1');
     overlay?.classList.remove('is-active');
+    Funnel.milestone(completed ? 'onboarding_completed' : 'onboarding_skipped');
   }
 };
 
@@ -26,6 +29,7 @@ function _goTo(n) {
   currentStep = n;
   stepEls.forEach((el, i) => el.classList.toggle('is-active', i === n));
   dots.forEach((dot, i) => dot.classList.toggle('is-active', i === n));
+  Funnel.milestone(`onboarding_step_${n}`);
 }
 
 function _bindEvents() {
@@ -35,7 +39,7 @@ function _bindEvents() {
       if (next < stepEls.length) {
         _goTo(next);
       } else {
-        Onboarding.dismiss();
+        Onboarding.dismiss(true);
       }
     });
   });
@@ -46,18 +50,19 @@ function _bindEvents() {
       overlay.querySelectorAll('[data-ob-theme]').forEach(b => b.classList.remove('is-active'));
       btn.classList.add('is-active');
       setTheme(theme);
+      Funnel.milestone('onboarding_theme_selected');
     });
   });
 
-  overlay.querySelector('.ob-skip')?.addEventListener('click', () => Onboarding.dismiss());
+  overlay.querySelector('.ob-skip')?.addEventListener('click', () => Onboarding.dismiss(false));
 
   overlay.querySelector('[data-ob-new-project]')?.addEventListener('click', () => {
-    Onboarding.dismiss();
+    Onboarding.dismiss(true);
     document.querySelector('[data-menu-action="new-project"]')?.click();
   });
 
   overlay.querySelector('[data-ob-demo]')?.addEventListener('click', () => {
-    Onboarding.dismiss();
+    Onboarding.dismiss(true);
     document.getElementById('demo-login-btn')?.click();
   });
 }

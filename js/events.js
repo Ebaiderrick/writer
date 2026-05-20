@@ -1,6 +1,7 @@
 import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { Telemetry } from './telemetry.js';
 import { Logger } from './logger.js';
+import { Funnel } from './funnel.js';
 import { showToast } from './toast.js';
 import { refs } from './dom.js';
 import { ContextMenu } from './contextMenu.js';
@@ -139,6 +140,7 @@ async function launchNewCreationFlow() {
       tasks: workspaceRoot.workspace?.tasks || []
     }
   });
+  Funnel.milestone('first_project_created');
   openProject(project.id);
 }
 
@@ -187,6 +189,7 @@ async function createProjectInsideCurrentWorkspace() {
       tasks: workspaceProject.workspace?.tasks || []
     }
   });
+  Funnel.milestone('first_project_created');
   openProject(project.id);
 }
 
@@ -2049,6 +2052,11 @@ function handleBlockInput(id, element) {
   project.updatedAt = new Date().toISOString();
   clearSuggestionContext();
 
+  if (!_funnelFirstLineTracked && normalized.trim()) {
+    _funnelFirstLineTracked = true;
+    Funnel.milestone('first_line_typed');
+  }
+
   const shouldRefreshSpelling = state.grammarCheck
     && hasLanguageDictionary(state.writingLanguage)
     && Boolean(window.getSelection()?.isCollapsed);
@@ -2071,6 +2079,7 @@ function handleBlockInput(id, element) {
 
 let lastKeyDownCode = "";
 let _enterPrevBlockId = null;  // tracks block left behind when Enter creates a new one
+let _funnelFirstLineTracked = false;
 
 function insertSoftLineBreak(id, element) {
   if (!element) {

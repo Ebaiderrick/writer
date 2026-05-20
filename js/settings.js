@@ -7,6 +7,7 @@ import { auth, db } from './firebase.js';
 import { sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { collection, addDoc, getDocs, query, orderBy, limit, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { Logger, SESSION_ID } from './logger.js';
+import { Referral } from './referral.js';
 
 let _prevView = null;
 let _settingsView = null;
@@ -156,6 +157,16 @@ function _populateAccount() {
   const nameEl = document.getElementById('settingsAccountName');
   if (emailEl) emailEl.textContent = session?.email || auth.currentUser?.email || '—';
   if (nameEl) nameEl.textContent = session?.name || auth.currentUser?.displayName || '—';
+
+  const uid = auth.currentUser?.uid;
+  const refGroup = document.getElementById('settingsReferralGroup');
+  const refLink = document.getElementById('settingsReferralLink');
+  if (uid && refGroup && refLink) {
+    refGroup.style.display = '';
+    refLink.value = Referral.getShareUrl();
+  } else if (refGroup) {
+    refGroup.style.display = 'none';
+  }
 }
 
 function _populateUsage() {
@@ -280,6 +291,17 @@ function _bindAccount() {
     } catch (err) {
       showToast(err.message || 'Failed to send reset email', 'error');
     }
+  });
+
+  document.getElementById('settingsCopyReferral')?.addEventListener('click', () => {
+    const linkEl = document.getElementById('settingsReferralLink');
+    if (!linkEl?.value) return;
+    navigator.clipboard?.writeText(linkEl.value)
+      .then(() => {
+        showToast('Referral link copied!');
+        Referral.trackShare();
+      })
+      .catch(() => showToast('Could not copy — try manually', 'warning'));
   });
 }
 
