@@ -1023,12 +1023,41 @@ export function renderHome() {
     };
 
     if (!projects.length) {
-      refs.projectGrid.innerHTML = `
-        <article class="project-library-empty">
-          <strong>No projects match this view yet.</strong>
-          <p>Create a new film script or switch filters to bring more work into view.</p>
-        </article>
-      `;
+      const allProjects = (state.projects || []).filter(p => !p.isWorkspaceRoot);
+      const isFiltered = state.homeProjectFilter !== 'all' || state.homeProjectFormat !== 'all';
+      if (!allProjects.length) {
+        refs.projectGrid.innerHTML = `
+          <div class="project-empty-state">
+            <div class="project-empty-icon">🎬</div>
+            <h3>Your screenplay journey starts here</h3>
+            <p>Create your first project and start writing in industry-standard format.</p>
+            <div class="empty-actions">
+              <button class="primary-button btn-sm" data-menu-action="new-project">New Project</button>
+              <button class="ghost-button btn-sm" id="emptyStateDemoBtn">Explore Demo</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('emptyStateDemoBtn')?.addEventListener('click', () => {
+          document.getElementById('demo-login-btn')?.click();
+        });
+      } else {
+        refs.projectGrid.innerHTML = `
+          <div class="project-empty-state">
+            <div class="project-empty-icon">🔍</div>
+            <h3>No projects match this view</h3>
+            <p>${isFiltered ? 'Try a different filter or create a new project.' : 'Create a new screenplay to get started.'}</p>
+            <div class="empty-actions">
+              ${isFiltered ? `<button class="ghost-button btn-sm" id="emptyClearFilters">Clear Filters</button>` : ''}
+              <button class="primary-button btn-sm" data-menu-action="new-project">New Project</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('emptyClearFilters')?.addEventListener('click', () => {
+          state.homeProjectFilter = 'all';
+          state.homeProjectFormat = 'all';
+          renderHome();
+        });
+      }
     } else {
       projects.forEach((project) => refs.projectGrid.appendChild(appendProjectCard(project)));
     }

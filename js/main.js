@@ -8,6 +8,8 @@ import { ContextMenu } from './contextMenu.js';
 import { Auth } from './auth.js';
 import { applyTranslations } from './i18n.js';
 import { restoreLocalSaveFile, startLocalSaveTimer } from './localSave.js';
+import { Settings } from './settings.js';
+import { Onboarding } from './onboarding.js';
 
 function boot() {
   loadProjects();
@@ -37,6 +39,22 @@ function boot() {
   initBackground();
   AI.init();
   ContextMenu.init();
+  Settings.init();
+
+  // Wire up auth-page legal links
+  document.getElementById('authTosLink')?.addEventListener('click', e => {
+    e.preventDefault();
+    document.getElementById('tosDialog')?.showModal();
+  });
+  document.getElementById('authPrivacyLink')?.addEventListener('click', e => {
+    e.preventDefault();
+    document.getElementById('privacyDialog')?.showModal();
+  });
+
+  // Show onboarding for returning/first-time sessions
+  if (session?.loggedIn && !session?.isDemoSession) {
+    Onboarding.maybeShow();
+  }
 }
 
 if (document.readyState === 'loading') {

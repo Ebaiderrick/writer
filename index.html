@@ -89,7 +89,7 @@
             </div>
             <label class="checkbox-group">
               <input type="checkbox" required>
-              <span>I agree to the <a href="#">Terms</a> and <a href="#">Privacy Policy</a></span>
+              <span>I agree to the <a href="#" id="authTosLink">Terms</a> and <a href="#" id="authPrivacyLink">Privacy Policy</a></span>
             </label>
             <button type="submit" class="btn-primary">Create Account</button>
             <button type="button" class="btn-google" id="google-signup">
@@ -260,6 +260,252 @@
           <div id="workspaceProjectGrid" class="project-grid"></div>
         </section>
       </section>
+    </section>
+
+    <!-- Settings View -->
+    <section id="settingsView" class="settings-view" hidden>
+      <header class="settings-topbar">
+        <button class="ghost-button settings-back-btn" id="settingsBackBtn">← Back</button>
+        <h1 class="settings-topbar-title">Settings</h1>
+        <div class="home-topbar-user">
+          <button class="user-trigger open-profile-btn" aria-label="Open profile">
+            <div class="user-avatar-circle">
+              <img src="" alt="" class="user-avatar-img" hidden>
+            </div>
+            <span class="user-name" id="settingsUserNameDisplay">User</span>
+            <span class="user-arrow">▾</span>
+          </button>
+        </div>
+      </header>
+      <div class="settings-body">
+        <nav class="settings-nav">
+          <button class="settings-tab is-active" data-settings-tab="general">General</button>
+          <button class="settings-tab" data-settings-tab="editor">Editor</button>
+          <button class="settings-tab" data-settings-tab="ai">AI</button>
+          <button class="settings-tab" data-settings-tab="account">Account</button>
+          <button class="settings-tab" data-settings-tab="billing">Billing</button>
+          <button class="settings-tab" data-settings-tab="usage">Usage</button>
+          <button class="settings-tab" data-settings-tab="legal">Legal</button>
+        </nav>
+        <main class="settings-content">
+
+          <!-- General -->
+          <section class="settings-section is-active" data-settings-section="general">
+            <div class="settings-section-inner">
+              <h2>General</h2>
+              <div class="settings-group">
+                <label class="settings-label">Theme</label>
+                <div class="settings-theme-grid">
+                  <button class="settings-theme-btn" data-settings-theme="cedar">
+                    <span class="theme-swatch" style="background:linear-gradient(135deg,#fff1f2,#ffe4e6)"></span>
+                    Cedar
+                  </button>
+                  <button class="settings-theme-btn" data-settings-theme="dark">
+                    <span class="theme-swatch" style="background:linear-gradient(135deg,#1a1a1a,#252525)"></span>
+                    Dark
+                  </button>
+                  <button class="settings-theme-btn" data-settings-theme="white">
+                    <span class="theme-swatch" style="background:linear-gradient(135deg,#ffffff,#f8f9fa)"></span>
+                    White
+                  </button>
+                  <button class="settings-theme-btn" data-settings-theme="navy">
+                    <span class="theme-swatch" style="background:linear-gradient(135deg,#0f172a,#1e293b)"></span>
+                    Dark Blue
+                  </button>
+                </div>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label" for="settingsLang">Interface Language</label>
+                <select id="settingsLang" class="settings-select">
+                  <option value="en">English</option>
+                  <option value="fr">French</option>
+                  <option value="de">German</option>
+                  <option value="es">Spanish</option>
+                  <option value="it">Italian</option>
+                  <option value="pt">Portuguese</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <!-- Editor -->
+          <section class="settings-section" data-settings-section="editor">
+            <div class="settings-section-inner">
+              <h2>Editor</h2>
+              <div class="settings-group">
+                <label class="settings-label">Display</label>
+                <div class="settings-toggle-list">
+                  <label class="settings-toggle-row">
+                    <span>Auto-number scenes</span>
+                    <input type="checkbox" id="settingsAutoNumber" class="settings-toggle">
+                  </label>
+                  <label class="settings-toggle-row">
+                    <span>Background animation</span>
+                    <input type="checkbox" id="settingsBgAnim" class="settings-toggle">
+                  </label>
+                  <label class="settings-toggle-row">
+                    <span>Page numbers</span>
+                    <input type="checkbox" id="settingsPageNumbers" class="settings-toggle">
+                  </label>
+                  <label class="settings-toggle-row">
+                    <span>Show outline</span>
+                    <input type="checkbox" id="settingsOutline" class="settings-toggle">
+                  </label>
+                </div>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label" for="settingsTextSize">Script Text Size</label>
+                <select id="settingsTextSize" class="settings-select">
+                  <option value="10">10pt</option>
+                  <option value="11">11pt</option>
+                  <option value="12">12pt (Default)</option>
+                  <option value="13">13pt</option>
+                  <option value="14">14pt</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <!-- AI -->
+          <section class="settings-section" data-settings-section="ai">
+            <div class="settings-section-inner">
+              <h2>AI Assistant</h2>
+              <div class="settings-group">
+                <label class="settings-label" for="settingsAiUrl">Custom AI Endpoint</label>
+                <p class="settings-hint">Override the default endpoint. Leave blank to use the built-in server or Netlify function.</p>
+                <input type="url" id="settingsAiUrl" class="settings-input" placeholder="https://your-server.com/api/ai-assist">
+              </div>
+              <div class="settings-actions">
+                <button id="settingsAiSave" class="primary-button btn-sm">Save Endpoint</button>
+                <button id="settingsAiTest" class="ghost-button btn-sm">Test Connection</button>
+                <button id="settingsAiReset" class="ghost-button btn-sm">Reset to Default</button>
+              </div>
+              <div class="settings-info-card">
+                <p>EyaWriter routes AI requests through OpenRouter. You need an <code>OPENAI_API_KEY</code> set on the server to enable AI features. Without a key, the server runs in test mode and returns stub responses.</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- Account -->
+          <section class="settings-section" data-settings-section="account">
+            <div class="settings-section-inner">
+              <h2>Account</h2>
+              <div class="settings-group">
+                <label class="settings-label">Name</label>
+                <p class="settings-value" id="settingsAccountName">—</p>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label">Email</label>
+                <p class="settings-value" id="settingsAccountEmail">—</p>
+              </div>
+              <div class="settings-actions">
+                <button id="settingsChangePassword" class="ghost-button btn-sm">Send Password Reset Email</button>
+              </div>
+              <div class="settings-danger-zone">
+                <h3>Profile</h3>
+                <p>Manage your display name, avatar, and bio from the profile popup (top-right corner).</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- Billing -->
+          <section class="settings-section" data-settings-section="billing">
+            <div class="settings-section-inner">
+              <h2>Billing</h2>
+              <div class="settings-placeholder">
+                <div class="placeholder-icon">💳</div>
+                <h3>Pro Plan — Coming Soon</h3>
+                <p>Billing and subscription management will be available here. Pro features will include unlimited cloud storage, priority AI access, team workspaces, and export to industry formats.</p>
+                <div class="plan-comparison">
+                  <div class="plan-card plan-current">
+                    <h4>Free</h4>
+                    <ul>
+                      <li>✓ Unlimited local projects</li>
+                      <li>✓ Cloud sync (Firebase)</li>
+                      <li>✓ AI assistant (with own API key)</li>
+                      <li>✓ Real-time collaboration</li>
+                      <li>✓ 6 language UI</li>
+                    </ul>
+                    <span class="plan-badge">Current Plan</span>
+                  </div>
+                  <div class="plan-card plan-pro">
+                    <h4>Pro</h4>
+                    <ul>
+                      <li>✓ Everything in Free</li>
+                      <li>✓ Built-in AI credits</li>
+                      <li>✓ Priority support</li>
+                      <li>✓ Advanced analytics</li>
+                      <li>✓ PDF &amp; FDX export</li>
+                    </ul>
+                    <span class="plan-badge plan-badge-pro">Coming Soon</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Usage -->
+          <section class="settings-section" data-settings-section="usage">
+            <div class="settings-section-inner">
+              <h2>Usage</h2>
+              <div class="settings-usage-grid">
+                <div class="usage-stat">
+                  <span class="usage-stat-value" id="settingsUsageProjects">0</span>
+                  <span class="usage-stat-label">Projects</span>
+                </div>
+                <div class="usage-stat">
+                  <span class="usage-stat-value" id="settingsUsageWords">0</span>
+                  <span class="usage-stat-label">Total Words</span>
+                </div>
+                <div class="usage-stat">
+                  <span class="usage-stat-value" id="settingsUsageScenes">0</span>
+                  <span class="usage-stat-label">Scenes Written</span>
+                </div>
+                <div class="usage-stat">
+                  <span class="usage-stat-value" id="settingsUsageJoined">—</span>
+                  <span class="usage-stat-label">Member Since</span>
+                </div>
+              </div>
+              <p class="settings-hint" style="margin-top:24px;">Detailed analytics and writing streaks are coming in a future update.</p>
+            </div>
+          </section>
+
+          <!-- Legal -->
+          <section class="settings-section" data-settings-section="legal">
+            <div class="settings-section-inner">
+              <h2>Legal</h2>
+              <div class="settings-legal-links">
+                <button class="settings-legal-btn" id="settingsPrivacyBtn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <div>
+                    <strong>Privacy Policy</strong>
+                    <span>How we collect and use your data</span>
+                  </div>
+                  <span class="legal-arrow">›</span>
+                </button>
+                <button class="settings-legal-btn" id="settingsTosBtn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <div>
+                    <strong>Terms of Service</strong>
+                    <span>Rules for using EyaWriter</span>
+                  </div>
+                  <span class="legal-arrow">›</span>
+                </button>
+                <button class="settings-legal-btn" id="settingsAiDisclosureBtn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div>
+                    <strong>AI Usage Disclosure</strong>
+                    <span>How AI features work in EyaWriter</span>
+                  </div>
+                  <span class="legal-arrow">›</span>
+                </button>
+              </div>
+              <p class="settings-hint" style="margin-top:24px;">EyaWriter version 1.0.0 — Last updated May 2026</p>
+            </div>
+          </section>
+
+        </main>
+      </div>
     </section>
 
     <section id="studioView" class="studio-view" hidden>
@@ -1296,6 +1542,13 @@
           </svg>
           <span>Edit</span>
         </button>
+        <button class="profile-action-btn open-settings-btn" id="open-settings-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Settings</span>
+        </button>
         <button class="profile-action-btn profile-action-logout" id="profile-signout-btn">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -1307,6 +1560,156 @@
       </div>
     </div>
   </div>
+
+  <!-- Onboarding Overlay -->
+  <div id="onboardingOverlay" class="ob-overlay" aria-modal="true" role="dialog" aria-label="Welcome to EyaWriter">
+    <div class="ob-card">
+      <div class="ob-dots">
+        <span class="ob-dot is-active"></span>
+        <span class="ob-dot"></span>
+        <span class="ob-dot"></span>
+      </div>
+
+      <!-- Step 1: Welcome -->
+      <div class="ob-step is-active" data-step="0">
+        <div class="ob-icon">⚡</div>
+        <h2>Welcome to EyaWriter</h2>
+        <p class="ob-subtitle">The screenplay editor built for serious writers.</p>
+        <ul class="ob-features">
+          <li><span class="ob-feature-icon">✍️</span><span>Industry-format screenplay editing with block-based flow</span></li>
+          <li><span class="ob-feature-icon">🤖</span><span>AI assistant for scene expansion, dialogue rewrites, and next-beat prediction</span></li>
+          <li><span class="ob-feature-icon">🤝</span><span>Real-time collaboration, comments, and shared workspaces</span></li>
+          <li><span class="ob-feature-icon">🌍</span><span>Six-language UI with spellcheck and grammar tools</span></li>
+        </ul>
+        <button class="primary-button ob-btn" data-ob-next="1">Get Started →</button>
+        <button class="ob-skip">Skip for now</button>
+      </div>
+
+      <!-- Step 2: Theme -->
+      <div class="ob-step" data-step="1">
+        <div class="ob-icon">🎨</div>
+        <h2>Make it yours</h2>
+        <p class="ob-subtitle">Pick a theme that fits your writing mood.</p>
+        <div class="ob-theme-grid">
+          <button class="ob-theme-btn is-active" data-ob-theme="cedar">
+            <span class="ob-theme-swatch" style="background:linear-gradient(135deg,#fff1f2,#ffe4e6)"></span>
+            <span>Cedar</span>
+          </button>
+          <button class="ob-theme-btn" data-ob-theme="dark">
+            <span class="ob-theme-swatch" style="background:linear-gradient(135deg,#1a1a1a,#252525)"></span>
+            <span>Dark</span>
+          </button>
+          <button class="ob-theme-btn" data-ob-theme="white">
+            <span class="ob-theme-swatch" style="background:linear-gradient(135deg,#ffffff,#f8f9fa); border:1px solid #e5e7eb"></span>
+            <span>White</span>
+          </button>
+          <button class="ob-theme-btn" data-ob-theme="navy">
+            <span class="ob-theme-swatch" style="background:linear-gradient(135deg,#0f172a,#1e293b)"></span>
+            <span>Dark Blue</span>
+          </button>
+        </div>
+        <button class="primary-button ob-btn" data-ob-next="2">Continue →</button>
+        <button class="ob-skip">Skip for now</button>
+      </div>
+
+      <!-- Step 3: First project -->
+      <div class="ob-step" data-step="2">
+        <div class="ob-icon">🎬</div>
+        <h2>Ready to write?</h2>
+        <p class="ob-subtitle">Start your first script or explore with a demo.</p>
+        <div class="ob-cta-grid">
+          <button class="ob-cta-btn" data-ob-new-project>
+            <span class="ob-cta-icon">✦</span>
+            <strong>Start Fresh</strong>
+            <span>Create a new screenplay from scratch</span>
+          </button>
+          <button class="ob-cta-btn" data-ob-demo>
+            <span class="ob-cta-icon">▶</span>
+            <strong>Explore Demo</strong>
+            <span>See EyaWriter in action with sample content</span>
+          </button>
+        </div>
+        <button class="primary-button ob-btn" data-ob-next="99">Start Writing →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Privacy Policy Dialog -->
+  <dialog id="privacyDialog" class="legal-dialog">
+    <div class="legal-dialog-inner">
+      <div class="legal-dialog-header">
+        <h2>Privacy Policy</h2>
+        <form method="dialog"><button class="ghost-button btn-sm">Close</button></form>
+      </div>
+      <div class="legal-dialog-body">
+        <p><strong>Last updated: May 2026</strong></p>
+        <h3>What we collect</h3>
+        <p>EyaWriter collects the minimum information needed to provide the service: your email address and display name (via Firebase Authentication), and the screenplay projects you save to cloud storage (via Firestore).</p>
+        <h3>How we use your data</h3>
+        <p>Your data is used exclusively to provide the EyaWriter service — syncing projects, enabling collaboration, and authenticating your account. We do not sell or share your personal data with third parties for marketing purposes.</p>
+        <h3>Firebase &amp; third-party services</h3>
+        <p>EyaWriter uses Firebase (Google) for authentication and data storage. Projects saved to the cloud are stored in Firestore under your user account. Please review <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Google's Privacy Policy</a> for more information about how Firebase handles data.</p>
+        <h3>AI features</h3>
+        <p>When you use AI writing features, the text of the current screenplay block and recent story context are sent to an AI provider (OpenRouter / OpenAI) to generate suggestions. No personal identifying information is included in these requests. See our AI Usage Disclosure for details.</p>
+        <h3>Local storage</h3>
+        <p>EyaWriter stores application preferences (theme, language, editor settings) in your browser's localStorage. This data never leaves your device.</p>
+        <h3>Contact</h3>
+        <p>For privacy enquiries, please contact us through the repository at github.com/Ebaiderrick/writer.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Terms of Service Dialog -->
+  <dialog id="tosDialog" class="legal-dialog">
+    <div class="legal-dialog-inner">
+      <div class="legal-dialog-header">
+        <h2>Terms of Service</h2>
+        <form method="dialog"><button class="ghost-button btn-sm">Close</button></form>
+      </div>
+      <div class="legal-dialog-body">
+        <p><strong>Last updated: May 2026</strong></p>
+        <h3>Acceptance</h3>
+        <p>By using EyaWriter, you agree to these Terms of Service. If you do not agree, please discontinue use of the service.</p>
+        <h3>Your content</h3>
+        <p>You retain full ownership of all screenplay content you create with EyaWriter. By storing projects in the cloud you grant EyaWriter a limited, non-exclusive licence to store and display your content solely for the purpose of providing the service to you.</p>
+        <h3>Acceptable use</h3>
+        <p>You may not use EyaWriter to create, distribute, or store content that is illegal, harmful, defamatory, or that violates the intellectual property rights of others. You may not attempt to circumvent any security measures or disrupt service for other users.</p>
+        <h3>AI features</h3>
+        <p>AI-generated content is provided as a writing aid. You are solely responsible for reviewing, editing, and any use of AI suggestions in your work. EyaWriter does not claim ownership of AI-generated text.</p>
+        <h3>Service availability</h3>
+        <p>EyaWriter is provided "as is" without warranty of any kind. We do not guarantee continuous availability and reserve the right to modify or discontinue features at any time.</p>
+        <h3>Limitation of liability</h3>
+        <p>To the maximum extent permitted by law, EyaWriter shall not be liable for any indirect, incidental, or consequential damages arising from your use of the service.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- AI Usage Disclosure Dialog -->
+  <dialog id="aiDisclosureDialog" class="legal-dialog">
+    <div class="legal-dialog-inner">
+      <div class="legal-dialog-header">
+        <h2>AI Usage Disclosure</h2>
+        <form method="dialog"><button class="ghost-button btn-sm">Close</button></form>
+      </div>
+      <div class="legal-dialog-body">
+        <p><strong>Last updated: May 2026</strong></p>
+        <h3>What gets sent to the AI</h3>
+        <p>When you use an AI writing action (Expand, Rephrase, Predict, etc.), EyaWriter sends the following to the AI provider:</p>
+        <ul>
+          <li>The text of the current screenplay block</li>
+          <li>Recent story context (up to the last few scenes)</li>
+          <li>The selected action type and any custom instruction you typed</li>
+        </ul>
+        <p>No account information, email address, or other personal data is included in AI requests.</p>
+        <h3>AI provider</h3>
+        <p>By default, EyaWriter routes AI requests through <strong>OpenRouter</strong>, which provides access to multiple language models (including OpenAI's GPT series). You can configure a custom endpoint in Settings → AI to use any compatible API.</p>
+        <h3>Data retention</h3>
+        <p>EyaWriter does not store AI request or response data. Requests are processed in real-time and the response is returned directly to your editor. Refer to the AI provider's privacy policy for their data handling practices.</p>
+        <h3>Your control</h3>
+        <p>AI features are opt-in and require enabling "AI Assistance" in the editor toolbar. You can disable AI assistance at any time. No AI processing occurs unless you explicitly trigger an AI action.</p>
+      </div>
+    </div>
+  </dialog>
 
   <script type="module" src="js/main.js"></script>
 </body>

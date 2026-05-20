@@ -13,6 +13,8 @@ import {
 import { doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { auth, db } from './firebase.js';
 import { showHome, showAuth, renderHome, setTheme, customAlert, customConfirm } from './ui.js';
+import { showToast } from './toast.js';
+import { Onboarding } from './onboarding.js';
 import { state } from './config.js';
 import { refs } from './dom.js';
 import {
@@ -200,6 +202,10 @@ export const Auth = (() => {
     profilePopup?.addEventListener('click', e => { if (e.target === profilePopup) closeProfilePopup(); });
     profileEditBtn?.addEventListener('click', handleEditToggle);
     profileSignOutBtn?.addEventListener('click', handleSignOut);
+    document.getElementById('open-settings-btn')?.addEventListener('click', () => {
+      closeProfilePopup();
+      import('./settings.js').then(({ Settings }) => Settings.show());
+    });
     profileUploadBtn?.addEventListener('click', () => profileUpload.click());
     profileUpload?.addEventListener('change', handleImageUpload);
     profileBio?.addEventListener('input', () => {
@@ -387,6 +393,7 @@ export const Auth = (() => {
     closeProfilePopup();
     clearSession();
     try { await firebaseSignOut(auth); } catch { /* ignore */ }
+    showToast('Signed out', 'info');
     showAuth();
   }
 
@@ -623,6 +630,7 @@ export const Auth = (() => {
       profileName.textContent = formatUsernameForDisplay(requestedUsername);
       if (user) updateTriggerUI({ photoURL: nextPhotoURL, displayName: requestedUsername });
       else if (isDemo) updateTriggerUI({ photoURL: session.photoURL, displayName: requestedUsername });
+      showToast('Profile updated');
 
     } catch (err) {
       console.error('Bio save failed', err);
@@ -820,6 +828,9 @@ export const Auth = (() => {
         username
       });
       signupForm.reset();
+      localStorage.removeItem('eyawriter_onboarded_v1');
+      showToast('Account created — welcome to EyaWriter!');
+      setTimeout(() => Onboarding.maybeShow(), 800);
     } catch (err) {
       console.error('Sign-up error:', err.code, err);
       customAlert(friendlyError(err));
