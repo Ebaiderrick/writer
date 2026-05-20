@@ -28,8 +28,8 @@ app.use(express.json({ limit: "50kb" }));
 
 const ALLOWED_TYPES = new Set(["scene", "dialogue", "action", "character", "parenthetical", "transition", "shot", "general"]);
 const ALLOWED_ACTIONS = new Set(["Predict", "Expand", "Fix", "Add Conflict", "Cinematic", "Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext", "Continue", "Visualize", "Add Tension", "Describe", "Grammar", "Camera Angle", "Improve Shot", "Add Movement"]);
-const MAX_CURRENT = 2000;
-const MAX_CONTEXT = 5000;
+const MAX_CURRENT = 4000;
+const MAX_CONTEXT = 15000;
 const MAX_INSTRUCTION = 500;
 
 // Simple in-memory rate limiter: 20 requests per minute per IP

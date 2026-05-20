@@ -3,8 +3,8 @@ const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://openrouter.ai/a
 
 const ALLOWED_TYPES = new Set(["scene", "dialogue", "action", "character", "parenthetical", "transition", "shot", "general"]);
 const ALLOWED_ACTIONS = new Set(["Predict", "Expand", "Fix", "Add Conflict", "Cinematic", "Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext", "Continue", "Visualize", "Add Tension", "Describe", "Grammar", "Camera Angle", "Improve Shot", "Add Movement"]);
-const MAX_CURRENT = 2000;
-const MAX_CONTEXT = 5000;
+const MAX_CURRENT = 4000;
+const MAX_CONTEXT = 15000;
 const MAX_INSTRUCTION = 500;
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
