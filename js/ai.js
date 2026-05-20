@@ -7,6 +7,68 @@ import { customAlert, showModal } from "./ui.js";
 import { Telemetry } from "./telemetry.js";
 import { Logger } from "./logger.js";
 
+// ── AI response cache (in-memory, 5-minute TTL, max 50 entries) ──────────────
+
+const _aiCache = new Map();
+const AI_CACHE_TTL_MS = 5 * 60 * 1000;
+const AI_CACHE_MAX = 50;
+const _pendingKeys = new Set();
+
+function _aiCacheKey(req) {
+  return `${req.type}|${req.action}|${(req.current || '').slice(0, 200)}|${(req.context || '').slice(0, 300)}|${req.instruction || ''}`;
+}
+
+function _getAiCached(req) {
+  const key = _aiCacheKey(req);
+  const entry = _aiCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > AI_CACHE_TTL_MS) { _aiCache.delete(key); return null; }
+  return entry.output;
+}
+
+function _setAiCached(req, output) {
+  const key = _aiCacheKey(req);
+  _aiCache.set(key, { output, ts: Date.now() });
+  if (_aiCache.size > AI_CACHE_MAX) {
+    _aiCache.delete(_aiCache.keys().next().value);
+  }
+}
+
+// ── SSE stream consumer ────────────────────────────────────────────────────
+
+async function consumeSSEStream(response, onChunk) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') return fullText;
+      try {
+        const parsed = JSON.parse(data);
+        const chunk = parsed.choices?.[0]?.delta?.content || '';
+        if (chunk) {
+          fullText += chunk;
+          onChunk(chunk);
+        }
+      } catch { /* skip malformed SSE line */ }
+    }
+  }
+  return fullText;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const AI = (() => {
   let activeBlock = null;
   let menuEl = null;
@@ -295,15 +357,57 @@ export const AI = (() => {
     };
 
     lastRequest = request;
+
+    // Return cached result instantly (skip for Grammar/Improve to always get fresh proofreads)
+    const isCacheable = action !== 'Grammar' && action !== 'Improve';
+    if (isCacheable) {
+      const cached = _getAiCached(request);
+      if (cached) {
+        Telemetry.track('ai_used', { action, type: request.type, cached: true });
+        showResultOptions(cached, request);
+        return;
+      }
+    }
+
+    // Deduplicate: ignore if identical request already in-flight
+    const reqKey = _aiCacheKey(request);
+    if (_pendingKeys.has(reqKey)) return;
+    _pendingKeys.add(reqKey);
+
     setLoadingState(submitButton, input, true);
     showMessage("AI assistant is thinking...", "info");
 
+    // Streaming state
+    let streamContentEl = null;
+    let accumulatedText = '';
+
+    const onChunk = (chunk) => {
+      accumulatedText += chunk;
+      if (!menuEl) return;
+      if (!streamContentEl) {
+        removeResultBox();
+        const box = document.createElement('div');
+        box.className = 'ai-result ai-result-streaming';
+        styleResultBox(box, 'info');
+        streamContentEl = document.createElement('div');
+        streamContentEl.style.fontSize = '0.9rem';
+        streamContentEl.style.lineHeight = '1.4';
+        streamContentEl.style.whiteSpace = 'pre-wrap';
+        const cursor = document.createElement('span');
+        cursor.className = 'ai-stream-cursor';
+        box.append(streamContentEl, cursor);
+        menuEl.appendChild(box);
+      }
+      streamContentEl.textContent = accumulatedText;
+    };
+
     try {
-      const output = await requestAiText(request);
+      const output = await requestAiText(request, onChunk);
       if (!output) {
         throw new Error("The AI assistant returned no text.");
       }
 
+      if (isCacheable) _setAiCached(request, output);
       Telemetry.track('ai_used', { action: request.action, type: request.type });
       showResultOptions(output, request);
     } catch (error) {
@@ -313,6 +417,7 @@ export const AI = (() => {
       Logger.capture('ai.runAI', error, { action: request.action, type: request.type });
       showError(message);
     } finally {
+      _pendingKeys.delete(reqKey);
       setLoadingState(submitButton, input, false);
     }
   }
@@ -379,6 +484,7 @@ export const AI = (() => {
     });
 
     const retryBtn = createActionBtn("Retry", () => {
+      _aiCache.delete(_aiCacheKey(request));
       runAI(request.action, request.instruction || "", null, null);
     });
 
@@ -413,6 +519,7 @@ export const AI = (() => {
       retryActions.style.marginTop = "8px";
 
       const retryBtn = createActionBtn("Retry", () => {
+        _aiCache.delete(_aiCacheKey(lastRequest));
         runAI(lastRequest.action, lastRequest.instruction || "", null, null);
       });
       retryActions.appendChild(retryBtn);
@@ -579,17 +686,15 @@ export const AI = (() => {
     return "";
   }
 
-  async function requestAiText(request) {
+  async function requestAiText(request, onChunk) {
     const response = await fetch(getAiEndpoint(), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(request)
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...request, stream: Boolean(onChunk) })
     });
-    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
       let msg = data.error || `AI assistant failed (Status ${response.status})`;
       if (response.status === 401) msg = "Invalid API Key. Please check your OpenRouter configuration.";
       if (response.status === 402) msg = "Insufficient credits in your OpenRouter account.";
@@ -599,7 +704,23 @@ export const AI = (() => {
       throw new Error(msg);
     }
 
+    const contentType = response.headers.get('Content-Type') || '';
+    if (onChunk && contentType.includes('text/event-stream')) {
+      const raw = await consumeSSEStream(response, onChunk);
+      return cleanAiClientResponse(raw);
+    }
+
+    const data = await response.json().catch(() => ({}));
     return normalizeAiOutput(data);
+  }
+
+  function cleanAiClientResponse(text) {
+    let cleaned = String(text || '').trim();
+    cleaned = cleaned.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/g, '').trim();
+    if (cleaned.startsWith('"') && cleaned.endsWith('"') && (cleaned.match(/"/g) || []).length === 2) {
+      cleaned = cleaned.slice(1, -1).trim();
+    }
+    return cleaned;
   }
 
   function getLastScenes(activeLineId) {

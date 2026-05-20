@@ -26,8 +26,8 @@ app.use(cors({
 }));
 app.use(express.json({ limit: "50kb" }));
 
-const ALLOWED_TYPES = new Set(["scene", "dialogue", "action", "character", "parenthetical", "transition", "shot", "general"]);
-const ALLOWED_ACTIONS = new Set(["Predict", "Expand", "Fix", "Add Conflict", "Cinematic", "Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext", "Continue", "Visualize", "Add Tension", "Describe", "Grammar", "Camera Angle", "Improve Shot", "Add Movement"]);
+const ALLOWED_TYPES = new Set(["scene", "dialogue", "action", "character", "parenthetical", "transition", "shot", "general", "script"]);
+const ALLOWED_ACTIONS = new Set(["Predict", "Expand", "Fix", "Add Conflict", "Cinematic", "Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext", "Continue", "Visualize", "Add Tension", "Describe", "Grammar", "Camera Angle", "Improve Shot", "Add Movement", "Improve"]);
 const MAX_CURRENT = 4000;
 const MAX_CONTEXT = 15000;
 const MAX_INSTRUCTION = 500;
@@ -67,7 +67,7 @@ app.post("/api/ai-assist", async (req, res) => {
     return res.status(429).json({ error: "Too many requests. Please wait and try again." });
   }
 
-  const { type, action, current, context, instruction } = req.body;
+  const { type, action, current, context, instruction, stream: wantStream = false } = req.body;
 
   if (current === undefined || current === null) {
     return res.status(400).json({ error: "Missing current block" });
@@ -115,19 +115,31 @@ app.post("/api/ai-assist", async (req, res) => {
           { role: "user", content: userPrompt }
         ],
         max_tokens: 1000,
-        temperature: 0.7
+        temperature: 0.7,
+        ...(wantStream ? { stream: true } : {})
       })
     });
 
-    const data = await response.json().catch(() => ({}));
-
     if (!response.ok) {
-      console.error(`[${requestId}] Upstream API error status=${response.status}`, JSON.stringify(data).slice(0, 300));
+      const errData = await response.json().catch(() => ({}));
+      console.error(`[${requestId}] Upstream API error status=${response.status}`, JSON.stringify(errData).slice(0, 300));
       return res.status(response.status).json({
-        error: extractApiError(data) || `AI request failed with status ${response.status}`
+        error: extractApiError(errData) || `AI request failed with status ${response.status}`
       });
     }
 
+    // Stream SSE chunks directly to the client when requested
+    if (wantStream && response.headers.get('content-type')?.includes('text/event-stream')) {
+      console.log(`[${requestId}] Streaming AI response`);
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      req.on('close', () => response.body.destroy());
+      response.body.pipe(res);
+      return;
+    }
+
+    const data = await response.json().catch(() => ({}));
     let output = extractOutputText(data);
     output = cleanAiResponse(output, current);
 

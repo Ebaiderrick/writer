@@ -7034,3 +7034,20 @@ html[data-theme="white"] .user-trigger {
   background: color-mix(in srgb, #f0b429 18%, var(--surface-strong));
   border-color: color-mix(in srgb, #f0b429 42%, var(--line));
 }
+
+/* ── AI streaming cursor ───────────────────────────────── */
+.ai-stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent, #f43f5e);
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  border-radius: 1px;
+  animation: ai-cursor-blink 0.7s step-end infinite;
+}
+
+@keyframes ai-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

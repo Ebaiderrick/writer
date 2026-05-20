@@ -3,11 +3,18 @@ import { uid, normalizeLineText, stripWrapperChars, clamp } from './utils.js';
 import { refs } from './dom.js';
 import { t } from './i18n.js';
 import { auth, db } from './firebase.js';
-import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch, limit, query } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { Recovery } from './recovery.js';
 
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// Track last-synced version per project to skip redundant Firestore writes
+const _syncedVersions = new Map();
+
+function _projectVersionKey(project) {
+  return `${project.updatedAt}|${project.lines.length}|${project.title}`;
+}
 
 function generateScriptId() {
   const bytes = new Uint8Array(6);
@@ -36,6 +43,10 @@ async function syncCurrentProjectToFirestore() {
   if (!userId) return;
   const project = getCurrentProject();
   if (!project) return;
+
+  // Skip sync if nothing has changed since the last successful write
+  const versionKey = _projectVersionKey(project);
+  if (_syncedVersions.get(project.id) === versionKey) return;
 
   // Ensure script identity exists for traceability
   if (!project.scriptId) {
@@ -94,6 +105,7 @@ async function syncCurrentProjectToFirestore() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
     window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
+    _syncedVersions.set(project.id, versionKey);
     Recovery.clearOfflineSyncPending();
 
   } catch (err) {
@@ -103,17 +115,29 @@ async function syncCurrentProjectToFirestore() {
 }
 
 export async function fetchCloudProjects(userId) {
-  const snapshot = await getDocs(collection(db, 'users', userId, 'projects'));
+  const q = query(collection(db, 'users', userId, 'projects'), limit(200));
+  const snapshot = await getDocs(q);
   return snapshot.docs.map(d => sanitizeProject(d.data()));
 }
 
 export async function importLocalProjectsToCloud(userId, projects) {
+  if (!projects.length) return;
+  const now = new Date().toISOString();
+  const BATCH_LIMIT = 499;
+  let batch = writeBatch(db);
+  let count = 0;
+
   for (const p of projects) {
-    await setDoc(doc(db, 'users', userId, 'projects', p.id), {
-      ...p,
-      syncedAt: new Date().toISOString()
-    });
+    batch.set(doc(db, 'users', userId, 'projects', p.id), { ...p, syncedAt: now });
+    count++;
+    if (count === BATCH_LIMIT) {
+      await batch.commit();
+      batch = writeBatch(db);
+      count = 0;
+    }
   }
+
+  if (count > 0) await batch.commit();
 }
 
 export async function deleteProjectFromCloud(projectId) {

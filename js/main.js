@@ -55,7 +55,6 @@ function boot() {
       if (restored) startLocalSaveTimer();
     });
   }
-  initBackground();
   AI.init();
   ContextMenu.init();
   Settings.init();
@@ -70,9 +69,18 @@ function boot() {
     document.getElementById('privacyDialog')?.showModal();
   });
 
-  // Show onboarding for returning/first-time sessions
-  if (session?.loggedIn && !session?.isDemoSession) {
-    Onboarding.maybeShow();
+  // Defer non-critical initialisation until the browser is idle
+  const idleInit = () => {
+    initBackground();
+    if (session?.loggedIn && !session?.isDemoSession) {
+      Onboarding.maybeShow();
+    }
+  };
+
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(idleInit, { timeout: 2000 });
+  } else {
+    setTimeout(idleInit, 200);
   }
 }
 
