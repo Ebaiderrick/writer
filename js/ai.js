@@ -4,6 +4,8 @@ import { getCurrentProject, getLine, getLineIndex, queueSave } from "./project.j
 import { renderStudio, addBlock } from "./events.js";
 import { escapeHtml } from "./utils.js";
 import { customAlert, showModal } from "./ui.js";
+import { Telemetry } from "./telemetry.js";
+import { Logger } from "./logger.js";
 
 export const AI = (() => {
   let activeBlock = null;
@@ -302,13 +304,14 @@ export const AI = (() => {
         throw new Error("The AI assistant returned no text.");
       }
 
+      Telemetry.track('ai_used', { action: request.action, type: request.type });
       showResultOptions(output, request);
     } catch (error) {
       const message = error instanceof Error
         ? error.message
         : "Could not reach the AI server. Run `cd server && npm install && npm start`.";
+      Logger.capture('ai.runAI', error, { action: request.action, type: request.type });
       showError(message);
-      console.error("AI Error:", error);
     } finally {
       setLoadingState(submitButton, input, false);
     }

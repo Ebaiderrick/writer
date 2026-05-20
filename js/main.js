@@ -12,6 +12,8 @@ import { Settings } from './settings.js';
 import { Onboarding } from './onboarding.js';
 import { Recovery } from './recovery.js';
 import { showToast } from './toast.js';
+import './logger.js';
+import './telemetry.js';
 
 function boot() {
   loadProjects();

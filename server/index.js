@@ -54,7 +54,14 @@ app.get("/", (req, res) => {
   res.send("EyaWriter AI Server Running");
 });
 
+function newRequestId() {
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 app.post("/api/ai-assist", async (req, res) => {
+  const requestId = newRequestId();
+  res.set("X-Request-Id", requestId);
+
   const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket.remoteAddress || "unknown";
   if (!_checkRate(ip)) {
     return res.status(429).json({ error: "Too many requests. Please wait and try again." });
@@ -80,6 +87,8 @@ app.post("/api/ai-assist", async (req, res) => {
   if (typeof instruction === "string" && instruction.length > MAX_INSTRUCTION) {
     return res.status(400).json({ error: "Instruction too long" });
   }
+
+  console.log(`[${requestId}] AI request type=${type || "?"} action=${action || "?"} ip=${ip}`);
 
   if (!process.env.OPENAI_API_KEY) {
     return res.json({
@@ -113,7 +122,7 @@ app.post("/api/ai-assist", async (req, res) => {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      console.error("OpenRouter Error:", data);
+      console.error(`[${requestId}] Upstream API error status=${response.status}`, JSON.stringify(data).slice(0, 300));
       return res.status(response.status).json({
         error: extractApiError(data) || `AI request failed with status ${response.status}`
       });
@@ -126,9 +135,10 @@ app.post("/api/ai-assist", async (req, res) => {
       return res.status(502).json({ error: "AI assistant returned no text." });
     }
 
+    console.log(`[${requestId}] AI request completed successfully`);
     return res.json({ output });
   } catch (error) {
-    console.error("AI ERROR:", error);
+    console.error(`[${requestId}] AI request error:`, error.message || error);
     return res.status(500).json({
       error: "AI request failed. Check your server connection and API configuration."
     });

@@ -5,6 +5,8 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { state } from './config.js';
 import { logActivity } from './activity.js';
+import { Telemetry } from './telemetry.js';
+import { Logger } from './logger.js';
 import { getCurrentProject, sanitizeProject, upsertProject, persistProjects, deleteProjectFromCloud } from './project.js';
 import { uid as makeId } from './utils.js';
 import { customAlert, customConfirm, showHome, renderHome } from './ui.js';
@@ -216,9 +218,10 @@ export async function inviteCollaborator(email, role = WORKSPACE_ROLES.editor) {
       }
     }
 
+    Telemetry.track('collab_invite_sent', { role });
     return { ok: true };
   } catch (err) {
-    console.error('inviteCollaborator error:', err);
+    Logger.capture('inviteCollaborator', err);
     return { ok: false, reason: err.message || 'An error occurred. Please try again.' };
   }
 }
@@ -304,6 +307,7 @@ export async function acceptInvitation(inviteId) {
     syncedAt: new Date().toISOString()
   });
 
+  Telemetry.track('collab_invite_accepted', { projectId: inv.projectId });
   upsertProject(projectForUser);
   persistProjects(false);
   renderHome();

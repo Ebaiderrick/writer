@@ -24,6 +24,8 @@ import {
   setProjectsFromCloud
 } from './project.js';
 import { initCollaboration, cleanupCollaboration } from './collaborate.js';
+import { Telemetry } from './telemetry.js';
+import { Logger } from './logger.js';
 
 const SESSION_KEY = 'eyawriter_session';
 
@@ -193,6 +195,7 @@ export const Auth = (() => {
           return;
         }
         cacheSession(firebaseUser);
+        Telemetry.track('login', { method: firebaseUser.providerData?.[0]?.providerId || 'email' });
         await ensureUsersByEmail(firebaseUser);
         await syncProjectsOnLogin(firebaseUser.uid);
         await loadUserProfile(firebaseUser);
@@ -314,12 +317,13 @@ export const Auth = (() => {
         username
       });
       await sendEmailVerification(credential.user);
+      Telemetry.track('signup', { method: 'email' });
       await firebaseSignOut(auth);
       signupForm.reset();
       localStorage.removeItem('eyawriter_onboarded_v1');
       customAlert(`Account created! Check ${email} for a verification link, then sign in.`, 'Verify Your Email');
     } catch (err) {
-      console.error('Sign-up error:', err.code, err);
+      Logger.capture('handleSignUp', err);
       customAlert(friendlyError(err));
     }
   }
@@ -384,6 +388,7 @@ export const Auth = (() => {
     const confirmed = await customConfirm('Sign out of your account?', 'Sign Out');
     if (!confirmed) return;
     closeProfilePopup();
+    Telemetry.track('logout');
     clearSession();
     try { await firebaseSignOut(auth); } catch { /* ignore */ }
     showToast('Signed out', 'info');

@@ -1,10 +1,12 @@
-import { state } from './config.js';
-import { setTheme, showHome, applyViewState, applyToolbarState } from './ui.js';
+import { state, APP_VERSION } from './config.js';
+import { setTheme, showHome, applyViewState, applyToolbarState, showModal, customAlert } from './ui.js';
 import { applyTranslations } from './i18n.js';
 import { showToast } from './toast.js';
 import { persistProjects } from './project.js';
-import { auth } from './firebase.js';
+import { auth, db } from './firebase.js';
 import { sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { collection, addDoc, getDocs, query, orderBy, limit, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { Logger, SESSION_ID } from './logger.js';
 
 let _prevView = null;
 let _settingsView = null;
@@ -19,6 +21,7 @@ export const Settings = {
     _bindAI();
     _bindAccount();
     _bindLegal();
+    _bindSupport();
     document.getElementById('settingsBackBtn')?.addEventListener('click', Settings.hide);
     document.querySelectorAll('.open-settings-btn').forEach(btn => {
       btn.addEventListener('click', () => Settings.show());
@@ -73,6 +76,53 @@ function _populate() {
   _populateAI();
   _populateAccount();
   _populateUsage();
+}
+
+function _populateSupport() {
+  const panel = document.getElementById('settingsDiagnosticsPanel');
+  const errList = document.getElementById('settingsRecentErrors');
+  if (!panel) return;
+
+  const uid = auth.currentUser?.uid || '—';
+  const sessionAge = Math.round((Date.now() - Logger.sessionStart) / 1000);
+  const localStorageBytes = (() => { try { return new Blob([localStorage.getItem('eyawriter-projects-v5') || '']).size; } catch { return 0; } })();
+  const diagnostics = {
+    appVersion: APP_VERSION,
+    sessionId: SESSION_ID,
+    userId: uid !== '—' ? uid.slice(0, 8) + '…' : '—',
+    sessionAge: `${Math.floor(sessionAge / 60)}m ${sessionAge % 60}s`,
+    online: navigator.onLine ? 'Yes' : 'No',
+    localStorageKB: Math.round(localStorageBytes / 1024) + ' KB',
+    userAgent: navigator.userAgent.slice(0, 120),
+    platform: navigator.platform || '—',
+    projects: (state.projects || []).length,
+    timestamp: new Date().toISOString()
+  };
+
+  panel.innerHTML = Object.entries(diagnostics).map(([k, v]) =>
+    `<div class="diagnostics-row"><span class="diagnostics-key">${k}</span><span class="diagnostics-val">${String(v)}</span></div>`
+  ).join('');
+  panel.dataset.diagnostics = JSON.stringify(diagnostics, null, 2);
+
+  // Load recent errors from Firestore
+  if (errList && auth.currentUser) {
+    errList.innerHTML = '<p class="settings-hint">Loading…</p>';
+    Logger.getRecentErrors(5).then(errors => {
+      if (!errors.length) {
+        errList.innerHTML = '<p class="settings-hint">No errors logged.</p>';
+        return;
+      }
+      errList.innerHTML = errors.map(e =>
+        `<div class="diagnostics-error-item">
+          <span class="diagnostics-error-context">${e.context || '?'}</span>
+          <span class="diagnostics-error-msg">${(e.message || '').slice(0, 120)}</span>
+          <span class="diagnostics-error-ts">${e.timestamp ? new Date(e.timestamp).toLocaleString() : ''}</span>
+        </div>`
+      ).join('');
+    });
+  } else if (errList) {
+    errList.innerHTML = '<p class="settings-hint">Sign in to view error log.</p>';
+  }
 }
 
 function _populateGeneral() {
@@ -242,6 +292,88 @@ function _bindLegal() {
   });
   document.getElementById('settingsAiDisclosureBtn')?.addEventListener('click', () => {
     document.getElementById('aiDisclosureDialog')?.showModal();
+  });
+}
+
+function _bindSupport() {
+  // Populate diagnostics when the support tab is opened
+  _settingsView.querySelectorAll('[data-settings-tab]').forEach(tab => {
+    if (tab.dataset.settingsTab === 'support') {
+      tab.addEventListener('click', () => _populateSupport());
+    }
+  });
+
+  document.getElementById('settingsCopyDiagnostics')?.addEventListener('click', () => {
+    const panel = document.getElementById('settingsDiagnosticsPanel');
+    const text = panel?.dataset.diagnostics || JSON.stringify({ error: 'No diagnostics available' });
+    navigator.clipboard?.writeText(text).then(() => {
+      showToast('Diagnostics copied to clipboard');
+    }).catch(() => {
+      showToast('Could not copy — try manually', 'warning');
+    });
+  });
+
+  document.getElementById('settingsClearErrorLog')?.addEventListener('click', async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { showToast('Sign in first', 'warning'); return; }
+    try {
+      const snap = await getDocs(collection(db, 'users', uid, 'errorLog'));
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      showToast('Error log cleared');
+      _populateSupport();
+    } catch {
+      showToast('Could not clear error log', 'error');
+    }
+  });
+
+  document.getElementById('settingsFeedbackBtn')?.addEventListener('click', async () => {
+    const container = document.createElement('div');
+    container.innerHTML = `
+      <div style="display:grid;gap:10px;">
+        <select id="feedbackType" class="comment-filter-select">
+          <option value="bug">Bug report</option>
+          <option value="feature">Feature request</option>
+          <option value="question">Question</option>
+          <option value="other">Other</option>
+        </select>
+        <input id="feedbackSubject" class="modal-input" type="text" placeholder="Subject (optional)" maxlength="120">
+        <textarea id="feedbackBody" class="collab-textarea" placeholder="Describe the issue or idea…" rows="5" maxlength="2000"></textarea>
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;cursor:pointer;">
+          <input type="checkbox" id="feedbackAttachDiag" checked>
+          <span>Attach diagnostics (helps us diagnose issues)</span>
+        </label>
+      </div>
+    `;
+    const confirmed = await showModal({ title: 'Send Feedback', message: container, confirmLabel: 'Send', showCancel: true });
+    if (!confirmed) return;
+
+    const type = container.querySelector('#feedbackType')?.value || 'other';
+    const subject = container.querySelector('#feedbackSubject')?.value?.trim() || '';
+    const body = container.querySelector('#feedbackBody')?.value?.trim() || '';
+    if (!body) { showToast('Please describe your feedback', 'warning'); return; }
+
+    const attachDiag = container.querySelector('#feedbackAttachDiag')?.checked;
+    const uid = auth.currentUser?.uid;
+    const panel = document.getElementById('settingsDiagnosticsPanel');
+
+    const entry = {
+      type,
+      subject,
+      body,
+      timestamp: new Date().toISOString(),
+      appVersion: APP_VERSION,
+      sessionId: SESSION_ID,
+      ...(attachDiag && panel?.dataset.diagnostics ? { diagnostics: JSON.parse(panel.dataset.diagnostics) } : {})
+    };
+
+    try {
+      if (uid) {
+        await addDoc(collection(db, 'users', uid, 'feedback'), entry);
+      }
+      showToast('Feedback sent — thank you!');
+    } catch {
+      showToast('Could not send feedback right now', 'error');
+    }
   });
 }
 

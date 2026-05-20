@@ -264,6 +264,7 @@
           <button class="settings-tab" data-settings-tab="billing">Billing</button>
           <button class="settings-tab" data-settings-tab="usage">Usage</button>
           <button class="settings-tab" data-settings-tab="legal">Legal</button>
+          <button class="settings-tab" data-settings-tab="support">Support</button>
         </nav>
         <main class="settings-content">
 
@@ -479,6 +480,37 @@
                 </button>
               </div>
               <p class="settings-hint" style="margin-top:24px;">EyaWriter version 1.0.0 — Last updated May 2026</p>
+            </div>
+          </section>
+
+          <!-- Support -->
+          <section class="settings-section" data-settings-section="support">
+            <div class="settings-section-inner">
+              <h2>Support &amp; Diagnostics</h2>
+              <div class="settings-group">
+                <label class="settings-label">Send Feedback</label>
+                <p class="settings-hint">Report a bug, suggest a feature, or ask a question.</p>
+                <div class="settings-actions">
+                  <button id="settingsFeedbackBtn" class="primary-button btn-sm">Send Feedback</button>
+                </div>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label">Diagnostics</label>
+                <p class="settings-hint">Session and environment info. Copy to share with support.</p>
+                <div id="settingsDiagnosticsPanel" class="diagnostics-panel">
+                  <p class="settings-hint">Loading diagnostics…</p>
+                </div>
+                <div class="settings-actions" style="margin-top:10px;">
+                  <button id="settingsCopyDiagnostics" class="ghost-button btn-sm">Copy Diagnostics</button>
+                  <button id="settingsClearErrorLog" class="ghost-button btn-sm">Clear Error Log</button>
+                </div>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label">Recent Errors</label>
+                <div id="settingsRecentErrors" class="diagnostics-error-list">
+                  <p class="settings-hint">No errors logged this session.</p>
+                </div>
+              </div>
             </div>
           </section>
 

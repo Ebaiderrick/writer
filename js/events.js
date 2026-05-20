@@ -1,4 +1,6 @@
 import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
+import { Telemetry } from './telemetry.js';
+import { Logger } from './logger.js';
 import { showToast } from './toast.js';
 import { refs } from './dom.js';
 import { ContextMenu } from './contextMenu.js';
@@ -572,6 +574,7 @@ function addWorkspaceTaskFromDashboard() {
     message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the workspace"}.`}`,
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
+  Telemetry.track('task_created', { assigneeType: nextTask.assigneeType, templateKey: nextTask.templateKey });
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
   renderWorkspaceView();
@@ -682,6 +685,7 @@ function confirmCompleteTask(taskId) {
     message: `${task.title} was confirmed done by ${currentLabel} (requested by ${requesterLabel}).`,
     actor: currentLabel
   });
+  Telemetry.track('task_completed', { taskId, assigneeType: task.assigneeType });
   renderWorkspaceView();
 }
 
@@ -3231,14 +3235,19 @@ async function exportWord() {
     try {
       const blob = await buildWordDocxBlob(project);
       downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
+      Telemetry.track('export_docx', { projectId: project.id });
       showToast('Script exported as Word document', 'success');
     } catch (error) {
-      console.error("DOCX export failed", error);
+      Logger.capture('exportWord', error);
       showToast('Word export failed — try again once the DOCX engine loads', 'error', 5000);
     }
 }
 
-function exportPdf() { printWithHiddenFrame(); }
+function exportPdf() {
+  const p = syncProjectFromInputs() || getCurrentProject();
+  if (p) Telemetry.track('export_pdf', { projectId: p.id });
+  printWithHiddenFrame();
+}
 
 function openPreviewWindow(autoPrint) {
   const project = syncProjectFromInputs() || getCurrentProject();

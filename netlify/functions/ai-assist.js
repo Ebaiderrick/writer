@@ -9,35 +9,48 @@ const MAX_INSTRUCTION = 500;
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-function badRequest(msg) {
-  return { statusCode: 400, headers: JSON_HEADERS, body: JSON.stringify({ error: msg }) };
+function newRequestId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function jsonHeaders(requestId) {
+  return { ...JSON_HEADERS, "X-Request-Id": requestId };
+}
+
+function badRequest(msg, requestId = "") {
+  return { statusCode: 400, headers: jsonHeaders(requestId), body: JSON.stringify({ error: msg }) };
 }
 
 export const handler = async (event) => {
+  const requestId = newRequestId();
+
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers: JSON_HEADERS, body: JSON.stringify({ error: "Method Not Allowed" }) };
+    return { statusCode: 405, headers: jsonHeaders(requestId), body: JSON.stringify({ error: "Method Not Allowed" }) };
   }
 
   let body;
   try {
     body = JSON.parse(event.body);
   } catch {
-    return badRequest("Invalid JSON");
+    return badRequest("Invalid JSON", requestId);
   }
 
   const { type, action, current, context: screenplayContext, instruction } = body;
 
-  if (current === undefined || current === null) return badRequest("Missing current block");
-  if (type && !ALLOWED_TYPES.has(type)) return badRequest("Invalid block type");
-  if (action && !ALLOWED_ACTIONS.has(action)) return badRequest("Invalid action");
-  if (typeof current === "string" && current.length > MAX_CURRENT) return badRequest("Content too long");
-  if (typeof screenplayContext === "string" && screenplayContext.length > MAX_CONTEXT) return badRequest("Context too long");
-  if (typeof instruction === "string" && instruction.length > MAX_INSTRUCTION) return badRequest("Instruction too long");
+  if (current === undefined || current === null) return badRequest("Missing current block", requestId);
+  if (type && !ALLOWED_TYPES.has(type)) return badRequest("Invalid block type", requestId);
+  if (action && !ALLOWED_ACTIONS.has(action)) return badRequest("Invalid action", requestId);
+  if (typeof current === "string" && current.length > MAX_CURRENT) return badRequest("Content too long", requestId);
+  if (typeof screenplayContext === "string" && screenplayContext.length > MAX_CONTEXT) return badRequest("Context too long", requestId);
+  if (typeof instruction === "string" && instruction.length > MAX_INSTRUCTION) return badRequest("Instruction too long", requestId);
+
+  console.log(`[${requestId}] AI request type=${type || "?"} action=${action || "?"}`);
 
   if (!process.env.OPENAI_API_KEY) {
     return {
       statusCode: 200,
-      headers: JSON_HEADERS,
+      headers: jsonHeaders(requestId),
       body: JSON.stringify({
         output: `AI is working (test mode) - You wanted to ${action || "assist with"} this ${type || "block"}.`
       }),
@@ -92,9 +105,10 @@ YOUR OUTPUT:`;
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      console.error(`[${requestId}] Upstream API error status=${response.status}`);
       return {
         statusCode: response.status,
-        headers: JSON_HEADERS,
+        headers: jsonHeaders(requestId),
         body: JSON.stringify({
           error: extractApiError(data) || `AI request failed with status ${response.status}`
         }),
@@ -105,15 +119,16 @@ YOUR OUTPUT:`;
     output = cleanAiResponse(output, current);
 
     if (!output) {
-      return { statusCode: 500, headers: JSON_HEADERS, body: JSON.stringify({ error: "AI assistant returned no text." }) };
+      return { statusCode: 500, headers: jsonHeaders(requestId), body: JSON.stringify({ error: "AI assistant returned no text." }) };
     }
 
-    return { statusCode: 200, headers: JSON_HEADERS, body: JSON.stringify({ output }) };
+    console.log(`[${requestId}] AI request completed successfully`);
+    return { statusCode: 200, headers: jsonHeaders(requestId), body: JSON.stringify({ output }) };
   } catch (error) {
-    console.error("AI function error:", error);
+    console.error(`[${requestId}] AI function error:`, error.message || error);
     return {
       statusCode: 500,
-      headers: JSON_HEADERS,
+      headers: jsonHeaders(requestId),
       body: JSON.stringify({ error: "AI request failed. Please try again." }),
     };
   }

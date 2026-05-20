@@ -6530,6 +6530,65 @@ html[data-theme="white"] .user-trigger {
   color: var(--ink-muted);
 }
 
+/* ── Support / Diagnostics ── */
+.diagnostics-panel {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+  font-size: 0.76rem;
+}
+
+.diagnostics-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  line-height: 1.5;
+}
+
+.diagnostics-key {
+  color: var(--ink-muted);
+  min-width: 130px;
+  flex-shrink: 0;
+}
+
+.diagnostics-val {
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.diagnostics-error-list {
+  display: grid;
+  gap: 6px;
+}
+
+.diagnostics-error-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, #ef4444 25%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, #ef4444 6%, var(--surface-strong));
+  font-size: 0.76rem;
+}
+
+.diagnostics-error-context {
+  font-weight: 600;
+  color: color-mix(in srgb, #ef4444 70%, var(--ink));
+}
+
+.diagnostics-error-msg {
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.diagnostics-error-ts {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+}
+
 /* ── Legal Dialogs ── */
 .legal-dialog {
   width: min(680px, 90vw);
