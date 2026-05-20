@@ -1,5 +1,6 @@
 import { state } from './config.js';
-import { setTheme, showHome, applyTranslations, applyViewState, applyToolbarState } from './ui.js';
+import { setTheme, showHome, applyViewState, applyToolbarState } from './ui.js';
+import { applyTranslations } from './i18n.js';
 import { showToast } from './toast.js';
 import { persistProjects } from './project.js';
 import { auth } from './firebase.js';
