@@ -1,4 +1,5 @@
 import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
+import { showToast } from './toast.js';
 import { refs } from './dom.js';
 import { ContextMenu } from './contextMenu.js';
 import {
@@ -3143,11 +3144,13 @@ function exportTxt() {
 
   const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
   downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+  showToast('Script exported as TXT', 'success');
 }
 
 function exportJson() {
   const project = syncProjectFromInputs() || getCurrentProject();
   downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+  showToast('Script exported as JSON', 'success');
 }
 
 async function exportWord() {
@@ -3157,9 +3160,10 @@ async function exportWord() {
     try {
       const blob = await buildWordDocxBlob(project);
       downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
+      showToast('Script exported as Word document', 'success');
     } catch (error) {
       console.error("DOCX export failed", error);
-      customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
+      showToast('Word export failed — try again once the DOCX engine loads', 'error', 5000);
     }
 }
 
@@ -3262,6 +3266,7 @@ function importFile(event) {
         nextProject = sanitizeProject(JSON.parse(text));
       } catch (error) {
         console.error("Invalid JSON import", error);
+        showToast('Could not import file — invalid JSON format', 'error');
         return;
       }
     } else {
@@ -3277,6 +3282,8 @@ function importFile(event) {
     upsertProject(nextProject);
     openProject(nextProject.id);
     persistProjects(true);
+    const lineCount = nextProject.lines.filter(l => l.text.trim()).length;
+    showToast(`Imported "${nextProject.title}" — ${lineCount} line${lineCount !== 1 ? 's' : ''}`, 'success');
   };
 
   reader.readAsText(file);

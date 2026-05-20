@@ -1,5 +1,5 @@
 import { state } from './config.js';
-import { loadProjects } from './project.js';
+import { loadProjects, persistProjects } from './project.js';
 import { bindEvents, renderStudio, applySaveModeButtons } from './events.js';
 import { showAuth, showHome, renderHome, applyToolbarState, applyTheme, applyViewState } from './ui.js';
 import { initBackground } from './background.js';
@@ -10,9 +10,26 @@ import { applyTranslations } from './i18n.js';
 import { restoreLocalSaveFile, startLocalSaveTimer } from './localSave.js';
 import { Settings } from './settings.js';
 import { Onboarding } from './onboarding.js';
+import { Recovery } from './recovery.js';
+import { showToast } from './toast.js';
 
 function boot() {
   loadProjects();
+
+  Recovery.init({
+    onOnline() {
+      showToast('Back online — syncing changes', 'info', 3000);
+      if (Recovery.hasOfflineSyncPending()) {
+        persistProjects(false, { syncInputs: false });
+      }
+    },
+    onOffline() {
+      showToast("You're offline — changes saved locally", 'warning', 4000);
+    }
+  });
+  Recovery.restoreHistory(state.currentProjectId);
+  Recovery.checkAndOffer();
+
   bindEvents();
 
   // Fast-path: show initial view from cached session while Firebase resolves

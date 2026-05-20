@@ -16,6 +16,13 @@
 <body>
   <div id="liquid-bg-container" class="mesh-background"></div>
 
+  <!-- Recovery banner — shown only after an interrupted session -->
+  <div id="recoveryBanner" class="recovery-banner" role="status" aria-live="polite">
+    <span class="recovery-banner-icon">↺</span>
+    <span id="recoveryBannerMsg" class="recovery-banner-msg"></span>
+    <button id="recoveryBannerDismiss" class="recovery-banner-dismiss" aria-label="Dismiss">✕</button>
+  </div>
+
   <div class="app-shell">
     <!-- Auth View -->
     <section id="authView" class="auth-view">

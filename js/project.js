@@ -4,6 +4,7 @@ import { refs } from './dom.js';
 import { t } from './i18n.js';
 import { auth, db } from './firebase.js';
 import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { Recovery } from './recovery.js';
 
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -93,9 +94,11 @@ async function syncCurrentProjectToFirestore() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
     window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
+    Recovery.clearOfflineSyncPending();
 
   } catch (err) {
     console.error('Firestore sync failed', err);
+    Recovery.markOfflineSyncPending();
   }
 }
 
@@ -375,10 +378,18 @@ export function persistProjects(forceSavedBadge = false, { syncInputs = true } =
     leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
     rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
   }));
+  Recovery.writeSnapshot(state.projects);
   if (refs.saveBadge) {
-      refs.saveBadge.textContent = forceSavedBadge ? t("save.savedLocal") : t("save.saved");
+    const offline = !Recovery.isOnline();
+    if (offline) {
+      refs.saveBadge.textContent = t("save.savedLocal");
       refs.saveBadge.classList.remove("saving");
+      refs.saveBadge.classList.add("is-saved", "is-offline");
+    } else {
+      refs.saveBadge.textContent = forceSavedBadge ? t("save.savedLocal") : t("save.saved");
+      refs.saveBadge.classList.remove("saving", "is-offline");
       refs.saveBadge.classList.add("is-saved");
+    }
   }
   queueFirestoreSync();
 }
@@ -422,6 +433,7 @@ export function pushHistory() {
   } else {
     state.historyIndex++;
   }
+  Recovery.persistHistory(state.currentProjectId);
 }
 
 export function undo() {
