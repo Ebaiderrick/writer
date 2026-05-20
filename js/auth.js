@@ -103,9 +103,8 @@ export const Auth = (() => {
     // Handle Google redirect result
     getRedirectResult(auth).catch(err => {
       console.error('Google redirect result error:', err.code, err);
-      if (err.code && err.code !== 'auth/cancelled-popup-request') {
-        customAlert(friendlyError(err));
-      }
+      const msg = friendlyError(err);
+      if (msg) customAlert(msg);
     });
 
     // Tab switching logic
@@ -290,6 +289,9 @@ export const Auth = (() => {
     if (!name) return customAlert('Please enter your name.');
     if (!isValidEmail(email)) return customAlert('Please enter a valid email.');
     if (password.length < 6) return customAlert('Password must be at least 6 characters.');
+    if (!/[A-Z]/.test(password)) return customAlert('Password must contain at least one uppercase letter.');
+    if (!/[a-z]/.test(password)) return customAlert('Password must contain at least one lowercase letter.');
+    if (!/[0-9]/.test(password)) return customAlert('Password must contain at least one number.');
     if (password !== password2) return customAlert('Passwords do not match.');
 
     try {
@@ -345,15 +347,16 @@ export const Auth = (() => {
     } catch (err) {
       console.error('Google sign-in error:', err.code, err);
       if (err.code === 'auth/popup-blocked') {
-        // Popup blocked — fall back to redirect
         try {
           await signInWithRedirect(auth, googleProvider);
         } catch (redirectErr) {
           console.error('Google redirect error:', redirectErr.code, redirectErr);
-          customAlert(friendlyError(redirectErr));
+          const msg = friendlyError(redirectErr);
+          if (msg) customAlert(msg);
         }
-      } else if (err.code !== 'auth/popup-closed-by-user') {
-        customAlert(friendlyError(err));
+      } else {
+        const msg = friendlyError(err);
+        if (msg) customAlert(msg);
       }
     }
   }
@@ -824,15 +827,22 @@ export const Auth = (() => {
     const map = {
       'auth/email-already-in-use': 'An account with this email already exists. Please sign in instead.',
       'auth/invalid-email': 'Please enter a valid email address.',
-      'auth/wrong-password': 'Incorrect password. Please try again.',
-      'auth/user-not-found': 'No account found for this email. Please sign up first.',
+      'auth/wrong-password': 'Incorrect email or password. Please try again.',
+      'auth/user-not-found': 'Incorrect email or password. Please try again.',
       'auth/invalid-credential': 'Incorrect email or password. Please try again.',
       'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
       'auth/weak-password': 'Password must be at least 6 characters.',
       'auth/network-request-failed': 'Network error. Please check your connection.',
-      'auth/popup-blocked': 'Pop-up was blocked. Please allow pop-ups and try again.'
+      'auth/popup-blocked': 'Pop-up was blocked. Please allow pop-ups and try again.',
+      'auth/unauthorized-domain': 'Sign-in is not allowed from this domain. Please contact support.',
+      'auth/operation-not-allowed': 'Google sign-in is not enabled. Please contact support.',
+      'auth/internal-error': 'An authentication error occurred. Please try again.',
+      'auth/cancelled-popup-request': null,
+      'auth/popup-closed-by-user': null
     };
-    return map[err.code] || 'Something went wrong. Please try again.';
+    const msg = map[err.code];
+    if (msg === null) return null;
+    return msg || 'Something went wrong. Please try again.';
   }
 
   function normalizeEmail(email) {
