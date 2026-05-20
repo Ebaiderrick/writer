@@ -41,14 +41,22 @@ function boot() {
   ContextMenu.init();
   Settings.init();
 
-  // Wire up auth-page legal links
-  document.getElementById('authTosLink')?.addEventListener('click', e => {
-    e.preventDefault();
-    document.getElementById('tosDialog')?.showModal();
-  });
-  document.getElementById('authPrivacyLink')?.addEventListener('click', e => {
-    e.preventDefault();
-    document.getElementById('privacyDialog')?.showModal();
+  // Wire all legal links (auth footer, home footer, signup checkbox)
+  function openDialog(id) { document.getElementById(id)?.showModal(); }
+  [
+    ['authTosLink',          'tosDialog'],
+    ['authPrivacyLink',      'privacyDialog'],
+    ['authFooterPrivacy',    'privacyDialog'],
+    ['authFooterTos',        'tosDialog'],
+    ['authFooterAiDisclosure','aiDisclosureDialog'],
+    ['homeFooterPrivacy',    'privacyDialog'],
+    ['homeFooterTos',        'tosDialog'],
+    ['homeFooterAiDisclosure','aiDisclosureDialog'],
+  ].forEach(([btnId, dialogId]) => {
+    document.getElementById(btnId)?.addEventListener('click', e => {
+      e.preventDefault();
+      openDialog(dialogId);
+    });
   });
 
   // Show onboarding for returning/first-time sessions
