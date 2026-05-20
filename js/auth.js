@@ -5,6 +5,7 @@ import {
   signInWithRedirect,
   getRedirectResult,
   sendPasswordResetEmail,
+  sendEmailVerification,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
@@ -25,9 +26,6 @@ import {
 import { initCollaboration, cleanupCollaboration } from './collaborate.js';
 
 const SESSION_KEY = 'eyawriter_session';
-const EMAILJS_SERVICE = 'service_j18y8zo';
-const EMAILJS_TEMPLATE = 'template_6qr97mn';
-const EMAILJS_PUBLIC_KEY = 'VI5qc4g4cH9d0vpvr';
 
 const googleProvider = new GoogleAuthProvider();
 const PROFILE_BIO_PLACEHOLDER = 'About me';
@@ -35,7 +33,6 @@ const USERNAME_CHANGE_MS = 90 * 24 * 60 * 60 * 1000;
 
 export const Auth = (() => {
   let tabBtns, forms, themeBtns, html;
-  let otpOverlay, otpBoxes, otpSubmit, otpResend, otpError, otpDisplay, otpCancel;
   let forgotOverlay, forgotForm, forgotEmailInput, forgotCancel, forgotLink;
   let signupForm, loginForm;
   let signupNameInput, signupEmailInput, signupPassInput, signupPass2Input;
@@ -55,22 +52,11 @@ export const Auth = (() => {
   let isSavingProfile = false;
   let cachedProfileMeta = {};
 
-  let generatedOTP = '';
-  let pendingSignup = null;
-
   function init() {
     tabBtns = document.querySelectorAll('.tab-btn');
     forms = document.querySelectorAll('.auth-form');
     themeBtns = document.querySelectorAll('.theme-btn');
     html = document.documentElement;
-
-    otpOverlay = document.getElementById('otp-modal-overlay');
-    otpBoxes = document.querySelectorAll('.otp-field');
-    otpSubmit = document.getElementById('otp-submit-btn');
-    otpResend = document.getElementById('otp-resend-btn');
-    otpError = document.getElementById('otp-error');
-    otpDisplay = document.getElementById('otp-email-display');
-    otpCancel = document.getElementById('otp-cancel-btn');
 
     forgotOverlay = document.getElementById('forgot-password-overlay');
     forgotForm = document.getElementById('forgot-password-form');
@@ -114,9 +100,6 @@ export const Auth = (() => {
       }
     });
 
-    // Init EmailJS with public key
-    if (window.emailjs) window.emailjs.init(EMAILJS_PUBLIC_KEY);
-
     // Handle Google redirect result
     getRedirectResult(auth).catch(err => {
       console.error('Google redirect result error:', err.code, err);
@@ -157,30 +140,6 @@ export const Auth = (() => {
     document.querySelector(`.theme-btn[data-theme="${initialTheme}"]`)?.classList.add('active');
     const av = document.getElementById('authView');
     if (av) av.setAttribute('data-theme', initialTheme);
-
-    // OTP box focus management
-    otpBoxes.forEach((box, i) => {
-      box.addEventListener('input', () => {
-        box.value = box.value.replace(/\D/g, '').slice(-1);
-        if (box.value && i < otpBoxes.length - 1) otpBoxes[i + 1].focus();
-      });
-      box.addEventListener('keydown', e => {
-        if (e.key === 'Backspace' && !box.value && i > 0) otpBoxes[i - 1].focus();
-      });
-      box.addEventListener('paste', e => {
-        e.preventDefault();
-        const pasted = (e.clipboardData || window.clipboardData)
-          .getData('text').replace(/\D/g, '').slice(0, otpBoxes.length);
-        otpBoxes.forEach((b, idx) => {
-          b.value = pasted[idx] || '';
-        });
-        otpBoxes[Math.min(pasted.length, otpBoxes.length - 1)].focus();
-      });
-    });
-
-    otpSubmit.addEventListener('click', verifyOTP);
-    otpResend.addEventListener('click', resendOTP);
-    otpCancel.addEventListener('click', () => otpOverlay.classList.remove('active'));
 
     forgotLink.addEventListener('click', e => {
       e.preventDefault();
@@ -229,6 +188,11 @@ export const Auth = (() => {
 
     onAuthStateChanged(auth, async firebaseUser => {
       if (firebaseUser) {
+        if (!firebaseUser.emailVerified) {
+          await firebaseSignOut(auth);
+          showToast('Please verify your email before signing in.', 'warning', 5000);
+          return;
+        }
         cacheSession(firebaseUser);
         await ensureUsersByEmail(firebaseUser);
         await syncProjectsOnLogin(firebaseUser.uid);
@@ -237,6 +201,7 @@ export const Auth = (() => {
         renderHome();
         updateTriggerUI(firebaseUser);
         initCollaboration();
+        setTimeout(() => Onboarding.maybeShow(), 800);
       } else {
         cleanupCollaboration();
         const session = getCachedSession();
@@ -327,9 +292,34 @@ export const Auth = (() => {
     if (password.length < 6) return customAlert('Password must be at least 6 characters.');
     if (password !== password2) return customAlert('Passwords do not match.');
 
-    pendingSignup = { name, email, password };
-    await sendOTP(email, name);
-    showOTPOverlay(email);
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      const username = generateRandomUsername(name);
+      const createdAt = new Date().toISOString();
+      await updateProfile(credential.user, { displayName: username });
+      await setDoc(doc(db, 'users', credential.user.uid, 'profile', 'data'), {
+        uid: credential.user.uid,
+        name,
+        username,
+        email,
+        createdAt,
+        usernameCreatedAt: createdAt,
+        usernameUpdatedAt: createdAt
+      });
+      await setDoc(doc(db, 'usersByEmail', email.toLowerCase()), {
+        uid: credential.user.uid,
+        name: username,
+        username
+      });
+      await sendEmailVerification(credential.user);
+      await firebaseSignOut(auth);
+      signupForm.reset();
+      localStorage.removeItem('eyawriter_onboarded_v1');
+      customAlert(`Account created! Check ${email} for a verification link, then sign in.`, 'Verify Your Email');
+    } catch (err) {
+      console.error('Sign-up error:', err.code, err);
+      customAlert(friendlyError(err));
+    }
   }
 
   async function handleSignIn(e) {
@@ -758,97 +748,6 @@ export const Auth = (() => {
     if (homeName) homeName.textContent = formatUsernameForDisplay(name);
   }
 
-  async function sendOTP(email, name) {
-    generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
-    if (window.emailjs) {
-      try {
-        await window.emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
-          to_email: email,
-          to_name: name,
-          otp: generatedOTP
-        });
-      } catch (err) {
-        console.error('EmailJS send failed', err);
-        console.warn('OTP (fallback):', generatedOTP);
-      }
-    } else {
-      console.warn('EmailJS not loaded — OTP:', generatedOTP);
-    }
-  }
-
-  function showOTPOverlay(email) {
-    otpDisplay.textContent = email;
-    otpBoxes.forEach(b => { b.value = ''; });
-    otpError.textContent = '';
-    otpOverlay.classList.add('active');
-    otpBoxes[0].focus();
-  }
-
-  async function verifyOTP() {
-    if (!pendingSignup) {
-      otpError.textContent = 'Session expired. Please try again.';
-      otpOverlay.classList.remove('active');
-      return;
-    }
-
-    const entered = [...otpBoxes].map(b => b.value).join('');
-    if (entered.length < otpBoxes.length) {
-      otpError.textContent = 'Please enter all 6 digits.';
-      return;
-    }
-    if (entered !== generatedOTP) {
-      otpError.textContent = 'Incorrect code. Try again.';
-      otpBoxes.forEach(b => { b.value = ''; });
-      otpBoxes[0].focus();
-      return;
-    }
-
-    const { name, email, password } = pendingSignup;
-    pendingSignup = null;
-    otpOverlay.classList.remove('active');
-    otpError.textContent = '';
-
-    try {
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
-      const username = generateRandomUsername(name);
-      const createdAt = new Date().toISOString();
-      await updateProfile(credential.user, { displayName: username });
-      await setDoc(doc(db, 'users', credential.user.uid, 'profile', 'data'), {
-        uid: credential.user.uid,
-        name,
-        username,
-        email,
-        createdAt,
-        usernameCreatedAt: createdAt,
-        usernameUpdatedAt: createdAt
-      });
-      await setDoc(doc(db, 'usersByEmail', email.toLowerCase()), {
-        uid: credential.user.uid,
-        name: username,
-        username
-      });
-      signupForm.reset();
-      localStorage.removeItem('eyawriter_onboarded_v1');
-      showToast('Account created — welcome to EyaWriter!');
-      setTimeout(() => Onboarding.maybeShow(), 800);
-    } catch (err) {
-      console.error('Sign-up error:', err.code, err);
-      customAlert(friendlyError(err));
-    }
-  }
-
-  async function resendOTP() {
-    if (!pendingSignup) {
-      otpError.textContent = 'Start signup again to request a new code.';
-      return;
-    }
-    await sendOTP(pendingSignup.email, pendingSignup.name);
-    otpBoxes.forEach(b => { b.value = ''; });
-    otpError.textContent = 'New code sent!';
-    otpBoxes[0].focus();
-    setTimeout(() => { otpError.textContent = ''; }, 2500);
-  }
-
   function cacheSession(firebaseUser) {
     localStorage.setItem(SESSION_KEY, JSON.stringify({
       userId: firebaseUser.uid,
@@ -857,7 +756,8 @@ export const Auth = (() => {
       username: firebaseUser.displayName || firebaseUser.email,
       photoURL: firebaseUser.photoURL || '',
       loggedIn: true,
-      loggedInAt: new Date().toISOString()
+      loggedInAt: new Date().toISOString(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
     }));
   }
 
@@ -901,7 +801,12 @@ export const Auth = (() => {
     try {
       const raw = localStorage.getItem(SESSION_KEY);
       const session = raw ? JSON.parse(raw) : null;
-      return session?.loggedIn ? session : null;
+      if (!session?.loggedIn) return null;
+      if (session.expiresAt && Date.now() > session.expiresAt) {
+        localStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      return session;
     } catch {
       return null;
     }

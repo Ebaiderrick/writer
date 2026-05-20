@@ -1,40 +1,43 @@
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "openai/gpt-3.5-turbo";
 const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
 
+const ALLOWED_TYPES = new Set(["scene", "dialogue", "action", "character", "parenthetical", "transition", "shot", "general"]);
+const ALLOWED_ACTIONS = new Set(["Predict", "Expand", "Fix", "Add Conflict", "Cinematic", "Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext", "Continue", "Visualize", "Add Tension", "Describe", "Grammar", "Camera Angle", "Improve Shot", "Add Movement"]);
+const MAX_CURRENT = 2000;
+const MAX_CONTEXT = 5000;
+const MAX_INSTRUCTION = 500;
+
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+function badRequest(msg) {
+  return { statusCode: 400, headers: JSON_HEADERS, body: JSON.stringify({ error: msg }) };
+}
+
 export const handler = async (event) => {
   if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Method Not Allowed" })
-    };
+    return { statusCode: 405, headers: JSON_HEADERS, body: JSON.stringify({ error: "Method Not Allowed" }) };
   }
 
   let body;
   try {
     body = JSON.parse(event.body);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Invalid JSON" })
-    };
+  } catch {
+    return badRequest("Invalid JSON");
   }
 
   const { type, action, current, context: screenplayContext, instruction } = body;
 
-  if (current === undefined || current === null) {
-    return {
-      statusCode: 400,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Missing current block" }),
-    };
-  }
+  if (current === undefined || current === null) return badRequest("Missing current block");
+  if (type && !ALLOWED_TYPES.has(type)) return badRequest("Invalid block type");
+  if (action && !ALLOWED_ACTIONS.has(action)) return badRequest("Invalid action");
+  if (typeof current === "string" && current.length > MAX_CURRENT) return badRequest("Content too long");
+  if (typeof screenplayContext === "string" && screenplayContext.length > MAX_CONTEXT) return badRequest("Context too long");
+  if (typeof instruction === "string" && instruction.length > MAX_INSTRUCTION) return badRequest("Instruction too long");
 
   if (!process.env.OPENAI_API_KEY) {
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify({
         output: `AI is working (test mode) - You wanted to ${action || "assist with"} this ${type || "block"}.`
       }),
@@ -91,7 +94,7 @@ YOUR OUTPUT:`;
     if (!response.ok) {
       return {
         statusCode: response.status,
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({
           error: extractApiError(data) || `AI request failed with status ${response.status}`
         }),
@@ -102,25 +105,16 @@ YOUR OUTPUT:`;
     output = cleanAiResponse(output, current);
 
     if (!output) {
-      return {
-        statusCode: 500,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "AI assistant returned no text." }),
-      };
+      return { statusCode: 500, headers: JSON_HEADERS, body: JSON.stringify({ error: "AI assistant returned no text." }) };
     }
 
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ output }),
-    };
+    return { statusCode: 200, headers: JSON_HEADERS, body: JSON.stringify({ output }) };
   } catch (error) {
+    console.error("AI function error:", error);
     return {
       statusCode: 500,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        error: `AI request failed: ${error.message}`
-      }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ error: "AI request failed. Please try again." }),
     };
   }
 };

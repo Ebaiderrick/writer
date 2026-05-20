@@ -11,19 +11,74 @@ const DEFAULT_PORT = Number(process.env.PORT) || 3001;
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "openai/gpt-4o-mini";
 const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
 
-app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+const ALLOWED_ORIGINS = [
+  "https://eyawriter.com",
+  "https://www.eyawriter.com",
+  "http://localhost:8000",
+  "http://localhost:3000",
+  "http://localhost:3001",
+];
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) cb(null, true);
+    else cb(new Error("Not allowed by CORS"));
+  }
+}));
+app.use(express.json({ limit: "50kb" }));
+
+const ALLOWED_TYPES = new Set(["scene", "dialogue", "action", "character", "parenthetical", "transition", "shot", "general"]);
+const ALLOWED_ACTIONS = new Set(["Predict", "Expand", "Fix", "Add Conflict", "Cinematic", "Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext", "Continue", "Visualize", "Add Tension", "Describe", "Grammar", "Camera Angle", "Improve Shot", "Add Movement"]);
+const MAX_CURRENT = 2000;
+const MAX_CONTEXT = 5000;
+const MAX_INSTRUCTION = 500;
+
+// Simple in-memory rate limiter: 20 requests per minute per IP
+const _rateBuckets = new Map();
+function _checkRate(ip) {
+  const now = Date.now();
+  let bucket = _rateBuckets.get(ip);
+  if (!bucket || now > bucket.resetAt) {
+    bucket = { count: 0, resetAt: now + 60_000 };
+  }
+  bucket.count++;
+  _rateBuckets.set(ip, bucket);
+  return bucket.count <= 20;
+}
+// Prune stale entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, b] of _rateBuckets) { if (now > b.resetAt) _rateBuckets.delete(ip); }
+}, 300_000);
 
 app.get("/", (req, res) => {
   res.send("EyaWriter AI Server Running");
 });
 
 app.post("/api/ai-assist", async (req, res) => {
-  console.log(`[${new Date().toISOString()}] AI Request: ${req.body.action} (${req.body.type})`);
+  const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+  if (!_checkRate(ip)) {
+    return res.status(429).json({ error: "Too many requests. Please wait and try again." });
+  }
+
   const { type, action, current, context, instruction } = req.body;
 
   if (current === undefined || current === null) {
     return res.status(400).json({ error: "Missing current block" });
+  }
+  if (type && !ALLOWED_TYPES.has(type)) {
+    return res.status(400).json({ error: "Invalid block type" });
+  }
+  if (action && !ALLOWED_ACTIONS.has(action)) {
+    return res.status(400).json({ error: "Invalid action" });
+  }
+  if (typeof current === "string" && current.length > MAX_CURRENT) {
+    return res.status(400).json({ error: "Content too long" });
+  }
+  if (typeof context === "string" && context.length > MAX_CONTEXT) {
+    return res.status(400).json({ error: "Context too long" });
+  }
+  if (typeof instruction === "string" && instruction.length > MAX_INSTRUCTION) {
+    return res.status(400).json({ error: "Instruction too long" });
   }
 
   if (!process.env.OPENAI_API_KEY) {
