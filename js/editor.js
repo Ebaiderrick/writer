@@ -72,7 +72,7 @@ function _renderEditorInner() {
       const isCollapsed = project.collapsedSceneIds.includes(line.id);
       collapsedSceneId = isCollapsed ? line.id : "";
       toggle.hidden = false;
-      toggle.innerHTML = isCollapsed ? "&#9654;" : "&#9660;";
+      toggle.textContent = isCollapsed ? "▶" : "▼";
       toggle.title = isCollapsed ? "Expand scene" : "Collapse scene";
       toggle.setAttribute("aria-label", isCollapsed ? "Expand scene" : "Collapse scene");
     } else {

@@ -9,10 +9,10 @@ import { calculateAnalytics } from './analytics.js';
 import { auth } from './firebase.js';
 
 const MENU_GLYPHS = {
-  left: "&#9664;",
-  right: "&#9654;",
-  up: "&#9650;",
-  down: "&#9660;"
+  left: "◀",
+  right: "▶",
+  up: "▲",
+  down: "▼"
 };
 
 function getProjectCollaborationLabel(project) {
@@ -1395,7 +1395,7 @@ export function renderLeftPaneLayout() {
 
     const toggle = section.querySelector("[data-left-pane-section-toggle]");
     if (toggle) {
-      toggle.innerHTML = block.collapsed ? MENU_GLYPHS.right : MENU_GLYPHS.down;
+      toggle.textContent = block.collapsed ? MENU_GLYPHS.right : MENU_GLYPHS.down;
       toggle.setAttribute("aria-expanded", String(!block.collapsed));
       toggle.setAttribute("aria-label", `${block.collapsed ? "Expand" : "Collapse"} ${label}`);
     }
@@ -1487,7 +1487,7 @@ export function applyViewState() {
   document.body.classList.remove("show-ruler");
   document.body.classList.remove("outline-hidden");
   document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
-  refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+  refs.toolStripToggle.textContent = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
   if (refs.quickDisplayBg) refs.quickDisplayBg.checked = Boolean(state.backgroundAnimation);
   if (refs.quickDisplayActiveBlock) refs.quickDisplayActiveBlock.checked = !refs.leftPane?.classList.contains("is-hidden");
   if (refs.quickDisplayPreview) refs.quickDisplayPreview.checked = !refs.rightPane?.classList.contains("is-hidden");
@@ -1514,7 +1514,7 @@ export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
   document.body.classList.toggle("spelling-mode-active", state.grammarCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
-  refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+  refs.toolStripToggle.textContent = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
   if (refs.bgAnimationToggle) {
     refs.bgAnimationToggle.checked = state.backgroundAnimation;
   }
@@ -3444,15 +3444,15 @@ export function revealMetricsPanel() {
     // This needs togglePane from events.js, but ui.js shouldn't depend on events.js
     // We can just manipulate the classes directly here or emit an event.
     refs.leftPane.classList.remove("is-hidden");
-    if (refs.leftRailToggle) refs.leftRailToggle.innerHTML = MENU_GLYPHS.left;
+    if (refs.leftRailToggle) refs.leftRailToggle.textContent = MENU_GLYPHS.left;
     refs.studioLayout.classList.remove("left-pane-hidden");
     if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
   }
   if (refs.leftPaneBody.classList.contains("is-collapsed")) {
       refs.leftPaneBody.classList.remove("is-collapsed");
-      refs.leftPaneSectionToggle.innerHTML = MENU_GLYPHS.up;
+      refs.leftPaneSectionToggle.textContent = MENU_GLYPHS.up;
   }
-  refs.leftPaneSectionToggle.innerHTML = refs.leftPaneBody.classList.contains("is-collapsed") ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+  refs.leftPaneSectionToggle.textContent = refs.leftPaneBody.classList.contains("is-collapsed") ? MENU_GLYPHS.down : MENU_GLYPHS.up;
   document.querySelector('[data-left-pane-block="metrics"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 

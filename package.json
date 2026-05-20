@@ -3,7 +3,20 @@
   "type": "module",
   "version": "1.0.0",
   "description": "Screenplay editor with AI assistance",
+  "scripts": {
+    "start": "concurrently --names \"server,app\" --prefix-colors \"cyan,green\" \"npm run server\" \"npm run app\"",
+    "dev": "concurrently --names \"server,app\" --prefix-colors \"cyan,green\" \"npm run server:dev\" \"npm run app\"",
+    "app": "http-server . -p 8000 --silent -c-1",
+    "server": "cd server && node index.js",
+    "server:dev": "cd server && node --watch index.js",
+    "server:install": "cd server && npm install",
+    "setup": "npm install && npm run server:install",
+    "test": "npx playwright test",
+    "test:ui": "npx playwright test --ui"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.59.1"
+    "@playwright/test": "^1.59.1",
+    "concurrently": "^9.2.1",
+    "http-server": "^14.1.1"
   }
 }

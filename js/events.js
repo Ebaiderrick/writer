@@ -1316,16 +1316,16 @@ export function bindEvents() {
   // Layout Toggles
   refs.leftRailToggle?.addEventListener("click", () => {
     togglePane("left");
-    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "▶" : "◀");
   });
   refs.rightRailToggle?.addEventListener("click", () => {
     togglePane("right");
-    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "◀" : "▶");
   });
   refs.toolStripToggle.addEventListener("click", () => {
         state.toolStripCollapsed = !state.toolStripCollapsed;
         applyToolbarState();
-        setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "&#9660;" : "&#9650;");
+        setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "▼" : "▲");
         persistProjects(false);
     });
 
@@ -1363,11 +1363,11 @@ export function bindEvents() {
 
   refs.leftPaneSectionToggle.addEventListener("click", () => {
     togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle);
-    setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+    setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
   });
   refs.rightPaneSectionToggle.addEventListener("click", () => {
     togglePaneSection(refs.rightPaneBody, refs.rightPaneSectionToggle);
-    setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+    setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
   });
 
   refs.leftPaneBody.addEventListener("click", (event) => {
@@ -1823,13 +1823,13 @@ export function renderStudio() {
   applyViewState();
   applyToolbarState();
   if (refs.leftRailToggle) {
-    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "▶" : "◀");
   }
   if (refs.rightRailToggle) {
-    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "◀" : "▶");
   }
-  setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
-  setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
+  setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
   applyTranslations();
   updateSuggestions();
   updateCommentIcons();
@@ -1860,7 +1860,7 @@ function handleMetaInput() {
 
 function togglePaneSection(body, button) {
   body.classList.toggle("is-collapsed");
-  button.innerHTML = body.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;";
+  button.textContent = body.classList.contains("is-collapsed") ? "▼" : "▲";
 }
 
 function readEditableText(element) {
@@ -2364,7 +2364,7 @@ function togglePane(side) {
   const collapsed = pane.classList.toggle("is-hidden");
   if (handle) handle.classList.toggle("is-hidden", collapsed);
   refs.studioLayout.classList.toggle(isLeft ? "left-pane-hidden" : "right-pane-hidden", collapsed);
-  button.innerHTML = collapsed ? (isLeft ? "&#9654;" : "&#9664;") : (isLeft ? "&#9664;" : "&#9654;");
+  button.textContent = collapsed ? (isLeft ? "▶" : "◀") : (isLeft ? "◀" : "▶");
 }
 
 function initResizeHandle(handle, side) {
@@ -2879,9 +2879,9 @@ function getPointContext(block, clientX, clientY) {
   };
 }
 
-function setButtonGlyph(button, entity) {
+function setButtonGlyph(button, glyph) {
   if (button) {
-    button.innerHTML = entity;
+    button.textContent = glyph;
   }
 }
 
