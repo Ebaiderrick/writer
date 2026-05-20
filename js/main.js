@@ -9,6 +9,7 @@ import { Auth } from './auth.js';
 import { applyTranslations } from './i18n.js';
 import { restoreLocalSaveFile, startLocalSaveTimer } from './localSave.js';
 import { Settings } from './settings.js';
+import { Admin } from './admin.js';
 import { Onboarding } from './onboarding.js';
 import { Referral } from './referral.js';
 import { Recovery } from './recovery.js';
@@ -60,6 +61,7 @@ function boot() {
   AI.init();
   ContextMenu.init();
   Settings.init();
+  Admin.init();
 
   // Wire up auth-page legal links
   document.getElementById('authTosLink')?.addEventListener('click', e => {

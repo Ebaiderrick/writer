@@ -2,9 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Personal projects and profile — owner only
+    // Helper — true when the caller has a record in the admins collection
+    function isAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Personal projects and profile — owner or admin
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAdmin();
     }
 
     // Billing and AI usage — owner only, no client write except via server-side admin SDK
@@ -93,6 +100,42 @@ service cloud.firestore {
         resource.data.toEmail == request.auth.token.email;
       allow delete: if request.auth != null &&
         resource.data.fromUid == request.auth.uid;
+    }
+
+    // Admin identity — admins read their own record; no client write ever
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Feature flags — any signed-in user can read; only admins can write
+    match /config/{document} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Incidents — public read (including signed-out); only admins can write
+    match /incidents/{incidentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin aggregate data (flat top-level collections)
+    // signupRecords: owner creates their own record on signup; admins can manage
+    match /adminSignups/{uid} {
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow read, update, delete: if isAdmin();
+    }
+    // feedback: any auth'd user can submit, stamped with their uid; admins can manage
+    match /adminFeedback/{feedbackId} {
+      allow create: if request.auth != null &&
+        request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+    // activeUsers: owner or admin can read/write
+    match /adminActiveUsers/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, update, delete: if isAdmin();
     }
 
     // Deny all other access

@@ -5,9 +5,10 @@ import { showToast } from './toast.js';
 import { persistProjects } from './project.js';
 import { auth, db } from './firebase.js';
 import { sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { collection, addDoc, getDocs, query, orderBy, limit, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { collection, doc, addDoc, getDocs, query, orderBy, limit, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { Logger, SESSION_ID } from './logger.js';
 import { Referral } from './referral.js';
+import { Admin } from './admin.js';
 
 let _prevView = null;
 let _settingsView = null;
@@ -167,6 +168,13 @@ function _populateAccount() {
   } else if (refGroup) {
     refGroup.style.display = 'none';
   }
+
+  // Reveal admin button if user is an admin (async check)
+  Admin.maybeRevealButton().then(() => {
+    const adminGroup = document.getElementById('settingsAdminGroup');
+    const isVisible = !document.querySelector('.open-admin-btn')?.hidden;
+    if (adminGroup) adminGroup.style.display = isVisible ? '' : 'none';
+  });
 }
 
 function _populateUsage() {
@@ -303,6 +311,11 @@ function _bindAccount() {
       })
       .catch(() => showToast('Could not copy — try manually', 'warning'));
   });
+
+  document.getElementById('settingsAdminBtn')?.addEventListener('click', () => {
+    Settings.hide();
+    Admin.show();
+  });
 }
 
 function _bindLegal() {
@@ -389,9 +402,7 @@ function _bindSupport() {
     };
 
     try {
-      if (uid) {
-        await addDoc(collection(db, 'users', uid, 'feedback'), entry);
-      }
+      await addDoc(collection(db, 'adminFeedback'), { ...entry, uid: uid || null });
       showToast('Feedback sent — thank you!');
     } catch {
       showToast('Could not send feedback right now', 'error');

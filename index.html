@@ -436,6 +436,12 @@
                 <h3>Profile</h3>
                 <p>Manage your display name, avatar, and bio from the profile popup (top-right corner).</p>
               </div>
+              <div class="settings-group" id="settingsAdminGroup" style="display:none">
+                <label class="settings-label">Administration</label>
+                <div class="settings-actions">
+                  <button class="ghost-button btn-sm open-admin-btn" id="settingsAdminBtn">Open Admin Dashboard</button>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -563,6 +569,103 @@
                   <p class="settings-hint">No errors logged this session.</p>
                 </div>
               </div>
+            </div>
+          </section>
+
+        </main>
+      </div>
+    </section>
+
+    <!-- Admin View -->
+    <section id="adminView" class="admin-view" hidden>
+      <header class="admin-topbar">
+        <button class="ghost-button admin-back-btn" id="adminBackBtn">← Back</button>
+        <h1 class="admin-topbar-title">Admin Dashboard</h1>
+        <span class="admin-topbar-badge">Internal</span>
+      </header>
+      <div class="admin-body">
+        <nav class="admin-nav">
+          <button class="admin-tab is-active" data-admin-tab="overview">Overview</button>
+          <button class="admin-tab" data-admin-tab="users">Users</button>
+          <button class="admin-tab" data-admin-tab="feedback">Feedback</button>
+          <button class="admin-tab" data-admin-tab="flags">Feature Flags</button>
+          <button class="admin-tab" data-admin-tab="incidents">Incidents</button>
+        </nav>
+        <main class="admin-content">
+
+          <!-- Overview -->
+          <section class="admin-section is-active" data-admin-section="overview">
+            <div class="admin-section-inner">
+              <h2>Overview</h2>
+              <div id="adminOverviewPanel"><p class="admin-loading">Loading…</p></div>
+            </div>
+          </section>
+
+          <!-- Users -->
+          <section class="admin-section" data-admin-section="users">
+            <div class="admin-section-inner">
+              <h2>User Lookup</h2>
+              <div class="admin-search-row">
+                <input type="email" id="adminUserSearch" class="settings-input" placeholder="user@example.com" aria-label="User email">
+                <button id="adminUserSearchBtn" class="ghost-button btn-sm">Look Up</button>
+              </div>
+              <div id="adminUserList"><p class="admin-loading">Enter an email to look up a user.</p></div>
+            </div>
+          </section>
+
+          <!-- Feedback -->
+          <section class="admin-section" data-admin-section="feedback">
+            <div class="admin-section-inner">
+              <h2>Feedback</h2>
+              <div class="admin-filter-row">
+                <label class="settings-label">Filter</label>
+                <select id="adminFeedbackFilter" class="comment-filter-select">
+                  <option value="all">All types</option>
+                  <option value="bug">Bug reports</option>
+                  <option value="feature">Feature requests</option>
+                  <option value="question">Questions</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div id="adminFeedbackList"><p class="admin-loading">Loading…</p></div>
+            </div>
+          </section>
+
+          <!-- Feature Flags -->
+          <section class="admin-section" data-admin-section="flags">
+            <div class="admin-section-inner">
+              <h2>Feature Flags</h2>
+              <p class="settings-hint">Flags are stored in <code>config/featureFlags</code> and cached client-side for 5 minutes.</p>
+              <div id="adminFlagList"></div>
+              <div class="admin-flag-add-row">
+                <input type="text" id="adminFlagNewName" class="settings-input" placeholder="new_flag_name" aria-label="New flag name">
+                <button id="adminFlagAddBtn" class="ghost-button btn-sm">Add Flag</button>
+              </div>
+              <div class="admin-flag-save-row">
+                <button id="adminFlagSave" class="primary-button btn-sm">Save All Flags</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Incidents -->
+          <section class="admin-section" data-admin-section="incidents">
+            <div class="admin-section-inner">
+              <h2>Incidents</h2>
+              <div class="admin-incident-form">
+                <h3>Create Incident</h3>
+                <div class="admin-form-row">
+                  <input type="text" id="adminIncidentTitle" class="settings-input" placeholder="Incident title" maxlength="200" aria-label="Incident title">
+                  <select id="adminIncidentSeverity" class="comment-filter-select" aria-label="Severity">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+                <textarea id="adminIncidentBody" class="collab-textarea" placeholder="Describe the incident…" rows="3" maxlength="1000"></textarea>
+                <button id="adminIncidentCreateBtn" class="ghost-button btn-sm">Create Incident</button>
+              </div>
+              <div id="adminIncidentList"><p class="admin-loading">Loading…</p></div>
             </div>
           </section>
 

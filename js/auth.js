@@ -201,6 +201,11 @@ export const Auth = (() => {
         await ensureUsersByEmail(firebaseUser);
         await trackRetention(firebaseUser);
         Funnel.milestone('first_login');
+        // Update admin active-user record (best-effort)
+        setDoc(doc(db, 'adminActiveUsers', firebaseUser.uid), {
+          uid: firebaseUser.uid,
+          lastActiveAt: new Date().toISOString()
+        }, { merge: true }).catch(() => {});
         await syncProjectsOnLogin(firebaseUser.uid);
         await loadUserProfile(firebaseUser);
         if (refs.authView && !refs.authView.hidden) showHome();
@@ -323,6 +328,13 @@ export const Auth = (() => {
       await enqueueWelcomeEmail(credential.user);
       await Referral.processSignup(credential.user.uid);
       await Funnel.milestone('signed_up', credential.user.uid);
+      // Write admin signup record (idempotent — create only)
+      setDoc(doc(db, 'adminSignups', credential.user.uid), {
+        uid: credential.user.uid,
+        email,
+        createdAt,
+        referredBy: localStorage.getItem('eyawriter_ref') || null
+      }).catch(() => {});
       await sendEmailVerification(credential.user);
       Telemetry.track('signup', { method: 'email' });
       await firebaseSignOut(auth);
