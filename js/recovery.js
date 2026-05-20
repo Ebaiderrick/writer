@@ -32,49 +32,65 @@ export const Recovery = {
   // Called from persistProjects() on every save
   writeSnapshot(projects) {
     try {
-      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
+      const snap = {
         ts: Date.now(),
         count: projects.length,
         titles: projects.slice(0, 5).map(p => p.title || 'Untitled')
-      }));
+      };
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snap));
+      _updateSnapshotDisplay(snap);
     } catch { /* storage full — skip */ }
   },
 
-  // Called from boot() after loadProjects()
+  // Called from boot() after loadProjects() — populates File > File Recovery
   checkAndOffer() {
-    const sessionTs    = parseInt(sessionStorage.getItem(SESSION_TS_KEY) || '0', 10);
-    const cleanExitTs  = parseInt(localStorage.getItem(CLEAN_EXIT_KEY)   || '0', 10);
-
-    // Only notify if this is a session restore (page refresh), not a new open.
-    // sessionStorage persists across F5 but is cleared on tab close.
-    if (!sessionTs) return;
-
-    // If clean exit timestamp is more recent → normal close, no recovery needed
-    if (cleanExitTs >= sessionTs) return;
-
+    const sessionTs   = parseInt(sessionStorage.getItem(SESSION_TS_KEY) || '0', 10);
+    const cleanExitTs = parseInt(localStorage.getItem(CLEAN_EXIT_KEY)   || '0', 10);
     const snapshotRaw = localStorage.getItem(SNAPSHOT_KEY);
+
+    // Always populate snapshot display if data exists
+    if (snapshotRaw) {
+      try {
+        const snap = JSON.parse(snapshotRaw);
+        _updateSnapshotDisplay(snap);
+      } catch { /* corrupt snapshot */ }
+    }
+
+    // Refresh offline indicator
+    this.refreshOfflineStatus();
+
+    // Only surface the interrupted-session alert when:
+    // - sessionStorage key exists (page was refreshed, not a fresh tab open)
+    // - clean-exit timestamp is older than the session start → unclean exit
+    // - snapshot exists and is within 4 hours
+    if (!sessionTs) return;
+    if (cleanExitTs >= sessionTs) return;
     if (!snapshotRaw) return;
 
     try {
       const snap = JSON.parse(snapshotRaw);
-      // Only surface if snapshot is recent (within 4 hours)
       if (!snap.ts || Date.now() - snap.ts > 4 * 60 * 60 * 1000) return;
 
-      const banner = document.getElementById('recoveryBanner');
-      if (!banner) return;
-
       const time = new Date(snap.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const label = document.getElementById('recoveryBannerMsg');
-      if (label) {
-        label.textContent = `Session recovered from ${time} — ${snap.count} project${snap.count !== 1 ? 's' : ''} autosaved.`;
+      const alert = document.getElementById('recoverySessionAlert');
+      if (alert) {
+        alert.textContent = `Session recovered from ${time} — ${snap.count} project${snap.count !== 1 ? 's' : ''} autosaved.`;
+        alert.removeAttribute('hidden');
       }
-      banner.classList.add('is-visible');
-
-      document.getElementById('recoveryBannerDismiss')?.addEventListener('click', () => {
-        banner.classList.remove('is-visible');
-      }, { once: true });
-
+      // Auto-open the File Recovery group so the user sees it
+      document.getElementById('fileRecoveryGroup')?.setAttribute('open', '');
     } catch { /* corrupt snapshot */ }
+  },
+
+  // Updates the offline/online indicator in File > File Recovery
+  refreshOfflineStatus() {
+    const row = document.getElementById('recoveryOfflineRow');
+    if (!row) return;
+    if (!_isOnline && this.hasOfflineSyncPending()) {
+      row.removeAttribute('hidden');
+    } else {
+      row.setAttribute('hidden', '');
+    }
   },
 
   // Persist undo history to sessionStorage for refresh resilience
@@ -105,10 +121,12 @@ export const Recovery = {
   // Called from syncCurrentProjectToFirestore on network failure
   markOfflineSyncPending() {
     localStorage.setItem(OFFLINE_FLAG, Date.now().toString());
+    this.refreshOfflineStatus();
   },
 
   clearOfflineSyncPending() {
     localStorage.removeItem(OFFLINE_FLAG);
+    this.refreshOfflineStatus();
   },
 
   hasOfflineSyncPending: () => !!localStorage.getItem(OFFLINE_FLAG),
@@ -118,14 +136,28 @@ export const Recovery = {
 
 // ── Internal ────────────────────────────────────────────────
 
+function _updateSnapshotDisplay(snap) {
+  if (!snap?.ts) return;
+  const timeEl  = document.getElementById('recoveryLastSave');
+  const countEl = document.getElementById('recoveryProjectCount');
+  if (timeEl) {
+    timeEl.textContent = new Date(snap.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  if (countEl) {
+    countEl.textContent = `${snap.count} project${snap.count !== 1 ? 's' : ''}`;
+  }
+}
+
 function _handleOnline() {
   _isOnline = true;
   _onOnline?.();
+  Recovery.refreshOfflineStatus();
 }
 
 function _handleOffline() {
   _isOnline = false;
   _onOffline?.();
+  Recovery.refreshOfflineStatus();
 }
 
 function _handleStorageConflict(event) {

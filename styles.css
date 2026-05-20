@@ -6911,54 +6911,40 @@ html[data-theme="white"] .user-trigger {
   .settings-topbar { padding: 0 14px; }
 }
 
-/* ── Recovery banner ────────────────────────────────────── */
-.recovery-banner {
-  position: fixed;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%) translateY(-120%);
-  z-index: 9000;
+/* ── File Recovery menu section ─────────────────────────── */
+.recovery-alert {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--control-bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  font-size: 0.78rem;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.recovery-info-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
-  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));
-  border-top: none;
-  border-radius: 0 0 10px 10px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.14);
-  font-size: 0.82rem;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px;
+  font-size: 0.78rem;
+}
+
+.recovery-info-label {
+  color: color-mix(in srgb, var(--ink) 55%, var(--muted));
+}
+
+.recovery-info-value {
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
-  transition: transform .3s cubic-bezier(.22,1,.36,1);
-  white-space: nowrap;
 }
 
-.recovery-banner.is-visible {
-  transform: translateX(-50%) translateY(0);
+.recovery-offline-row {
+  justify-content: flex-start;
+  gap: 6px;
+  color: #7a5c00;
 }
-
-.recovery-banner-icon {
-  font-size: 1rem;
-  opacity: .7;
-}
-
-.recovery-banner-msg {
-  flex: 1;
-}
-
-.recovery-banner-dismiss {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--ink);
-  opacity: .5;
-  font-size: 0.8rem;
-  padding: 0 2px;
-  line-height: 1;
-  transition: opacity .15s;
-}
-
-.recovery-banner-dismiss:hover { opacity: 1; }
 
 /* ── Offline save badge ────────────────────────────────── */
 .save-badge.is-offline {

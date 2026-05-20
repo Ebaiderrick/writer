@@ -16,13 +16,6 @@
 <body>
   <div id="liquid-bg-container" class="mesh-background"></div>
 
-  <!-- Recovery banner — shown only after an interrupted session -->
-  <div id="recoveryBanner" class="recovery-banner" role="status" aria-live="polite">
-    <span class="recovery-banner-icon">↺</span>
-    <span id="recoveryBannerMsg" class="recovery-banner-msg"></span>
-    <button id="recoveryBannerDismiss" class="recovery-banner-dismiss" aria-label="Dismiss">✕</button>
-  </div>
-
   <div class="app-shell">
     <!-- Auth View -->
     <section id="authView" class="auth-view">
@@ -589,6 +582,23 @@
                   <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
                 </div>
               </details>
+            <details class="menu-group" id="fileRecoveryGroup">
+              <summary class="menu-group-summary">File Recovery</summary>
+              <div class="menu-group-body">
+                <div id="recoverySessionAlert" class="recovery-alert" hidden></div>
+                <div class="recovery-info-row">
+                  <span class="recovery-info-label">Last autosave</span>
+                  <span id="recoveryLastSave" class="recovery-info-value">—</span>
+                </div>
+                <div class="recovery-info-row">
+                  <span class="recovery-info-label">Projects saved</span>
+                  <span id="recoveryProjectCount" class="recovery-info-value">—</span>
+                </div>
+                <div id="recoveryOfflineRow" class="recovery-info-row recovery-offline-row" hidden>
+                  <span>Sync pending — offline</span>
+                </div>
+              </div>
+            </details>
             <details class="menu-group">
               <summary class="menu-group-summary">Output</summary>
               <div class="menu-group-body">
