@@ -1,7 +1,7 @@
 import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
-import { getCurrentProject, persistProjects, serializeScript, restoreProject, permanentlyDeleteProject } from './project.js';
+import { getCurrentProject, persistProjects, serializeScript, restoreProject, permanentlyDeleteProject, togglePinProject } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
@@ -101,6 +101,80 @@ function buildProjectGroups(projects) {
 
 function buildProjectLibraryGroups(projects) {
   return buildProjectGroups(projects);
+}
+
+function renderWorkspaceSwitcher(allProjects) {
+  const container = document.getElementById('homeWorkspaceSwitcher');
+  if (!container) return;
+
+  const sharedProjects = allProjects.filter(p => !p.isArchived && !p.isWorkspaceRoot && p.isShared);
+  const groups = buildProjectGroups(sharedProjects);
+
+  if (!groups.length) {
+    container.hidden = true;
+    return;
+  }
+
+  container.hidden = false;
+  const currentFilter = state.homeWorkspaceFilter || null;
+
+  container.innerHTML = `
+    <div class="workspace-switcher-inner">
+      <span class="workspace-switcher-label">Workspaces</span>
+      <div class="workspace-switcher-chips" role="tablist" aria-label="Filter by workspace">
+        <button class="workspace-switcher-chip ${!currentFilter ? 'is-active' : ''}" data-workspace-chip="all" role="tab" aria-selected="${!currentFilter}">All</button>
+        ${groups.map(g => `
+          <button class="workspace-switcher-chip ${currentFilter === g.workspaceId ? 'is-active' : ''}"
+            data-workspace-chip="${escapeHtml(g.workspaceId)}" role="tab" aria-selected="${currentFilter === g.workspaceId}">
+            <span class="ws-chip-name">${escapeHtml(g.workspaceName)}</span>
+            <span class="ws-chip-count">${g.projects.length}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderPinnedProjects(allProjects, openProjectFn) {
+  const section = document.getElementById('pinnedProjectSection');
+  const grid = document.getElementById('pinnedProjectGrid');
+  if (!section || !grid) return;
+
+  const pinned = allProjects
+    .filter(p => p.isPinned && !p.isArchived && !p.isWorkspaceRoot)
+    .sort((a, b) => new Date(b.pinnedAt || 0) - new Date(a.pinnedAt || 0));
+
+  section.hidden = !pinned.length;
+  if (!pinned.length) { grid.innerHTML = ''; return; }
+
+  grid.innerHTML = pinned.map(p => {
+    const wsName = p.workspace?.name || 'Personal';
+    const collabCount = Object.keys(p.collaborators || {}).length;
+    const memberLabel = p.isShared ? ` · ${1 + collabCount} member${collabCount !== 0 ? 's' : ''}` : '';
+    return `
+      <article class="pinned-project-chip" data-project-id="${escapeHtml(p.id)}">
+        <div class="pinned-chip-body">
+          <span class="pinned-chip-title">${escapeHtml(p.title)}</span>
+          <span class="pinned-chip-meta">${escapeHtml(wsName)}${memberLabel}</span>
+        </div>
+        <button class="pinned-chip-unpin" data-project-action="pin" data-project-id="${escapeHtml(p.id)}" title="Unpin" type="button" aria-label="Unpin ${escapeHtml(p.title)}">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </article>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('.pinned-project-chip').forEach(chip => {
+    chip.addEventListener('click', e => {
+      if (e.target.closest('.pinned-chip-unpin')) {
+        const projectId = e.target.closest('.pinned-chip-unpin').dataset.projectId;
+        togglePinProject(projectId);
+        renderHome();
+        return;
+      }
+      if (typeof openProjectFn === 'function') openProjectFn(chip.dataset.projectId);
+    });
+  });
 }
 
 function getTaskStatusCountLabel(tasks) {
@@ -854,6 +928,9 @@ export function renderHome() {
     if (state.homeProjectFormat !== "all") {
       projects = projects.filter((project) => getProjectFormatValue(project) === state.homeProjectFormat);
     }
+    if (state.homeWorkspaceFilter) {
+      projects = projects.filter((project) => (project.workspace?.id || project.id) === state.homeWorkspaceFilter);
+    }
   }
 
   if (state.currentWorkspaceId && workspaceLead) {
@@ -1008,10 +1085,9 @@ export function renderHome() {
         </select>
       </div>
       `;
-    if (refs.homeWorkspaceDashboard) {
-      refs.homeWorkspaceDashboard.hidden = false;
-      refs.homeWorkspaceDashboard.innerHTML = "";
-    }
+    const homeWorkspaceDashboard = document.getElementById('homeWorkspaceDashboard');
+    if (homeWorkspaceDashboard) homeWorkspaceDashboard.innerHTML = '';
+    renderWorkspaceSwitcher(state.projects);
   }
 
   if (!state.currentWorkspaceId) {
@@ -1032,13 +1108,47 @@ export function renderHome() {
       node.querySelector(".project-card-updated").textContent = t("project.modified", { value: formatDateTime(project.updatedAt) });
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
+
+      // Pin button in card actions
+      const actionsEl = node.querySelector('.project-card-actions');
+      if (actionsEl) {
+        const pinBtn = document.createElement('button');
+        pinBtn.className = 'project-quick-action project-pin-btn';
+        pinBtn.type = 'button';
+        pinBtn.dataset.projectAction = 'pin';
+        pinBtn.dataset.projectId = project.id;
+        pinBtn.textContent = project.isPinned ? 'Unpin' : 'Pin';
+        actionsEl.insertBefore(pinBtn, actionsEl.querySelector('.project-delete'));
+      }
+
+      // Collaborator strip for shared projects
+      if (project.isShared && (project.ownerName || project.ownerEmail || Object.keys(project.collaborators || {}).length)) {
+        const members = [
+          { name: project.ownerName || project.ownerEmail || 'Owner', photoURL: project.ownerPhotoURL || '' },
+          ...Object.values(project.collaborators || {}).slice(0, 3)
+        ];
+        const totalCount = 1 + Object.keys(project.collaborators || {}).length;
+        const strip = document.createElement('div');
+        strip.className = 'project-card-collab-strip';
+        strip.innerHTML = members.map(m => {
+          const initials = (m.name || 'U').split(/\s+/).map(p => p[0]).join('').slice(0, 2).toUpperCase() || 'U';
+          return m.photoURL
+            ? `<img class="project-card-member-avatar" src="${escapeHtml(m.photoURL)}" alt="${escapeHtml(m.name || 'Member')}" title="${escapeHtml(m.name || 'Member')}">`
+            : `<span class="project-card-member-avatar" title="${escapeHtml(m.name || 'Member')}">${escapeHtml(initials)}</span>`;
+        }).join('') + `<span class="project-card-collab-count">${totalCount} member${totalCount !== 1 ? 's' : ''}</span>`;
+        node.appendChild(strip);
+      }
+
       return node;
     };
 
+    // Render pinned section (uses full unfiltered list so pinned always appears)
+    renderPinnedProjects(state.projects);
+
     if (!projects.length) {
-      const allProjects = (state.projects || []).filter(p => !p.isWorkspaceRoot);
-      const isFiltered = state.homeProjectFilter !== 'all' || state.homeProjectFormat !== 'all';
-      if (!allProjects.length) {
+      const allActive = (state.projects || []).filter(p => !p.isWorkspaceRoot && !p.isArchived);
+      const isFiltered = state.homeProjectFilter !== 'all' || state.homeProjectFormat !== 'all' || !!state.homeWorkspaceFilter;
+      if (!allActive.length) {
         refs.projectGrid.innerHTML = `
           <div class="project-empty-state">
             <div class="project-empty-icon">🎬</div>
@@ -1048,10 +1158,29 @@ export function renderHome() {
               <button class="primary-button btn-sm" data-menu-action="new-project">New Project</button>
               <button class="ghost-button btn-sm" id="emptyStateDemoBtn">Explore Demo</button>
             </div>
+            <div class="empty-collab-prompt">
+              <p class="empty-collab-copy">Collaborating with a team? Accept an invitation from a teammate to see shared projects here.</p>
+            </div>
           </div>
         `;
         document.getElementById('emptyStateDemoBtn')?.addEventListener('click', () => {
           document.getElementById('demo-login-btn')?.click();
+        });
+      } else if (state.homeProjectFilter === 'shared' && !state.homeWorkspaceFilter) {
+        refs.projectGrid.innerHTML = `
+          <div class="project-empty-state">
+            <div class="project-empty-icon">🤝</div>
+            <h3>No shared projects yet</h3>
+            <p>Shared projects appear here once a teammate invites you to collaborate, or once you invite someone to your project.</p>
+            <div class="empty-actions">
+              <button class="primary-button btn-sm" data-menu-trigger="homeCollabMenu">Invite a Collaborator</button>
+              <button class="ghost-button btn-sm" data-home-project-filter="all" id="emptyViewAll">View All Projects</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('emptyViewAll')?.addEventListener('click', () => {
+          state.homeProjectFilter = 'all';
+          renderHome();
         });
       } else {
         refs.projectGrid.innerHTML = `
@@ -1068,6 +1197,7 @@ export function renderHome() {
         document.getElementById('emptyClearFilters')?.addEventListener('click', () => {
           state.homeProjectFilter = 'all';
           state.homeProjectFormat = 'all';
+          state.homeWorkspaceFilter = null;
           renderHome();
         });
       }
@@ -1076,6 +1206,7 @@ export function renderHome() {
     }
 
     renderRecentProjectMenus();
+    renderArchivedSection();
     applyTranslations();
     return;
   }

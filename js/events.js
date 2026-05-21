@@ -11,7 +11,7 @@ import {
   getWorkspaceProjects, getWorkspaceRootProject, updateWorkspaceAcrossProjects,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
-  deleteProjectFromCloud, archiveProject
+  deleteProjectFromCloud, archiveProject, togglePinProject
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
@@ -1704,11 +1704,21 @@ export function bindEvents() {
           renderHome();
           return;
       }
+      // Workspace switcher chips
+      const workspaceChip = e.target.closest('[data-workspace-chip]');
+      if (workspaceChip) {
+          const chipId = workspaceChip.dataset.workspaceChip;
+          state.homeWorkspaceFilter = chipId === 'all' ? null : chipId;
+          renderHome();
+          return;
+      }
+
       const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
       if (workspaceTrigger) {
           openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
           return;
       }
+
       const card = e.target.closest(".project-card");
       if (!card) return;
       const projectId = card.dataset.projectId;
@@ -1719,6 +1729,10 @@ export function bindEvents() {
           renameProjectById(projectId);
       } else if (e.target.closest('[data-project-action="duplicate"]')) {
           duplicateProjectById(projectId);
+      } else if (e.target.closest('[data-project-action="pin"]')) {
+          const pinBtn = e.target.closest('[data-project-action="pin"]');
+          togglePinProject(pinBtn.dataset.projectId || projectId);
+          renderHome();
       } else {
           openProject(projectId);
       }

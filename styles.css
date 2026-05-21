@@ -538,6 +538,227 @@ html[data-theme="rose"] .mesh-background {
   margin: 0 auto;
 }
 
+/* ===== WORKSPACE SWITCHER ===== */
+.home-workspace-switcher {
+  max-width: 1200px;
+  margin: 0 auto 0;
+  padding: 12px 0 4px;
+}
+
+.workspace-switcher-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workspace-switcher-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.workspace-switcher-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+.workspace-switcher-chips::-webkit-scrollbar { display: none; }
+
+.workspace-switcher-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.workspace-switcher-chip:hover {
+  border-color: var(--accent, #6366f1);
+  color: var(--ink);
+}
+.workspace-switcher-chip.is-active {
+  border-color: var(--accent, #6366f1);
+  background: color-mix(in srgb, var(--accent, #6366f1) 12%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ws-chip-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.ws-chip-count {
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--line);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.workspace-switcher-chip.is-active .ws-chip-count {
+  background: color-mix(in srgb, var(--accent, #6366f1) 25%, transparent);
+  color: var(--accent, #6366f1);
+}
+
+/* ===== PINNED PROJECTS ===== */
+.pinned-projects-section {
+  margin-bottom: 20px;
+}
+
+.pinned-projects-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.pinned-projects-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pinned-project-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+.pinned-project-row::-webkit-scrollbar { display: none; }
+
+.pinned-project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  min-width: 160px;
+  max-width: 220px;
+  flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+.pinned-project-chip:hover { border-color: var(--accent, #6366f1); background: var(--surface-strong); }
+
+.pinned-chip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pinned-chip-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pinned-chip-meta {
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pinned-chip-unpin {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.pinned-chip-unpin:hover { background: rgba(197,48,48,0.1); color: #c53030; border-color: rgba(197,48,48,0.2); }
+
+/* ===== PROJECT CARD: PIN BUTTON ===== */
+.project-pin-btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.project-card:hover .project-pin-btn,
+.project-card:focus-within .project-pin-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ===== PROJECT CARD: COLLAB STRIP ===== */
+.project-card-collab-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--line);
+  margin-top: auto;
+}
+
+.project-card-member-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  object-fit: cover;
+  font-size: 0.6rem;
+  font-weight: 700;
+  background: var(--accent, #6366f1);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: -6px;
+}
+.project-card-member-avatar:first-child { margin-left: 0; }
+
+.project-card-collab-count {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+/* ===== EMPTY STATE: COLLAB PROMPT ===== */
+.empty-collab-prompt {
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  max-width: 340px;
+  margin-inline: auto;
+}
+
+.empty-collab-copy {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
 .home-projects-head {
   justify-content: space-between;
   align-items: end;

@@ -325,6 +325,14 @@ export async function permanentlyDeleteProject(projectId) {
   return { ok: true };
 }
 
+export function togglePinProject(projectId) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return;
+  project.isPinned = !project.isPinned;
+  project.pinnedAt = project.isPinned ? new Date().toISOString() : null;
+  persistProjects(false);
+}
+
 export function setProjectsFromCloud(cloudProjects) {
   state.projects = cloudProjects.length > 0 ? cloudProjects : [cloneProject(sampleProject, true)];
   state.currentProjectId = state.projects[0].id;
@@ -426,6 +434,8 @@ export function sanitizeProject(project) {
     archivedByName: project.archivedByName || '',
     restoredAt: project.restoredAt || null,
     restoredBy: project.restoredBy || null,
+    isPinned: Boolean(project.isPinned),
+    pinnedAt: project.pinnedAt || null,
     ownerId: project.ownerId || null,
     storyMemory: sanitizeStoryMemory(project.storyMemory),
     activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
