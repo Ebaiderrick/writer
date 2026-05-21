@@ -624,9 +624,11 @@ function syncSharedProjectWatchers() {
   const user = auth.currentUser;
   if (!user) return;
 
+  // Watch ALL shared projects — both owned (catches collaborator edits while not in studio)
+  // and collaborated (catches owner edits and removal).
   const sharedIds = new Set(
     state.projects
-      .filter(project => project.isShared && project.ownerId !== user.uid)
+      .filter(project => project.isShared)
       .map(project => project.id)
   );
 
@@ -647,14 +649,18 @@ function syncSharedProjectWatchers() {
           return;
         }
 
-        const sharedProject = sanitizeProject(snap.data());
-        if (!sharedProject.collaborators?.[user.uid]) {
+        const snapData = snap.data();
+        const isOwner = !snapData.ownerId || snapData.ownerId === user.uid;
+
+        // Collaborator was removed — clean up their local copy.
+        if (!isOwner && !snapData.collaborators?.[user.uid]) {
           handleSharedProjectRemoved(projectId);
           return;
         }
 
-        if (snap.data().updatedBy === user.uid) return;
-        upsertProject(sharedProject);
+        if (snapData.updatedBy === user.uid) return;
+        const updated = sanitizeProject(snapData);
+        upsertProject(updated);
         persistProjects(false);
         renderHome();
         if (state.currentProjectId === projectId) {

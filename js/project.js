@@ -12,8 +12,12 @@ const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 // Track last-synced version per project to skip redundant Firestore writes
 const _syncedVersions = new Map();
 
+function _membershipHash(project) {
+  return Object.keys(project.collaborators || {}).sort().join(',') || 'none';
+}
+
 function _projectVersionKey(project) {
-  return `${project.updatedAt}|${project.lines.length}|${project.title}`;
+  return `${project.updatedAt}|${project.lines.length}|${project.title}|${_membershipHash(project)}`;
 }
 
 function generateScriptId() {
@@ -151,6 +155,20 @@ export async function deleteProjectFromCloud(projectId) {
   const userId = auth.currentUser?.uid;
   if (!userId) return;
   try {
+    // Cascade-delete shared project document when the owner removes it.
+    const project = state.projects.find(p => p.id === projectId);
+    if (project?.isShared && (!project.ownerId || project.ownerId === userId)) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        await fetch('/api/delete-shared-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ projectId })
+        });
+      } catch (err) {
+        console.warn('[deleteProjectFromCloud] Cascade delete failed:', err.message);
+      }
+    }
     await deleteDoc(doc(db, 'users', userId, 'projects', projectId));
   } catch (err) {
     console.error('Firestore delete failed', err);
@@ -252,6 +270,7 @@ export function sanitizeProject(project) {
     createdAt: project.createdAt || new Date().toISOString(),
     updatedAt: project.updatedAt || new Date().toISOString(),
     isShared: Boolean(project.isShared),
+    isArchived: Boolean(project.isArchived),
     ownerId: project.ownerId || null,
     storyMemory: sanitizeStoryMemory(project.storyMemory),
     activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
@@ -349,6 +368,20 @@ export function getWorkspaceProjects(workspaceId) {
 
 export function getWorkspaceRootProject(workspaceId) {
   return state.projects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot) || null;
+}
+
+export function getOwnedProjects(userId) {
+  const id = userId || auth.currentUser?.uid;
+  return state.projects.filter(p => !p.isArchived && (!p.isShared || !p.ownerId || p.ownerId === id));
+}
+
+export function getSharedProjects(userId) {
+  const id = userId || auth.currentUser?.uid;
+  return state.projects.filter(p => !p.isArchived && p.isShared && p.ownerId && p.ownerId !== id);
+}
+
+export function getArchivedProjects() {
+  return state.projects.filter(p => p.isArchived);
 }
 
 export function updateWorkspaceAcrossProjects(workspaceId, updater) {
