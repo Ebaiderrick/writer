@@ -36,6 +36,25 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid;
     }
 
+    // ── Shared project helpers ──────────────────────────────────────────────
+    function sharedProject(projectId) {
+      return get(/databases/$(database)/documents/sharedProjects/$(projectId)).data;
+    }
+    function isSharedProjectOwner(projectId) {
+      return sharedProject(projectId).ownerId == request.auth.uid;
+    }
+    function isSharedProjectMember(projectId) {
+      let p = sharedProject(projectId);
+      return p.ownerId == request.auth.uid || request.auth.uid in p.collaborators;
+    }
+    function isSharedProjectEditor(projectId) {
+      let p = sharedProject(projectId);
+      return p.ownerId == request.auth.uid || (
+        request.auth.uid in p.collaborators &&
+        p.collaborators[request.auth.uid].role != 'viewer'
+      );
+    }
+
     // Shared projects — owner or collaborators can read/write content
     match /sharedProjects/{projectId} {
       // Allow reading non-existent docs (resource==null) so the client can check
@@ -45,50 +64,56 @@ service cloud.firestore {
         resource.data.ownerId == request.auth.uid ||
         request.auth.uid in resource.data.collaborators
       );
+      // Only the owner-to-be can create; they must stamp their own uid.
       allow create: if request.auth != null &&
-        request.resource.data.ownerId == request.auth.uid;
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.collaborators is map;
+      // Update paths — three distinct cases:
       allow update: if request.auth != null && (
-        // Owner can update anything.
+        // 1. Owner can update anything.
         resource.data.ownerId == request.auth.uid ||
-        // Collaborators can update content fields but NOT ownership or membership.
+        // 2. Non-viewer collaborators can update content fields only.
+        //    Ownership fields (including ownerPhotoURL) and membership are locked.
         (
           request.auth.uid in resource.data.collaborators &&
           resource.data.collaborators[request.auth.uid].role != 'viewer' &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['ownerId', 'ownerName', 'ownerEmail', 'collaborators'])
+            .hasAny(['ownerId', 'ownerName', 'ownerEmail', 'ownerPhotoURL', 'collaborators'])
         ) ||
-        // Invitee self-add: only allowed change is adding own uid to collaborators + updatedBy.
+        // 3. Invitee self-add: caller may ONLY add themselves to collaborators (+ updatedBy).
+        //    Role must be a valid value; existing collaborators map entries are preserved.
         (
           request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['collaborators', 'updatedBy']) &&
+          request.resource.data.updatedBy == request.auth.uid &&
           request.auth.uid in request.resource.data.collaborators &&
-          !(request.auth.uid in resource.data.collaborators)
+          !(request.auth.uid in resource.data.collaborators) &&
+          request.resource.data.collaborators[request.auth.uid].role in ['editor', 'viewer']
         )
       );
-      allow delete: if request.auth != null &&
-        resource.data.ownerId == request.auth.uid;
+      // Owner or admin can delete.
+      allow delete: if request.auth != null && (
+        resource.data.ownerId == request.auth.uid || isAdmin()
+      );
     }
 
-    // Comments — readable/writable by project members
+    // Comments — readable/writable/deletable by project members
     match /sharedProjects/{projectId}/comments/{commentId} {
-      allow read: if request.auth != null && (
-        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
-        request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators
-      );
-      allow create: if request.auth != null && (
-        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
-        (
-          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators &&
-          get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators[request.auth.uid].role != 'viewer'
-        )
-      );
+      allow read: if request.auth != null && isSharedProjectMember(projectId);
+      // Non-viewer members can create comments stamped with their own uid.
+      allow create: if request.auth != null &&
+        isSharedProjectEditor(projectId) &&
+        request.resource.data.uid == request.auth.uid;
+      // Comment author or non-viewer member can update (resolve/unresolve).
       allow update: if request.auth != null && (
         resource.data.uid == request.auth.uid ||
-        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
-        (
-          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators &&
-          get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators[request.auth.uid].role != 'viewer'
-        )
+        isSharedProjectEditor(projectId)
+      );
+      // Comment author, project owner, or admin can delete.
+      allow delete: if request.auth != null && (
+        resource.data.uid == request.auth.uid ||
+        isSharedProjectOwner(projectId) ||
+        isAdmin()
       );
     }
 

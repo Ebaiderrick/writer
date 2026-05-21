@@ -81,20 +81,27 @@ async function syncCurrentProjectToFirestore() {
 
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
-      // Only sync content fields — never overwrite ownership/membership on the shared doc.
-      const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
-      'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
-      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace'];
-      const contentPayload = Object.fromEntries(
-        CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
-      );
-      await setDoc(doc(db, 'sharedProjects', project.id), {
-        ...contentPayload,
-        syncedAt: new Date().toISOString(),
-        updatedBy: userId,
-        lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
-        lastActivityAt: new Date().toISOString()
-      }, { merge: true });
+      // Skip shared project write for viewers — they have read-only access.
+      // Check against the local collaborators map; Firestore rules enforce the same constraint.
+      const isViewer = project.ownerId !== userId &&
+        project.collaborators?.[userId]?.role === 'viewer';
+
+      if (!isViewer) {
+        // Only sync content fields — never overwrite ownership/membership on the shared doc.
+        const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
+        'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
+        'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace'];
+        const contentPayload = Object.fromEntries(
+          CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
+        );
+        await setDoc(doc(db, 'sharedProjects', project.id), {
+          ...contentPayload,
+          syncedAt: new Date().toISOString(),
+          updatedBy: userId,
+          lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+          lastActivityAt: new Date().toISOString()
+        }, { merge: true });
+      }
     }
 
     // Update local storage with the new scriptId and notify UI

@@ -124,6 +124,33 @@ export function canManageWorkspace(project = getCurrentProject(), user = auth.cu
   return getUserProjectRole(project, user) === WORKSPACE_ROLES.owner;
 }
 
+// ── Centralized permission utility ────────────────────────────
+// Single authoritative source for all workspace permission checks.
+
+export const Permissions = {
+  getRole: getUserProjectRole,
+  canEdit: canEditProject,
+  canManage: canManageWorkspace,
+
+  /** True if user is the project owner or any listed collaborator. */
+  isMember(project = getCurrentProject(), user = auth.currentUser) {
+    if (!project || !user) return false;
+    if (!project.ownerId || project.ownerId === user.uid) return true;
+    return Boolean(project.collaborators?.[user.uid]);
+  },
+
+  /** Comment author or project owner can delete a comment. */
+  canDeleteComment(comment, project = getCurrentProject(), user = auth.currentUser) {
+    if (!comment || !project || !user) return false;
+    return comment.uid === user.uid || canManageWorkspace(project, user);
+  },
+
+  /** Non-viewer members can resolve/unresolve comments. */
+  canResolveComment(_comment, project = getCurrentProject(), user = auth.currentUser) {
+    return canEditProject(project, user);
+  }
+};
+
 function updateCollabBadge(count) {
   document.querySelectorAll('.collab-badge').forEach(b => {
     b.textContent = count || '';
@@ -268,31 +295,75 @@ export async function acceptInvitation(inviteId) {
   if (!user) return;
 
   try {
+    // Primary path: server-side acceptance via Admin SDK (atomic + validated).
+    let token = '';
+    try { token = await user.getIdToken(); } catch { /* continue without token */ }
+
+    const res = await fetch('/api/accept-invitation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ inviteId })
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    // Fallback path: Admin SDK not configured in this environment.
+    if (res.status === 503 && data.fallback) {
+      return _acceptInvitationClientSide(inviteId);
+    }
+
+    if (!res.ok) {
+      Logger.capture('acceptInvitation', new Error(data.error || `HTTP ${res.status}`), { inviteId });
+      return;
+    }
+
+    const { projectId, role, project: sharedProject } = data;
+    if (!sharedProject || !projectId) return;
+
+    // Copy project into recipient's personal projects (client write to own subcollection).
+    const projectForUser = sanitizeProject(sharedProject);
+    await setDoc(doc(db, 'users', user.uid, 'projects', projectId), {
+      ...projectForUser,
+      syncedAt: new Date().toISOString()
+    });
+
+    await logActivity(projectId, `Joined project as ${role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`);
+    Telemetry.track('collab_invite_accepted', { projectId });
+    upsertProject(projectForUser);
+    persistProjects(false);
+    renderHome();
+    syncSharedProjectWatchers();
+    subscribeToSharedProject(projectId);
+  } catch (err) {
+    Logger.capture('acceptInvitation', err);
+    console.error('Failed to accept invitation:', err);
+  }
+}
+
+// Client-side fallback for local dev when FIREBASE_SERVICE_ACCOUNT is not configured.
+async function _acceptInvitationClientSide(inviteId) {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  try {
     const invSnap = await getDoc(doc(db, 'invitations', inviteId));
     if (!invSnap.exists()) return;
     const inv = invSnap.data();
 
-    // Guard: only accept genuinely pending invitations
     if (inv.status !== 'pending') return;
-
-    // Guard: invitation must belong to the current user
     if (inv.toEmail.toLowerCase() !== user.email.toLowerCase()) return;
 
     const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
     const profileData = profileSnap.exists() ? profileSnap.data() : {};
 
     const sharedRef = doc(db, 'sharedProjects', inv.projectId);
-
-    // Verify the project still exists before accepting
     const projectExistsSnap = await getDoc(sharedRef);
     if (!projectExistsSnap.exists()) {
       await updateDoc(doc(db, 'invitations', inviteId), { status: 'declined' });
       return;
     }
 
-    // Step 1: Add self to collaborators using dot-notation.
-    // Set updatedBy to the collaborator's uid so the owner's onSnapshot listener
-    // does NOT skip this update (it skips when updatedBy === own uid).
+    // Uses the Firestore self-add rule (allowed in dev environments).
     await updateDoc(sharedRef, {
       [`collaborators.${user.uid}`]: {
         name: user.displayName || user.email,
@@ -304,18 +375,12 @@ export async function acceptInvitation(inviteId) {
       updatedBy: user.uid
     });
 
-    // Step 2: Mark invitation accepted (recipient can always update their own invite).
     await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
-
     await logActivity(inv.projectId, `Joined project as ${inv.role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`);
 
-    // Step 3: Now read the shared project — user is a collaborator so read is allowed.
     const projSnap = await getDoc(sharedRef);
     if (!projSnap.exists()) return;
-    const sharedProject = projSnap.data();
-
-    // Step 4: Copy project into the recipient's personal projects.
-    const projectForUser = sanitizeProject(sharedProject);
+    const projectForUser = sanitizeProject(projSnap.data());
     await setDoc(doc(db, 'users', user.uid, 'projects', inv.projectId), {
       ...projectForUser,
       syncedAt: new Date().toISOString()
@@ -328,8 +393,8 @@ export async function acceptInvitation(inviteId) {
     syncSharedProjectWatchers();
     subscribeToSharedProject(inv.projectId);
   } catch (err) {
-    Logger.capture('acceptInvitation', err);
-    console.error('Failed to accept invitation:', err);
+    Logger.capture('_acceptInvitationClientSide', err);
+    console.error('Client-side fallback acceptance failed:', err);
   }
 }
 
@@ -675,11 +740,24 @@ export async function addComment(projectId, text, { lineId = null, parentId = nu
 }
 
 export async function deleteComment(projectId, commentId) {
+  const user = auth.currentUser;
+  if (!user) return;
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
+
+  const comment = allComments.find(c => c.id === commentId);
+  if (comment && !Permissions.canDeleteComment(comment, project, user)) {
+    await customAlert('You can only delete your own comments. Ask the workspace owner to remove others.', 'Not Authorized');
+    return;
+  }
+
   const ref = commentDocRef(project, commentId);
   if (!ref) return;
-  await deleteDoc(ref);
+  try {
+    await deleteDoc(ref);
+  } catch (err) {
+    Logger.capture('deleteComment', err);
+  }
 }
 
 export async function resolveComment(projectId, commentId, resolved) {
