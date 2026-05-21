@@ -98,12 +98,20 @@ service cloud.firestore {
         resource.data.fromUid == request.auth.uid ||
         resource.data.toEmail == request.auth.token.email
       );
+      // Sender can only create an invite stamped with their own uid and a valid role
       allow create: if request.auth != null &&
-        request.resource.data.fromUid == request.auth.uid;
+        request.resource.data.fromUid == request.auth.uid &&
+        request.resource.data.role in ['editor', 'viewer'] &&
+        request.resource.data.status == 'pending';
+      // Recipient can only update status field (accept/decline their own invite)
       allow update: if request.auth != null &&
-        resource.data.toEmail == request.auth.token.email;
-      allow delete: if request.auth != null &&
-        resource.data.fromUid == request.auth.uid;
+        resource.data.toEmail == request.auth.token.email &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+        request.resource.data.status in ['accepted', 'declined'];
+      allow delete: if request.auth != null && (
+        resource.data.fromUid == request.auth.uid ||
+        isAdmin()
+      );
     }
 
     // Waitlist — anyone can submit; only admins can read/manage

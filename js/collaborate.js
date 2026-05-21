@@ -106,14 +106,14 @@ export function onStudioEnter(projectId) {
 
 export function getUserProjectRole(project = getCurrentProject(), user = auth.currentUser) {
   if (!project || !user) {
-    return WORKSPACE_ROLES.owner;
+    return WORKSPACE_ROLES.viewer;
   }
 
   if (!project.ownerId || project.ownerId === user.uid) {
     return WORKSPACE_ROLES.owner;
   }
 
-  return project.collaborators?.[user.uid]?.role || WORKSPACE_ROLES.editor;
+  return project.collaborators?.[user.uid]?.role || WORKSPACE_ROLES.viewer;
 }
 
 export function canEditProject(project = getCurrentProject(), user = auth.currentUser) {
@@ -267,52 +267,70 @@ export async function acceptInvitation(inviteId) {
   const user = auth.currentUser;
   if (!user) return;
 
-  const invSnap = await getDoc(doc(db, 'invitations', inviteId));
-  if (!invSnap.exists()) return;
-  const inv = invSnap.data();
+  try {
+    const invSnap = await getDoc(doc(db, 'invitations', inviteId));
+    if (!invSnap.exists()) return;
+    const inv = invSnap.data();
 
-  const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
-  const profileData = profileSnap.exists() ? profileSnap.data() : {};
+    // Guard: only accept genuinely pending invitations
+    if (inv.status !== 'pending') return;
 
-  const sharedRef = doc(db, 'sharedProjects', inv.projectId);
+    // Guard: invitation must belong to the current user
+    if (inv.toEmail.toLowerCase() !== user.email.toLowerCase()) return;
 
-  // Step 1: Add self to collaborators using dot-notation.
-  // Set updatedBy to the collaborator's uid so the owner's onSnapshot listener
-  // does NOT skip this update (it skips when updatedBy === own uid).
-  await updateDoc(sharedRef, {
-    [`collaborators.${user.uid}`]: {
-      name: user.displayName || user.email,
-      email: user.email,
-      photoURL: profileData.photoURL || user.photoURL || '',
-      addedAt: new Date().toISOString(),
-      role: inv.role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor
-    },
-    updatedBy: user.uid
-  });
+    const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
+    const profileData = profileSnap.exists() ? profileSnap.data() : {};
 
-  // Step 2: Mark invitation accepted (recipient can always update their own invite).
-  await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
+    const sharedRef = doc(db, 'sharedProjects', inv.projectId);
 
-  await logActivity(inv.projectId, `Joined project as ${inv.role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`);
+    // Verify the project still exists before accepting
+    const projectExistsSnap = await getDoc(sharedRef);
+    if (!projectExistsSnap.exists()) {
+      await updateDoc(doc(db, 'invitations', inviteId), { status: 'declined' });
+      return;
+    }
 
-  // Step 3: Now read the shared project — user is a collaborator so read is allowed.
-  const projSnap = await getDoc(sharedRef);
-  if (!projSnap.exists()) return;
-  const sharedProject = projSnap.data();
+    // Step 1: Add self to collaborators using dot-notation.
+    // Set updatedBy to the collaborator's uid so the owner's onSnapshot listener
+    // does NOT skip this update (it skips when updatedBy === own uid).
+    await updateDoc(sharedRef, {
+      [`collaborators.${user.uid}`]: {
+        name: user.displayName || user.email,
+        email: user.email,
+        photoURL: profileData.photoURL || user.photoURL || '',
+        addedAt: new Date().toISOString(),
+        role: inv.role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor
+      },
+      updatedBy: user.uid
+    });
 
-  // Step 4: Copy project into the recipient's personal projects.
-  const projectForUser = sanitizeProject(sharedProject);
-  await setDoc(doc(db, 'users', user.uid, 'projects', inv.projectId), {
-    ...projectForUser,
-    syncedAt: new Date().toISOString()
-  });
+    // Step 2: Mark invitation accepted (recipient can always update their own invite).
+    await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
 
-  Telemetry.track('collab_invite_accepted', { projectId: inv.projectId });
-  upsertProject(projectForUser);
-  persistProjects(false);
-  renderHome();
-  syncSharedProjectWatchers();
-  subscribeToSharedProject(inv.projectId);
+    await logActivity(inv.projectId, `Joined project as ${inv.role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`);
+
+    // Step 3: Now read the shared project — user is a collaborator so read is allowed.
+    const projSnap = await getDoc(sharedRef);
+    if (!projSnap.exists()) return;
+    const sharedProject = projSnap.data();
+
+    // Step 4: Copy project into the recipient's personal projects.
+    const projectForUser = sanitizeProject(sharedProject);
+    await setDoc(doc(db, 'users', user.uid, 'projects', inv.projectId), {
+      ...projectForUser,
+      syncedAt: new Date().toISOString()
+    });
+
+    Telemetry.track('collab_invite_accepted', { projectId: inv.projectId });
+    upsertProject(projectForUser);
+    persistProjects(false);
+    renderHome();
+    syncSharedProjectWatchers();
+    subscribeToSharedProject(inv.projectId);
+  } catch (err) {
+    Logger.capture('acceptInvitation', err);
+    console.error('Failed to accept invitation:', err);
+  }
 }
 
 export async function declineInvitation(inviteId) {
