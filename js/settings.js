@@ -9,6 +9,8 @@ import { collection, doc, addDoc, getDocs, query, orderBy, limit, deleteDoc } fr
 import { Logger, SESSION_ID } from './logger.js';
 import { Referral } from './referral.js';
 import { Admin } from './admin.js';
+import { Billing } from './billing.js';
+import { Quota } from './quota.js';
 
 let _prevView = null;
 let _settingsView = null;
@@ -21,6 +23,7 @@ export const Settings = {
     _bindGeneral();
     _bindEditor();
     _bindAI();
+    _bindBilling();
     _bindAccount();
     _bindLegal();
     _bindSupport();
@@ -285,6 +288,17 @@ function _bindAI() {
     } finally {
       btn.disabled = false;
       btn.textContent = 'Test Connection';
+    }
+  });
+}
+
+function _bindBilling() {
+  _settingsView.querySelectorAll('[data-settings-tab]').forEach(tab => {
+    if (tab.dataset.settingsTab === 'billing') {
+      tab.addEventListener('click', () => {
+        Billing.populateSettings();
+        Quota.renderUsageBar('billingQuotaBar');
+      });
     }
   });
 }

@@ -6,6 +6,7 @@ import { escapeHtml } from "./utils.js";
 import { customAlert, showModal } from "./ui.js";
 import { Telemetry } from "./telemetry.js";
 import { Logger } from "./logger.js";
+import { auth } from "./firebase.js";
 
 // ── AI response cache (in-memory, 5-minute TTL, max 50 entries) ──────────────
 
@@ -411,6 +412,13 @@ export const AI = (() => {
       Telemetry.track('ai_used', { action: request.action, type: request.type });
       showResultOptions(output, request);
     } catch (error) {
+      if (error?.code === 'quota_exceeded') {
+        closeMenu();
+        import('./billing.js').then(({ Billing }) => {
+          Billing.showUpgradeModal('You\'ve used all 50 free AI requests this month.');
+        });
+        return;
+      }
       const message = error instanceof Error
         ? error.message
         : "Could not reach the AI server. Run `cd server && npm install && npm start`.";
@@ -687,14 +695,27 @@ export const AI = (() => {
   }
 
   async function requestAiText(request, onChunk) {
+    const headers = { "Content-Type": "application/json" };
+    if (auth.currentUser) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        headers["Authorization"] = `Bearer ${token}`;
+      } catch { /* skip token if unavailable */ }
+    }
+
     const response = await fetch(getAiEndpoint(), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ ...request, stream: Boolean(onChunk) })
     });
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
+      if (response.status === 429 && data.error === 'quota_exceeded') {
+        const err = new Error('quota_exceeded');
+        err.code = 'quota_exceeded';
+        throw err;
+      }
       let msg = data.error || `AI assistant failed (Status ${response.status})`;
       if (response.status === 401) msg = "Invalid API Key. Please check your OpenRouter configuration.";
       if (response.status === 402) msg = "Insufficient credits in your OpenRouter account.";

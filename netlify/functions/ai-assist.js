@@ -1,3 +1,5 @@
+import { adminAuth, adminDb } from './_admin.js';
+
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "openai/gpt-3.5-turbo";
 const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
 
@@ -46,6 +48,42 @@ export const handler = async (event) => {
   if (typeof instruction === "string" && instruction.length > MAX_INSTRUCTION) return badRequest("Instruction too long", requestId);
 
   console.log(`[${requestId}] AI request type=${type || "?"} action=${action || "?"}`);
+
+  // Quota enforcement
+  const FREE_MONTHLY_QUOTA = 50;
+  let quotaUid = null;
+  let isProUser = false;
+
+  if (adminAuth && adminDb) {
+    const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    if (token) {
+      try {
+        const decoded = await adminAuth.verifyIdToken(token);
+        quotaUid = decoded.uid;
+      } catch { /* treat as anonymous */ }
+    }
+    if (quotaUid) {
+      try {
+        const qSnap = await adminDb.doc(`users/${quotaUid}/quota/current`).get();
+        if (qSnap.exists) {
+          const q = qSnap.data();
+          isProUser = q.plan === 'pro';
+          if (!isProUser) {
+            const pastReset = q.resetAt && new Date() >= new Date(q.resetAt);
+            const usedCount = pastReset ? 0 : (q.count || 0);
+            if (usedCount >= FREE_MONTHLY_QUOTA) {
+              return {
+                statusCode: 429,
+                headers: jsonHeaders(requestId),
+                body: JSON.stringify({ error: 'quota_exceeded', remaining: 0 })
+              };
+            }
+          }
+        }
+      } catch { /* quota check failed — allow request */ }
+    }
+  }
 
   if (!process.env.OPENAI_API_KEY) {
     return {
@@ -123,6 +161,24 @@ YOUR OUTPUT:`;
     }
 
     console.log(`[${requestId}] AI request completed successfully`);
+
+    // Increment quota for non-pro authenticated users
+    if (adminDb && quotaUid && !isProUser) {
+      try {
+        const ref = adminDb.doc(`users/${quotaUid}/quota/current`);
+        const now = new Date();
+        const nextReset = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const qSnap = await ref.get();
+        const q = qSnap.exists ? qSnap.data() : {};
+        const pastReset = !q.resetAt || now >= new Date(q.resetAt);
+        if (pastReset) {
+          await ref.set({ count: 1, resetAt: nextReset.toISOString(), plan: q.plan || 'free' }, { merge: true });
+        } else {
+          await ref.set({ count: (q.count || 0) + 1 }, { merge: true });
+        }
+      } catch { /* silent */ }
+    }
+
     return { statusCode: 200, headers: jsonHeaders(requestId), body: JSON.stringify({ output }) };
   } catch (error) {
     console.error(`[${requestId}] AI function error:`, error.message || error);

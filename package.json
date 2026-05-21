@@ -17,6 +17,10 @@
     "test:rules": "firebase emulators:exec --only firestore --project demo-eyawriter \"node --test tests/rules.test.mjs\"",
     "test:ci": "npm run test:functions && npm test"
   },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "stripe": "^16.0.0"
+  },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.1",
     "@playwright/test": "^1.59.1",

@@ -449,34 +449,30 @@
           <section class="settings-section" data-settings-section="billing">
             <div class="settings-section-inner">
               <h2>Billing</h2>
-              <div class="settings-placeholder">
-                <div class="placeholder-icon">💳</div>
-                <h3>Pro Plan — Coming Soon</h3>
-                <p>Billing and subscription management will be available here. Pro features will include unlimited cloud storage, priority AI access, team workspaces, and export to industry formats.</p>
-                <div class="plan-comparison">
-                  <div class="plan-card plan-current">
-                    <h4>Free</h4>
-                    <ul>
-                      <li>✓ Unlimited local projects</li>
-                      <li>✓ Cloud sync (Firebase)</li>
-                      <li>✓ AI assistant (with own API key)</li>
-                      <li>✓ Real-time collaboration</li>
-                      <li>✓ 6 language UI</li>
-                    </ul>
-                    <span class="plan-badge">Current Plan</span>
-                  </div>
-                  <div class="plan-card plan-pro">
-                    <h4>Pro</h4>
-                    <ul>
-                      <li>✓ Everything in Free</li>
-                      <li>✓ Built-in AI credits</li>
-                      <li>✓ Priority support</li>
-                      <li>✓ Advanced analytics</li>
-                      <li>✓ PDF &amp; FDX export</li>
-                    </ul>
-                    <span class="plan-badge plan-badge-pro">Coming Soon</span>
-                  </div>
+              <div class="billing-plan-summary">
+                <div class="billing-plan-row">
+                  <span class="settings-label">Current plan</span>
+                  <strong id="billingCurrentPlan" class="plan-badge-current">Free</strong>
                 </div>
+                <div class="billing-plan-row">
+                  <span class="settings-label">Status</span>
+                  <span id="billingSubStatus">—</span>
+                </div>
+                <div class="billing-plan-row">
+                  <span class="settings-label">Renews</span>
+                  <span id="billingRenewDate">—</span>
+                </div>
+              </div>
+
+              <div id="billingFreeSection">
+                <div id="billingQuotaBar" class="billing-quota-wrap"></div>
+                <p class="settings-hint">Free plan includes 50 AI requests per month. Upgrade to Pro for unlimited AI.</p>
+                <button class="primary-button billing-upgrade-btn" id="billingUpgradeBtn">Upgrade to Pro — $12/mo</button>
+              </div>
+
+              <div id="billingProSection" hidden>
+                <p class="settings-hint">You're on the Pro plan — enjoy unlimited AI requests.</p>
+                <button class="ghost-button" id="billingPortalBtn">Manage Subscription</button>
               </div>
             </div>
           </section>
@@ -1902,6 +1898,56 @@
         <p>EyaWriter does not store AI request or response data. Requests are processed in real-time and the response is returned directly to your editor. Refer to the AI provider's privacy policy for their data handling practices.</p>
         <h3>Your control</h3>
         <p>AI features are opt-in and require enabling "AI Assistance" in the editor toolbar. You can disable AI assistance at any time. No AI processing occurs unless you explicitly trigger an AI action.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Announcement banner -->
+  <div id="announcementBanner" class="announcement-banner" hidden>
+    <span id="announcementMsg"></span>
+    <button id="announcementDismiss" class="announcement-dismiss" aria-label="Dismiss">&times;</button>
+  </div>
+
+  <!-- Upgrade modal -->
+  <dialog id="upgradeModal" class="app-dialog upgrade-dialog">
+    <div class="upgrade-dialog-inner">
+      <h2 class="upgrade-dialog-title">Upgrade to Pro</h2>
+      <p id="upgradeModalReason" class="upgrade-dialog-reason">Unlock unlimited AI requests and Pro features.</p>
+      <ul class="upgrade-feature-list">
+        <li>Unlimited AI requests every month</li>
+        <li>Priority support</li>
+        <li>All future Pro features</li>
+      </ul>
+      <div class="upgrade-dialog-price">$12 <span>/month</span></div>
+      <div class="dialog-actions">
+        <button class="primary-button billing-upgrade-btn">Upgrade to Pro</button>
+        <button class="ghost-button" onclick="document.getElementById('upgradeModal').close()">Maybe later</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- NPS survey dialog -->
+  <dialog id="npsDialog" class="app-dialog nps-dialog">
+    <div class="nps-dialog-inner">
+      <h2 class="nps-dialog-title">How likely are you to recommend EyaWriter?</h2>
+      <p class="settings-hint">0 = Not at all likely &nbsp;&bull;&nbsp; 10 = Extremely likely</p>
+      <div class="nps-score-row">
+        <button class="nps-score-btn" data-score="0" type="button">0</button>
+        <button class="nps-score-btn" data-score="1" type="button">1</button>
+        <button class="nps-score-btn" data-score="2" type="button">2</button>
+        <button class="nps-score-btn" data-score="3" type="button">3</button>
+        <button class="nps-score-btn" data-score="4" type="button">4</button>
+        <button class="nps-score-btn" data-score="5" type="button">5</button>
+        <button class="nps-score-btn" data-score="6" type="button">6</button>
+        <button class="nps-score-btn" data-score="7" type="button">7</button>
+        <button class="nps-score-btn" data-score="8" type="button">8</button>
+        <button class="nps-score-btn" data-score="9" type="button">9</button>
+        <button class="nps-score-btn" data-score="10" type="button">10</button>
+      </div>
+      <textarea class="nps-comment" placeholder="What could we do better? (optional)" rows="3"></textarea>
+      <div class="dialog-actions">
+        <button class="primary-button nps-submit-btn" disabled>Submit</button>
+        <button class="ghost-button nps-dismiss-btn">Not now</button>
       </div>
     </div>
   </dialog>

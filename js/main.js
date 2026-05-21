@@ -10,6 +10,8 @@ import { applyTranslations } from './i18n.js';
 import { restoreLocalSaveFile, startLocalSaveTimer } from './localSave.js';
 import { Settings } from './settings.js';
 import { Admin } from './admin.js';
+import { Billing } from './billing.js';
+import { NPS } from './nps.js';
 import { Onboarding } from './onboarding.js';
 import { Referral } from './referral.js';
 import { Recovery } from './recovery.js';
@@ -62,6 +64,7 @@ function boot() {
   ContextMenu.init();
   Settings.init();
   Admin.init();
+  NPS.init();
 
   // Wire up auth-page legal links
   document.getElementById('authTosLink')?.addEventListener('click', e => {
@@ -78,6 +81,7 @@ function boot() {
     initBackground();
     if (session?.loggedIn && !session?.isDemoSession) {
       Onboarding.maybeShow();
+      NPS.maybeShow();
     }
   };
 

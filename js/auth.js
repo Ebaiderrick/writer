@@ -28,6 +28,7 @@ import { Telemetry } from './telemetry.js';
 import { Logger } from './logger.js';
 import { Funnel } from './funnel.js';
 import { Referral } from './referral.js';
+import { Billing } from './billing.js';
 
 const SESSION_KEY = 'eyawriter_session';
 
@@ -212,6 +213,7 @@ export const Auth = (() => {
         renderHome();
         updateTriggerUI(firebaseUser);
         initCollaboration();
+        Billing.init().catch(() => {});
         setTimeout(() => Onboarding.maybeShow(), 800);
       } else {
         cleanupCollaboration();
