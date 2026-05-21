@@ -1557,6 +1557,13 @@ export function bindEvents() {
         hideSuggestionTray(true);
         clearSuggestionContext();
       }
+      // Workspace switcher chips (outside projectGrid, needs document-level delegation)
+      const workspaceChipDoc = event.target.closest('[data-workspace-chip]');
+      if (workspaceChipDoc) {
+        const chipId = workspaceChipDoc.dataset.workspaceChip;
+        state.homeWorkspaceFilter = chipId === 'all' ? null : chipId;
+        renderHome();
+      }
   });
 
   // Delegated Editor Events
@@ -1704,12 +1711,12 @@ export function bindEvents() {
           renderHome();
           return;
       }
-      // Workspace switcher chips
-      const workspaceChip = e.target.closest('[data-workspace-chip]');
-      if (workspaceChip) {
-          const chipId = workspaceChip.dataset.workspaceChip;
-          state.homeWorkspaceFilter = chipId === 'all' ? null : chipId;
-          renderHome();
+      // Pinned project chips
+      const pinnedChip = e.target.closest('.pinned-project-chip');
+      if (pinnedChip) {
+          if (!e.target.closest('.pinned-chip-unpin')) {
+              openProject(pinnedChip.dataset.projectId);
+          }
           return;
       }
 

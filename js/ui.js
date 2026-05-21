@@ -135,7 +135,7 @@ function renderWorkspaceSwitcher(allProjects) {
   `;
 }
 
-function renderPinnedProjects(allProjects, openProjectFn) {
+function renderPinnedProjects(allProjects) {
   const section = document.getElementById('pinnedProjectSection');
   const grid = document.getElementById('pinnedProjectGrid');
   if (!section || !grid) return;
@@ -164,15 +164,11 @@ function renderPinnedProjects(allProjects, openProjectFn) {
     `;
   }).join('');
 
-  grid.querySelectorAll('.pinned-project-chip').forEach(chip => {
-    chip.addEventListener('click', e => {
-      if (e.target.closest('.pinned-chip-unpin')) {
-        const projectId = e.target.closest('.pinned-chip-unpin').dataset.projectId;
-        togglePinProject(projectId);
-        renderHome();
-        return;
-      }
-      if (typeof openProjectFn === 'function') openProjectFn(chip.dataset.projectId);
+  grid.querySelectorAll('.pinned-chip-unpin').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      togglePinProject(btn.dataset.projectId);
+      renderHome();
     });
   });
 }
