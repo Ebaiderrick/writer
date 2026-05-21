@@ -429,6 +429,11 @@ export async function kickCollaborator(projectId, collaboratorUid) {
     return;
   }
 
+  if (collaboratorUid === user.uid) {
+    await customAlert('You cannot remove yourself. Use "Leave workspace" instead.', 'Not Allowed');
+    return;
+  }
+
   const newCollaborators = { ...(project.collaborators || {}) };
   delete newCollaborators[collaboratorUid];
 
@@ -460,6 +465,10 @@ export async function updateCollaboratorRole(projectId, collaboratorUid, role) {
   const collaborator = project.collaborators?.[collaboratorUid];
   if (!collaborator) {
     return { ok: false, reason: 'Collaborator not found.' };
+  }
+
+  if (role === WORKSPACE_ROLES.owner) {
+    return { ok: false, reason: 'Use the "Transfer Ownership" option to change ownership.' };
   }
 
   const nextRole = role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor;
@@ -604,6 +613,86 @@ export async function deleteWorkspaceReminder(projectId, reminderId) {
   await logActivity(projectId, `Removed reminder: ${existing.text}.`, { category: ACTIVITY_CATEGORIES.workspace });
   persistProjects(false);
   return { ok: true };
+}
+
+export async function transferOwnership(projectId, newOwnerUid) {
+  const user = auth.currentUser;
+  if (!user) return { ok: false, reason: 'Not signed in.' };
+
+  const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
+  if (!project) return { ok: false, reason: 'No project found.' };
+  if (!canManageWorkspace(project, user)) {
+    return { ok: false, reason: 'Only the current owner can transfer ownership.' };
+  }
+  if (newOwnerUid === user.uid) {
+    return { ok: false, reason: 'You are already the owner.' };
+  }
+  if (!project.collaborators?.[newOwnerUid]) {
+    return { ok: false, reason: 'The new owner must be a current collaborator.' };
+  }
+
+  try {
+    let token = '';
+    try { token = await user.getIdToken(); } catch { /* continue */ }
+
+    const res = await fetch('/api/transfer-ownership', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ projectId, newOwnerUid })
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      return { ok: false, reason: data.error || `Server error (${res.status})` };
+    }
+
+    // Update local state from server response.
+    if (data.project) {
+      const updated = sanitizeProject(data.project);
+      upsertProject(updated);
+    } else {
+      // Fallback local update if server didn't return the full project.
+      const collab = project.collaborators[newOwnerUid];
+      const oldOwnerEntry = {
+        name: project.ownerName || '',
+        email: project.ownerEmail || '',
+        photoURL: project.ownerPhotoURL || '',
+        addedAt: new Date().toISOString(),
+        role: WORKSPACE_ROLES.editor
+      };
+      const newCollaborators = { ...project.collaborators };
+      delete newCollaborators[newOwnerUid];
+      newCollaborators[user.uid] = oldOwnerEntry;
+
+      project.ownerId = newOwnerUid;
+      project.ownerName = collab.name || collab.email || '';
+      project.ownerEmail = collab.email || '';
+      project.ownerPhotoURL = collab.photoURL || '';
+      project.collaborators = newCollaborators;
+    }
+
+    Telemetry.track('collab_ownership_transferred', { projectId });
+    persistProjects(false);
+    renderCollaboratorList();
+    renderHome();
+    return { ok: true };
+  } catch (err) {
+    Logger.capture('transferOwnership', err);
+    return { ok: false, reason: err.message || 'Failed to transfer ownership.' };
+  }
+}
+
+export async function revokeInvitation(inviteId) {
+  const user = auth.currentUser;
+  if (!user) return;
+  try {
+    await deleteDoc(doc(db, 'invitations', inviteId));
+    Telemetry.track('collab_invite_revoked');
+  } catch (err) {
+    Logger.capture('revokeInvitation', err);
+    console.error('Failed to revoke invitation:', err);
+  }
 }
 
 // ── Real-time listeners ───────────────────────────────────────
@@ -864,7 +953,8 @@ export function renderCollaboratorList() {
         ${isOwner ? `<label class="collab-role-field"><span>Role</span><select class="collab-role-select" data-uid="${esc(uid)}">
           <option value="editor" ${(c.role || WORKSPACE_ROLES.editor) === WORKSPACE_ROLES.editor ? 'selected' : ''}>Editor</option>
           <option value="viewer" ${(c.role || WORKSPACE_ROLES.editor) === WORKSPACE_ROLES.viewer ? 'selected' : ''}>Viewer</option>
-        </select></label>` : `<span class="collaborator-role-copy">${esc((c.role || WORKSPACE_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))} access</span>`}
+        </select></label>
+        <button class="transfer-ownership-btn" data-uid="${esc(uid)}" data-name="${esc(c.name || c.email || '')}" title="Transfer ownership to this collaborator">Transfer Ownership</button>` : `<span class="collaborator-role-copy">${esc((c.role || WORKSPACE_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))} access</span>`}
       </div>
       ${isOwner ? `<button class="kick-btn" data-uid="${uid}" title="Remove collaborator">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -879,6 +969,23 @@ export function renderCollaboratorList() {
         'Remove Collaborator'
       );
       if (confirmed) kickCollaborator(project.id, btn.dataset.uid);
+    });
+  });
+
+  list.querySelectorAll('.transfer-ownership-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = btn.dataset.name || 'this collaborator';
+      const confirmed = await customConfirm(
+        `Transfer ownership of "${project.title}" to ${name}?\n\nYou will become an Editor. This cannot be undone from the client.`,
+        'Transfer Ownership'
+      );
+      if (!confirmed) return;
+      btn.disabled = true;
+      const result = await transferOwnership(project.id, btn.dataset.uid);
+      btn.disabled = false;
+      if (!result.ok) {
+        await customAlert(result.reason || 'Ownership transfer failed.', 'Transfer Ownership');
+      }
     });
   });
 
@@ -996,18 +1103,30 @@ function renderSentInvites(invitations) {
     ? '<p class="collab-empty">No invites sent.</p>'
     : sorted.map(inv => {
         const statusLabel = inv.status === 'accepted' ? 'Validated' : inv.status === 'declined' ? 'Declined' : 'Pending';
+        const canRevoke = inv.status === 'pending';
         return `
-          <div class="collab-request-item">
+          <div class="collab-request-item" data-invite-id="${esc(inv.id)}">
             <div class="collab-request-info">
               <span class="collab-request-from">${esc(inv.toEmail)}</span>
               <span class="collab-request-project">${esc(inv.projectTitle)}</span>
             </div>
-            <span class="status-pill ${inv.status}">${statusLabel}</span>
+            <div class="sent-invite-actions">
+              <span class="status-pill ${inv.status}">${statusLabel}</span>
+              ${canRevoke ? `<button class="revoke-invite-btn ghost-button" data-invite-id="${esc(inv.id)}" title="Revoke this invitation">Revoke</button>` : ''}
+            </div>
           </div>
         `;
       }).join('');
 
-  containers.forEach(list => { list.innerHTML = html; });
+  containers.forEach(list => {
+    list.innerHTML = html;
+    list.querySelectorAll('.revoke-invite-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        await revokeInvitation(btn.dataset.inviteId);
+      });
+    });
+  });
 }
 
 function renderCollabRequests(invitations) {
@@ -1461,6 +1580,7 @@ const ACTIVITY_ICONS = {
   member: '👤',
   role: '🔑',
   workspace: '🏷️',
+  governance: '🏛️',
   system: '⚙️'
 };
 

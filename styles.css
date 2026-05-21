@@ -5972,6 +5972,37 @@ html[data-theme="white"] .user-trigger {
 .status-pill.accepted { background: #d1fae5; color: #065f46; }
 .status-pill.declined { background: #fee2e2; color: #991b1b; }
 
+.sent-invite-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.revoke-invite-btn {
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  color: #c53030;
+  border-color: rgba(197,48,48,0.25);
+}
+.revoke-invite-btn:hover:not(:disabled) { background: rgba(197,48,48,0.08); }
+.revoke-invite-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.transfer-ownership-btn {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  color: var(--accent, #6366f1);
+  border: 1px solid color-mix(in srgb, var(--accent, #6366f1) 35%, transparent);
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.transfer-ownership-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent, #6366f1) 10%, transparent);
+}
+.transfer-ownership-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* ===== CONTEXT MENU ===== */
 .context-menu {
   position: fixed;

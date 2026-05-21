@@ -70,8 +70,11 @@ service cloud.firestore {
         request.resource.data.collaborators is map;
       // Update paths — three distinct cases:
       allow update: if request.auth != null && (
-        // 1. Owner can update anything.
-        resource.data.ownerId == request.auth.uid ||
+        // 1. Owner can update anything EXCEPT ownership fields (transfer must go server-side).
+        (
+          resource.data.ownerId == request.auth.uid &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'ownerEmail'])
+        ) ||
         // 2. Non-viewer collaborators can update content fields only.
         //    Ownership fields (including ownerPhotoURL) and membership are locked.
         (

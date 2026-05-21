@@ -8,6 +8,7 @@ export const ACTIVITY_CATEGORIES = {
   member: 'member',
   role: 'role',
   workspace: 'workspace',
+  governance: 'governance',
   system: 'system'
 };
 
