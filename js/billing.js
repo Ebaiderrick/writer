@@ -172,6 +172,6 @@ async function _checkAnnouncement() {
     document.getElementById('announcementDismiss')?.addEventListener('click', () => {
       banner.hidden = true;
       if (ann.dismissible !== false) localStorage.setItem(dismissKey, '1');
-    });
+    }, { once: true });
   } catch { /* optional */ }
 }

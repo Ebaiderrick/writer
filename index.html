@@ -602,6 +602,7 @@
           <button class="admin-tab" data-admin-tab="flags">Feature Flags</button>
           <button class="admin-tab" data-admin-tab="incidents">Incidents</button>
           <button class="admin-tab" data-admin-tab="waitlist">Waitlist</button>
+          <button class="admin-tab" data-admin-tab="announcements">Announcements</button>
         </nav>
         <main class="admin-content">
 
@@ -690,6 +691,45 @@
                 <button id="adminWaitlistExport" class="ghost-button btn-sm">Export CSV</button>
               </div>
               <div id="adminWaitlistList"><p class="admin-loading">Loading…</p></div>
+            </div>
+          </section>
+
+          <!-- Announcements -->
+          <section class="admin-section" data-admin-section="announcements">
+            <div class="admin-section-inner">
+              <h2>Announcement Banner</h2>
+              <p class="settings-hint">The banner appears at the top of the app for all users. Set <strong>enabled</strong> to show it, or disable to hide it without deleting the message.</p>
+              <div id="adminAnnouncementStatus" class="admin-ann-status"></div>
+              <div class="admin-ann-form">
+                <div class="admin-form-row">
+                  <label class="settings-label" for="adminAnnMessage">Message</label>
+                  <input type="text" id="adminAnnMessage" class="settings-input" placeholder="e.g. Scheduled maintenance on Friday at 2pm UTC" maxlength="300" aria-label="Announcement message">
+                </div>
+                <div class="admin-form-row">
+                  <label class="settings-label" for="adminAnnType">Type</label>
+                  <select id="adminAnnType" class="comment-filter-select" aria-label="Announcement type">
+                    <option value="info">Info (blue)</option>
+                    <option value="warning">Warning (yellow)</option>
+                    <option value="success">Success (green)</option>
+                  </select>
+                  <label class="settings-label" for="adminAnnDismissKey" style="margin-left:16px;">Dismiss key</label>
+                  <input type="text" id="adminAnnDismissKey" class="settings-input" style="max-width:180px;" placeholder="e.g. ann-2024-01" maxlength="60" aria-label="Dismiss key (change to re-show for users who dismissed)">
+                </div>
+                <div class="admin-form-row">
+                  <label class="admin-toggle-label">
+                    <input type="checkbox" id="adminAnnEnabled">
+                    Enabled (show to all users)
+                  </label>
+                  <label class="admin-toggle-label" style="margin-left:20px;">
+                    <input type="checkbox" id="adminAnnDismissible" checked>
+                    Dismissible (users can close it)
+                  </label>
+                </div>
+                <div class="admin-ann-actions">
+                  <button id="adminAnnSave" class="primary-button btn-sm">Save Announcement</button>
+                  <button id="adminAnnDisable" class="ghost-button btn-sm">Disable Banner</button>
+                </div>
+              </div>
             </div>
           </section>
 

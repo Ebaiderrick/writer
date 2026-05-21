@@ -42,6 +42,7 @@ export const Admin = {
     _bindFlags();
     _bindIncidents();
     _bindWaitlist();
+    _bindAnnouncements();
   },
 
   async show() {
@@ -92,7 +93,8 @@ function _activateTab(name) {
     feedback: _loadFeedback,
     flags: _loadFlags,
     incidents: _loadIncidents,
-    waitlist: _loadWaitlist
+    waitlist: _loadWaitlist,
+    announcements: _loadAnnouncements
   };
   loaders[name]?.();
 }
@@ -453,6 +455,97 @@ async function _exportWaitlist() {
     URL.revokeObjectURL(url);
   } catch (err) {
     showToast('Export failed: ' + err.message, 'error');
+  }
+}
+
+// ─── Announcements ───────────────────────────────────────────────────────
+
+function _bindAnnouncements() {
+  document.getElementById('adminAnnSave')?.addEventListener('click', _saveAnnouncement);
+  document.getElementById('adminAnnDisable')?.addEventListener('click', async () => {
+    try {
+      await setDoc(doc(db, 'config', 'announcement'), { enabled: false }, { merge: true });
+      // Hide the live banner immediately for this admin session
+      const banner = document.getElementById('announcementBanner');
+      if (banner) banner.hidden = true;
+      showToast('Announcement banner disabled');
+      _loadAnnouncements();
+    } catch (err) {
+      showToast('Failed: ' + err.message, 'error');
+    }
+  });
+}
+
+async function _loadAnnouncements() {
+  const statusEl = document.getElementById('adminAnnouncementStatus');
+  if (!statusEl) return;
+
+  try {
+    const snap = await getDoc(doc(db, 'config', 'announcement'));
+    const ann = snap.exists() ? snap.data() : null;
+
+    if (ann) {
+      statusEl.innerHTML = `
+        <div class="admin-ann-current">
+          <strong>Current:</strong>
+          <span class="admin-badge ${ann.enabled ? 'admin-badge-ok' : 'admin-badge-danger'}">${ann.enabled ? 'Active' : 'Disabled'}</span>
+          <span class="admin-badge admin-badge-type">${_esc(ann.type || 'info')}</span>
+          <p class="admin-ann-preview">${_esc(ann.message || '(no message)')}</p>
+          <small>Dismiss key: <code>${_esc(ann.dismissKey || 'default')}</code></small>
+        </div>`;
+
+      // Pre-fill the form with the current announcement
+      const msgEl = document.getElementById('adminAnnMessage');
+      const typeEl = document.getElementById('adminAnnType');
+      const keyEl = document.getElementById('adminAnnDismissKey');
+      const enabledEl = document.getElementById('adminAnnEnabled');
+      const dismissibleEl = document.getElementById('adminAnnDismissible');
+      if (msgEl) msgEl.value = ann.message || '';
+      if (typeEl) typeEl.value = ann.type || 'info';
+      if (keyEl) keyEl.value = ann.dismissKey || '';
+      if (enabledEl) enabledEl.checked = Boolean(ann.enabled);
+      if (dismissibleEl) dismissibleEl.checked = ann.dismissible !== false;
+    } else {
+      statusEl.innerHTML = '<p class="admin-loading">No announcement set yet.</p>';
+    }
+  } catch (err) {
+    statusEl.innerHTML = `<p class="admin-error">Error: ${_esc(err.message)}</p>`;
+  }
+}
+
+async function _saveAnnouncement() {
+  const message = document.getElementById('adminAnnMessage')?.value.trim();
+  const type = document.getElementById('adminAnnType')?.value || 'info';
+  const dismissKey = document.getElementById('adminAnnDismissKey')?.value.trim() || `ann-${Date.now()}`;
+  const enabled = document.getElementById('adminAnnEnabled')?.checked || false;
+  const dismissible = document.getElementById('adminAnnDismissible')?.checked !== false;
+
+  if (!message) { showToast('Enter a message', 'warning'); return; }
+
+  try {
+    await setDoc(doc(db, 'config', 'announcement'), {
+      message, type, dismissKey, enabled, dismissible,
+      updatedAt: new Date().toISOString(),
+      updatedBy: auth.currentUser?.uid || 'admin'
+    });
+
+    // Show/hide the live banner immediately in this session
+    const banner = document.getElementById('announcementBanner');
+    const msgEl = document.getElementById('announcementMsg');
+    if (banner && msgEl) {
+      if (enabled) {
+        msgEl.textContent = message;
+        banner.dataset.type = type;
+        banner.hidden = false;
+      } else {
+        banner.hidden = true;
+      }
+    }
+
+    showToast(enabled ? 'Announcement published' : 'Announcement saved (disabled)');
+    _loadAnnouncements();
+  } catch (err) {
+    showToast('Save failed: ' + err.message, 'error');
   }
 }
 
