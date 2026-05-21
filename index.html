@@ -1202,9 +1202,10 @@
                     <h3>Team Workspace</h3>
                     <p>Shared access, roles, comments, and activity</p>
                   </div>
-                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Team Workspace">â–¼</button>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Team Workspace">▼</button>
                 </div>
                 <div class="panel-section-body">
+                  <div id="workspaceAwareness" class="workspace-awareness" hidden></div>
                   <button class="ghost-button btn-sm" data-menu-action="open-workspace">Open Workspace</button>
                 </div>
               </section>
@@ -1598,9 +1599,14 @@
       </div>
       <p id="cdText" class="cd-text"></p>
       <div id="cdReplies" class="cd-replies"></div>
+      <div class="cd-reply-compose cld-reply-compose" id="cdReplyCompose" hidden>
+        <textarea class="cld-reply-input" id="cdReplyText" rows="2" placeholder="Write a reply… (Enter to send)"></textarea>
+        <button class="ghost-button btn-sm" id="cdReplySend" type="button">Send</button>
+      </div>
       <div class="cd-actions">
-        <button id="cdResolveBtn" class="ghost-button cd-resolve-btn"></button>
         <button id="cdDeleteBtn" class="ghost-button cd-delete-btn">Delete</button>
+        <button id="cdReplyBtn" class="ghost-button btn-sm" type="button">Reply</button>
+        <button id="cdResolveBtn" class="ghost-button cd-resolve-btn"></button>
         <button id="cdCloseBtn" class="ghost-button">Close</button>
       </div>
     </div>

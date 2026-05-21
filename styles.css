@@ -4395,6 +4395,9 @@ kbd {
 }
 
 .activity-log-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
   padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--line);
   font-size: 0.76rem;
@@ -4402,6 +4405,17 @@ kbd {
 
 .activity-log-item + .activity-log-item {
   padding-top: var(--space-2);
+}
+
+.activity-log-icon {
+  flex-shrink: 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.activity-log-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .activity-log-meta {
@@ -4412,9 +4426,61 @@ kbd {
   font-weight: 600;
 }
 
+.activity-log-user {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-log-time {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .activity-log-copy {
   margin-top: 2px;
   color: var(--ink);
+}
+
+/* Mention highlight in comments */
+.mention-tag {
+  display: inline;
+  color: var(--accent-strong);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent-soft, #ffe4e6) 60%, transparent);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+/* Workspace awareness widget in left pane */
+.workspace-awareness {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: color-mix(in srgb, var(--accent-soft, #ffe4e6) 30%, var(--panel));
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-size: 0.76rem;
+  color: var(--ink);
+}
+
+.awareness-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.awareness-icon {
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+.awareness-time {
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .role-badge,

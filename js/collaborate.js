@@ -4,7 +4,7 @@ import {
   collection, query, where, onSnapshot, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { state } from './config.js';
-import { logActivity } from './activity.js';
+import { logActivity, logCommentActivity, ACTIVITY_CATEGORIES } from './activity.js';
 import { Telemetry } from './telemetry.js';
 import { Logger } from './logger.js';
 import { getCurrentProject, sanitizeProject, upsertProject, persistProjects, deleteProjectFromCloud } from './project.js';
@@ -228,7 +228,7 @@ export async function inviteCollaborator(email, role = WORKSPACE_ROLES.editor) {
     };
 
     await setDoc(doc(db, 'invitations', inviteId), inviteData);
-    await logActivity(project.id, `Invited ${normalizedEmail} as ${inviteData.role}.`);
+    await logActivity(project.id, `Invited ${normalizedEmail} as ${inviteData.role}.`, { category: ACTIVITY_CATEGORIES.invite });
 
     // Send email notification (best-effort)
     if (window.emailjs) {
@@ -327,7 +327,7 @@ export async function acceptInvitation(inviteId) {
       syncedAt: new Date().toISOString()
     });
 
-    await logActivity(projectId, `Joined project as ${role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`);
+    await logActivity(projectId, `Joined project as ${role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`, { category: ACTIVITY_CATEGORIES.member });
     Telemetry.track('collab_invite_accepted', { projectId });
     upsertProject(projectForUser);
     persistProjects(false);
@@ -376,7 +376,7 @@ async function _acceptInvitationClientSide(inviteId) {
     });
 
     await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
-    await logActivity(inv.projectId, `Joined project as ${inv.role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`);
+    await logActivity(inv.projectId, `Joined project as ${inv.role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`, { category: ACTIVITY_CATEGORIES.member });
 
     const projSnap = await getDoc(sharedRef);
     if (!projSnap.exists()) return;
@@ -427,7 +427,7 @@ export async function kickCollaborator(projectId, collaboratorUid) {
   });
 
   project.collaborators = newCollaborators;
-  await logActivity(projectId, 'Removed a collaborator from the workspace.');
+  await logActivity(projectId, 'Removed a collaborator from the workspace.', { category: ACTIVITY_CATEGORIES.member });
   persistProjects(false);
   renderCollaboratorList();
   renderHome();
@@ -463,7 +463,7 @@ export async function updateCollaboratorRole(projectId, collaboratorUid, role) {
     ...collaborator,
     role: nextRole
   };
-  await logActivity(projectId, `Changed ${collaborator.name || collaborator.email} to ${nextRole}.`);
+  await logActivity(projectId, `Changed ${collaborator.name || collaborator.email} to ${nextRole}.`, { category: ACTIVITY_CATEGORIES.role });
   persistProjects(false);
   renderCollaboratorList();
   renderHome();
@@ -495,7 +495,7 @@ export async function renameWorkspace(projectId, name) {
     workspace: project.workspace,
     updatedBy: user.uid
   });
-  await logActivity(projectId, `Renamed the workspace to ${nextName}.`);
+  await logActivity(projectId, `Renamed the workspace to ${nextName}.`, { category: ACTIVITY_CATEGORIES.workspace });
   persistProjects(false);
   renderHome();
   return { ok: true };
@@ -532,7 +532,7 @@ export async function addWorkspaceReminder(projectId, reminder) {
     workspace: project.workspace,
     updatedBy: user.uid
   });
-  await logActivity(projectId, `Added reminder: ${text}.`);
+  await logActivity(projectId, `Added reminder: ${text}.`, { category: ACTIVITY_CATEGORIES.workspace });
   persistProjects(false);
   return { ok: true };
 }
@@ -560,7 +560,7 @@ export async function toggleWorkspaceReminder(projectId, reminderId) {
     workspace: project.workspace,
     updatedBy: user.uid
   });
-  await logActivity(projectId, `${changed.completed ? 'Completed' : 'Reopened'} reminder: ${changed.text}.`);
+  await logActivity(projectId, `${changed.completed ? 'Completed' : 'Reopened'} reminder: ${changed.text}.`, { category: ACTIVITY_CATEGORIES.workspace });
   persistProjects(false);
   return { ok: true };
 }
@@ -588,7 +588,7 @@ export async function deleteWorkspaceReminder(projectId, reminderId) {
     workspace: project.workspace,
     updatedBy: user.uid
   });
-  await logActivity(projectId, `Removed reminder: ${existing.text}.`);
+  await logActivity(projectId, `Removed reminder: ${existing.text}.`, { category: ACTIVITY_CATEGORIES.workspace });
   persistProjects(false);
   return { ok: true };
 }
@@ -733,16 +733,20 @@ export async function addComment(projectId, text, { lineId = null, parentId = nu
   const ref = commentDocRef(project, makeId('cmt'));
   if (!ref) return;
   const commentId = ref.id;
+  const trimmedText = text.trim();
+  const mentions = parseMentions(trimmedText, project);
   await setDoc(ref, {
     id: commentId,
     uid: user.uid,
     userName: user.displayName || user.email,
-    text: text.trim(),
+    text: trimmedText,
     lineId: lineId || null,
     parentId: parentId || null,
+    mentions,
     resolved: false,
     createdAt: new Date().toISOString()
   });
+  logCommentActivity(projectId, parentId ? 'replied' : 'added', { text: trimmedText });
 }
 
 export async function deleteComment(projectId, commentId) {
@@ -761,6 +765,7 @@ export async function deleteComment(projectId, commentId) {
   if (!ref) return;
   try {
     await deleteDoc(ref);
+    logCommentActivity(projectId, 'deleted');
   } catch (err) {
     Logger.capture('deleteComment', err);
   }
@@ -783,6 +788,7 @@ export async function resolveComment(projectId, commentId, resolved) {
     resolvedAt: resolved ? new Date().toISOString() : null
   };
   await updateDoc(ref, patch);
+  logCommentActivity(projectId, resolved ? 'resolved' : 'unresolved');
   allComments = allComments.map((comment) => comment.id === commentId ? { ...comment, ...patch } : comment);
   renderCommentList(allComments, projectId);
   renderLeftPaneComments();
@@ -801,6 +807,7 @@ export function renderCollaboratorList() {
   if (!list || !project) return;
 
   renderActivityLog(project);
+  renderWorkspaceAwareness(project);
 
   const user = auth.currentUser;
   const isOwner = canManageWorkspace(project, user);
@@ -1035,10 +1042,10 @@ function renderCommentList(comments, projectId) {
     <div class="comment-item${c.resolved ? ' comment-resolved' : ''}">
       <div class="comment-meta">
         <span class="comment-author">${esc(c.userName)}</span>
-        <span class="comment-time">${fmtTime(c.createdAt)}</span>
+        <span class="comment-time">${relativeTime(c.createdAt)}</span>
         ${c.resolved ? `<span class="comment-resolved-label">Resolved by ${esc(c.resolvedBy || '')}</span>` : ''}
       </div>
-      <p class="comment-text">${esc(c.text)}</p>
+      <p class="comment-text">${displayWithMentions(c.text)}</p>
       <button class="ghost-button comment-resolve-btn" data-comment-id="${c.id}" data-resolved="${c.resolved}">
         ${c.resolved ? 'Unresolve' : 'Resolve'}
       </button>
@@ -1204,10 +1211,10 @@ function populateCommentListDialog() {
         <span class="cld-time">${fmtTime(c.createdAt)}</span>
         ${c.resolved ? `<span class="comment-resolved-pill">Resolved by ${esc(c.resolvedBy || '')}</span>` : ''}
       </div>
-      <p class="cld-text">${esc(c.text)}</p>
+      <p class="cld-text">${displayWithMentions(c.text)}</p>
       ${threadReplies.length ? `<div class="cld-replies">${threadReplies.map(r => `
-        <div class="cld-reply"><span class="cld-reply-author">${esc(r.userName)}</span> <span class="cld-reply-time">${fmtTime(r.createdAt)}</span>
-        <p class="cld-reply-text">${esc(r.text)}</p></div>`).join('')}
+        <div class="cld-reply"><span class="cld-reply-author">${esc(r.userName)}</span> <span class="cld-reply-time">${relativeTime(r.createdAt)}</span>
+        <p class="cld-reply-text">${displayWithMentions(r.text)}</p></div>`).join('')}
       </div>` : ''}
       <div class="cld-reply-compose" hidden>
         <textarea class="cld-reply-input" rows="2" placeholder="Write a reply…"></textarea>
@@ -1321,8 +1328,8 @@ export function showCommentDetail(commentId) {
   if (!dialog) return;
 
   dialog.querySelector('#cdAuthor').textContent = comment.userName;
-  dialog.querySelector('#cdTime').textContent = fmtTime(comment.createdAt);
-  dialog.querySelector('#cdText').textContent = comment.text;
+  dialog.querySelector('#cdTime').textContent = relativeTime(comment.createdAt);
+  dialog.querySelector('#cdText').innerHTML = displayWithMentions(comment.text);
 
   const resolvedPill = dialog.querySelector('#cdResolvedPill');
   resolvedPill.hidden = !comment.resolved;
@@ -1332,10 +1339,15 @@ export function showCommentDetail(commentId) {
   repliesEl.innerHTML = replies.length ? replies.map(r => `
     <div class="cd-reply">
       <span class="cd-reply-author">${esc(r.userName)}</span>
-      <span class="cd-reply-time">${fmtTime(r.createdAt)}</span>
-      <p class="cd-reply-text">${esc(r.text)}</p>
+      <span class="cd-reply-time">${relativeTime(r.createdAt)}</span>
+      <p class="cd-reply-text">${displayWithMentions(r.text)}</p>
     </div>
   `).join('') : '';
+
+  const replyCompose = dialog.querySelector('#cdReplyCompose');
+  if (replyCompose) { replyCompose.hidden = true; }
+  const replyText = dialog.querySelector('#cdReplyText');
+  if (replyText) replyText.value = '';
 
   const resolveBtn = dialog.querySelector('#cdResolveBtn');
   resolveBtn.textContent = comment.resolved ? 'Unresolve' : 'Mark as Solved';
@@ -1371,6 +1383,32 @@ function initCommentDetailDialog() {
     dialog.close();
   });
 
+  // Reply toggle
+  dialog.querySelector('#cdReplyBtn')?.addEventListener('click', () => {
+    const compose = dialog.querySelector('#cdReplyCompose');
+    if (!compose) return;
+    compose.hidden = !compose.hidden;
+    if (!compose.hidden) dialog.querySelector('#cdReplyText')?.focus();
+  });
+
+  // Send reply
+  const sendReply = async () => {
+    const project = getCurrentProject();
+    if (!project) return;
+    const text = dialog.querySelector('#cdReplyText')?.value?.trim();
+    if (!text) return;
+    const commentId = dialog.querySelector('#cdResolveBtn')?.dataset.commentId;
+    const parent = allComments.find(c => c.id === commentId);
+    await addComment(project.id, text, { lineId: parent?.lineId || null, parentId: commentId });
+    dialog.querySelector('#cdReplyText').value = '';
+    dialog.querySelector('#cdReplyCompose').hidden = true;
+    if (commentId) showCommentDetail(commentId);
+  };
+  dialog.querySelector('#cdReplySend')?.addEventListener('click', sendReply);
+  dialog.querySelector('#cdReplyText')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+  });
+
   dialog.querySelector('#cdCloseBtn').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
 }
@@ -1404,6 +1442,15 @@ function fmtTime(iso) {
   } catch { return ''; }
 }
 
+const ACTIVITY_ICONS = {
+  comment: '💬',
+  invite: '✉️',
+  member: '👤',
+  role: '🔑',
+  workspace: '🏷️',
+  system: '⚙️'
+};
+
 function renderActivityLog(project) {
   const container = document.getElementById('studioActivityLog');
   if (!container) return;
@@ -1412,17 +1459,91 @@ function renderActivityLog(project) {
     container.innerHTML = '<p class="collab-empty">No activity recorded yet.</p>';
     return;
   }
-  container.innerHTML = [...log].reverse().map(e => `
-    <div class="activity-log-item">
-      <div class="activity-log-meta">
-        <span>${esc(e.user)}</span>
-        <span>${fmtTime(e.timestamp)}</span>
+  container.innerHTML = [...log].reverse().slice(0, 20).map(e => {
+    const icon = ACTIVITY_ICONS[e.category] || ACTIVITY_ICONS.system;
+    return `
+      <div class="activity-log-item">
+        <span class="activity-log-icon" aria-hidden="true">${icon}</span>
+        <div class="activity-log-body">
+          <div class="activity-log-meta">
+            <span class="activity-log-user">${esc(e.user)}</span>
+            <span class="activity-log-time">${relativeTime(e.timestamp)}</span>
+          </div>
+          <div class="activity-log-copy">${esc(e.message)}</div>
+        </div>
       </div>
-      <div class="activity-log-copy">${esc(e.message)}</div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
+}
+
+export function renderWorkspaceAwareness(project) {
+  const el = document.getElementById('workspaceAwareness');
+  if (!el) return;
+  if (!project?.isShared) { el.hidden = true; return; }
+
+  const lastEditor = project.lastEditorName;
+  const lastAt = project.lastActivityAt;
+  const openCount = allComments.filter(c => !c.resolved && !c.parentId).length;
+
+  el.hidden = false;
+  el.innerHTML = [
+    lastEditor && lastAt
+      ? `<div class="awareness-row">
+           <span class="awareness-icon" aria-hidden="true">✏️</span>
+           <span>${esc(lastEditor)} <span class="awareness-time">${relativeTime(lastAt)}</span></span>
+         </div>`
+      : '',
+    `<div class="awareness-row">
+       <span class="awareness-icon" aria-hidden="true">💬</span>
+       <span>${openCount} open comment${openCount !== 1 ? 's' : ''}</span>
+     </div>`
+  ].filter(Boolean).join('');
 }
 
 function esc(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Escape text then wrap @handle patterns in a styled span (safe — regex only matches word chars).
+function displayWithMentions(text) {
+  return esc(text).replace(/@([\w][\w.-]*)/g, '<span class="mention-tag">@$1</span>');
+}
+
+// Extract collaborator mentions from comment text, matched against project membership.
+function parseMentions(text, project) {
+  const mentions = [];
+  const seen = new Set();
+  const pattern = /@([\w][\w.-]*)/g;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    const handle = match[1].toLowerCase();
+    const ownerName = (project.ownerName || project.ownerEmail || '').split('@')[0].replace(/\s+/g, '').toLowerCase();
+    if (ownerName && ownerName.includes(handle) && !seen.has(project.ownerId)) {
+      mentions.push({ uid: project.ownerId || null, name: project.ownerName || project.ownerEmail || 'Owner' });
+      if (project.ownerId) seen.add(project.ownerId);
+    }
+    Object.entries(project.collaborators || {}).forEach(([uid, c]) => {
+      if (seen.has(uid)) return;
+      const name = (c.name || c.email || '').split('@')[0].replace(/\s+/g, '').toLowerCase();
+      if (name && name.includes(handle)) {
+        mentions.push({ uid, name: c.name || c.email || uid });
+        seen.add(uid);
+      }
+    });
+  }
+  return mentions;
+}
+
+function relativeTime(iso) {
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `${d}d ago`;
+    return fmtTime(iso);
+  } catch { return ''; }
 }
