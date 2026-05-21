@@ -102,6 +102,12 @@ service cloud.firestore {
         resource.data.fromUid == request.auth.uid;
     }
 
+    // Waitlist — anyone can submit; only admins can read/manage
+    match /waitlist/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
     // Admin identity — admins read their own record; no client write ever
     match /admins/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;

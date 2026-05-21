@@ -7453,3 +7453,26 @@ html[data-theme="white"] .user-trigger {
   font-size: 0.75rem;
   padding: 3px 8px;
 }
+
+/* ── Admin waitlist table ──────────────────────────────── */
+.admin-waitlist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.admin-waitlist-table th {
+  text-align: left;
+  color: var(--text-faint, rgba(255,255,255,.35));
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,.08));
+}
+.admin-waitlist-table td {
+  padding: 9px 12px;
+  color: var(--text-muted, rgba(255,255,255,.55));
+  border-bottom: 1px solid var(--border, rgba(255,255,255,.06));
+}
+.admin-waitlist-table tr:hover td { background: rgba(255,255,255,.03); }

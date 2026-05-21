@@ -41,6 +41,7 @@ export const Admin = {
     _bindFeedback();
     _bindFlags();
     _bindIncidents();
+    _bindWaitlist();
   },
 
   async show() {
@@ -90,7 +91,8 @@ function _activateTab(name) {
     users: _loadUsers,
     feedback: _loadFeedback,
     flags: _loadFlags,
-    incidents: _loadIncidents
+    incidents: _loadIncidents,
+    waitlist: _loadWaitlist
   };
   loaders[name]?.();
 }
@@ -397,6 +399,60 @@ async function _incidentAction(action, id) {
     _loadIncidents();
   } catch (err) {
     showToast('Failed: ' + err.message, 'error');
+  }
+}
+
+// ─── Waitlist ─────────────────────────────────────────────────────────────
+
+function _bindWaitlist() {
+  document.getElementById('adminWaitlistExport')?.addEventListener('click', _exportWaitlist);
+}
+
+async function _loadWaitlist() {
+  const list = document.getElementById('adminWaitlistList');
+  const count = document.getElementById('adminWaitlistCount');
+  if (!list) return;
+  list.innerHTML = '<p class="admin-loading">Loading…</p>';
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'waitlist'), orderBy('createdAt', 'desc'), limit(200))
+    );
+    if (count) count.textContent = snap.size;
+    if (!snap.size) { list.innerHTML = '<p class="admin-loading">No waitlist entries yet.</p>'; return; }
+    list.innerHTML = `<table class="admin-waitlist-table">
+      <thead><tr><th>Email</th><th>Name</th><th>Source</th><th>Date</th></tr></thead>
+      <tbody>${snap.docs.map(d => {
+        const w = d.data();
+        return `<tr>
+          <td>${_esc(w.email || '')}</td>
+          <td>${_esc(w.name || '—')}</td>
+          <td>${_esc(w.source || '—')}</td>
+          <td>${w.createdAt ? new Date(w.createdAt).toLocaleDateString() : '—'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  } catch (err) {
+    list.innerHTML = `<p class="admin-error">Error: ${_esc(err.message)}</p>`;
+  }
+}
+
+async function _exportWaitlist() {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'waitlist'), orderBy('createdAt', 'desc'), limit(5000))
+    );
+    const rows = ['email,name,source,date'];
+    snap.docs.forEach(d => {
+      const w = d.data();
+      rows.push(`"${(w.email||'').replace(/"/g,'""')}","${(w.name||'').replace(/"/g,'""')}","${w.source||''}","${w.createdAt||''}"`);
+    });
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'eyawriter-waitlist.csv'; a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showToast('Export failed: ' + err.message, 'error');
   }
 }
 

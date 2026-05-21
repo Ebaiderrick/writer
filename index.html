@@ -590,6 +590,7 @@
           <button class="admin-tab" data-admin-tab="feedback">Feedback</button>
           <button class="admin-tab" data-admin-tab="flags">Feature Flags</button>
           <button class="admin-tab" data-admin-tab="incidents">Incidents</button>
+          <button class="admin-tab" data-admin-tab="waitlist">Waitlist</button>
         </nav>
         <main class="admin-content">
 
@@ -666,6 +667,18 @@
                 <button id="adminIncidentCreateBtn" class="ghost-button btn-sm">Create Incident</button>
               </div>
               <div id="adminIncidentList"><p class="admin-loading">Loading…</p></div>
+            </div>
+          </section>
+
+          <!-- Waitlist -->
+          <section class="admin-section" data-admin-section="waitlist">
+            <div class="admin-section-inner">
+              <h2>Waitlist <span id="adminWaitlistCount" style="font-size:1rem;font-weight:400;color:var(--text-muted);"></span></h2>
+              <p class="settings-hint">Users who signed up for Pro early access from the marketing site.</p>
+              <div style="margin-bottom:16px;">
+                <button id="adminWaitlistExport" class="ghost-button btn-sm">Export CSV</button>
+              </div>
+              <div id="adminWaitlistList"><p class="admin-loading">Loading…</p></div>
             </div>
           </section>
 

@@ -1,5 +1,14 @@
-const CACHE_NAME = 'eyawriter-v1.0.0';
-const PRECACHE = ['/', '/styles.css'];
+const CACHE_NAME = 'eyawriter-v1.1.0';
+const PRECACHE = [
+  '/',
+  '/styles.css',
+  '/marketing.css',
+  '/landing.html',
+  '/features.html',
+  '/pricing.html',
+  '/faq.html',
+  '/help.html'
+];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(

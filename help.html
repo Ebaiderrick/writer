@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Help Center — EyaWriter</title>
+  <meta name="description" content="EyaWriter Help Center — getting started guides, editor documentation, AI usage guides, collaboration how-tos, and keyboard shortcuts.">
+  <link rel="canonical" href="https://eyawriter.com/help">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+  <link rel="stylesheet" href="/marketing.css">
+</head>
+<body>
+
+<nav class="mkt-nav">
+  <div class="container">
+    <a href="/" class="nav-logo">Eya<span>Writer</span></a>
+    <ul class="nav-links">
+      <li><a href="/features">Features</a></li>
+      <li><a href="/pricing">Pricing</a></li>
+      <li><a href="/faq">FAQ</a></li>
+      <li><a href="/help" class="is-active">Help</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="/app" class="btn-ghost">Sign In</a>
+      <a href="/app" class="btn-primary">Get Started Free</a>
+    </div>
+    <button class="nav-hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+
+<section class="section">
+  <div class="container">
+    <div class="section-header" style="margin-bottom:40px;">
+      <span class="section-label">Documentation</span>
+      <h1 class="section-title">Help Center</h1>
+      <p class="section-sub">Everything you need to get the most out of EyaWriter.</p>
+    </div>
+
+    <div class="help-grid">
+      <!-- Sidebar -->
+      <aside class="help-sidebar">
+        <div class="help-sidebar-title">On this page</div>
+        <ul class="help-sidebar-nav">
+          <li><a href="#getting-started" class="is-active">Getting Started</a></li>
+          <li><a href="#editor">Editor Guide</a></li>
+          <li><a href="#ai">AI Tools</a></li>
+          <li><a href="#collaboration">Collaboration</a></li>
+          <li><a href="#export">Export</a></li>
+          <li><a href="#shortcuts">Keyboard Shortcuts</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+        </ul>
+      </aside>
+
+      <!-- Content -->
+      <main class="help-content">
+
+        <!-- Getting Started -->
+        <section class="help-section" id="getting-started">
+          <h2>Getting Started</h2>
+
+          <h3>Creating your account</h3>
+          <p>EyaWriter is free — no credit card required. To sign up, visit <a href="/app">/app</a> and click the Sign Up tab. Enter your name, email, and a password with at least one uppercase letter, one lowercase letter, and one number.</p>
+          <p>After signing up, you'll receive a verification email. Click the link in that email, then sign in. Your account is ready.</p>
+
+          <div class="tip-box">You can explore EyaWriter in demo mode before creating an account — your work won't be saved to the cloud, but you can try all the formatting features.</div>
+
+          <h3>Creating your first script</h3>
+          <ol>
+            <li>After signing in, you'll land on the Home screen.</li>
+            <li>Click <strong>New Project</strong> (or the <strong>+</strong> button).</li>
+            <li>Give your script a title and click Create.</li>
+            <li>You'll be taken directly to the editor. Start typing your first scene heading.</li>
+          </ol>
+
+          <h3>Interface overview</h3>
+          <div class="help-card">
+            <h4>Toolbar</h4>
+            <p>The top bar contains element type buttons (Scene Heading, Action, Character, etc.), the AI assistant trigger, export button, and collaboration panel.</p>
+          </div>
+          <div class="help-card">
+            <h4>Editor</h4>
+            <p>The main writing area. Each line is an "element" — a scene heading, action line, dialogue line, etc. Click a line or use Tab/Enter to change element types.</p>
+          </div>
+          <div class="help-card">
+            <h4>Outline panel</h4>
+            <p>The right sidebar shows a live outline of your scenes. Click any scene to jump to it. Toggle the panel from Settings or the toolbar.</p>
+          </div>
+          <div class="help-card">
+            <h4>Home screen</h4>
+            <p>Lists all your projects. Switch between grid and list view, sort by date or title, and access project settings from here.</p>
+          </div>
+        </section>
+
+        <!-- Editor Guide -->
+        <section class="help-section" id="editor">
+          <h2>Editor Guide</h2>
+
+          <h3>Screenplay element types</h3>
+          <p>Every line in EyaWriter has an element type that controls its formatting. Change the type using the toolbar buttons or keyboard shortcuts.</p>
+          <table class="shortcuts-table">
+            <thead><tr><th>Element</th><th>Format</th><th>Shortcut</th></tr></thead>
+            <tbody>
+              <tr><td>Scene Heading</td><td>ALL CAPS, bold, e.g. INT. OFFICE — DAY</td><td><kbd>Ctrl</kbd>+<kbd>1</kbd></td></tr>
+              <tr><td>Action</td><td>Full width, regular text</td><td><kbd>Ctrl</kbd>+<kbd>2</kbd></td></tr>
+              <tr><td>Character</td><td>Centered, ALL CAPS</td><td><kbd>Ctrl</kbd>+<kbd>3</kbd></td></tr>
+              <tr><td>Dialogue</td><td>Indented block below character</td><td><kbd>Ctrl</kbd>+<kbd>4</kbd></td></tr>
+              <tr><td>Parenthetical</td><td>Centered, in (parentheses)</td><td><kbd>Ctrl</kbd>+<kbd>5</kbd></td></tr>
+              <tr><td>Transition</td><td>Right-aligned, ALL CAPS</td><td><kbd>Ctrl</kbd>+<kbd>6</kbd></td></tr>
+              <tr><td>Shot</td><td>ALL CAPS</td><td><kbd>Ctrl</kbd>+<kbd>7</kbd></td></tr>
+              <tr><td>Note</td><td>Hidden in export, shown in editor</td><td><kbd>Ctrl</kbd>+<kbd>8</kbd></td></tr>
+            </tbody>
+          </table>
+
+          <h3>Scene headings</h3>
+          <p>Scene headings follow the pattern: <code>INT./EXT. LOCATION — TIME OF DAY</code>. EyaWriter auto-suggests locations you've used before as you type. Press <kbd>Tab</kbd> to accept a suggestion.</p>
+          <p>Common time-of-day values: DAY, NIGHT, MORNING, AFTERNOON, EVENING, CONTINUOUS, LATER, MOMENTS LATER.</p>
+
+          <h3>Auto-complete</h3>
+          <p>EyaWriter remembers character names and locations from your script. When writing a Character element, it suggests names from your existing cast. Press <kbd>Tab</kbd> or <kbd>Enter</kbd> to accept.</p>
+
+          <h3>Scene numbering</h3>
+          <p>Toggle automatic scene numbering from Settings → Editor → Scene Numbering, or from the toolbar. Numbers appear in the left margin and update automatically as scenes are added or reordered.</p>
+
+          <h3>Moving scenes</h3>
+          <p>Drag any scene heading in the Outline panel to reorder scenes. The full scene content moves with it. You can also cut and paste scene blocks in the editor itself.</p>
+
+          <h3>Page count</h3>
+          <p>EyaWriter tracks an approximate page count shown in the toolbar. Screenplay convention is roughly one page per minute of screen time.</p>
+        </section>
+
+        <!-- AI Tools -->
+        <section class="help-section" id="ai">
+          <h2>AI Tools</h2>
+
+          <h3>How to use AI assistance</h3>
+          <p>Select any text in the editor, then click the <strong>AI</strong> button in the toolbar (or press <kbd>Ctrl</kbd>+<kbd>Space</kbd>). Choose an action from the panel:</p>
+          <ul>
+            <li><strong>Grammar</strong> — fixes spelling, punctuation, and grammar errors</li>
+            <li><strong>Improve</strong> — rewrites the selected text to be cleaner and more vivid</li>
+            <li><strong>Dialogue</strong> — sharpens dialogue lines, preserving character voice</li>
+            <li><strong>Scene</strong> — generates or expands a scene from your selected text as a brief</li>
+            <li><strong>Proofreading</strong> — runs a full smart proofread and returns notes</li>
+          </ul>
+
+          <div class="tip-box">For best results, select just the relevant text — one line, one dialogue block, or one scene. The AI performs better with focused input than with the full script.</div>
+
+          <h3>Custom instructions</h3>
+          <p>You can add a custom instruction to any AI request. Use this to specify tone, genre, or style: <em>"Rewrite in a noir style"</em> or <em>"Make the dialogue sound more natural for a teenager."</em></p>
+
+          <h3>Setting up your own API key</h3>
+          <ol>
+            <li>Go to <strong>Settings → AI</strong>.</li>
+            <li>Enter your API endpoint URL (e.g. your OpenRouter or OpenAI endpoint).</li>
+            <li>Click Save, then Test Connection to verify it works.</li>
+          </ol>
+          <p>Using your own key bypasses the shared rate limit and lets you use any model available on that platform.</p>
+
+          <h3>AI rate limits</h3>
+          <p>The shared (free) AI endpoint has a rate limit to keep the service fair for all users. If you hit the limit, wait a few minutes or plug in your own API key for unlimited use.</p>
+
+          <h3>Privacy note</h3>
+          <p>AI requests only send the selected text and a small surrounding context window to the model. Your full script is never sent. We do not log AI request content or use it for model training.</p>
+        </section>
+
+        <!-- Collaboration -->
+        <section class="help-section" id="collaboration">
+          <h2>Collaboration</h2>
+
+          <h3>Inviting collaborators</h3>
+          <ol>
+            <li>Open your script in the editor.</li>
+            <li>Click the <strong>Collaborate</strong> button in the toolbar.</li>
+            <li>Enter your collaborator's email address and choose their role.</li>
+            <li>Click <strong>Send Invite</strong>. They'll receive an email invitation.</li>
+          </ol>
+          <p>Collaborators must have a free EyaWriter account. If they don't have one, they can sign up at <a href="/app">/app</a> — it takes 30 seconds.</p>
+
+          <h3>Collaboration roles</h3>
+          <table class="shortcuts-table">
+            <thead><tr><th>Role</th><th>Permissions</th></tr></thead>
+            <tbody>
+              <tr><td>Owner</td><td>Full access: edit, delete, manage collaborators</td></tr>
+              <tr><td>Editor</td><td>Read and write script content; add and resolve comments</td></tr>
+              <tr><td>Viewer</td><td>Read only; can add comments but not edit content</td></tr>
+            </tbody>
+          </table>
+
+          <h3>Using comments</h3>
+          <p>Click on any line in a shared script to open the comment panel. Type your comment and press Enter. Comments are visible to all collaborators. The owner and editors can mark comments as resolved.</p>
+
+          <h3>Real-time sync</h3>
+          <p>Changes from all collaborators appear in real time. If two editors type on the same line simultaneously, EyaWriter reconciles the changes — last write wins. For important simultaneous sessions, coordinate who edits which scene to avoid conflicts.</p>
+
+          <h3>Removing a collaborator</h3>
+          <p>Open the Collaborate panel, find the collaborator's name, and click <strong>Remove</strong>. They'll immediately lose access to the script.</p>
+        </section>
+
+        <!-- Export -->
+        <section class="help-section" id="export">
+          <h2>Export</h2>
+
+          <h3>Exporting to DOCX</h3>
+          <ol>
+            <li>Open your script in the editor.</li>
+            <li>Click the <strong>Export</strong> button in the toolbar.</li>
+            <li>Choose your export options (scene numbers, title page).</li>
+            <li>Click <strong>Export to DOCX</strong>. The file downloads instantly.</li>
+          </ol>
+          <p>The exported DOCX uses Courier 12pt font, 1.5" left margin, 1" other margins, and standard screenplay element spacing — ready for submission.</p>
+
+          <h3>Title page</h3>
+          <p>EyaWriter generates a standard title page with your script's title and your account name. You can edit the contact information in the export options dialog before downloading.</p>
+
+          <h3>Scene numbers in export</h3>
+          <p>If scene numbering is enabled, scene numbers appear in the left margin of the exported DOCX. Toggle this in the export dialog.</p>
+
+          <h3>PDF export</h3>
+          <p>PDF export is in development and will be available with the Pro plan. For now, you can print-to-PDF from most word processors after opening the exported DOCX.</p>
+        </section>
+
+        <!-- Shortcuts -->
+        <section class="help-section" id="shortcuts">
+          <h2>Keyboard Shortcuts</h2>
+
+          <h3>Element types</h3>
+          <table class="shortcuts-table">
+            <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
+            <tbody>
+              <tr><td>Scene Heading</td><td><kbd>Ctrl</kbd>+<kbd>1</kbd></td></tr>
+              <tr><td>Action</td><td><kbd>Ctrl</kbd>+<kbd>2</kbd></td></tr>
+              <tr><td>Character</td><td><kbd>Ctrl</kbd>+<kbd>3</kbd></td></tr>
+              <tr><td>Dialogue</td><td><kbd>Ctrl</kbd>+<kbd>4</kbd></td></tr>
+              <tr><td>Parenthetical</td><td><kbd>Ctrl</kbd>+<kbd>5</kbd></td></tr>
+              <tr><td>Transition</td><td><kbd>Ctrl</kbd>+<kbd>6</kbd></td></tr>
+              <tr><td>Shot</td><td><kbd>Ctrl</kbd>+<kbd>7</kbd></td></tr>
+              <tr><td>Note</td><td><kbd>Ctrl</kbd>+<kbd>8</kbd></td></tr>
+            </tbody>
+          </table>
+
+          <h3>Editor</h3>
+          <table class="shortcuts-table">
+            <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
+            <tbody>
+              <tr><td>New line (same element)</td><td><kbd>Shift</kbd>+<kbd>Enter</kbd></td></tr>
+              <tr><td>Next element / new line</td><td><kbd>Enter</kbd></td></tr>
+              <tr><td>Accept auto-complete</td><td><kbd>Tab</kbd></td></tr>
+              <tr><td>Open AI assistant</td><td><kbd>Ctrl</kbd>+<kbd>Space</kbd></td></tr>
+              <tr><td>Save (cloud sync)</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td></tr>
+              <tr><td>Undo</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td></tr>
+              <tr><td>Redo</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td></tr>
+              <tr><td>Find in script</td><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td></tr>
+            </tbody>
+          </table>
+
+          <h3>Navigation</h3>
+          <table class="shortcuts-table">
+            <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
+            <tbody>
+              <tr><td>Go to next scene</td><td><kbd>Ctrl</kbd>+<kbd>↓</kbd></td></tr>
+              <tr><td>Go to previous scene</td><td><kbd>Ctrl</kbd>+<kbd>↑</kbd></td></tr>
+              <tr><td>Toggle outline panel</td><td><kbd>Ctrl</kbd>+<kbd>\\</kbd></td></tr>
+              <tr><td>Back to Home</td><td><kbd>Escape</kbd> (from toolbar)</td></tr>
+            </tbody>
+          </table>
+
+          <h3>App</h3>
+          <table class="shortcuts-table">
+            <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
+            <tbody>
+              <tr><td>Open Settings</td><td><kbd>Ctrl</kbd>+<kbd>,</kbd></td></tr>
+              <tr><td>Admin Dashboard (admins only)</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- Troubleshooting -->
+        <section class="help-section" id="troubleshooting">
+          <h2>Troubleshooting</h2>
+
+          <h3>My changes aren't saving</h3>
+          <p>EyaWriter auto-saves every few seconds. Check the save indicator in the toolbar. If it shows an error, check your internet connection. EyaWriter will save locally and sync when you're back online.</p>
+
+          <h3>The AI assistant isn't responding</h3>
+          <ul>
+            <li>Check your internet connection.</li>
+            <li>Make sure you have text selected before clicking AI.</li>
+            <li>The shared endpoint has a rate limit — wait a minute and try again.</li>
+            <li>If you've set a custom API endpoint, test it in Settings → AI → Test Connection.</li>
+          </ul>
+
+          <h3>I can't see a collaborator's changes</h3>
+          <p>Make sure both you and your collaborator are viewing the shared version of the script (found under Collaborate, not under your private projects list). Refresh the page if changes don't appear after 10 seconds.</p>
+
+          <h3>Export is blank or incomplete</h3>
+          <p>This can happen if some lines have no element type assigned. Check that every line in your script has a type (scene heading, action, etc.) — untyped lines may be skipped in export.</p>
+
+          <h3>I forgot my password</h3>
+          <p>On the sign-in screen, click <strong>Forgot password?</strong> and enter your email. You'll receive a reset link within a few minutes. Check your spam folder if it doesn't arrive.</p>
+
+          <h3>Offline mode isn't working</h3>
+          <p>Offline support requires the service worker to be registered, which happens after your first visit. Visit EyaWriter while online, then go offline — your most recently opened scripts will be available.</p>
+
+          <h3>Still stuck?</h3>
+          <p>Email us at <a href="mailto:hello@eyawriter.com">hello@eyawriter.com</a> — include your account email and a description of the issue. For urgent issues, check the <a href="/faq">FAQ</a> first.</p>
+
+          <div class="tip-box">You can attach diagnostic information to your support email from inside the app: Settings → Support → Copy Diagnostics, then paste into your email.</div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+</section>
+
+<footer class="mkt-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand"><a href="/" class="nav-logo">Eya<span>Writer</span></a><p>Professional screenplay writing with AI assistance. Free forever.</p></div>
+      <div class="footer-col"><h4>Product</h4><ul><li><a href="/features">Features</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/app">Get Started</a></li></ul></div>
+      <div class="footer-col"><h4>Learn</h4><ul><li><a href="/help">Help Center</a></li><li><a href="/faq">FAQ</a></li></ul></div>
+      <div class="footer-col"><h4>Company</h4><ul><li><a href="mailto:hello@eyawriter.com">Contact</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><span>© 2025 EyaWriter. All rights reserved.</span><span>Made for storytellers everywhere.</span></div>
+  </div>
+</footer>
+
+<script type="module" src="/js/marketing.js"></script>
+</body>
+</html>
