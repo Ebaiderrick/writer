@@ -1,7 +1,7 @@
 import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
-import { getCurrentProject, persistProjects, serializeScript } from './project.js';
+import { getCurrentProject, persistProjects, serializeScript, restoreProject, permanentlyDeleteProject } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
@@ -828,7 +828,7 @@ export function renderHome() {
   const template = document.querySelector("#projectCardTemplate");
   state.homeProjectSort = state.homeProjectSort || "latest";
   state.homeProjectFormat = state.homeProjectFormat || "all";
-  let projects = sortProjectsForHome(state.projects);
+  let projects = sortProjectsForHome(state.projects).filter(p => !p.isArchived);
   let workspaceLead = null;
   const currentUid = auth.currentUser?.uid || "";
 
@@ -1106,7 +1106,67 @@ export function renderHome() {
   });
 
   renderRecentProjectMenus();
+  renderArchivedSection();
   applyTranslations();
+}
+
+export function renderArchivedSection() {
+  const section = document.getElementById('archivedProjectSection');
+  const grid = document.getElementById('archivedProjectGrid');
+  if (!section || !grid) return;
+
+  const archived = (state.projects || []).filter(p => p.isArchived && !p.isWorkspaceRoot);
+  section.hidden = !archived.length;
+  if (!archived.length) { grid.innerHTML = ''; return; }
+
+  grid.innerHTML = '';
+  archived.forEach(project => {
+    const card = document.createElement('article');
+    card.className = 'project-card archived-project-card';
+    card.dataset.projectId = project.id;
+
+    const archivedDate = project.archivedAt ? formatDateTime(project.archivedAt) : '';
+    const archivedBy = project.archivedByName ? ` by ${escapeHtml(project.archivedByName)}` : '';
+
+    card.innerHTML = `
+      <div class="project-card-body archived-card-body">
+        <h3 class="project-card-title">${escapeHtml(project.title)}</h3>
+        <p class="project-card-logline">${escapeHtml(project.logline || '')}</p>
+        <p class="archived-meta">Archived${archivedBy}${archivedDate ? ' · ' + archivedDate : ''}</p>
+      </div>
+      <div class="archived-card-actions">
+        <button class="ghost-button btn-sm project-restore-btn" data-project-id="${escapeHtml(project.id)}" type="button">Restore</button>
+        <button class="ghost-button btn-sm project-delete-perm-btn" data-project-id="${escapeHtml(project.id)}" type="button">Delete Forever</button>
+      </div>
+    `;
+
+    card.querySelector('.project-restore-btn').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const result = await restoreProject(project.id);
+      if (result.ok) {
+        renderHome();
+      } else {
+        customAlert(result.reason || 'Restore failed.', 'Restore Failed');
+      }
+    });
+
+    card.querySelector('.project-delete-perm-btn').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const confirmed = await customConfirm(
+        `Permanently delete "${project.title}"? This cannot be undone.`,
+        'Delete Forever'
+      );
+      if (!confirmed) return;
+      const result = await permanentlyDeleteProject(project.id);
+      if (result.ok) {
+        renderHome();
+      } else {
+        customAlert(result.reason || 'Deletion failed.', 'Delete Failed');
+      }
+    });
+
+    grid.appendChild(card);
+  });
 }
 
 export function renderRecentProjectMenus() {
@@ -1116,7 +1176,7 @@ export function renderRecentProjectMenus() {
   }
 
   const projects = [...state.projects]
-    .filter((project) => !project.isWorkspaceRoot)
+    .filter((project) => !project.isWorkspaceRoot && !project.isArchived)
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
     .slice(0, 5);
 

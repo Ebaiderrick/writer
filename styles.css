@@ -1436,6 +1436,76 @@ html[data-theme="rose"] .mesh-background {
   overflow: hidden;
 }
 
+/* ── Archive / Recently Deleted section ─────────────────────── */
+.archived-projects-section {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px dashed var(--line);
+}
+
+.archived-projects-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.archived-projects-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.archived-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.archived-project-card {
+  height: auto !important;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  opacity: 0.72;
+  filter: grayscale(0.3);
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+.archived-project-card:hover {
+  opacity: 1;
+  filter: none;
+}
+
+.archived-card-body {
+  flex: 1;
+}
+
+.archived-meta {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.archived-card-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.project-delete-perm-btn {
+  color: #c0392b;
+  margin-left: auto;
+}
+
+.project-delete-perm-btn:hover {
+  background: rgba(192, 57, 43, 0.08);
+}
+
 .project-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);

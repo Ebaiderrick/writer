@@ -11,7 +11,7 @@ import {
   getWorkspaceProjects, getWorkspaceRootProject, updateWorkspaceAcrossProjects,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
-  deleteProjectFromCloud
+  deleteProjectFromCloud, archiveProject
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
@@ -3024,32 +3024,29 @@ async function removeProject(id) {
   if (!target) return;
 
   const entityLabel = target.isWorkspaceRoot ? "workspace" : "project";
-  const confirmation = await customPrompt(`This will permanently delete the ${entityLabel} "${target.title}".\n\nTo confirm, please retype the ${entityLabel} name below:`, "", "Confirm Deletion");
+  const confirmed = await customConfirm(
+    `Move "${target.title}" to the archive? You can restore it from the "Recently Deleted" section on your home screen.`,
+    `Archive ${entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1)}`
+  );
+  if (!confirmed) return;
 
-  if (confirmation !== target.title) {
-    if (confirmation !== null) {
-      await customAlert("Deletion cancelled. The name you typed did not match.", "Cancelled");
-    }
+  const result = await archiveProject(id);
+  if (!result.ok) {
+    await customAlert(result.reason || 'Could not archive the project.', 'Archive Failed');
     return;
   }
 
+  // If the archived project was currently open, navigate to the first active project.
   const workspaceId = target.workspace?.id || target.id;
-  state.projects = state.projects.filter((item) => {
-    if (target.isWorkspaceRoot) {
-      return item.workspace?.id !== workspaceId;
-    }
-    return item.id !== id;
-  });
-  if (!state.projects.length) {
-    const fallback = createProjectWithOptions();
-    state.projects = [fallback];
-  }
-  if (target.isWorkspaceRoot || state.currentWorkspaceId === workspaceId) {
+  const wasCurrentProject = target.isWorkspaceRoot
+    ? state.projects.find(p => p.workspace?.id === workspaceId && p.id === state.currentProjectId)
+    : target.id === state.currentProjectId;
+
+  if (wasCurrentProject || (target.isWorkspaceRoot && state.currentWorkspaceId === workspaceId)) {
     state.currentWorkspaceId = null;
+    state.currentProjectId = state.projects.find(p => !p.isArchived)?.id || state.projects[0]?.id || null;
   }
-  state.currentProjectId = state.projects[0].id;
-  persistProjects(true, { syncInputs: false });
-  deleteProjectFromCloud(id);
+
   showHome();
   renderHome();
 }

@@ -176,6 +176,155 @@ export async function deleteProjectFromCloud(projectId) {
   }
 }
 
+export async function archiveProject(projectId) {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return { ok: false, reason: 'Not signed in.' };
+
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return { ok: false, reason: 'Project not found.' };
+
+  const user = auth.currentUser;
+  const now = new Date().toISOString();
+  const archiveMeta = {
+    isArchived: true,
+    archivedAt: now,
+    archivedBy: userId,
+    archivedByName: user?.displayName || user?.email || 'Unknown',
+    restoredAt: null,
+    restoredBy: null
+  };
+
+  // Archive workspace siblings when the workspace root is archived.
+  const workspaceId = project.workspace?.id || project.id;
+  const toArchive = project.isWorkspaceRoot
+    ? state.projects.filter(p => p.workspace?.id === workspaceId)
+    : [project];
+
+  toArchive.forEach(p => Object.assign(p, archiveMeta));
+
+  try {
+    for (const p of toArchive) {
+      await setDoc(doc(db, 'users', userId, 'projects', p.id), archiveMeta, { merge: true });
+    }
+    if (project.isShared && (!project.ownerId || project.ownerId === userId)) {
+      try {
+        const token = await user.getIdToken();
+        await fetch('/api/archive-shared-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ projectId })
+        });
+      } catch (err) {
+        console.warn('[archiveProject] Server archive failed:', err.message);
+      }
+    }
+    logActivity(projectId, `Archived "${project.title}".`, { category: ACTIVITY_CATEGORIES.system });
+    persistProjects(false, { syncInputs: false });
+    return { ok: true };
+  } catch (err) {
+    console.error('[archiveProject]', err);
+    return { ok: false, reason: err.message || 'Archive failed.' };
+  }
+}
+
+export async function restoreProject(projectId) {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return { ok: false, reason: 'Not signed in.' };
+
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return { ok: false, reason: 'Project not found.' };
+
+  // Re-validate shared project membership before restoring.
+  if (project.isShared) {
+    const isOwner = !project.ownerId || project.ownerId === userId;
+    const isCollaborator = Boolean(project.collaborators?.[userId]);
+    if (!isOwner && !isCollaborator) {
+      return { ok: false, reason: 'You are no longer a member of this shared project.' };
+    }
+  }
+
+  const user = auth.currentUser;
+  const now = new Date().toISOString();
+  const restoreMeta = {
+    isArchived: false,
+    archivedAt: null,
+    archivedBy: null,
+    archivedByName: '',
+    restoredAt: now,
+    restoredBy: userId
+  };
+
+  const workspaceId = project.workspace?.id || project.id;
+  const toRestore = project.isWorkspaceRoot
+    ? state.projects.filter(p => p.workspace?.id === workspaceId)
+    : [project];
+
+  toRestore.forEach(p => Object.assign(p, restoreMeta));
+
+  try {
+    for (const p of toRestore) {
+      await setDoc(doc(db, 'users', userId, 'projects', p.id), restoreMeta, { merge: true });
+    }
+    if (project.isShared && (!project.ownerId || project.ownerId === userId)) {
+      try {
+        const token = await user.getIdToken();
+        await fetch('/api/restore-shared-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ projectId })
+        });
+      } catch (err) {
+        console.warn('[restoreProject] Server restore failed:', err.message);
+      }
+    }
+    logActivity(projectId, `Restored "${project.title}".`, { category: ACTIVITY_CATEGORIES.system });
+    persistProjects(false, { syncInputs: false });
+    return { ok: true };
+  } catch (err) {
+    console.error('[restoreProject]', err);
+    return { ok: false, reason: err.message || 'Restore failed.' };
+  }
+}
+
+export async function permanentlyDeleteProject(projectId) {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return { ok: false, reason: 'Not signed in.' };
+
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return { ok: false, reason: 'Project not found.' };
+  if (!project.isArchived) return { ok: false, reason: 'Archive the project first before permanent deletion.' };
+
+  const workspaceId = project.workspace?.id || project.id;
+  const toDelete = project.isWorkspaceRoot
+    ? state.projects.filter(p => p.workspace?.id === workspaceId)
+    : [project];
+
+  if (project.isWorkspaceRoot) {
+    state.projects = state.projects.filter(p => p.workspace?.id !== workspaceId);
+  } else {
+    state.projects = state.projects.filter(p => p.id !== projectId);
+  }
+
+  // Ensure at least one active project remains.
+  if (!state.projects.some(p => !p.isArchived)) {
+    const fallback = createProjectWithOptions();
+    state.projects.unshift(fallback);
+  }
+
+  if (toDelete.some(p => p.id === state.currentProjectId)) {
+    state.currentProjectId = state.projects.find(p => !p.isArchived)?.id || state.projects[0]?.id || null;
+  }
+  if (project.isWorkspaceRoot && state.currentWorkspaceId === workspaceId) {
+    state.currentWorkspaceId = null;
+  }
+
+  persistProjects(false, { syncInputs: false });
+  for (const p of toDelete) {
+    await deleteProjectFromCloud(p.id);
+  }
+  return { ok: true };
+}
+
 export function setProjectsFromCloud(cloudProjects) {
   state.projects = cloudProjects.length > 0 ? cloudProjects : [cloneProject(sampleProject, true)];
   state.currentProjectId = state.projects[0].id;
@@ -272,6 +421,11 @@ export function sanitizeProject(project) {
     updatedAt: project.updatedAt || new Date().toISOString(),
     isShared: Boolean(project.isShared),
     isArchived: Boolean(project.isArchived),
+    archivedAt: project.archivedAt || null,
+    archivedBy: project.archivedBy || null,
+    archivedByName: project.archivedByName || '',
+    restoredAt: project.restoredAt || null,
+    restoredBy: project.restoredBy || null,
     ownerId: project.ownerId || null,
     storyMemory: sanitizeStoryMemory(project.storyMemory),
     activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
