@@ -260,6 +260,14 @@ async function ensureSharedProject(project, user) {
   const ref = doc(db, 'sharedProjects', project.id);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
+    const shareEntry = {
+      timestamp: new Date().toISOString(),
+      user: user.displayName || user.email || 'Unknown User',
+      uid: user.uid,
+      category: ACTIVITY_CATEGORIES.workspace,
+      message: `Shared "${project.title}" with the team.`
+    };
+    const activityLog = [...(project.activityLog || []), shareEntry];
     await setDoc(ref, {
       ...project,
       ownerId: user.uid,
@@ -274,9 +282,14 @@ async function ensureSharedProject(project, user) {
       },
       collaborators: {},
       isShared: true,
+      activityLog,
+      lastActivityAt: shareEntry.timestamp,
+      lastEditorName: shareEntry.user,
       updatedBy: user.uid,
       syncedAt: new Date().toISOString()
     });
+    project.activityLog = activityLog;
+    project.lastActivityAt = shareEntry.timestamp;
   }
   project.isShared = true;
   project.ownerId = user.uid;
@@ -1485,12 +1498,34 @@ export function renderWorkspaceAwareness(project) {
   const lastAt = project.lastActivityAt;
   const openCount = allComments.filter(c => !c.resolved && !c.parentId).length;
 
+  // Collect up to 3 distinct recent editors from the activity log.
+  const recentEditors = [];
+  const seenNames = new Set();
+  const log = project.activityLog || [];
+  for (let i = log.length - 1; i >= 0 && recentEditors.length < 3; i--) {
+    const { user, timestamp } = log[i];
+    if (user && !seenNames.has(user)) {
+      recentEditors.push({ name: user, timestamp });
+      seenNames.add(user);
+    }
+  }
+
   el.hidden = false;
   el.innerHTML = [
     lastEditor && lastAt
       ? `<div class="awareness-row">
            <span class="awareness-icon" aria-hidden="true">✏️</span>
            <span>${esc(lastEditor)} <span class="awareness-time">${relativeTime(lastAt)}</span></span>
+         </div>`
+      : '',
+    recentEditors.length > 1
+      ? `<div class="awareness-row">
+           <span class="awareness-icon" aria-hidden="true">👥</span>
+           <span class="awareness-recent">${
+             recentEditors.map(e =>
+               `<span class="awareness-collaborator" title="${esc(relativeTime(e.timestamp))}">${esc(e.name.split(' ')[0])}</span>`
+             ).join(' · ')
+           }</span>
          </div>`
       : '',
     `<div class="awareness-row">

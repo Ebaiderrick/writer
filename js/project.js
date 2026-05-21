@@ -5,6 +5,7 @@ import { t } from './i18n.js';
 import { auth, db } from './firebase.js';
 import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch, limit, query } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { Recovery } from './recovery.js';
+import { logActivity, ACTIVITY_CATEGORIES } from './activity.js';
 
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -355,6 +356,8 @@ export function createProjectWithOptions(options = {}) {
   });
   upsertProject(project);
   persistProjects(true);
+  // Fire-and-forget: records creation in the project's own timeline.
+  logActivity(project.id, `Created "${project.title}".`, { category: ACTIVITY_CATEGORIES.system });
   return project;
 }
 

@@ -4483,6 +4483,24 @@ kbd {
   font-size: 0.72rem;
 }
 
+.awareness-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.awareness-collaborator {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: default;
+}
+
 .role-badge,
 .owner-badge {
   display: inline-flex;
