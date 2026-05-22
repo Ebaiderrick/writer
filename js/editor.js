@@ -40,31 +40,59 @@ export function renderEditor() {
   }
 }
 
+function _rowVersionKey(line, project, editable) {
+  const tasks = (project?.workspace?.tasks || []).filter(
+    t => t.lineId === line.id || t.sceneId === line.id
+  );
+  const tasksKey = `${tasks.length}:${tasks.filter(t => t.status !== 'done').length}`;
+  return `${line.type}|${line.text}|${String(line.secondary ?? '')}|${editable}|${state.grammarCheck}|${tasksKey}`;
+}
+
 function _renderEditorInner() {
   const project = getCurrentProject();
   if (!project) return;
   const editable = canEditProject(project);
-  refs.screenplayEditor.innerHTML = "";
   const template = document.querySelector("#blockTemplate");
   const filterSet = buildVisibleFilterSet(project);
   const spellingLexicon = state.grammarCheck && hasLanguageDictionary(state.writingLanguage)
     ? buildProjectLexicon(project, state.writingLanguage)
     : null;
+
+  // Build a map of existing rows for O(1) reuse — avoids full DOM rebuild on every render
+  const existingByLineId = new Map();
+  for (const row of refs.screenplayEditor.querySelectorAll('.script-block-row')) {
+    existingByLineId.set(row.dataset.id, row);
+  }
+
+  const seenIds = new Set();
   let currentSceneId = "";
   let collapsedSceneId = "";
   let visibleRows = 0;
   let sceneNumber = 0;
 
+  const fragment = document.createDocumentFragment();
+
   project.lines.forEach((line) => {
-    const row = template.content.firstElementChild.cloneNode(true);
-    const toggle = row.querySelector(".scene-toggle");
-    const tag = row.querySelector(".block-tag");
-    const block = row.querySelector(".script-block");
+    seenIds.add(line.id);
+    const versionKey = _rowVersionKey(line, project, editable);
+    const existing = existingByLineId.get(line.id);
+    const canReuse = existing && existing.dataset.rowVersion === versionKey;
+
+    let row, toggle, tag, block;
+    if (canReuse) {
+      row = existing;
+      toggle = row.querySelector(".scene-toggle");
+      tag = row.querySelector(".block-tag");
+      block = row.querySelector(".script-block");
+    } else {
+      row = template.content.firstElementChild.cloneNode(true);
+      toggle = row.querySelector(".scene-toggle");
+      tag = row.querySelector(".block-tag");
+      block = row.querySelector(".script-block");
+    }
 
     row.dataset.id = line.id;
-    if (line.id === state.activeBlockId) {
-      row.classList.add("is-active");
-    }
+    row.classList.toggle("is-active", line.id === state.activeBlockId);
 
     if (line.type === "scene") {
       sceneNumber++;
@@ -72,59 +100,67 @@ function _renderEditorInner() {
       const isCollapsed = project.collapsedSceneIds.includes(line.id);
       collapsedSceneId = isCollapsed ? line.id : "";
       toggle.hidden = false;
-      toggle.innerHTML = isCollapsed ? "&#9654;" : "&#9660;";
+      toggle.textContent = isCollapsed ? "▶" : "▼";
       toggle.title = isCollapsed ? "Expand scene" : "Collapse scene";
       toggle.setAttribute("aria-label", isCollapsed ? "Expand scene" : "Collapse scene");
     } else {
       toggle.hidden = true;
     }
 
+    // Always update position-dependent and state-dependent fields
     row.dataset.sceneOwner = currentSceneId;
     row.dataset.type = line.type;
     const label = getTypeLabel(line.type);
     tag.textContent = (state.autoNumberScenes && line.type === "scene") ? `${sceneNumber}. ${label}` : label;
-    block.dataset.id = line.id;
-    block.dataset.type = line.type;
-    block.contentEditable = editable ? "true" : "false";
-    block.spellcheck = state.grammarCheck;
-    block.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
-    block.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");
-    block.setAttribute("autocapitalize", state.grammarCheck ? "sentences" : "off");
-    renderBlockContent(block, line, project, spellingLexicon);
 
-    if (line.secondary !== undefined) {
-      row.classList.add("is-dual");
-      block.classList.add("dual-primary");
+    if (!canReuse) {
+      block.dataset.id = line.id;
+      block.dataset.type = line.type;
+      block.contentEditable = editable ? "true" : "false";
+      block.spellcheck = state.grammarCheck;
+      block.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
+      block.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");
+      block.setAttribute("autocapitalize", state.grammarCheck ? "sentences" : "off");
+      renderBlockContent(block, line, project, spellingLexicon);
 
-      const secBlock = document.createElement("div");
-      secBlock.className = "script-block dual-secondary";
-      secBlock.contentEditable = editable ? "true" : "false";
-      secBlock.spellcheck = state.grammarCheck;
-      secBlock.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
-      secBlock.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");
-      secBlock.setAttribute("autocapitalize", state.grammarCheck ? "sentences" : "off");
-      secBlock.dataset.id = line.id;
-      secBlock.dataset.type = line.type;
-      secBlock.dataset.secondary = "true";
-      renderBlockContent(secBlock, { ...line, text: line.secondary }, project, spellingLexicon);
+      if (line.secondary !== undefined) {
+        row.classList.add("is-dual");
+        block.classList.add("dual-primary");
 
-      const columns = document.createElement("div");
-      columns.className = "dual-columns";
-      block.replaceWith(columns);
-      columns.appendChild(block);
-      columns.appendChild(secBlock);
-    }
+        const secBlock = document.createElement("div");
+        secBlock.className = "script-block dual-secondary";
+        secBlock.contentEditable = editable ? "true" : "false";
+        secBlock.spellcheck = state.grammarCheck;
+        secBlock.setAttribute("spellcheck", state.grammarCheck ? "true" : "false");
+        secBlock.setAttribute("autocorrect", state.grammarCheck ? "on" : "off");
+        secBlock.setAttribute("autocapitalize", state.grammarCheck ? "sentences" : "off");
+        secBlock.dataset.id = line.id;
+        secBlock.dataset.type = line.type;
+        secBlock.dataset.secondary = "true";
+        renderBlockContent(secBlock, { ...line, text: line.secondary }, project, spellingLexicon);
 
-    const linkedTasks = getLineLinkedTasks(project, line.id, currentSceneId, line.type);
-    if (linkedTasks.length) {
-      const marker = document.createElement("button");
-      marker.type = "button";
-      marker.className = `script-task-marker ${linkedTasks.some((task) => task.status !== "done") ? "is-open" : "is-done"}`;
-      marker.dataset.scriptTaskTarget = line.id;
-      marker.dataset.taskIds = linkedTasks.map((task) => task.id).join(",");
-      marker.title = linkedTasks.map((task) => task.title).join("\n");
-      marker.textContent = linkedTasks.length === 1 ? "Task" : `${linkedTasks.length} Tasks`;
-      row.insertBefore(marker, row.querySelector(".dual-columns") || row.querySelector(".script-block"));
+        const columns = document.createElement("div");
+        columns.className = "dual-columns";
+        block.replaceWith(columns);
+        columns.appendChild(block);
+        columns.appendChild(secBlock);
+      }
+
+      // Remove any stale task markers before re-adding
+      row.querySelectorAll('.script-task-marker').forEach(m => m.remove());
+      const linkedTasks = getLineLinkedTasks(project, line.id, currentSceneId, line.type);
+      if (linkedTasks.length) {
+        const marker = document.createElement("button");
+        marker.type = "button";
+        marker.className = `script-task-marker ${linkedTasks.some((task) => task.status !== "done") ? "is-open" : "is-done"}`;
+        marker.dataset.scriptTaskTarget = line.id;
+        marker.dataset.taskIds = linkedTasks.map((task) => task.id).join(",");
+        marker.title = linkedTasks.map((task) => task.title).join("\n");
+        marker.textContent = linkedTasks.length === 1 ? "Task" : `${linkedTasks.length} Tasks`;
+        row.insertBefore(marker, row.querySelector(".dual-columns") || row.querySelector(".script-block"));
+      }
+
+      row.dataset.rowVersion = versionKey;
     }
 
     const hiddenByScene = !filterSet && Boolean(collapsedSceneId && line.type !== "scene");
@@ -136,8 +172,14 @@ function _renderEditorInner() {
       visibleRows += 1;
     }
 
-    refs.screenplayEditor.appendChild(row);
+    fragment.appendChild(row);
   });
+
+  // Remove rows for deleted lines, then commit the ordered fragment
+  for (const [id, row] of existingByLineId) {
+    if (!seenIds.has(id)) row.remove();
+  }
+  refs.screenplayEditor.appendChild(fragment);
 
   if (!visibleRows && state.filterQuery.trim()) {
     refs.screenplayEditor.appendChild(createUINode(t("editor.noMatches", { query: state.filterQuery })));

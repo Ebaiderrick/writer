@@ -3,7 +3,29 @@
   "type": "module",
   "version": "1.0.0",
   "description": "Screenplay editor with AI assistance",
+  "scripts": {
+    "start": "concurrently --names \"server,app\" --prefix-colors \"cyan,green\" \"npm run server\" \"npm run app\"",
+    "dev": "concurrently --names \"server,app\" --prefix-colors \"cyan,green\" \"npm run server:dev\" \"npm run app\"",
+    "app": "http-server . -p 8000 --silent -c-1",
+    "server": "cd server && node index.js",
+    "server:dev": "cd server && node --watch index.js",
+    "server:install": "cd server && npm install",
+    "setup": "npm install && npm run server:install",
+    "test": "npx playwright test",
+    "test:ui": "npx playwright test --ui",
+    "test:functions": "node --test tests/function.test.mjs",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-eyawriter \"node --test tests/rules.test.mjs\"",
+    "test:ci": "npm run test:functions && npm test"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "stripe": "^16.12.0"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.59.1"
+    "@firebase/rules-unit-testing": "3.0.4",
+    "@playwright/test": "1.59.1",
+    "concurrently": "9.2.1",
+    "firebase": "10.14.1",
+    "http-server": "14.1.1"
   }
 }

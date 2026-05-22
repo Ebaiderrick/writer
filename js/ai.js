@@ -4,6 +4,72 @@ import { getCurrentProject, getLine, getLineIndex, queueSave } from "./project.j
 import { renderStudio, addBlock } from "./events.js";
 import { escapeHtml } from "./utils.js";
 import { customAlert, showModal } from "./ui.js";
+import { Telemetry } from "./telemetry.js";
+import { Logger } from "./logger.js";
+import { auth } from "./firebase.js";
+import { Quota, FREE_MONTHLY_QUOTA, PREMIUM_MONTHLY_QUOTA, PREMIUM_PLUS_MONTHLY_QUOTA } from "./quota.js";
+
+// ── AI response cache (in-memory, 5-minute TTL, max 50 entries) ──────────────
+
+const _aiCache = new Map();
+const AI_CACHE_TTL_MS = 5 * 60 * 1000;
+const AI_CACHE_MAX = 50;
+const _pendingKeys = new Set();
+
+function _aiCacheKey(req) {
+  return `${req.type}|${req.action}|${(req.current || '').slice(0, 200)}|${(req.context || '').slice(0, 300)}|${req.instruction || ''}`;
+}
+
+function _getAiCached(req) {
+  const key = _aiCacheKey(req);
+  const entry = _aiCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > AI_CACHE_TTL_MS) { _aiCache.delete(key); return null; }
+  return entry.output;
+}
+
+function _setAiCached(req, output) {
+  const key = _aiCacheKey(req);
+  _aiCache.set(key, { output, ts: Date.now() });
+  if (_aiCache.size > AI_CACHE_MAX) {
+    _aiCache.delete(_aiCache.keys().next().value);
+  }
+}
+
+// ── SSE stream consumer ────────────────────────────────────────────────────
+
+async function consumeSSEStream(response, onChunk) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') return fullText;
+      try {
+        const parsed = JSON.parse(data);
+        const chunk = parsed.choices?.[0]?.delta?.content || '';
+        if (chunk) {
+          fullText += chunk;
+          onChunk(chunk);
+        }
+      } catch { /* skip malformed SSE line */ }
+    }
+  }
+  return fullText;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const AI = (() => {
   let activeBlock = null;
@@ -136,6 +202,20 @@ export const AI = (() => {
 
       menuEl.appendChild(item);
     });
+
+    // Show low-quota warning using cached quota data (non-blocking)
+    const cached = Quota.getCached();
+    if (cached && cached.remaining <= 10 && cached.remaining > 0) {
+      const footer = document.createElement("div");
+      footer.style.cssText = "margin-top:8px;padding:5px 8px;border-top:1px solid var(--line);font-size:0.78rem;color:var(--muted);";
+      footer.textContent = `⚠ ${cached.remaining} AI request${cached.remaining !== 1 ? 's' : ''} left this month`;
+      menuEl.appendChild(footer);
+    } else if (cached && cached.remaining === 0) {
+      const footer = document.createElement("div");
+      footer.style.cssText = "margin-top:8px;padding:5px 8px;border-top:1px solid var(--line);font-size:0.78rem;color:#ef4444;";
+      footer.textContent = "AI limit reached — upgrade for more requests";
+      menuEl.appendChild(footer);
+    }
 
     blockRow.appendChild(menuEl);
   }
@@ -293,23 +373,77 @@ export const AI = (() => {
     };
 
     lastRequest = request;
+
+    // Return cached result instantly (skip for Grammar/Improve to always get fresh proofreads)
+    const isCacheable = action !== 'Grammar' && action !== 'Improve';
+    if (isCacheable) {
+      const cached = _getAiCached(request);
+      if (cached) {
+        Telemetry.track('ai_used', { action, type: request.type, cached: true });
+        showResultOptions(cached, request);
+        return;
+      }
+    }
+
+    // Deduplicate: ignore if identical request already in-flight
+    const reqKey = _aiCacheKey(request);
+    if (_pendingKeys.has(reqKey)) return;
+    _pendingKeys.add(reqKey);
+
     setLoadingState(submitButton, input, true);
     showMessage("AI assistant is thinking...", "info");
 
+    // Streaming state
+    let streamContentEl = null;
+    let accumulatedText = '';
+
+    const onChunk = (chunk) => {
+      accumulatedText += chunk;
+      if (!menuEl) return;
+      if (!streamContentEl) {
+        removeResultBox();
+        const box = document.createElement('div');
+        box.className = 'ai-result ai-result-streaming';
+        styleResultBox(box, 'info');
+        streamContentEl = document.createElement('div');
+        streamContentEl.style.fontSize = '0.9rem';
+        streamContentEl.style.lineHeight = '1.4';
+        streamContentEl.style.whiteSpace = 'pre-wrap';
+        const cursor = document.createElement('span');
+        cursor.className = 'ai-stream-cursor';
+        box.append(streamContentEl, cursor);
+        menuEl.appendChild(box);
+      }
+      streamContentEl.textContent = accumulatedText;
+    };
+
     try {
-      const output = await requestAiText(request);
+      const output = await requestAiText(request, onChunk);
       if (!output) {
         throw new Error("The AI assistant returned no text.");
       }
 
+      if (isCacheable) _setAiCached(request, output);
+      Telemetry.track('ai_used', { action: request.action, type: request.type });
       showResultOptions(output, request);
     } catch (error) {
+      if (error?.code === 'quota_exceeded') {
+        closeMenu();
+        import('./billing.js').then(({ Billing }) => {
+          const plan = error.plan || Quota.getCached()?.plan || 'free';
+          const planLabel = plan === 'premium_plus' ? 'Premium Plus' : plan === 'pro' ? 'Premium' : 'Free';
+          const limit = plan === 'premium_plus' ? PREMIUM_PLUS_MONTHLY_QUOTA : plan === 'pro' ? PREMIUM_MONTHLY_QUOTA : FREE_MONTHLY_QUOTA;
+          Billing.showUpgradeModal(`You've used all ${limit} AI requests on the ${planLabel} plan this month.`);
+        });
+        return;
+      }
       const message = error instanceof Error
         ? error.message
         : "Could not reach the AI server. Run `cd server && npm install && npm start`.";
+      Logger.capture('ai.runAI', error, { action: request.action, type: request.type });
       showError(message);
-      console.error("AI Error:", error);
     } finally {
+      _pendingKeys.delete(reqKey);
       setLoadingState(submitButton, input, false);
     }
   }
@@ -357,6 +491,18 @@ export const AI = (() => {
       const id = activeBlock?.dataset.id;
       const line = id ? getLine(id) : null;
       if (line) {
+        // Overwrite protection: warn if the block was edited while AI was working
+        const currentText = activeBlock?.innerText?.trim() || '';
+        if (currentText !== request.current && currentText) {
+          showMessage('Block was edited while AI was working — replacing with AI output anyway.', 'info');
+          setTimeout(() => {
+            line.text = text;
+            renderStudio();
+            queueSave();
+            closeMenu();
+          }, 1500);
+          return;
+        }
         line.text = text;
         renderStudio();
         queueSave();
@@ -376,6 +522,7 @@ export const AI = (() => {
     });
 
     const retryBtn = createActionBtn("Retry", () => {
+      _aiCache.delete(_aiCacheKey(request));
       runAI(request.action, request.instruction || "", null, null);
     });
 
@@ -410,6 +557,7 @@ export const AI = (() => {
       retryActions.style.marginTop = "8px";
 
       const retryBtn = createActionBtn("Retry", () => {
+        _aiCache.delete(_aiCacheKey(lastRequest));
         runAI(lastRequest.action, lastRequest.instruction || "", null, null);
       });
       retryActions.appendChild(retryBtn);
@@ -576,17 +724,43 @@ export const AI = (() => {
     return "";
   }
 
-  async function requestAiText(request) {
-    const response = await fetch(getAiEndpoint(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(request)
-    });
-    const data = await response.json().catch(() => ({}));
+  async function requestAiText(request, onChunk) {
+    const headers = { "Content-Type": "application/json" };
+    if (auth.currentUser) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        headers["Authorization"] = `Bearer ${token}`;
+      } catch { /* skip token if unavailable */ }
+    }
+
+    const controller = new AbortController();
+    // Streaming responses can legitimately take longer
+    const timeoutMs = onChunk ? 90000 : 30000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response;
+    try {
+      response = await fetch(getAiEndpoint(), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...request, stream: Boolean(onChunk) }),
+        signal: controller.signal
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw new Error('AI request timed out. Please try again.');
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 429 && data.error === 'quota_exceeded') {
+        const err = new Error('quota_exceeded');
+        err.code = 'quota_exceeded';
+        err.plan = data.plan;
+        throw err;
+      }
       let msg = data.error || `AI assistant failed (Status ${response.status})`;
       if (response.status === 401) msg = "Invalid API Key. Please check your OpenRouter configuration.";
       if (response.status === 402) msg = "Insufficient credits in your OpenRouter account.";
@@ -596,7 +770,23 @@ export const AI = (() => {
       throw new Error(msg);
     }
 
+    const contentType = response.headers.get('Content-Type') || '';
+    if (onChunk && contentType.includes('text/event-stream')) {
+      const raw = await consumeSSEStream(response, onChunk);
+      return cleanAiClientResponse(raw);
+    }
+
+    const data = await response.json().catch(() => ({}));
     return normalizeAiOutput(data);
+  }
+
+  function cleanAiClientResponse(text) {
+    let cleaned = String(text || '').trim();
+    cleaned = cleaned.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/g, '').trim();
+    if (cleaned.startsWith('"') && cleaned.endsWith('"') && (cleaned.match(/"/g) || []).length === 2) {
+      cleaned = cleaned.slice(1, -1).trim();
+    }
+    return cleaned;
   }
 
   function getLastScenes(activeLineId) {

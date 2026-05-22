@@ -1,7 +1,7 @@
 import { state, LEFT_PANE_BLOCK_DEFS, EDITOR_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
-import { getCurrentProject, persistProjects, serializeScript } from './project.js';
+import { getCurrentProject, persistProjects, serializeScript, restoreProject, permanentlyDeleteProject, togglePinProject } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
@@ -9,10 +9,10 @@ import { calculateAnalytics } from './analytics.js';
 import { auth } from './firebase.js';
 
 const MENU_GLYPHS = {
-  left: "&#9664;",
-  right: "&#9654;",
-  up: "&#9650;",
-  down: "&#9660;"
+  left: "◀",
+  right: "▶",
+  up: "▲",
+  down: "▼"
 };
 
 function getProjectCollaborationLabel(project) {
@@ -129,6 +129,76 @@ function buildProjectLibraryGroups(projects) {
   return buildProjectGroups(projects);
 }
 
+function renderWorkspaceSwitcher(allProjects) {
+  const container = document.getElementById('homeWorkspaceSwitcher');
+  if (!container) return;
+
+  const sharedProjects = allProjects.filter(p => !p.isArchived && !p.isWorkspaceRoot && p.isShared);
+  const groups = buildProjectGroups(sharedProjects);
+
+  if (!groups.length) {
+    container.hidden = true;
+    return;
+  }
+
+  container.hidden = false;
+  const currentFilter = state.homeWorkspaceFilter || null;
+
+  container.innerHTML = `
+    <div class="workspace-switcher-inner">
+      <span class="workspace-switcher-label">Workspaces</span>
+      <div class="workspace-switcher-chips" role="tablist" aria-label="Filter by workspace">
+        <button class="workspace-switcher-chip ${!currentFilter ? 'is-active' : ''}" data-workspace-chip="all" role="tab" aria-selected="${!currentFilter}">All</button>
+        ${groups.map(g => `
+          <button class="workspace-switcher-chip ${currentFilter === g.workspaceId ? 'is-active' : ''}"
+            data-workspace-chip="${escapeHtml(g.workspaceId)}" role="tab" aria-selected="${currentFilter === g.workspaceId}">
+            <span class="ws-chip-name">${escapeHtml(g.workspaceName)}</span>
+            <span class="ws-chip-count">${g.projects.length}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderPinnedProjects(allProjects) {
+  const section = document.getElementById('pinnedProjectSection');
+  const grid = document.getElementById('pinnedProjectGrid');
+  if (!section || !grid) return;
+
+  const pinned = allProjects
+    .filter(p => p.isPinned && !p.isArchived && !p.isWorkspaceRoot)
+    .sort((a, b) => new Date(b.pinnedAt || 0) - new Date(a.pinnedAt || 0));
+
+  section.hidden = !pinned.length;
+  if (!pinned.length) { grid.innerHTML = ''; return; }
+
+  grid.innerHTML = pinned.map(p => {
+    const wsName = p.workspace?.name || 'Personal';
+    const collabCount = Object.keys(p.collaborators || {}).length;
+    const memberLabel = p.isShared ? ` · ${1 + collabCount} member${collabCount !== 0 ? 's' : ''}` : '';
+    return `
+      <article class="pinned-project-chip" data-project-id="${escapeHtml(p.id)}">
+        <div class="pinned-chip-body">
+          <span class="pinned-chip-title">${escapeHtml(p.title)}</span>
+          <span class="pinned-chip-meta">${escapeHtml(wsName)}${memberLabel}</span>
+        </div>
+        <button class="pinned-chip-unpin" data-project-action="pin" data-project-id="${escapeHtml(p.id)}" title="Unpin" type="button" aria-label="Unpin ${escapeHtml(p.title)}">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </article>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('.pinned-chip-unpin').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      togglePinProject(btn.dataset.projectId);
+      renderHome();
+    });
+  });
+}
+
 function getTaskStatusCountLabel(tasks) {
   const openCount = tasks.filter((task) => task.status !== "done").length;
   const doneCount = tasks.filter((task) => task.status === "done").length;
@@ -194,8 +264,8 @@ function buildEditorPersonalInbox(tasks, currentUid) {
     if (task.assignedTo === currentUid && task.status !== "done") {
       items.push({
         id: `${task.id}-assignment`,
-        type: dueState === "overdue" ? "overdue" : dueState === "soon" || dueState === "today" ? "due" : "assigned",
-        label: dueState === "overdue" ? "Overdue for you" : dueState === "soon" || dueState === "today" ? "Due for you" : "Assigned to you",
+        type: task.status === "pending-confirmation" ? "confirm" : dueState === "overdue" ? "overdue" : dueState === "soon" || dueState === "today" ? "due" : "assigned",
+        label: task.status === "pending-confirmation" ? "Needs your confirmation" : dueState === "overdue" ? "Overdue for me" : dueState === "soon" || dueState === "today" ? "Due for me" : "Assigned to me",
         message: task.title,
         task
       });
@@ -259,8 +329,8 @@ function sortEditorTasks(tasks) {
     });
     return sorted;
   }
-  if (state.editorTaskSort === "status") {
-    const weight = { "in-progress": 0, todo: 1, done: 2 };
+  if (state.workspaceTaskSort === "status") {
+    const weight = { "in-progress": 0, todo: 1, "pending-confirmation": 2, done: 3 };
     sorted.sort((a, b) => {
       const diff = (weight[a.status] ?? 99) - (weight[b.status] ?? 99);
       return diff || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
@@ -354,7 +424,7 @@ export function renderEditorView() {
   const notifications = [...buildEditorDueNotifications(allTaskItems, projects), ...persistedNotifications]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const unreadNotifications = notifications.filter((notification) => !notification.read);
-  const inboxItems = allTaskItems.filter((task) => task.status === "done" || task.aiState === "review" || task.aiState === "failed").slice(0, 6);
+  const inboxItems = allTaskItems.filter((task) => task.status === "done" || task.status === "pending-confirmation" || task.aiState === "review" || task.aiState === "failed").slice(0, 6);
   const assignees = [
     { id: editorLead.ownerId || "editor_owner", label: ownerLabel },
     ...Object.entries(editorLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
@@ -419,6 +489,7 @@ export function renderEditorView() {
   const taskSummary = {
     todo: allTaskItems.filter((task) => task.status === "todo").length,
     inProgress: allTaskItems.filter((task) => task.status === "in-progress").length,
+    awaiting: allTaskItems.filter((task) => task.status === "pending-confirmation").length,
     done: allTaskItems.filter((task) => task.status === "done").length
   };
   const taskStatusSummary = getTaskStatusCountLabel(allTaskItems);
@@ -435,8 +506,11 @@ export function renderEditorView() {
     if (state.editorTaskFilter === "overdue") {
       return getTaskDueState(task) === "overdue";
     }
-    if (state.editorTaskFilter === "open") {
-      return task.status !== "done";
+    if (state.workspaceTaskFilter === "awaiting") {
+      return task.status === "pending-confirmation";
+    }
+    if (state.workspaceTaskFilter === "open") {
+      return task.status !== "done" && task.status !== "pending-confirmation";
     }
     if (state.editorTaskFilter === "done") {
       return task.status === "done";
@@ -529,8 +603,9 @@ export function renderEditorView() {
                   <span>${escapeHtml(item.message)}</span>
                   <small>${escapeHtml(item.task.assignedLabel || "Editor task")}</small>
                 </div>
-                <div class="editor-notification-actions">
-                  <button class="ghost-button btn-sm" type="button" data-editor-home-action="${item.type === "mention" ? "comment-task" : "open-task-project"}" data-task-id="${escapeHtml(item.task.id)}" data-task-project-id="${escapeHtml(item.task.projectId || "")}">${item.type === "mention" ? "Open Thread" : item.task.lineId ? "Open Line" : item.task.sceneId ? "Open Scene" : "Open Project"}</button>
+                <div class="workspace-notification-actions">
+                  ${item.type === "confirm" ? `<button class="primary-button btn-sm" type="button" data-workspace-home-action="confirm-complete" data-task-id="${escapeHtml(item.task.id)}">Confirm Complete</button>` : ""}
+                  <button class="ghost-button btn-sm" type="button" data-workspace-home-action="${item.type === "mention" ? "comment-task" : "open-task-project"}" data-task-id="${escapeHtml(item.task.id)}" data-task-project-id="${escapeHtml(item.task.projectId || "")}">${item.type === "mention" ? "Open Thread" : item.task.lineId ? "Open Line" : item.task.sceneId ? "Open Scene" : "Open Project"}</button>
                 </div>
               </article>
             `).join("") || '<p class="editor-home-empty">Assignments, mentions, and review items for you will collect here.</p>'}
@@ -587,29 +662,31 @@ export function renderEditorView() {
           <div class="editor-home-panel-head">
             <h4>Tasks & Delegation</h4>
           </div>
-          <div class="editor-task-filters" role="tablist" aria-label="Editor tasks filter">
-            <button class="editor-filter-chip ${state.editorTaskFilter === "all" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
-            <button class="editor-filter-chip ${state.editorTaskFilter === "mine" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="mine">My Tasks</button>
-            <button class="editor-filter-chip ${state.editorTaskFilter === "ai" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
-            <button class="editor-filter-chip ${state.editorTaskFilter === "due-soon" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="due-soon">Due Soon</button>
-            <button class="editor-filter-chip ${state.editorTaskFilter === "overdue" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="overdue">Overdue</button>
-            <button class="editor-filter-chip ${state.editorTaskFilter === "open" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="open">Open</button>
-            <button class="editor-filter-chip ${state.editorTaskFilter === "done" ? "is-active" : ""}" type="button" data-editor-home-action="set-task-filter" data-task-filter="done">Done</button>
-            <select class="comment-filter-select editor-task-sort-select" data-editor-home-action="set-task-sort" aria-label="Sort tasks">
-              <option value="latest" ${state.editorTaskSort === "latest" ? "selected" : ""}>Latest</option>
-              <option value="due" ${state.editorTaskSort === "due" ? "selected" : ""}>Due Date</option>
-              <option value="status" ${state.editorTaskSort === "status" ? "selected" : ""}>By Status</option>
-              <option value="comments" ${state.editorTaskSort === "comments" ? "selected" : ""}>Most Discussed</option>
+          <div class="workspace-task-filters" role="tablist" aria-label="Workspace tasks filter">
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "all" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">My Tasks</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "ai" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "due-soon" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="due-soon">Due Soon</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "overdue" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="overdue">Overdue</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "awaiting" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="awaiting">Awaiting</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "open" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="open">Open</button>
+            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "done" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="done">Done</button>
+            <select class="comment-filter-select workspace-task-sort-select" data-workspace-home-action="set-task-sort" aria-label="Sort tasks">
+              <option value="latest" ${state.workspaceTaskSort === "latest" ? "selected" : ""}>Latest</option>
+              <option value="due" ${state.workspaceTaskSort === "due" ? "selected" : ""}>Due Date</option>
+              <option value="status" ${state.workspaceTaskSort === "status" ? "selected" : ""}>By Status</option>
+              <option value="comments" ${state.workspaceTaskSort === "comments" ? "selected" : ""}>Most Discussed</option>
             </select>
           </div>
-          <div class="editor-task-summary">
-            <span class="editor-task-summary-chip">To Do ${taskSummary.todo}</span>
-            <span class="editor-task-summary-chip">In Progress ${taskSummary.inProgress}</span>
-            <span class="editor-task-summary-chip">Done ${taskSummary.done}</span>
-            <span class="editor-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
-            <span class="editor-task-summary-chip">Assigned to you ${myAssignedTasks.length}</span>
-            <span class="editor-task-summary-chip">Due soon ${dueSoonCount}</span>
-            <span class="editor-task-summary-chip">Overdue ${overdueCount}</span>
+          <div class="workspace-task-summary">
+            <span class="workspace-task-summary-chip">To Do ${taskSummary.todo}</span>
+            <span class="workspace-task-summary-chip">In Progress ${taskSummary.inProgress}</span>
+            ${taskSummary.awaiting ? `<span class="workspace-task-summary-chip workspace-task-summary-chip-awaiting">Awaiting ${taskSummary.awaiting}</span>` : ""}
+            <span class="workspace-task-summary-chip">Done ${taskSummary.done}</span>
+            <span class="workspace-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
+            <span class="workspace-task-summary-chip">Assigned to me ${myAssignedTasks.length}</span>
+            <span class="workspace-task-summary-chip">Due soon ${dueSoonCount}</span>
+            <span class="workspace-task-summary-chip">Overdue ${overdueCount}</span>
           </div>
           <div class="editor-task-form">
             <label class="editor-task-field">
@@ -744,24 +821,25 @@ export function renderEditorView() {
                     <select class="comment-filter-select editor-task-status-select" data-editor-task-status="${escapeHtml(task.id)}">
                       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
                       <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+                      <option value="pending-confirmation" ${task.status === "pending-confirmation" ? "selected" : ""}>Awaiting Confirmation</option>
                       <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
                     </select>
                   </div>
-                  ${task.description ? `<p class="editor-task-copy">${escapeHtml(task.description)}</p>` : ""}
-                  ${buildEditorTaskAssigneeMarkup(task, currentUid)}
-                  <div class="editor-task-chip-row">
-                    <span class="editor-task-tag">${escapeHtml(getEditorTaskTemplate(task.templateKey).label)}</span>
-                    <span class="editor-task-tag editor-task-tag-priority editor-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
-                    ${task.assignedTo === currentUid ? '<span class="editor-task-tag editor-task-tag-focus">Assigned to you</span>' : ""}
-                    ${getTaskDueState(task) ? `<span class="editor-task-tag editor-task-tag-${escapeHtml(getTaskDueState(task))}">${escapeHtml(getTaskDueLabel(task))}</span>` : ""}
-                    <span class="editor-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
-                    <span class="editor-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
-                    ${task.assigneeType === "system" ? `<span class="editor-task-tag editor-task-tag-ai">${escapeHtml(getAiTaskStateLabel(task))}</span>` : ""}
-                    ${task.projectId ? `<span class="editor-task-tag">${escapeHtml(projects.find((project) => project.id === task.projectId)?.title || "Linked Project")}</span>` : ""}
-                    ${task.lineLabel ? `<span class="editor-task-tag">${escapeHtml(task.lineLabel)}</span>` : ""}
-                    ${task.dueAt && !getTaskDueState(task) ? `<span class="editor-task-tag">${escapeHtml(formatTaskDueLabel(task))}</span>` : ""}
-                    ${task.memoryLinkName ? `<span class="editor-task-tag">${escapeHtml(task.memoryLinkName)}</span>` : ""}
-                    ${task.comments?.length ? `<span class="editor-task-tag">${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}</span>` : ""}
+                  ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  ${task.status === "pending-confirmation" ? `<p class="workspace-task-comment-preview workspace-task-pending-note">Marked done by ${escapeHtml(task.pendingConfirmRequestedByLabel || "a teammate")} — awaiting assignee confirmation.</p>` : ""}
+                  <div class="workspace-task-chip-row">
+                    <span class="workspace-task-tag">${escapeHtml(getWorkspaceTaskTemplate(task.templateKey).label)}</span>
+                    <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
+                    ${task.assignedTo === currentUid ? '<span class="workspace-task-tag workspace-task-tag-focus">Assigned to me</span>' : ""}
+                    ${getTaskDueState(task) ? `<span class="workspace-task-tag workspace-task-tag-${escapeHtml(getTaskDueState(task))}">${escapeHtml(getTaskDueLabel(task))}</span>` : ""}
+                    <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
+                    <span class="workspace-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
+                    ${task.assigneeType === "system" ? `<span class="workspace-task-tag workspace-task-tag-ai">${escapeHtml(getAiTaskStateLabel(task))}</span>` : ""}
+                    ${task.projectId ? `<span class="workspace-task-tag">${escapeHtml(projects.find((project) => project.id === task.projectId)?.title || "Linked Project")}</span>` : ""}
+                    ${task.lineLabel ? `<span class="workspace-task-tag">${escapeHtml(task.lineLabel)}</span>` : ""}
+                    ${task.dueAt && !getTaskDueState(task) ? `<span class="workspace-task-tag">${escapeHtml(formatTaskDueLabel(task))}</span>` : ""}
+                    ${task.memoryLinkName ? `<span class="workspace-task-tag">${escapeHtml(task.memoryLinkName)}</span>` : ""}
+                    ${task.comments?.length ? `<span class="workspace-task-tag">${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}</span>` : ""}
                   </div>
                   ${task.aiResultText ? `<p class="editor-task-comment-preview">AI suggestion ready. Review before applying it to the script.</p>` : ""}
                   ${task.assigneeType === "system" && task.aiError ? `<p class="editor-task-comment-preview">Last AI run: ${escapeHtml(task.aiError)}</p>` : ""}
@@ -769,16 +847,17 @@ export function renderEditorView() {
                   ${task.comments?.length ? `<p class="editor-task-comment-preview">Latest comment by ${escapeHtml(task.comments[task.comments.length - 1].author || "Editor member")}: ${escapeHtml(task.comments[task.comments.length - 1].text)}</p>` : ""}
                   <div class="editor-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
-                    <div class="editor-task-actions">
-                      ${task.assigneeType === "system" && ["ready", "scheduled", "failed"].includes(task.aiState) ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">${task.aiState === "failed" ? "Retry AI" : "Run AI"}</button>` : ""}
-                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
-                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="apply-ai-task" data-task-id="${escapeHtml(task.id)}">Apply</button>` : ""}
-                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="dismiss-ai-task" data-task-id="${escapeHtml(task.id)}">Dismiss</button>` : ""}
-                      <button class="ghost-button btn-sm" type="button" data-editor-home-action="edit-task" data-task-id="${escapeHtml(task.id)}">Edit</button>
-                      <button class="ghost-button btn-sm" type="button" data-editor-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
-                      ${task.memoryLinkId ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="open-task-memory" data-task-id="${escapeHtml(task.id)}" data-memory-id="${escapeHtml(task.memoryLinkId)}" data-memory-project-id="${escapeHtml(task.memoryProjectId || task.projectId)}">Open Memory</button>` : ""}
-                      <button class="ghost-button btn-sm" type="button" data-editor-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
-                      ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.lineId ? "Open Line" : task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
+                    <div class="workspace-task-actions">
+                      ${task.status === "pending-confirmation" && (task.assignedTo === currentUid || task.pendingConfirmBy === currentUid) ? `<button class="primary-button btn-sm" type="button" data-workspace-home-action="confirm-complete" data-task-id="${escapeHtml(task.id)}">Confirm Complete</button>` : ""}
+                      ${task.assigneeType === "system" && ["ready", "scheduled", "failed"].includes(task.aiState) ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">${task.aiState === "failed" ? "Retry AI" : "Run AI"}</button>` : ""}
+                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
+                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="apply-ai-task" data-task-id="${escapeHtml(task.id)}">Apply</button>` : ""}
+                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="dismiss-ai-task" data-task-id="${escapeHtml(task.id)}">Dismiss</button>` : ""}
+                      <button class="ghost-button btn-sm" type="button" data-workspace-home-action="edit-task" data-task-id="${escapeHtml(task.id)}">Edit</button>
+                      <button class="ghost-button btn-sm" type="button" data-workspace-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
+                      ${task.memoryLinkId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-memory" data-task-id="${escapeHtml(task.id)}" data-memory-id="${escapeHtml(task.memoryLinkId)}" data-memory-project-id="${escapeHtml(task.memoryProjectId || task.projectId)}">Open Memory</button>` : ""}
+                      <button class="ghost-button btn-sm" type="button" data-workspace-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
+                      ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.lineId ? "Open Line" : task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
                     </div>
                   </div>
                 </article>
@@ -838,7 +917,7 @@ export function showNewCreationFlow() {
         <button class="creation-option-card is-disabled" type="button" disabled>
           <span class="creation-option-icon">TEXT</span>
           <strong>Prose / Poetry</strong>
-          <small>Coming soon. This path will open after the film workflow is fully polished.</small>
+          <small>Coming soon.</small>
           <span class="creation-option-badge">Soon</span>
         </button>
       </div>
@@ -875,9 +954,8 @@ export function renderHome() {
   const template = document.querySelector("#projectCardTemplate");
   state.homeProjectSort = state.homeProjectSort || "latest";
   state.homeProjectFormat = state.homeProjectFormat || "all";
-  state.homeEditorFilter = state.homeEditorFilter || "all";
-  let projects = sortProjectsForHome(state.projects);
-  let editorLead = null;
+  let projects = sortProjectsForHome(state.projects).filter(p => !p.isArchived);
+  let workspaceLead = null;
   const currentUid = auth.currentUser?.uid || "";
   const editorOptions = buildProjectGroups(state.projects.filter((project) => !project.isEditorRoot));
   if (state.homeEditorFilter !== "all" && !editorOptions.some((group) => group.editorId === state.homeEditorFilter)) {
@@ -908,6 +986,9 @@ export function renderHome() {
     }
     if (state.homeProjectFormat !== "all") {
       projects = projects.filter((project) => getProjectFormatValue(project) === state.homeProjectFormat);
+    }
+    if (state.homeWorkspaceFilter) {
+      projects = projects.filter((project) => (project.workspace?.id || project.id) === state.homeWorkspaceFilter);
     }
   }
 
@@ -1023,14 +1104,16 @@ export function renderHome() {
                     <select class="comment-filter-select editor-task-status-select" data-editor-task-status="${escapeHtml(task.id)}">
                       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
                       <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+                      <option value="pending-confirmation" ${task.status === "pending-confirmation" ? "selected" : ""}>Awaiting Confirmation</option>
                       <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
                     </select>
                   </div>
-                  ${task.description ? `<p class="editor-task-copy">${escapeHtml(task.description)}</p>` : ""}
-                  ${buildEditorTaskAssigneeMarkup(task, currentUid)}
-                  <div class="editor-task-meta">
+                  ${task.status === "pending-confirmation" ? `<p class="workspace-task-comment-preview workspace-task-pending-note">Marked done by ${escapeHtml(task.pendingConfirmRequestedByLabel || "a teammate")} — awaiting assignee confirmation.</p>` : ""}
+                  ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
+                  <div class="workspace-task-meta">
                     <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
-                    ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-editor-home-action="open-task-project" data-task-project-id="${escapeHtml(task.projectId)}">Open Project</button>` : ""}
+                    ${task.status === "pending-confirmation" && (task.assignedTo === currentUid || task.pendingConfirmBy === currentUid) ? `<button class="primary-button btn-sm" type="button" data-workspace-home-action="confirm-complete" data-task-id="${escapeHtml(task.id)}">Confirm Complete</button>` : ""}
+                    ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-project-id="${escapeHtml(task.projectId)}">Open Project</button>` : ""}
                   </div>
                 </article>
               `).join("") : '<p class="editor-home-empty">No tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
@@ -1045,38 +1128,25 @@ export function renderHome() {
     refs.editorBackBtn.hidden = true;
     refs.homeProjectsTitle.textContent = "Projects";
     refs.homeProjectsSubtitle.innerHTML = `
-      <div class="project-toolbar">
-        <div class="project-toolbar-main">
-          <div class="project-filter-row project-filter-row-inline" role="tablist" aria-label="Project filters">
-            <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
-            <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
-            <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
-          </div>
-          <div class="project-toolbar-selects">
-            ${editorOptions.length > 1 ? `
-              <select class="comment-filter-select project-editor-select" data-home-editor-filter aria-label="Editor filter">
-                <option value="all">All Editors</option>
-                ${editorOptions.map((group) => `<option value="${escapeHtml(group.editorId)}" ${state.homeEditorFilter === group.editorId ? "selected" : ""}>${escapeHtml(group.editorName)}</option>`).join("")}
-              </select>
-            ` : ""}
-            <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
-              <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>Format</option>
-              <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film</option>
-              <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose</option>
-            </select>
-            <select class="comment-filter-select project-format-select project-sort-select" data-home-project-sort aria-label="Project sort">
-              <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
-              <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
-              <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Scenes</option>
-            </select>
-          </div>
-        </div>
-        <span class="project-toolbar-note">${editorOptions.length > 1 ? `${editorOptions.length} Editors connected` : "Your projects stay tied to one Editor context."}</span>
-      </div>`;
-    if (refs.homeEditorDashboard) {
-      refs.homeEditorDashboard.hidden = false;
-      refs.homeEditorDashboard.innerHTML = "";
-    }
+      <div class="project-filter-row project-filter-row-inline" role="tablist" aria-label="Project filters">
+        <button class="project-filter-chip ${state.homeProjectFilter === "all" ? "is-active" : ""}" type="button" data-home-project-filter="all">All</button>
+        <button class="project-filter-chip ${state.homeProjectFilter === "mine" ? "is-active" : ""}" type="button" data-home-project-filter="mine">My Projects</button>
+        <button class="project-filter-chip ${state.homeProjectFilter === "shared" ? "is-active" : ""}" type="button" data-home-project-filter="shared">Shared</button>
+        <select class="comment-filter-select project-format-select" data-home-project-format aria-label="Project format">
+          <option value="all" ${state.homeProjectFormat === "all" ? "selected" : ""}>Format</option>
+          <option value="film-script" ${state.homeProjectFormat === "film-script" ? "selected" : ""}>Film</option>
+          <option value="prose-poetry" ${state.homeProjectFormat === "prose-poetry" ? "selected" : ""}>Prose</option>
+        </select>
+        <select class="comment-filter-select project-format-select project-sort-select" data-home-project-sort aria-label="Project sort">
+          <option value="latest" ${state.homeProjectSort === "latest" ? "selected" : ""}>Latest</option>
+          <option value="title" ${state.homeProjectSort === "title" ? "selected" : ""}>A-Z</option>
+          <option value="scenes" ${state.homeProjectSort === "scenes" ? "selected" : ""}>Scenes</option>
+        </select>
+      </div>
+      `;
+    const homeWorkspaceDashboard = document.getElementById('homeWorkspaceDashboard');
+    if (homeWorkspaceDashboard) homeWorkspaceDashboard.innerHTML = '';
+    renderWorkspaceSwitcher(state.projects);
   }
 
   if (!state.currentEditorId) {
@@ -1097,21 +1167,105 @@ export function renderHome() {
       node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })}   ${collaborationLabel}`;
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
+
+      // Pin button in card actions
+      const actionsEl = node.querySelector('.project-card-actions');
+      if (actionsEl) {
+        const pinBtn = document.createElement('button');
+        pinBtn.className = 'project-quick-action project-pin-btn';
+        pinBtn.type = 'button';
+        pinBtn.dataset.projectAction = 'pin';
+        pinBtn.dataset.projectId = project.id;
+        pinBtn.textContent = project.isPinned ? 'Unpin' : 'Pin';
+        actionsEl.insertBefore(pinBtn, actionsEl.querySelector('.project-delete'));
+      }
+
+      // Collaborator strip for shared projects
+      if (project.isShared && (project.ownerName || project.ownerEmail || Object.keys(project.collaborators || {}).length)) {
+        const members = [
+          { name: project.ownerName || project.ownerEmail || 'Owner', photoURL: project.ownerPhotoURL || '' },
+          ...Object.values(project.collaborators || {}).slice(0, 3)
+        ];
+        const totalCount = 1 + Object.keys(project.collaborators || {}).length;
+        const strip = document.createElement('div');
+        strip.className = 'project-card-collab-strip';
+        strip.innerHTML = members.map(m => {
+          const initials = (m.name || 'U').split(/\s+/).map(p => p[0]).join('').slice(0, 2).toUpperCase() || 'U';
+          return m.photoURL
+            ? `<img class="project-card-member-avatar" src="${escapeHtml(m.photoURL)}" alt="${escapeHtml(m.name || 'Member')}" title="${escapeHtml(m.name || 'Member')}">`
+            : `<span class="project-card-member-avatar" title="${escapeHtml(m.name || 'Member')}">${escapeHtml(initials)}</span>`;
+        }).join('') + `<span class="project-card-collab-count">${totalCount} member${totalCount !== 1 ? 's' : ''}</span>`;
+        node.appendChild(strip);
+      }
+
       return node;
     };
 
+    // Render pinned section (uses full unfiltered list so pinned always appears)
+    renderPinnedProjects(state.projects);
+
     if (!projects.length) {
-      refs.projectGrid.innerHTML = `
-        <article class="project-library-empty">
-          <strong>No projects match this view yet.</strong>
-          <p>Create a new film script or switch filters to bring more work into view.</p>
-        </article>
-      `;
+      const allActive = (state.projects || []).filter(p => !p.isWorkspaceRoot && !p.isArchived);
+      const isFiltered = state.homeProjectFilter !== 'all' || state.homeProjectFormat !== 'all' || !!state.homeWorkspaceFilter;
+      if (!allActive.length) {
+        refs.projectGrid.innerHTML = `
+          <div class="project-empty-state">
+            <div class="project-empty-icon">🎬</div>
+            <h3>Your screenplay journey starts here</h3>
+            <p>Create your first project and start writing in industry-standard format.</p>
+            <div class="empty-actions">
+              <button class="primary-button btn-sm" data-menu-action="new-project">New Project</button>
+              <button class="ghost-button btn-sm" id="emptyStateDemoBtn">Explore Demo</button>
+            </div>
+            <div class="empty-collab-prompt">
+              <p class="empty-collab-copy">Collaborating with a team? Accept an invitation from a teammate to see shared projects here.</p>
+            </div>
+          </div>
+        `;
+        document.getElementById('emptyStateDemoBtn')?.addEventListener('click', () => {
+          document.getElementById('demo-login-btn')?.click();
+        });
+      } else if (state.homeProjectFilter === 'shared' && !state.homeWorkspaceFilter) {
+        refs.projectGrid.innerHTML = `
+          <div class="project-empty-state">
+            <div class="project-empty-icon">🤝</div>
+            <h3>No shared projects yet</h3>
+            <p>Shared projects appear here once a teammate invites you to collaborate, or once you invite someone to your project.</p>
+            <div class="empty-actions">
+              <button class="primary-button btn-sm" data-menu-trigger="homeCollabMenu">Invite a Collaborator</button>
+              <button class="ghost-button btn-sm" data-home-project-filter="all" id="emptyViewAll">View All Projects</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('emptyViewAll')?.addEventListener('click', () => {
+          state.homeProjectFilter = 'all';
+          renderHome();
+        });
+      } else {
+        refs.projectGrid.innerHTML = `
+          <div class="project-empty-state">
+            <div class="project-empty-icon">🔍</div>
+            <h3>No projects match this view</h3>
+            <p>${isFiltered ? 'Try a different filter or create a new project.' : 'Create a new screenplay to get started.'}</p>
+            <div class="empty-actions">
+              ${isFiltered ? `<button class="ghost-button btn-sm" id="emptyClearFilters">Clear Filters</button>` : ''}
+              <button class="primary-button btn-sm" data-menu-action="new-project">New Project</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('emptyClearFilters')?.addEventListener('click', () => {
+          state.homeProjectFilter = 'all';
+          state.homeProjectFormat = 'all';
+          state.homeWorkspaceFilter = null;
+          renderHome();
+        });
+      }
     } else {
       projects.forEach((project) => refs.projectGrid.appendChild(appendProjectCard(project)));
     }
 
     renderRecentProjectMenus();
+    renderArchivedSection();
     applyTranslations();
     return;
   }
@@ -1142,7 +1296,67 @@ export function renderHome() {
   });
 
   renderRecentProjectMenus();
+  renderArchivedSection();
   applyTranslations();
+}
+
+export function renderArchivedSection() {
+  const section = document.getElementById('archivedProjectSection');
+  const grid = document.getElementById('archivedProjectGrid');
+  if (!section || !grid) return;
+
+  const archived = (state.projects || []).filter(p => p.isArchived && !p.isWorkspaceRoot);
+  section.hidden = !archived.length;
+  if (!archived.length) { grid.innerHTML = ''; return; }
+
+  grid.innerHTML = '';
+  archived.forEach(project => {
+    const card = document.createElement('article');
+    card.className = 'project-card archived-project-card';
+    card.dataset.projectId = project.id;
+
+    const archivedDate = project.archivedAt ? formatDateTime(project.archivedAt) : '';
+    const archivedBy = project.archivedByName ? ` by ${escapeHtml(project.archivedByName)}` : '';
+
+    card.innerHTML = `
+      <div class="project-card-body archived-card-body">
+        <h3 class="project-card-title">${escapeHtml(project.title)}</h3>
+        <p class="project-card-logline">${escapeHtml(project.logline || '')}</p>
+        <p class="archived-meta">Archived${archivedBy}${archivedDate ? ' · ' + archivedDate : ''}</p>
+      </div>
+      <div class="archived-card-actions">
+        <button class="ghost-button btn-sm project-restore-btn" data-project-id="${escapeHtml(project.id)}" type="button">Restore</button>
+        <button class="ghost-button btn-sm project-delete-perm-btn" data-project-id="${escapeHtml(project.id)}" type="button">Delete Forever</button>
+      </div>
+    `;
+
+    card.querySelector('.project-restore-btn').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const result = await restoreProject(project.id);
+      if (result.ok) {
+        renderHome();
+      } else {
+        customAlert(result.reason || 'Restore failed.', 'Restore Failed');
+      }
+    });
+
+    card.querySelector('.project-delete-perm-btn').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const confirmed = await customConfirm(
+        `Permanently delete "${project.title}"? This cannot be undone.`,
+        'Delete Forever'
+      );
+      if (!confirmed) return;
+      const result = await permanentlyDeleteProject(project.id);
+      if (result.ok) {
+        renderHome();
+      } else {
+        customAlert(result.reason || 'Deletion failed.', 'Delete Failed');
+      }
+    });
+
+    grid.appendChild(card);
+  });
 }
 
 export function renderRecentProjectMenus() {
@@ -1152,7 +1366,7 @@ export function renderRecentProjectMenus() {
   }
 
   const projects = [...state.projects]
-    .filter((project) => !project.isEditorRoot)
+    .filter((project) => !project.isWorkspaceRoot && !project.isArchived)
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
     .slice(0, 5);
 
@@ -1533,7 +1747,7 @@ export function renderLeftPaneLayout() {
 
     const toggle = section.querySelector("[data-left-pane-section-toggle]");
     if (toggle) {
-      toggle.innerHTML = block.collapsed ? MENU_GLYPHS.right : MENU_GLYPHS.down;
+      toggle.textContent = block.collapsed ? MENU_GLYPHS.right : MENU_GLYPHS.down;
       toggle.setAttribute("aria-expanded", String(!block.collapsed));
       toggle.setAttribute("aria-label", `${block.collapsed ? "Expand" : "Collapse"} ${label}`);
     }
@@ -1622,18 +1836,16 @@ export function updateMenuStateButtons() {
 }
 
 export function applyViewState() {
-    document.body.classList.remove("show-ruler");
-    document.body.classList.remove("outline-hidden");
-    document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
-    document.body.classList.toggle("focus-mode-enabled", Boolean(state.viewOptions.focusMode));
-    refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
-    if (refs.quickDisplayBg) refs.quickDisplayBg.checked = Boolean(state.backgroundAnimation);
-    if (refs.quickDisplayActiveBlock) refs.quickDisplayActiveBlock.checked = !refs.leftPane?.classList.contains("is-hidden");
-    if (refs.quickDisplayPreview) refs.quickDisplayPreview.checked = !refs.rightPane?.classList.contains("is-hidden");
-    if (refs.quickDisplayFullscreen) refs.quickDisplayFullscreen.checked = Boolean(document.fullscreenElement);
-    if (refs.quickDisplayFocusMode) refs.quickDisplayFocusMode.checked = Boolean(state.viewOptions.focusMode);
-    updateMenuStateButtons();
-  }
+  document.body.classList.remove("show-ruler");
+  document.body.classList.remove("outline-hidden");
+  document.documentElement.style.setProperty("--script-font-size", `${state.viewOptions.textSize}pt`);
+  refs.toolStripToggle.textContent = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+  if (refs.quickDisplayBg) refs.quickDisplayBg.checked = Boolean(state.backgroundAnimation);
+  if (refs.quickDisplayActiveBlock) refs.quickDisplayActiveBlock.checked = !refs.leftPane?.classList.contains("is-hidden");
+  if (refs.quickDisplayPreview) refs.quickDisplayPreview.checked = !refs.rightPane?.classList.contains("is-hidden");
+  if (refs.quickDisplayFullscreen) refs.quickDisplayFullscreen.checked = Boolean(document.fullscreenElement);
+  updateMenuStateButtons();
+}
 
 export function setTheme(theme) {
   state.theme = theme === "rose" ? "cedar" : theme;
@@ -1654,7 +1866,7 @@ export function applyToolbarState() {
   document.body.classList.toggle("ai-assist-active", state.aiAssist);
   document.body.classList.toggle("spelling-mode-active", state.grammarCheck);
   refs.toolStrip.classList.toggle("is-collapsed", state.toolStripCollapsed);
-  refs.toolStripToggle.innerHTML = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+  refs.toolStripToggle.textContent = state.toolStripCollapsed ? MENU_GLYPHS.down : MENU_GLYPHS.up;
   if (refs.bgAnimationToggle) {
     refs.bgAnimationToggle.checked = state.backgroundAnimation;
   }
@@ -3588,15 +3800,15 @@ export function revealMetricsPanel() {
     // This needs togglePane from events.js, but ui.js shouldn't depend on events.js
     // We can just manipulate the classes directly here or emit an event.
     refs.leftPane.classList.remove("is-hidden");
-    if (refs.leftRailToggle) refs.leftRailToggle.innerHTML = MENU_GLYPHS.left;
+    if (refs.leftRailToggle) refs.leftRailToggle.textContent = MENU_GLYPHS.left;
     refs.studioLayout.classList.remove("left-pane-hidden");
     if (refs.leftResize) refs.leftResize.classList.remove("is-hidden");
   }
   if (refs.leftPaneBody.classList.contains("is-collapsed")) {
       refs.leftPaneBody.classList.remove("is-collapsed");
-      refs.leftPaneSectionToggle.innerHTML = MENU_GLYPHS.up;
+      refs.leftPaneSectionToggle.textContent = MENU_GLYPHS.up;
   }
-  refs.leftPaneSectionToggle.innerHTML = refs.leftPaneBody.classList.contains("is-collapsed") ? MENU_GLYPHS.down : MENU_GLYPHS.up;
+  refs.leftPaneSectionToggle.textContent = refs.leftPaneBody.classList.contains("is-collapsed") ? MENU_GLYPHS.down : MENU_GLYPHS.up;
   document.querySelector('[data-left-pane-block="metrics"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 

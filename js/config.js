@@ -1,4 +1,5 @@
 export const STORAGE_KEY = "eyawriter-projects-v5";
+export const APP_VERSION = "1.1.0";
 export const TYPE_SEQUENCE = ["scene", "action", "character", "dialogue", "transition", "parenthetical", "shot", "text", "note", "dual", "image"];
 export const TYPE_LABELS = {
   scene: "Scene",
@@ -152,9 +153,9 @@ export const state = {
   homeProjectFilter: "all",
   homeProjectSort: "latest",
   homeProjectFormat: "all",
-  homeEditorFilter: "all",
-  editorTaskFilter: "all",
-  editorTaskSort: "latest",
+  homeWorkspaceFilter: null,
+  workspaceTaskFilter: "all",
+  workspaceTaskSort: "latest",
   backupPrompted: false,
   history: [],
   historyIndex: -1

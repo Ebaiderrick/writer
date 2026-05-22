@@ -4,7 +4,9 @@ import {
   collection, query, where, onSnapshot, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { state } from './config.js';
-import { logActivity } from './activity.js';
+import { logActivity, logCommentActivity, ACTIVITY_CATEGORIES } from './activity.js';
+import { Telemetry } from './telemetry.js';
+import { Logger } from './logger.js';
 import { getCurrentProject, sanitizeProject, upsertProject, persistProjects, deleteProjectFromCloud } from './project.js';
 import { uid as makeId } from './utils.js';
 import { customAlert, customConfirm, showHome, renderHome } from './ui.js';
@@ -28,6 +30,10 @@ let unsubSentInvites = null;
 let unsubComments = null;
 let unsubSharedProject = null;
 let sharedProjectWatchers = new Map();
+
+let _presenceInterval = null;
+let _unsubPresence = null;
+let _activePresence = [];
 
 // ── Comments collection path ──────────────────────────────────
 // Personal projects → users/{uid}/projects/{id}/comments
@@ -83,6 +89,7 @@ export function initCollaboration() {
 }
 
 export function cleanupCollaboration() {
+  stopPresenceHeartbeat();
   [unsubInvites, unsubSentInvites, unsubComments, unsubSharedProject].forEach(fn => fn?.());
   unsubInvites = unsubSentInvites = unsubComments = unsubSharedProject = null;
   sharedProjectWatchers.forEach(fn => fn?.());
@@ -95,23 +102,56 @@ export function onStudioEnter(projectId) {
   renderCollaboratorList();
   if (project.isShared) {
     subscribeToSharedProject(projectId);
+    startPresenceHeartbeat(projectId);
   } else {
+    stopPresenceHeartbeat();
     if (unsubSharedProject) { unsubSharedProject(); unsubSharedProject = null; }
   }
   syncSharedProjectWatchers();
   subscribeToComments(project);
+  _initMentionAutocomplete();
+}
+
+export function startPresenceHeartbeat(projectId) {
+  stopPresenceHeartbeat();
+  const user = auth.currentUser;
+  if (!user) return;
+  const presRef = doc(db, 'sharedProjects', projectId, 'presence', user.uid);
+  const write = () => setDoc(presRef, {
+    uid: user.uid,
+    name: user.displayName || user.email || 'Someone',
+    seenAt: new Date().toISOString()
+  }, { merge: true }).catch(() => {});
+  write();
+  _presenceInterval = setInterval(write, 60000);
+  const presCol = collection(db, 'sharedProjects', projectId, 'presence');
+  _unsubPresence = onSnapshot(presCol, snap => {
+    const now = Date.now();
+    const STALE = 3 * 60 * 1000;
+    _activePresence = snap.docs.map(d => d.data())
+      .filter(p => p.seenAt && (now - new Date(p.seenAt).getTime()) < STALE)
+      .filter(p => p.uid !== user.uid);
+    const proj = state.projects.find(p => p.id === projectId);
+    if (proj) renderWorkspaceAwareness(proj);
+  }, () => {});
+}
+
+export function stopPresenceHeartbeat() {
+  if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
+  if (_unsubPresence) { _unsubPresence(); _unsubPresence = null; }
+  _activePresence = [];
 }
 
 export function getUserProjectRole(project = getCurrentProject(), user = auth.currentUser) {
   if (!project || !user) {
-    return EDITOR_ROLES.owner;
+    return WORKSPACE_ROLES.viewer;
   }
 
   if (!project.ownerId || project.ownerId === user.uid) {
     return EDITOR_ROLES.owner;
   }
 
-  return project.collaborators?.[user.uid]?.role || EDITOR_ROLES.editor;
+  return project.collaborators?.[user.uid]?.role || WORKSPACE_ROLES.viewer;
 }
 
 export function canEditProject(project = getCurrentProject(), user = auth.currentUser) {
@@ -121,6 +161,33 @@ export function canEditProject(project = getCurrentProject(), user = auth.curren
 export function canManageEditor(project = getCurrentProject(), user = auth.currentUser) {
   return getUserProjectRole(project, user) === EDITOR_ROLES.owner;
 }
+
+// ── Centralized permission utility ────────────────────────────
+// Single authoritative source for all workspace permission checks.
+
+export const Permissions = {
+  getRole: getUserProjectRole,
+  canEdit: canEditProject,
+  canManage: canManageWorkspace,
+
+  /** True if user is the project owner or any listed collaborator. */
+  isMember(project = getCurrentProject(), user = auth.currentUser) {
+    if (!project || !user) return false;
+    if (!project.ownerId || project.ownerId === user.uid) return true;
+    return Boolean(project.collaborators?.[user.uid]);
+  },
+
+  /** Comment author or project owner can delete a comment. */
+  canDeleteComment(comment, project = getCurrentProject(), user = auth.currentUser) {
+    if (!comment || !project || !user) return false;
+    return comment.uid === user.uid || canManageWorkspace(project, user);
+  },
+
+  /** Non-viewer members can resolve/unresolve comments. */
+  canResolveComment(_comment, project = getCurrentProject(), user = auth.currentUser) {
+    return canEditProject(project, user);
+  }
+};
 
 function updateCollabBadge(count) {
   document.querySelectorAll('.collab-badge').forEach(b => {
@@ -199,7 +266,7 @@ export async function inviteCollaborator(email, role = EDITOR_ROLES.editor) {
     };
 
     await setDoc(doc(db, 'invitations', inviteId), inviteData);
-    await logActivity(project.id, `Invited ${normalizedEmail} as ${inviteData.role}.`);
+    await logActivity(project.id, `Invited ${normalizedEmail} as ${inviteData.role}.`, { category: ACTIVITY_CATEGORIES.invite });
 
     // Send email notification (best-effort)
     if (window.emailjs) {
@@ -216,9 +283,10 @@ export async function inviteCollaborator(email, role = EDITOR_ROLES.editor) {
       }
     }
 
+    Telemetry.track('collab_invite_sent', { role });
     return { ok: true };
   } catch (err) {
-    console.error('inviteCollaborator error:', err);
+    Logger.capture('inviteCollaborator', err);
     return { ok: false, reason: err.message || 'An error occurred. Please try again.' };
   }
 }
@@ -230,6 +298,14 @@ async function ensureSharedProject(project, user) {
   const ref = doc(db, 'sharedProjects', project.id);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
+    const shareEntry = {
+      timestamp: new Date().toISOString(),
+      user: user.displayName || user.email || 'Unknown User',
+      uid: user.uid,
+      category: ACTIVITY_CATEGORIES.workspace,
+      message: `Shared "${project.title}" with the team.`
+    };
+    const activityLog = [...(project.activityLog || []), shareEntry];
     await setDoc(ref, {
       ...project,
       ownerId: user.uid,
@@ -244,9 +320,14 @@ async function ensureSharedProject(project, user) {
       },
       collaborators: {},
       isShared: true,
+      activityLog,
+      lastActivityAt: shareEntry.timestamp,
+      lastEditorName: shareEntry.user,
       updatedBy: user.uid,
       syncedAt: new Date().toISOString()
     });
+    project.activityLog = activityLog;
+    project.lastActivityAt = shareEntry.timestamp;
   }
   project.isShared = true;
   project.ownerId = user.uid;
@@ -264,51 +345,108 @@ export async function acceptInvitation(inviteId) {
   const user = auth.currentUser;
   if (!user) return;
 
-  const invSnap = await getDoc(doc(db, 'invitations', inviteId));
-  if (!invSnap.exists()) return;
-  const inv = invSnap.data();
+  try {
+    // Primary path: server-side acceptance via Admin SDK (atomic + validated).
+    let token = '';
+    try { token = await user.getIdToken(); } catch { /* continue without token */ }
 
-  const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
-  const profileData = profileSnap.exists() ? profileSnap.data() : {};
+    const res = await fetch('/api/accept-invitation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ inviteId })
+    });
 
-  const sharedRef = doc(db, 'sharedProjects', inv.projectId);
+    const data = await res.json().catch(() => ({}));
 
-  // Step 1: Add self to collaborators using dot-notation.
-  // Set updatedBy to the collaborator's uid so the owner's onSnapshot listener
-  // does NOT skip this update (it skips when updatedBy === own uid).
-  await updateDoc(sharedRef, {
-    [`collaborators.${user.uid}`]: {
-      name: user.displayName || user.email,
-      email: user.email,
-      photoURL: profileData.photoURL || user.photoURL || '',
-      addedAt: new Date().toISOString(),
-      role: inv.role === EDITOR_ROLES.viewer ? EDITOR_ROLES.viewer : EDITOR_ROLES.editor
-    },
-    updatedBy: user.uid
-  });
+    // Fallback path: Admin SDK not configured in this environment.
+    if (res.status === 503 && data.fallback) {
+      return _acceptInvitationClientSide(inviteId);
+    }
 
-  // Step 2: Mark invitation accepted (recipient can always update their own invite).
-  await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
+    if (!res.ok) {
+      Logger.capture('acceptInvitation', new Error(data.error || `HTTP ${res.status}`), { inviteId });
+      return;
+    }
 
-  await logActivity(inv.projectId, `Joined project as ${inv.role === EDITOR_ROLES.viewer ? 'Viewer' : 'Editor'}.`);
+    const { projectId, role, project: sharedProject } = data;
+    if (!sharedProject || !projectId) return;
 
-  // Step 3: Now read the shared project — user is a collaborator so read is allowed.
-  const projSnap = await getDoc(sharedRef);
-  if (!projSnap.exists()) return;
-  const sharedProject = projSnap.data();
+    // Copy project into recipient's personal projects (client write to own subcollection).
+    const projectForUser = sanitizeProject(sharedProject);
+    await setDoc(doc(db, 'users', user.uid, 'projects', projectId), {
+      ...projectForUser,
+      syncedAt: new Date().toISOString()
+    });
 
-  // Step 4: Copy project into the recipient's personal projects.
-  const projectForUser = sanitizeProject(sharedProject);
-  await setDoc(doc(db, 'users', user.uid, 'projects', inv.projectId), {
-    ...projectForUser,
-    syncedAt: new Date().toISOString()
-  });
+    await logActivity(projectId, `Joined project as ${role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`, { category: ACTIVITY_CATEGORIES.member });
+    Telemetry.track('collab_invite_accepted', { projectId });
+    upsertProject(projectForUser);
+    persistProjects(false);
+    renderHome();
+    syncSharedProjectWatchers();
+    subscribeToSharedProject(projectId);
+  } catch (err) {
+    Logger.capture('acceptInvitation', err);
+    console.error('Failed to accept invitation:', err);
+  }
+}
 
-  upsertProject(projectForUser);
-  persistProjects(false);
-  renderHome();
-  syncSharedProjectWatchers();
-  subscribeToSharedProject(inv.projectId);
+// Client-side fallback for local dev when FIREBASE_SERVICE_ACCOUNT is not configured.
+async function _acceptInvitationClientSide(inviteId) {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  try {
+    const invSnap = await getDoc(doc(db, 'invitations', inviteId));
+    if (!invSnap.exists()) return;
+    const inv = invSnap.data();
+
+    if (inv.status !== 'pending') return;
+    if (inv.toEmail.toLowerCase() !== user.email.toLowerCase()) return;
+
+    const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
+    const profileData = profileSnap.exists() ? profileSnap.data() : {};
+
+    const sharedRef = doc(db, 'sharedProjects', inv.projectId);
+    const projectExistsSnap = await getDoc(sharedRef);
+    if (!projectExistsSnap.exists()) {
+      await updateDoc(doc(db, 'invitations', inviteId), { status: 'declined' });
+      return;
+    }
+
+    // Uses the Firestore self-add rule (allowed in dev environments).
+    await updateDoc(sharedRef, {
+      [`collaborators.${user.uid}`]: {
+        name: user.displayName || user.email,
+        email: user.email,
+        photoURL: profileData.photoURL || user.photoURL || '',
+        addedAt: new Date().toISOString(),
+        role: inv.role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor
+      },
+      updatedBy: user.uid
+    });
+
+    await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
+    await logActivity(inv.projectId, `Joined project as ${inv.role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`, { category: ACTIVITY_CATEGORIES.member });
+
+    const projSnap = await getDoc(sharedRef);
+    if (!projSnap.exists()) return;
+    const projectForUser = sanitizeProject(projSnap.data());
+    await setDoc(doc(db, 'users', user.uid, 'projects', inv.projectId), {
+      ...projectForUser,
+      syncedAt: new Date().toISOString()
+    });
+
+    Telemetry.track('collab_invite_accepted', { projectId: inv.projectId });
+    upsertProject(projectForUser);
+    persistProjects(false);
+    renderHome();
+    syncSharedProjectWatchers();
+    subscribeToSharedProject(inv.projectId);
+  } catch (err) {
+    Logger.capture('_acceptInvitationClientSide', err);
+    console.error('Client-side fallback acceptance failed:', err);
+  }
 }
 
 export async function declineInvitation(inviteId) {
@@ -329,6 +467,11 @@ export async function kickCollaborator(projectId, collaboratorUid) {
     return;
   }
 
+  if (collaboratorUid === user.uid) {
+    await customAlert('You cannot remove yourself. Use "Leave workspace" instead.', 'Not Allowed');
+    return;
+  }
+
   const newCollaborators = { ...(project.collaborators || {}) };
   delete newCollaborators[collaboratorUid];
 
@@ -340,7 +483,7 @@ export async function kickCollaborator(projectId, collaboratorUid) {
   });
 
   project.collaborators = newCollaborators;
-  await logActivity(projectId, 'Removed a collaborator from the editor.');
+  await logActivity(projectId, 'Removed a collaborator from the workspace.', { category: ACTIVITY_CATEGORIES.member });
   persistProjects(false);
   renderCollaboratorList();
   renderHome();
@@ -362,7 +505,11 @@ export async function updateCollaboratorRole(projectId, collaboratorUid, role) {
     return { ok: false, reason: 'Collaborator not found.' };
   }
 
-  const nextRole = role === EDITOR_ROLES.viewer ? EDITOR_ROLES.viewer : EDITOR_ROLES.editor;
+  if (role === WORKSPACE_ROLES.owner) {
+    return { ok: false, reason: 'Use the "Transfer Ownership" option to change ownership.' };
+  }
+
+  const nextRole = role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor;
   if (collaborator.role === nextRole) {
     return { ok: true };
   }
@@ -376,7 +523,7 @@ export async function updateCollaboratorRole(projectId, collaboratorUid, role) {
     ...collaborator,
     role: nextRole
   };
-  await logActivity(projectId, `Changed ${collaborator.name || collaborator.email} to ${nextRole}.`);
+  await logActivity(projectId, `Changed ${collaborator.name || collaborator.email} to ${nextRole}.`, { category: ACTIVITY_CATEGORIES.role });
   persistProjects(false);
   renderCollaboratorList();
   renderHome();
@@ -408,7 +555,7 @@ export async function renameEditor(projectId, name) {
     editor: project.editor,
     updatedBy: user.uid
   });
-  await logActivity(projectId, `Renamed the Editor to ${nextName}.`);
+  await logActivity(projectId, `Renamed the workspace to ${nextName}.`, { category: ACTIVITY_CATEGORIES.workspace });
   persistProjects(false);
   renderHome();
   return { ok: true };
@@ -445,7 +592,7 @@ export async function addEditorReminder(projectId, reminder) {
     editor: project.editor,
     updatedBy: user.uid
   });
-  await logActivity(projectId, `Added reminder: ${text}.`);
+  await logActivity(projectId, `Added reminder: ${text}.`, { category: ACTIVITY_CATEGORIES.workspace });
   persistProjects(false);
   return { ok: true };
 }
@@ -473,7 +620,7 @@ export async function toggleEditorReminder(projectId, reminderId) {
     editor: project.editor,
     updatedBy: user.uid
   });
-  await logActivity(projectId, `${changed.completed ? 'Completed' : 'Reopened'} reminder: ${changed.text}.`);
+  await logActivity(projectId, `${changed.completed ? 'Completed' : 'Reopened'} reminder: ${changed.text}.`, { category: ACTIVITY_CATEGORIES.workspace });
   persistProjects(false);
   return { ok: true };
 }
@@ -501,9 +648,89 @@ export async function deleteEditorReminder(projectId, reminderId) {
     editor: project.editor,
     updatedBy: user.uid
   });
-  await logActivity(projectId, `Removed reminder: ${existing.text}.`);
+  await logActivity(projectId, `Removed reminder: ${existing.text}.`, { category: ACTIVITY_CATEGORIES.workspace });
   persistProjects(false);
   return { ok: true };
+}
+
+export async function transferOwnership(projectId, newOwnerUid) {
+  const user = auth.currentUser;
+  if (!user) return { ok: false, reason: 'Not signed in.' };
+
+  const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
+  if (!project) return { ok: false, reason: 'No project found.' };
+  if (!canManageWorkspace(project, user)) {
+    return { ok: false, reason: 'Only the current owner can transfer ownership.' };
+  }
+  if (newOwnerUid === user.uid) {
+    return { ok: false, reason: 'You are already the owner.' };
+  }
+  if (!project.collaborators?.[newOwnerUid]) {
+    return { ok: false, reason: 'The new owner must be a current collaborator.' };
+  }
+
+  try {
+    let token = '';
+    try { token = await user.getIdToken(); } catch { /* continue */ }
+
+    const res = await fetch('/api/transfer-ownership', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ projectId, newOwnerUid })
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      return { ok: false, reason: data.error || `Server error (${res.status})` };
+    }
+
+    // Update local state from server response.
+    if (data.project) {
+      const updated = sanitizeProject(data.project);
+      upsertProject(updated);
+    } else {
+      // Fallback local update if server didn't return the full project.
+      const collab = project.collaborators[newOwnerUid];
+      const oldOwnerEntry = {
+        name: project.ownerName || '',
+        email: project.ownerEmail || '',
+        photoURL: project.ownerPhotoURL || '',
+        addedAt: new Date().toISOString(),
+        role: WORKSPACE_ROLES.editor
+      };
+      const newCollaborators = { ...project.collaborators };
+      delete newCollaborators[newOwnerUid];
+      newCollaborators[user.uid] = oldOwnerEntry;
+
+      project.ownerId = newOwnerUid;
+      project.ownerName = collab.name || collab.email || '';
+      project.ownerEmail = collab.email || '';
+      project.ownerPhotoURL = collab.photoURL || '';
+      project.collaborators = newCollaborators;
+    }
+
+    Telemetry.track('collab_ownership_transferred', { projectId });
+    persistProjects(false);
+    renderCollaboratorList();
+    renderHome();
+    return { ok: true };
+  } catch (err) {
+    Logger.capture('transferOwnership', err);
+    return { ok: false, reason: err.message || 'Failed to transfer ownership.' };
+  }
+}
+
+export async function revokeInvitation(inviteId) {
+  const user = auth.currentUser;
+  if (!user) return;
+  try {
+    await deleteDoc(doc(db, 'invitations', inviteId));
+    Telemetry.track('collab_invite_revoked');
+  } catch (err) {
+    Logger.capture('revokeInvitation', err);
+    console.error('Failed to revoke invitation:', err);
+  }
 }
 
 // ── Real-time listeners ───────────────────────────────────────
@@ -537,9 +764,11 @@ function syncSharedProjectWatchers() {
   const user = auth.currentUser;
   if (!user) return;
 
+  // Watch ALL shared projects — both owned (catches collaborator edits while not in studio)
+  // and collaborated (catches owner edits and removal).
   const sharedIds = new Set(
     state.projects
-      .filter(project => project.isShared && project.ownerId !== user.uid)
+      .filter(project => project.isShared)
       .map(project => project.id)
   );
 
@@ -560,14 +789,18 @@ function syncSharedProjectWatchers() {
           return;
         }
 
-        const sharedProject = sanitizeProject(snap.data());
-        if (!sharedProject.collaborators?.[user.uid]) {
+        const snapData = snap.data();
+        const isOwner = !snapData.ownerId || snapData.ownerId === user.uid;
+
+        // Collaborator was removed — clean up their local copy.
+        if (!isOwner && !snapData.collaborators?.[user.uid]) {
           handleSharedProjectRemoved(projectId);
           return;
         }
 
-        if (snap.data().updatedBy === user.uid) return;
-        upsertProject(sharedProject);
+        if (snapData.updatedBy === user.uid) return;
+        const updated = sanitizeProject(snapData);
+        upsertProject(updated);
         persistProjects(false);
         renderHome();
         if (state.currentProjectId === projectId) {
@@ -617,6 +850,7 @@ export function subscribeToComments(projectOrId) {
     renderCommentList(allComments, project.id);
     renderLeftPaneComments();
     updateCommentIcons(allComments);
+    _updateUnresolvedBadge(allComments);
   }, err => console.error('[comments]', err));
 }
 
@@ -640,24 +874,42 @@ export async function addComment(projectId, text, { lineId = null, parentId = nu
   const ref = commentDocRef(project, makeId('cmt'));
   if (!ref) return;
   const commentId = ref.id;
+  const trimmedText = text.trim();
+  const mentions = parseMentions(trimmedText, project);
   await setDoc(ref, {
     id: commentId,
     uid: user.uid,
     userName: user.displayName || user.email,
-    text: text.trim(),
+    text: trimmedText,
     lineId: lineId || null,
     parentId: parentId || null,
+    mentions,
     resolved: false,
     createdAt: new Date().toISOString()
   });
+  logCommentActivity(projectId, parentId ? 'replied' : 'added', { text: trimmedText });
 }
 
 export async function deleteComment(projectId, commentId) {
+  const user = auth.currentUser;
+  if (!user) return;
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
+
+  const comment = allComments.find(c => c.id === commentId);
+  if (comment && !Permissions.canDeleteComment(comment, project, user)) {
+    await customAlert('You can only delete your own comments. Ask the workspace owner to remove others.', 'Not Authorized');
+    return;
+  }
+
   const ref = commentDocRef(project, commentId);
   if (!ref) return;
-  await deleteDoc(ref);
+  try {
+    await deleteDoc(ref);
+    logCommentActivity(projectId, 'deleted');
+  } catch (err) {
+    Logger.capture('deleteComment', err);
+  }
 }
 
 export async function resolveComment(projectId, commentId, resolved) {
@@ -677,6 +929,7 @@ export async function resolveComment(projectId, commentId, resolved) {
     resolvedAt: resolved ? new Date().toISOString() : null
   };
   await updateDoc(ref, patch);
+  logCommentActivity(projectId, resolved ? 'resolved' : 'unresolved');
   allComments = allComments.map((comment) => comment.id === commentId ? { ...comment, ...patch } : comment);
   renderCommentList(allComments, projectId);
   renderLeftPaneComments();
@@ -695,6 +948,7 @@ export function renderCollaboratorList() {
   if (!list || !project) return;
 
   renderActivityLog(project);
+  renderWorkspaceAwareness(project);
 
   const user = auth.currentUser;
   const isOwner = canManageEditor(project, user);
@@ -736,9 +990,10 @@ export function renderCollaboratorList() {
         <span class="collaborator-name">${esc(c.name || c.email)} <span class="role-badge">${esc((c.role || EDITOR_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))}</span></span>
         <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(uid)}" data-name="${esc(c.name || '')}" data-email="${esc(c.email || '')}" data-photourl="${esc(c.photoURL || '')}">${esc(c.name || c.email || 'Collaborator')}</button>
         ${isOwner ? `<label class="collab-role-field"><span>Role</span><select class="collab-role-select" data-uid="${esc(uid)}">
-          <option value="editor" ${(c.role || EDITOR_ROLES.editor) === EDITOR_ROLES.editor ? 'selected' : ''}>Editor</option>
-          <option value="viewer" ${(c.role || EDITOR_ROLES.editor) === EDITOR_ROLES.viewer ? 'selected' : ''}>Viewer</option>
-        </select></label>` : `<span class="collaborator-role-copy">${esc((c.role || EDITOR_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))} access</span>`}
+          <option value="editor" ${(c.role || WORKSPACE_ROLES.editor) === WORKSPACE_ROLES.editor ? 'selected' : ''}>Editor</option>
+          <option value="viewer" ${(c.role || WORKSPACE_ROLES.editor) === WORKSPACE_ROLES.viewer ? 'selected' : ''}>Viewer</option>
+        </select></label>
+        <button class="transfer-ownership-btn" data-uid="${esc(uid)}" data-name="${esc(c.name || c.email || '')}" title="Transfer ownership to this collaborator">Transfer Ownership</button>` : `<span class="collaborator-role-copy">${esc((c.role || WORKSPACE_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))} access</span>`}
       </div>
       ${isOwner ? `<button class="kick-btn" data-uid="${uid}" title="Remove collaborator">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -753,6 +1008,23 @@ export function renderCollaboratorList() {
         'Remove Collaborator'
       );
       if (confirmed) kickCollaborator(project.id, btn.dataset.uid);
+    });
+  });
+
+  list.querySelectorAll('.transfer-ownership-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = btn.dataset.name || 'this collaborator';
+      const confirmed = await customConfirm(
+        `Transfer ownership of "${project.title}" to ${name}?\n\nYou will become an Editor. This cannot be undone from the client.`,
+        'Transfer Ownership'
+      );
+      if (!confirmed) return;
+      btn.disabled = true;
+      const result = await transferOwnership(project.id, btn.dataset.uid);
+      btn.disabled = false;
+      if (!result.ok) {
+        await customAlert(result.reason || 'Ownership transfer failed.', 'Transfer Ownership');
+      }
     });
   });
 
@@ -881,18 +1153,30 @@ function renderSentInvites(invitations) {
     ? '<p class="collab-empty">No invites sent.</p>'
     : sorted.map(inv => {
         const statusLabel = inv.status === 'accepted' ? 'Validated' : inv.status === 'declined' ? 'Declined' : 'Pending';
+        const canRevoke = inv.status === 'pending';
         return `
-          <div class="collab-request-item">
+          <div class="collab-request-item" data-invite-id="${esc(inv.id)}">
             <div class="collab-request-info">
               <span class="collab-request-from">${esc(inv.toEmail)}</span>
               <span class="collab-request-project">${esc(inv.projectTitle)}</span>
             </div>
-            <span class="status-pill ${inv.status}">${statusLabel}</span>
+            <div class="sent-invite-actions">
+              <span class="status-pill ${inv.status}">${statusLabel}</span>
+              ${canRevoke ? `<button class="revoke-invite-btn ghost-button" data-invite-id="${esc(inv.id)}" title="Revoke this invitation">Revoke</button>` : ''}
+            </div>
           </div>
         `;
       }).join('');
 
-  containers.forEach(list => { list.innerHTML = html; });
+  containers.forEach(list => {
+    list.innerHTML = html;
+    list.querySelectorAll('.revoke-invite-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        await revokeInvitation(btn.dataset.inviteId);
+      });
+    });
+  });
 }
 
 function renderCollabRequests(invitations) {
@@ -940,10 +1224,10 @@ function renderCommentList(comments, projectId) {
     <div class="comment-item${c.resolved ? ' comment-resolved' : ''}">
       <div class="comment-meta">
         <span class="comment-author">${esc(c.userName)}</span>
-        <span class="comment-time">${fmtTime(c.createdAt)}</span>
+        <span class="comment-time">${relativeTime(c.createdAt)}</span>
         ${c.resolved ? `<span class="comment-resolved-label">Resolved by ${esc(c.resolvedBy || '')}</span>` : ''}
       </div>
-      <p class="comment-text">${esc(c.text)}</p>
+      <p class="comment-text">${displayWithMentions(c.text)}</p>
       <button class="ghost-button comment-resolve-btn" data-comment-id="${c.id}" data-resolved="${c.resolved}">
         ${c.resolved ? 'Unresolve' : 'Resolve'}
       </button>
@@ -1029,6 +1313,7 @@ export function renderLeftPaneComments() {
   const countEl = document.getElementById('commentCount');
   const topLevel = allComments.filter(c => !c.parentId);
   if (countEl) countEl.textContent = `${topLevel.length} comment${topLevel.length !== 1 ? 's' : ''}`;
+  _updateUnresolvedBadge(allComments);
   // If the list dialog is open, refresh it in place
   const dialog = document.getElementById('commentListDialog');
   if (dialog?.open) populateCommentListDialog();
@@ -1109,10 +1394,10 @@ function populateCommentListDialog() {
         <span class="cld-time">${fmtTime(c.createdAt)}</span>
         ${c.resolved ? `<span class="comment-resolved-pill">Resolved by ${esc(c.resolvedBy || '')}</span>` : ''}
       </div>
-      <p class="cld-text">${esc(c.text)}</p>
+      <p class="cld-text">${displayWithMentions(c.text)}</p>
       ${threadReplies.length ? `<div class="cld-replies">${threadReplies.map(r => `
-        <div class="cld-reply"><span class="cld-reply-author">${esc(r.userName)}</span> <span class="cld-reply-time">${fmtTime(r.createdAt)}</span>
-        <p class="cld-reply-text">${esc(r.text)}</p></div>`).join('')}
+        <div class="cld-reply"><span class="cld-reply-author">${esc(r.userName)}</span> <span class="cld-reply-time">${relativeTime(r.createdAt)}</span>
+        <p class="cld-reply-text">${displayWithMentions(r.text)}</p></div>`).join('')}
       </div>` : ''}
       <div class="cld-reply-compose" hidden>
         <textarea class="cld-reply-input" rows="2" placeholder="Write a reply…"></textarea>
@@ -1226,8 +1511,8 @@ export function showCommentDetail(commentId) {
   if (!dialog) return;
 
   dialog.querySelector('#cdAuthor').textContent = comment.userName;
-  dialog.querySelector('#cdTime').textContent = fmtTime(comment.createdAt);
-  dialog.querySelector('#cdText').textContent = comment.text;
+  dialog.querySelector('#cdTime').textContent = relativeTime(comment.createdAt);
+  dialog.querySelector('#cdText').innerHTML = displayWithMentions(comment.text);
 
   const resolvedPill = dialog.querySelector('#cdResolvedPill');
   resolvedPill.hidden = !comment.resolved;
@@ -1237,10 +1522,15 @@ export function showCommentDetail(commentId) {
   repliesEl.innerHTML = replies.length ? replies.map(r => `
     <div class="cd-reply">
       <span class="cd-reply-author">${esc(r.userName)}</span>
-      <span class="cd-reply-time">${fmtTime(r.createdAt)}</span>
-      <p class="cd-reply-text">${esc(r.text)}</p>
+      <span class="cd-reply-time">${relativeTime(r.createdAt)}</span>
+      <p class="cd-reply-text">${displayWithMentions(r.text)}</p>
     </div>
   `).join('') : '';
+
+  const replyCompose = dialog.querySelector('#cdReplyCompose');
+  if (replyCompose) { replyCompose.hidden = true; }
+  const replyText = dialog.querySelector('#cdReplyText');
+  if (replyText) replyText.value = '';
 
   const resolveBtn = dialog.querySelector('#cdResolveBtn');
   resolveBtn.textContent = comment.resolved ? 'Unresolve' : 'Mark as Solved';
@@ -1276,6 +1566,32 @@ function initCommentDetailDialog() {
     dialog.close();
   });
 
+  // Reply toggle
+  dialog.querySelector('#cdReplyBtn')?.addEventListener('click', () => {
+    const compose = dialog.querySelector('#cdReplyCompose');
+    if (!compose) return;
+    compose.hidden = !compose.hidden;
+    if (!compose.hidden) dialog.querySelector('#cdReplyText')?.focus();
+  });
+
+  // Send reply
+  const sendReply = async () => {
+    const project = getCurrentProject();
+    if (!project) return;
+    const text = dialog.querySelector('#cdReplyText')?.value?.trim();
+    if (!text) return;
+    const commentId = dialog.querySelector('#cdResolveBtn')?.dataset.commentId;
+    const parent = allComments.find(c => c.id === commentId);
+    await addComment(project.id, text, { lineId: parent?.lineId || null, parentId: commentId });
+    dialog.querySelector('#cdReplyText').value = '';
+    dialog.querySelector('#cdReplyCompose').hidden = true;
+    if (commentId) showCommentDetail(commentId);
+  };
+  dialog.querySelector('#cdReplySend')?.addEventListener('click', sendReply);
+  dialog.querySelector('#cdReplyText')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+  });
+
   dialog.querySelector('#cdCloseBtn').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
 }
@@ -1309,6 +1625,16 @@ function fmtTime(iso) {
   } catch { return ''; }
 }
 
+const ACTIVITY_ICONS = {
+  comment: '💬',
+  invite: '✉️',
+  member: '👤',
+  role: '🔑',
+  workspace: '🏷️',
+  governance: '🏛️',
+  system: '⚙️'
+};
+
 function renderActivityLog(project) {
   const container = document.getElementById('studioActivityLog');
   if (!container) return;
@@ -1317,17 +1643,215 @@ function renderActivityLog(project) {
     container.innerHTML = '<p class="collab-empty">No activity recorded yet.</p>';
     return;
   }
-  container.innerHTML = [...log].reverse().map(e => `
-    <div class="activity-log-item">
-      <div class="activity-log-meta">
-        <span>${esc(e.user)}</span>
-        <span>${fmtTime(e.timestamp)}</span>
+  container.innerHTML = [...log].reverse().slice(0, 20).map(e => {
+    const icon = ACTIVITY_ICONS[e.category] || ACTIVITY_ICONS.system;
+    return `
+      <div class="activity-log-item">
+        <span class="activity-log-icon" aria-hidden="true">${icon}</span>
+        <div class="activity-log-body">
+          <div class="activity-log-meta">
+            <span class="activity-log-user">${esc(e.user)}</span>
+            <span class="activity-log-time">${relativeTime(e.timestamp)}</span>
+          </div>
+          <div class="activity-log-copy">${esc(e.message)}</div>
+        </div>
       </div>
-      <div class="activity-log-copy">${esc(e.message)}</div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
+}
+
+export function renderWorkspaceAwareness(project) {
+  const el = document.getElementById('workspaceAwareness');
+  if (!el) return;
+  if (!project?.isShared) { el.hidden = true; return; }
+
+  const lastEditor = project.lastEditorName;
+  const lastAt = project.lastActivityAt;
+  const openCount = allComments.filter(c => !c.resolved && !c.parentId).length;
+
+  // Collect up to 3 distinct recent editors from the activity log.
+  const recentEditors = [];
+  const seenNames = new Set();
+  const log = project.activityLog || [];
+  for (let i = log.length - 1; i >= 0 && recentEditors.length < 3; i--) {
+    const { user, timestamp } = log[i];
+    if (user && !seenNames.has(user)) {
+      recentEditors.push({ name: user, timestamp });
+      seenNames.add(user);
+    }
+  }
+
+  el.hidden = false;
+  el.innerHTML = [
+    _activePresence.length
+      ? `<div class="awareness-row awareness-online">
+           <span class="awareness-pulse" aria-hidden="true"></span>
+           <span>${_activePresence.map(p => esc(p.name.split(' ')[0])).join(', ')} ${_activePresence.length === 1 ? 'is' : 'are'} here now</span>
+         </div>`
+      : '',
+    lastEditor && lastAt
+      ? `<div class="awareness-row">
+           <span class="awareness-icon" aria-hidden="true">✏️</span>
+           <span>${esc(lastEditor)} <span class="awareness-time">${relativeTime(lastAt)}</span></span>
+         </div>`
+      : '',
+    recentEditors.length > 1
+      ? `<div class="awareness-row">
+           <span class="awareness-icon" aria-hidden="true">👥</span>
+           <span class="awareness-recent">${
+             recentEditors.map(e =>
+               `<span class="awareness-collaborator" title="${esc(relativeTime(e.timestamp))}">${esc(e.name.split(' ')[0])}</span>`
+             ).join(' · ')
+           }</span>
+         </div>`
+      : '',
+    `<div class="awareness-row">
+       <span class="awareness-icon" aria-hidden="true">💬</span>
+       <span>${openCount} open comment${openCount !== 1 ? 's' : ''}</span>
+     </div>`
+  ].filter(Boolean).join('');
+
+  // Mini activity feed (last 4 entries)
+  _renderMiniActivityFeed(log);
+}
+
+function _renderMiniActivityFeed(log) {
+  const feed = document.getElementById('miniActivityFeed');
+  if (!feed) return;
+  const entries = [...(log || [])].reverse().slice(0, 4);
+  if (!entries.length) { feed.hidden = true; return; }
+  const ICONS = { comment: '💬', invite: '✉️', member: '👤', role: '🔑', workspace: '🏷️', edit: '✏️', create: '🎬', restore: '↩️', system: '⚙️' };
+  feed.hidden = false;
+  feed.innerHTML = `<div class="mini-feed-label">Recent Activity</div>` +
+    entries.map(e => `
+      <div class="mini-feed-item">
+        <span class="mini-feed-icon">${ICONS[e.category] || '⚙️'}</span>
+        <div class="mini-feed-body">
+          <span class="mini-feed-user">${esc(e.user)}</span>
+          <span class="mini-feed-msg">${esc(e.message)}</span>
+          <span class="mini-feed-time">${relativeTime(e.timestamp)}</span>
+        </div>
+      </div>`
+    ).join('');
+}
+
+function _updateUnresolvedBadge(comments) {
+  const count = (comments || allComments).filter(c => !c.parentId && !c.resolved).length;
+  const badge = document.getElementById('studioCollabBadge');
+  if (!badge) return;
+  badge.textContent = count || '';
+  badge.hidden = !count;
+}
+
+function _getMentionCandidates(project, query) {
+  if (!project) return [];
+  const q = (query || '').toLowerCase();
+  const results = [];
+  const seen = new Set();
+  const add = (name, email) => {
+    const display = name || email || '';
+    const handle = display.split('@')[0].replace(/\s+/g, '');
+    if (!handle || seen.has(handle)) return;
+    if (!q || handle.toLowerCase().includes(q) || display.toLowerCase().includes(q)) {
+      results.push({ handle, display });
+      seen.add(handle);
+    }
+  };
+  add(project.ownerName, project.ownerEmail);
+  Object.values(project.collaborators || {}).forEach(c => add(c.name, c.email));
+  return results.slice(0, 5);
+}
+
+function _initMentionAutocomplete() {
+  const textarea = document.getElementById('commentComposeText');
+  const dropdown = document.getElementById('mentionDropdown');
+  if (!textarea || !dropdown || textarea.dataset.mentionBound) return;
+  textarea.dataset.mentionBound = '1';
+
+  textarea.addEventListener('input', () => {
+    const text = textarea.value;
+    const pos = textarea.selectionStart;
+    const before = text.slice(0, pos);
+    const m = before.match(/@([\w.]*)$/);
+    if (!m) { dropdown.hidden = true; return; }
+    const project = getCurrentProject();
+    const candidates = _getMentionCandidates(project, m[1]);
+    if (!candidates.length) { dropdown.hidden = true; return; }
+    dropdown.innerHTML = candidates.map(c =>
+      `<button class="mention-option" type="button" data-handle="${esc(c.handle)}" data-query-len="${m[0].length}">
+         <span class="mention-name">${esc(c.display)}</span>
+         <span class="mention-handle">@${esc(c.handle)}</span>
+       </button>`
+    ).join('');
+    dropdown.hidden = false;
+    dropdown.querySelectorAll('.mention-option').forEach(btn => {
+      btn.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const qLen = parseInt(btn.dataset.queryLen, 10);
+        const pos2 = textarea.selectionStart;
+        const newText = textarea.value.slice(0, pos2 - qLen) + `@${btn.dataset.handle} ` + textarea.value.slice(pos2);
+        textarea.value = newText;
+        textarea.focus();
+        dropdown.hidden = true;
+      });
+    });
+  });
+
+  textarea.addEventListener('blur', () => setTimeout(() => { dropdown.hidden = true; }, 150));
+  textarea.addEventListener('keydown', e => {
+    if (dropdown.hidden) return;
+    if (e.key === 'Escape') { dropdown.hidden = true; }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      dropdown.querySelector('.mention-option')?.focus();
+    }
+  });
 }
 
 function esc(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Escape text then wrap @handle patterns in a styled span (safe — regex only matches word chars).
+function displayWithMentions(text) {
+  return esc(text).replace(/@([\w][\w.-]*)/g, '<span class="mention-tag">@$1</span>');
+}
+
+// Extract collaborator mentions from comment text, matched against project membership.
+function parseMentions(text, project) {
+  const mentions = [];
+  const seen = new Set();
+  const pattern = /@([\w][\w.-]*)/g;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    const handle = match[1].toLowerCase();
+    const ownerName = (project.ownerName || project.ownerEmail || '').split('@')[0].replace(/\s+/g, '').toLowerCase();
+    if (ownerName && ownerName.includes(handle) && !seen.has(project.ownerId)) {
+      mentions.push({ uid: project.ownerId || null, name: project.ownerName || project.ownerEmail || 'Owner' });
+      if (project.ownerId) seen.add(project.ownerId);
+    }
+    Object.entries(project.collaborators || {}).forEach(([uid, c]) => {
+      if (seen.has(uid)) return;
+      const name = (c.name || c.email || '').split('@')[0].replace(/\s+/g, '').toLowerCase();
+      if (name && name.includes(handle)) {
+        mentions.push({ uid, name: c.name || c.email || uid });
+        seen.add(uid);
+      }
+    });
+  }
+  return mentions;
+}
+
+function relativeTime(iso) {
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `${d}d ago`;
+    return fmtTime(iso);
+  } catch { return ''; }
 }

@@ -5,6 +5,7 @@ import {
   signInWithRedirect,
   getRedirectResult,
   sendPasswordResetEmail,
+  sendEmailVerification,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
@@ -13,6 +14,8 @@ import {
 import { doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { auth, db } from './firebase.js';
 import { showHome, showAuth, renderHome, setTheme, customAlert, customConfirm } from './ui.js';
+import { showToast } from './toast.js';
+import { Onboarding } from './onboarding.js';
 import { state } from './config.js';
 import { refs } from './dom.js';
 import {
@@ -21,19 +24,26 @@ import {
   setProjectsFromCloud
 } from './project.js';
 import { initCollaboration, cleanupCollaboration } from './collaborate.js';
+import { Telemetry } from './telemetry.js';
+import { Logger } from './logger.js';
+import { Funnel } from './funnel.js';
+import { Referral } from './referral.js';
+import { Billing } from './billing.js';
 
 const SESSION_KEY = 'eyawriter_session';
-const EMAILJS_SERVICE = 'service_j18y8zo';
-const EMAILJS_TEMPLATE = 'template_6qr97mn';
-const EMAILJS_PUBLIC_KEY = 'VI5qc4g4cH9d0vpvr';
 
 const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+let _googleAuthInProgress = false;
+
 const PROFILE_BIO_PLACEHOLDER = 'About me';
 const USERNAME_CHANGE_MS = 90 * 24 * 60 * 60 * 1000;
 
 export const Auth = (() => {
   let tabBtns, forms, themeBtns, html;
-  let otpOverlay, otpBoxes, otpSubmit, otpResend, otpError, otpDisplay, otpCancel;
   let forgotOverlay, forgotForm, forgotEmailInput, forgotCancel, forgotLink;
   let signupForm, loginForm;
   let signupNameInput, signupEmailInput, signupPassInput, signupPass2Input;
@@ -53,22 +63,11 @@ export const Auth = (() => {
   let isSavingProfile = false;
   let cachedProfileMeta = {};
 
-  let generatedOTP = '';
-  let pendingSignup = null;
-
   function init() {
     tabBtns = document.querySelectorAll('.tab-btn');
     forms = document.querySelectorAll('.auth-form');
     themeBtns = document.querySelectorAll('.theme-btn');
     html = document.documentElement;
-
-    otpOverlay = document.getElementById('otp-modal-overlay');
-    otpBoxes = document.querySelectorAll('.otp-field');
-    otpSubmit = document.getElementById('otp-submit-btn');
-    otpResend = document.getElementById('otp-resend-btn');
-    otpError = document.getElementById('otp-error');
-    otpDisplay = document.getElementById('otp-email-display');
-    otpCancel = document.getElementById('otp-cancel-btn');
 
     forgotOverlay = document.getElementById('forgot-password-overlay');
     forgotForm = document.getElementById('forgot-password-form');
@@ -112,15 +111,24 @@ export const Auth = (() => {
       }
     });
 
-    // Init EmailJS with public key
-    if (window.emailjs) window.emailjs.init(EMAILJS_PUBLIC_KEY);
-
-    // Handle Google redirect result
-    getRedirectResult(auth).catch(err => {
-      console.error('Google redirect result error:', err.code, err);
-      if (err.code && err.code !== 'auth/cancelled-popup-request') {
-        customAlert(friendlyError(err));
+    // Handle return from signInWithRedirect — show loading state if we triggered one
+    const _isRedirectReturn = sessionStorage.getItem('eyawriter_google_redirect') === '1';
+    if (_isRedirectReturn) {
+      sessionStorage.removeItem('eyawriter_google_redirect');
+      _googleAuthInProgress = true;
+      _setGoogleBtnsLoading('Signing in…');
+    }
+    getRedirectResult(auth).then(result => {
+      if (result?.user) {
+        // Redirect succeeded; onAuthStateChanged handles the transition
+        // Leave buttons in loading state — auth view will be hidden when home renders
       }
+    }).catch(err => {
+      if (_isRedirectReturn) {
+        _resetGoogleBtns();
+      }
+      const msg = friendlyError(err);
+      if (msg) customAlert(msg);
     });
 
     // Tab switching logic
@@ -156,30 +164,6 @@ export const Auth = (() => {
     const av = document.getElementById('authView');
     if (av) av.setAttribute('data-theme', initialTheme);
 
-    // OTP box focus management
-    otpBoxes.forEach((box, i) => {
-      box.addEventListener('input', () => {
-        box.value = box.value.replace(/\D/g, '').slice(-1);
-        if (box.value && i < otpBoxes.length - 1) otpBoxes[i + 1].focus();
-      });
-      box.addEventListener('keydown', e => {
-        if (e.key === 'Backspace' && !box.value && i > 0) otpBoxes[i - 1].focus();
-      });
-      box.addEventListener('paste', e => {
-        e.preventDefault();
-        const pasted = (e.clipboardData || window.clipboardData)
-          .getData('text').replace(/\D/g, '').slice(0, otpBoxes.length);
-        otpBoxes.forEach((b, idx) => {
-          b.value = pasted[idx] || '';
-        });
-        otpBoxes[Math.min(pasted.length, otpBoxes.length - 1)].focus();
-      });
-    });
-
-    otpSubmit.addEventListener('click', verifyOTP);
-    otpResend.addEventListener('click', resendOTP);
-    otpCancel.addEventListener('click', () => otpOverlay.classList.remove('active'));
-
     forgotLink.addEventListener('click', e => {
       e.preventDefault();
       forgotOverlay.classList.add('active');
@@ -192,14 +176,16 @@ export const Auth = (() => {
 
     document.getElementById('google-signup')?.addEventListener('click', handleGoogleSignIn);
     document.getElementById('google-signin')?.addEventListener('click', handleGoogleSignIn);
-    document.getElementById('demo-login-btn')?.addEventListener('click', handleDemoLogin);
-
     // Profile Listeners
     profileTriggerBtns.forEach(btn => btn.addEventListener('click', openProfilePopup));
     profileClose?.addEventListener('click', closeProfilePopup);
     profilePopup?.addEventListener('click', e => { if (e.target === profilePopup) closeProfilePopup(); });
     profileEditBtn?.addEventListener('click', handleEditToggle);
     profileSignOutBtn?.addEventListener('click', handleSignOut);
+    document.getElementById('open-settings-btn')?.addEventListener('click', () => {
+      closeProfilePopup();
+      import('./settings.js').then(({ Settings }) => Settings.show());
+    });
     profileUploadBtn?.addEventListener('click', () => profileUpload.click());
     profileUpload?.addEventListener('change', handleImageUpload);
     profileBio?.addEventListener('input', () => {
@@ -223,15 +209,35 @@ export const Auth = (() => {
 
     onAuthStateChanged(auth, async firebaseUser => {
       if (firebaseUser) {
+        // Google accounts are always verified; only block unverified email/password accounts
+        const isGoogleUser = firebaseUser.providerData?.some(p => p.providerId === 'google.com');
+        if (!firebaseUser.emailVerified && !isGoogleUser) {
+          _resetGoogleBtns();
+          await firebaseSignOut(auth);
+          showToast('Please verify your email before signing in.', 'warning', 5000);
+          return;
+        }
+        _googleAuthInProgress = false;
         cacheSession(firebaseUser);
-        await ensureUsersByEmail(firebaseUser);
+        Telemetry.track('login', { method: firebaseUser.providerData?.[0]?.providerId || 'email' });
+        await ensureUsersByEmail(firebaseUser).catch(err => Logger.capture('ensureUsersByEmail', err));
+        await trackRetention(firebaseUser).catch(() => {});
+        Funnel.milestone('first_login');
+        // Update admin active-user record (best-effort)
+        setDoc(doc(db, 'adminActiveUsers', firebaseUser.uid), {
+          uid: firebaseUser.uid,
+          lastActiveAt: new Date().toISOString()
+        }, { merge: true }).catch(() => {});
         await syncProjectsOnLogin(firebaseUser.uid);
         await loadUserProfile(firebaseUser);
         if (refs.authView && !refs.authView.hidden) showHome();
         renderHome();
         updateTriggerUI(firebaseUser);
         initCollaboration();
+        Billing.init().catch(() => {});
+        setTimeout(() => Onboarding.maybeShow(), 800);
       } else {
+        _resetGoogleBtns();
         cleanupCollaboration();
         const session = getCachedSession();
         if (!session?.isDemoSession) {
@@ -319,11 +325,60 @@ export const Auth = (() => {
     if (!name) return customAlert('Please enter your name.');
     if (!isValidEmail(email)) return customAlert('Please enter a valid email.');
     if (password.length < 6) return customAlert('Password must be at least 6 characters.');
+    if (!/[A-Z]/.test(password)) return customAlert('Password must contain at least one uppercase letter.');
+    if (!/[a-z]/.test(password)) return customAlert('Password must contain at least one lowercase letter.');
+    if (!/[0-9]/.test(password)) return customAlert('Password must contain at least one number.');
     if (password !== password2) return customAlert('Passwords do not match.');
 
-    pendingSignup = { name, email, password };
-    await sendOTP(email, name);
-    showOTPOverlay(email);
+    // Step 1: create the Auth account — fatal if this fails.
+    let credential;
+    try {
+      credential = await createUserWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      Logger.capture('handleSignUp', err);
+      customAlert(friendlyError(err));
+      return;
+    }
+
+    // Step 2: profile setup in Firestore — best-effort; a rules misconfiguration
+    // must not prevent the user from receiving their verification email.
+    const username = generateRandomUsername(name);
+    const createdAt = new Date().toISOString();
+    try {
+      await updateProfile(credential.user, { displayName: username });
+      await setDoc(doc(db, 'users', credential.user.uid, 'profile', 'data'), {
+        uid: credential.user.uid,
+        name,
+        username,
+        email,
+        createdAt,
+        usernameCreatedAt: createdAt,
+        usernameUpdatedAt: createdAt
+      });
+      await setDoc(doc(db, 'usersByEmail', email.toLowerCase()), {
+        uid: credential.user.uid,
+        name: username,
+        username
+      });
+    } catch (err) {
+      Logger.capture('handleSignUp/profile', err);
+      // profile writes failed — will be retried on first login via ensureUsersByEmail
+    }
+    enqueueWelcomeEmail(credential.user);
+    Referral.processSignup(credential.user.uid);
+    Funnel.milestone('signed_up', credential.user.uid);
+    setDoc(doc(db, 'adminSignups', credential.user.uid), {
+      uid: credential.user.uid,
+      email,
+      createdAt,
+      referredBy: localStorage.getItem('eyawriter_ref') || null
+    }).catch(() => {});
+    try { await sendEmailVerification(credential.user); } catch { /* best-effort */ }
+    Telemetry.track('signup', { method: 'email' });
+    await firebaseSignOut(auth).catch(() => {});
+    signupForm.reset();
+    localStorage.removeItem('eyawriter_onboarded_v1');
+    customAlert(`Account created! Check ${email} for a verification link, then sign in.`, 'Verify Your Email');
   }
 
   async function handleSignIn(e) {
@@ -344,49 +399,69 @@ export const Auth = (() => {
   }
 
   async function handleGoogleSignIn() {
+    if (_googleAuthInProgress) return;
+    _googleAuthInProgress = true;
+    _setGoogleBtnsLoading('Connecting…');
+
     try {
       await signInWithPopup(auth, googleProvider);
+      // onAuthStateChanged fires next and transitions the view
+      // Leave buttons loading — they will be hidden when auth view disappears
     } catch (err) {
-      console.error('Google sign-in error:', err.code, err);
       if (err.code === 'auth/popup-blocked') {
-        // Popup blocked — fall back to redirect
         try {
+          sessionStorage.setItem('eyawriter_google_redirect', '1');
           await signInWithRedirect(auth, googleProvider);
+          // Page navigates away — no reset needed
         } catch (redirectErr) {
-          console.error('Google redirect error:', redirectErr.code, redirectErr);
-          customAlert(friendlyError(redirectErr));
+          sessionStorage.removeItem('eyawriter_google_redirect');
+          _resetGoogleBtns();
+          const msg = friendlyError(redirectErr);
+          if (msg) customAlert(msg);
         }
-      } else if (err.code !== 'auth/popup-closed-by-user') {
-        customAlert(friendlyError(err));
+      } else if (err.code === 'auth/cancelled-popup-request' || err.code === 'auth/popup-closed-by-user') {
+        _resetGoogleBtns();
+        // Silent — user dismissed the popup
+      } else {
+        _resetGoogleBtns();
+        const msg = friendlyError(err);
+        if (msg) customAlert(msg);
       }
     }
   }
 
-  function handleDemoLogin() {
-    const username = generateRandomUsername('demo');
-    const timestamp = new Date().toISOString();
-    localStorage.setItem(SESSION_KEY, JSON.stringify({
-      userId: 'user_demo123',
-      email: 'demo@eyawriter.com',
-      fullName: 'Demo Writer',
-      name: username,
-      username,
-      usernameCreatedAt: timestamp,
-      usernameUpdatedAt: timestamp,
-      loggedIn: true,
-      isDemoSession: true,
-      loggedInAt: timestamp
-    }));
-    showHome();
-    renderHome();
+  function _setGoogleBtnsLoading(label) {
+    _getGoogleBtns().forEach(b => {
+      b.disabled = true;
+      const span = b.querySelector('.btn-google-label');
+      if (span) span.textContent = label;
+    });
+  }
+
+  function _resetGoogleBtns() {
+    _googleAuthInProgress = false;
+    _getGoogleBtns().forEach(b => {
+      b.disabled = false;
+      const span = b.querySelector('.btn-google-label');
+      if (span) span.textContent = 'Continue with Google';
+    });
+  }
+
+  function _getGoogleBtns() {
+    return [
+      document.getElementById('google-signup'),
+      document.getElementById('google-signin')
+    ].filter(Boolean);
   }
 
   async function handleSignOut() {
     const confirmed = await customConfirm('Sign out of your account?', 'Sign Out');
     if (!confirmed) return;
     closeProfilePopup();
+    Telemetry.track('logout');
     clearSession();
     try { await firebaseSignOut(auth); } catch { /* ignore */ }
+    showToast('Signed out', 'info');
     showAuth();
   }
 
@@ -623,6 +698,7 @@ export const Auth = (() => {
       profileName.textContent = formatUsernameForDisplay(requestedUsername);
       if (user) updateTriggerUI({ photoURL: nextPhotoURL, displayName: requestedUsername });
       else if (isDemo) updateTriggerUI({ photoURL: session.photoURL, displayName: requestedUsername });
+      showToast('Profile updated');
 
     } catch (err) {
       console.error('Bio save failed', err);
@@ -750,94 +826,6 @@ export const Auth = (() => {
     if (homeName) homeName.textContent = formatUsernameForDisplay(name);
   }
 
-  async function sendOTP(email, name) {
-    generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
-    if (window.emailjs) {
-      try {
-        await window.emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
-          to_email: email,
-          to_name: name,
-          otp: generatedOTP
-        });
-      } catch (err) {
-        console.error('EmailJS send failed', err);
-        console.warn('OTP (fallback):', generatedOTP);
-      }
-    } else {
-      console.warn('EmailJS not loaded — OTP:', generatedOTP);
-    }
-  }
-
-  function showOTPOverlay(email) {
-    otpDisplay.textContent = email;
-    otpBoxes.forEach(b => { b.value = ''; });
-    otpError.textContent = '';
-    otpOverlay.classList.add('active');
-    otpBoxes[0].focus();
-  }
-
-  async function verifyOTP() {
-    if (!pendingSignup) {
-      otpError.textContent = 'Session expired. Please try again.';
-      otpOverlay.classList.remove('active');
-      return;
-    }
-
-    const entered = [...otpBoxes].map(b => b.value).join('');
-    if (entered.length < otpBoxes.length) {
-      otpError.textContent = 'Please enter all 6 digits.';
-      return;
-    }
-    if (entered !== generatedOTP) {
-      otpError.textContent = 'Incorrect code. Try again.';
-      otpBoxes.forEach(b => { b.value = ''; });
-      otpBoxes[0].focus();
-      return;
-    }
-
-    const { name, email, password } = pendingSignup;
-    pendingSignup = null;
-    otpOverlay.classList.remove('active');
-    otpError.textContent = '';
-
-    try {
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
-      const username = generateRandomUsername(name);
-      const createdAt = new Date().toISOString();
-      await updateProfile(credential.user, { displayName: username });
-      await setDoc(doc(db, 'users', credential.user.uid, 'profile', 'data'), {
-        uid: credential.user.uid,
-        name,
-        username,
-        email,
-        createdAt,
-        usernameCreatedAt: createdAt,
-        usernameUpdatedAt: createdAt
-      });
-      await setDoc(doc(db, 'usersByEmail', email.toLowerCase()), {
-        uid: credential.user.uid,
-        name: username,
-        username
-      });
-      signupForm.reset();
-    } catch (err) {
-      console.error('Sign-up error:', err.code, err);
-      customAlert(friendlyError(err));
-    }
-  }
-
-  async function resendOTP() {
-    if (!pendingSignup) {
-      otpError.textContent = 'Start signup again to request a new code.';
-      return;
-    }
-    await sendOTP(pendingSignup.email, pendingSignup.name);
-    otpBoxes.forEach(b => { b.value = ''; });
-    otpError.textContent = 'New code sent!';
-    otpBoxes[0].focus();
-    setTimeout(() => { otpError.textContent = ''; }, 2500);
-  }
-
   function cacheSession(firebaseUser) {
     localStorage.setItem(SESSION_KEY, JSON.stringify({
       userId: firebaseUser.uid,
@@ -846,7 +834,8 @@ export const Auth = (() => {
       username: firebaseUser.displayName || firebaseUser.email,
       photoURL: firebaseUser.photoURL || '',
       loggedIn: true,
-      loggedInAt: new Date().toISOString()
+      loggedInAt: new Date().toISOString(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
     }));
   }
 
@@ -890,7 +879,12 @@ export const Auth = (() => {
     try {
       const raw = localStorage.getItem(SESSION_KEY);
       const session = raw ? JSON.parse(raw) : null;
-      return session?.loggedIn ? session : null;
+      if (!session?.loggedIn) return null;
+      if (session.expiresAt && Date.now() > session.expiresAt) {
+        localStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      return session;
     } catch {
       return null;
     }
@@ -906,17 +900,37 @@ export const Auth = (() => {
 
   function friendlyError(err) {
     const map = {
+      // Email / password
       'auth/email-already-in-use': 'An account with this email already exists. Please sign in instead.',
       'auth/invalid-email': 'Please enter a valid email address.',
-      'auth/wrong-password': 'Incorrect password. Please try again.',
-      'auth/user-not-found': 'No account found for this email. Please sign up first.',
+      'auth/wrong-password': 'Incorrect email or password. Please try again.',
+      'auth/user-not-found': 'Incorrect email or password. Please try again.',
       'auth/invalid-credential': 'Incorrect email or password. Please try again.',
-      'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
       'auth/weak-password': 'Password must be at least 6 characters.',
-      'auth/network-request-failed': 'Network error. Please check your connection.',
-      'auth/popup-blocked': 'Pop-up was blocked. Please allow pop-ups and try again.'
+      // Rate limiting / access
+      'auth/too-many-requests': 'Too many sign-in attempts. Please wait a few minutes and try again.',
+      'auth/user-disabled': 'This account has been disabled. Please contact support.',
+      // Google / OAuth
+      'auth/popup-blocked': 'Google sign-in popup was blocked. Please allow pop-ups for this site and try again.',
+      'auth/popup-closed-by-user': null,
+      'auth/cancelled-popup-request': null,
+      'auth/account-exists-with-different-credential': 'An account already exists with this email. Please sign in with the method you used originally.',
+      'auth/credential-already-in-use': 'This Google account is already linked to a different user.',
+      'auth/unauthorized-domain': 'Google sign-in is not authorized for this domain. Please contact support.',
+      'auth/operation-not-allowed': 'Google sign-in is not enabled for this app. Please contact support.',
+      // Configuration
+      'auth/invalid-api-key': 'Firebase configuration error. Please contact support.',
+      'auth/app-not-authorized': 'This app is not authorized to use Firebase Authentication. Please contact support.',
+      'auth/web-storage-unsupported': 'Your browser has cookies or storage disabled. Please enable them and try again.',
+      // Network / general
+      'auth/network-request-failed': 'Network error. Please check your connection and try again.',
+      'auth/timeout': 'Sign-in timed out. Please try again.',
+      'auth/internal-error': 'An authentication error occurred. Please try again.',
+      'auth/requires-recent-login': 'Please sign out and sign back in before making this change.'
     };
-    return map[err.code] || 'Something went wrong. Please try again.';
+    const msg = map[err.code];
+    if (msg === null) return null;
+    return msg || `Sign-in failed (${err.code || 'unknown error'}). Please try again.`;
   }
 
   function normalizeEmail(email) {
@@ -925,6 +939,58 @@ export const Auth = (() => {
 
   function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  // Queue a welcome email sequence in Firestore for backend/webhook consumption
+  async function enqueueWelcomeEmail(user) {
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'emailQueue', 'welcome'), {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || '',
+        sequence: 'welcome',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        steps: [
+          { step: 'welcome',    sendAfterHours: 0,   sent: false },
+          { step: 'tips',       sendAfterHours: 72,  sent: false },
+          { step: 'engagement', sendAfterHours: 168, sent: false },
+        ],
+      });
+    } catch { /* best-effort — never block signup */ }
+  }
+
+  // Update login/retention stats in user profile on each sign-in
+  async function trackRetention(firebaseUser) {
+    try {
+      const ref = doc(db, 'users', firebaseUser.uid, 'profile', 'data');
+      const snap = await getDoc(ref);
+      const profile = snap.exists() ? snap.data() : {};
+
+      const now = new Date();
+      const signupDate = profile.createdAt ? new Date(profile.createdAt) : now;
+      const daysSinceSignup = Math.floor((now - signupDate) / 86_400_000);
+
+      const updates = {
+        lastActiveAt: now.toISOString(),
+        loginCount: (profile.loginCount || 0) + 1,
+      };
+
+      if (daysSinceSignup >= 1 && !profile.retention_d1) {
+        updates.retention_d1 = now.toISOString();
+        Telemetry.track('retention_d1', { daysSinceSignup });
+      }
+      if (daysSinceSignup >= 7 && !profile.retention_d7) {
+        updates.retention_d7 = now.toISOString();
+        Telemetry.track('retention_d7', { daysSinceSignup });
+      }
+      if (daysSinceSignup >= 30 && !profile.retention_d30) {
+        updates.retention_d30 = now.toISOString();
+        Telemetry.track('retention_d30', { daysSinceSignup });
+      }
+
+      await setDoc(ref, updates, { merge: true });
+    } catch { /* silently ignore — tracking is non-blocking */ }
   }
 
   return { init, getSession, signOut: handleSignOut };

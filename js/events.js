@@ -1,5 +1,10 @@
-import { state, TYPE_SEQUENCE, TYPE_LABELS, EDITOR_TASK_TEMPLATES } from './config.js';
+import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
+import { Telemetry } from './telemetry.js';
+import { Logger } from './logger.js';
+import { Funnel } from './funnel.js';
+import { showToast } from './toast.js';
 import { refs } from './dom.js';
+import { Billing, FREE_SCRIPT_LIMIT } from './billing.js';
 import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
@@ -7,7 +12,7 @@ import {
   getEditorProjects, getEditorRootProject, updateEditorAcrossProjects,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
-  deleteProjectFromCloud
+  deleteProjectFromCloud, archiveProject, togglePinProject
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
@@ -211,7 +216,16 @@ function ensureDefaultEditorRoot() {
   });
 }
 
+function _ownedScriptCount() {
+  return state.projects.filter(p => !p.isWorkspaceRoot && !p.isShared).length;
+}
+
 async function launchNewCreationFlow() {
+  if (!Billing.canCreateScript(_ownedScriptCount())) {
+    Billing.showUpgradeModal(`You've reached the ${FREE_SCRIPT_LIMIT}-script limit on the Free plan. Upgrade to Premium for unlimited scripts.`);
+    return;
+  }
+
   const selection = await showNewCreationFlow();
   if (!selection || selection.workType !== "film-script") {
     return;
@@ -236,8 +250,8 @@ async function launchNewCreationFlow() {
       tasks: editorRoot.editor?.tasks || []
     }
   });
-  openProject(project.id, { silentLoadToast: true });
-  showToast("Project created.", "success");
+  Funnel.milestone('first_project_created');
+  openProject(project.id);
 }
 
 function openEditorDashboard(editorId) {
@@ -252,9 +266,14 @@ function openEditorDashboard(editorId) {
   renderEditorView();
 }
 
-async function createProjectInsideCurrentEditor() {
-  const editorProject = getEditorRootProject(state.currentEditorId) || state.projects.find((project) => project.editor?.id === state.currentEditorId);
-  if (!editorProject) {
+async function createProjectInsideCurrentWorkspace() {
+  if (!Billing.canCreateScript(_ownedScriptCount())) {
+    Billing.showUpgradeModal(`You've reached the ${FREE_SCRIPT_LIMIT}-script limit on the Free plan. Upgrade to Premium for unlimited scripts.`);
+    return;
+  }
+
+  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId) || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId);
+  if (!workspaceProject) {
     launchNewCreationFlow();
     return;
   }
@@ -267,26 +286,26 @@ async function createProjectInsideCurrentEditor() {
     creationKind: "project",
     workType: "film-script",
     title: projectName.trim(),
-    isShared: editorProject.isShared,
-    ownerId: editorProject.ownerId,
-    ownerName: editorProject.ownerName,
-    ownerEmail: editorProject.ownerEmail,
-    ownerPhotoURL: editorProject.ownerPhotoURL,
-    collaborators: editorProject.collaborators,
-    activityLog: editorProject.activityLog,
-    lastEditorName: editorProject.lastEditorName,
-    lastActivityAt: editorProject.lastActivityAt,
-    editor: {
-      id: editorProject.editor?.id,
-      name: editorProject.editor?.name || editorProject.title,
-      inviteCode: editorProject.editor?.inviteCode,
-      reminders: editorProject.editor?.reminders || [],
-      targets: editorProject.editor?.targets || {},
-      tasks: editorProject.editor?.tasks || []
+    isShared: workspaceProject.isShared,
+    ownerId: workspaceProject.ownerId,
+    ownerName: workspaceProject.ownerName,
+    ownerEmail: workspaceProject.ownerEmail,
+    ownerPhotoURL: workspaceProject.ownerPhotoURL,
+    collaborators: workspaceProject.collaborators,
+    activityLog: workspaceProject.activityLog,
+    lastEditorName: workspaceProject.lastEditorName,
+    lastActivityAt: workspaceProject.lastActivityAt,
+    workspace: {
+      id: workspaceProject.workspace?.id,
+      name: workspaceProject.workspace?.name || workspaceProject.title,
+      inviteCode: workspaceProject.workspace?.inviteCode,
+      reminders: workspaceProject.workspace?.reminders || [],
+      targets: workspaceProject.workspace?.targets || {},
+      tasks: workspaceProject.workspace?.tasks || []
     }
   });
-  openProject(project.id, { silentLoadToast: true });
-  showToast("Project created.", "success");
+  Funnel.milestone('first_project_created');
+  openProject(project.id);
 }
 
 function isDisposableUntitledDraft(project = getCurrentProject()) {
@@ -673,6 +692,7 @@ function addEditorTaskFromDashboard() {
     message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the editor"}.`}`,
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
   });
+  Telemetry.track('task_created', { assigneeType: nextTask.assigneeType, templateKey: nextTask.templateKey });
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
   renderEditorView();
@@ -684,27 +704,55 @@ function addEditorTaskFromDashboard() {
   );
 }
 
-function updateEditorTask(taskId, patch) {
-  if (!state.currentEditorId || !taskId) return;
-  const previousTask = getEditorTaskById(taskId);
-  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
-    ...editor,
-    tasks: (editor.tasks || []).map((task) => task.id === taskId
-      ? { ...task, ...patch, updatedAt: new Date().toISOString() }
+function updateWorkspaceTask(taskId, patch) {
+  if (!state.currentWorkspaceId || !taskId) return;
+  const previousTask = getWorkspaceTaskById(taskId);
+  const currentUid = auth.currentUser?.uid || "";
+  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member";
+
+  // When a non-assignee marks a human task "done", route to pending-confirmation instead.
+  const effectivePatch = { ...patch };
+  if (
+    patch.status === "done" &&
+    !patch._confirmed &&
+    previousTask?.assigneeType !== "system" &&
+    previousTask?.assignedTo &&
+    previousTask.assignedTo !== currentUid
+  ) {
+    effectivePatch.status = "pending-confirmation";
+    effectivePatch.pendingConfirmBy = previousTask.assignedTo;
+    effectivePatch.pendingConfirmRequestedBy = currentUid;
+    effectivePatch.pendingConfirmRequestedByLabel = currentLabel;
+  }
+  delete effectivePatch._confirmed;
+
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    tasks: (workspace.tasks || []).map((task) => task.id === taskId
+      ? { ...task, ...effectivePatch, updatedAt: new Date().toISOString() }
       : task)
   }));
   persistProjects(true, { syncInputs: false });
   const task = getEditorTaskById(taskId);
   if (task && previousTask) {
-    if (patch.status && patch.status !== previousTask.status) {
-      showToast(`${task.title} moved to ${patch.status === "in-progress" ? "In Progress" : patch.status === "done" ? "Done" : "To Do"}.`, "success");
-      createEditorNotification({
-        task,
-        category: patch.status === "done" ? "completed" : "task",
-        title: patch.status === "done" ? "Task completed" : "Task status updated",
-        message: `${task.title} is now ${patch.status === "in-progress" ? "in progress" : patch.status.replace("-", " ")}.`,
-        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
-      });
+    if (effectivePatch.status && effectivePatch.status !== previousTask.status) {
+      if (effectivePatch.status === "pending-confirmation") {
+        createWorkspaceNotification({
+          task,
+          category: "task",
+          title: "Task awaiting your confirmation",
+          message: `${task.title} was marked done by ${currentLabel}. Please confirm to close it.`,
+          actor: currentLabel
+        });
+      } else {
+        createWorkspaceNotification({
+          task,
+          category: effectivePatch.status === "done" ? "completed" : "task",
+          title: effectivePatch.status === "done" ? "Task completed" : "Task status updated",
+          message: `${task.title} is now ${effectivePatch.status === "in-progress" ? "in progress" : effectivePatch.status.replace(/-/g, " ")}.`,
+          actor: currentLabel
+        });
+      }
     }
     if (patch.assignedTo && patch.assignedTo !== previousTask.assignedTo) {
       showToast(`${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`, "success");
@@ -713,7 +761,7 @@ function updateEditorTask(taskId, patch) {
         category: task.assigneeType === "system" ? "ai" : "task",
         title: "Task reassigned",
         message: `${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`,
-        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+        actor: currentLabel
       });
     }
     if (patch.dueAt && patch.dueAt !== previousTask.dueAt) {
@@ -723,12 +771,48 @@ function updateEditorTask(taskId, patch) {
         category: "task",
         title: "Task due date updated",
         message: `${task.title} is due ${new Date(task.dueAt).toLocaleString()}.`,
-        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+        actor: currentLabel
       });
     }
   }
   if (task) scheduleAiTaskRun(task);
   renderEditorView();
+}
+
+function confirmCompleteTask(taskId) {
+  const task = getWorkspaceTaskById(taskId);
+  if (!task) return;
+  const currentUid = auth.currentUser?.uid || "";
+  if (task.assignedTo !== currentUid && task.pendingConfirmBy !== currentUid) {
+    showToast("Only the assigned member can confirm task completion.", "warning");
+    return;
+  }
+  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member";
+  const requesterLabel = task.pendingConfirmRequestedByLabel || "a teammate";
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    tasks: (workspace.tasks || []).map((t) => t.id === taskId
+      ? {
+          ...t,
+          status: "done",
+          pendingConfirmBy: "",
+          pendingConfirmRequestedBy: "",
+          pendingConfirmRequestedByLabel: "",
+          updatedAt: new Date().toISOString()
+        }
+      : t)
+  }));
+  persistProjects(true, { syncInputs: false });
+  const updatedTask = getWorkspaceTaskById(taskId);
+  createWorkspaceNotification({
+    task: updatedTask || task,
+    category: "completed",
+    title: "Task confirmed complete",
+    message: `${task.title} was confirmed done by ${currentLabel} (requested by ${requesterLabel}).`,
+    actor: currentLabel
+  });
+  Telemetry.track('task_completed', { taskId, assigneeType: task.assigneeType });
+  renderWorkspaceView();
 }
 
 async function runAiTask(taskId) {
@@ -905,6 +989,7 @@ async function editEditorTask(taskId) {
     <select id="taskEditStatus" class="comment-filter-select">
       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
       <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
+      <option value="pending-confirmation" ${task.status === "pending-confirmation" ? "selected" : ""}>Awaiting Confirmation</option>
       <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
     </select>
     <select id="taskEditPriority" class="comment-filter-select">
@@ -979,7 +1064,8 @@ async function editEditorTask(taskId) {
           : (aiStartAt ? "scheduled" : "ready"))
       : "idle",
     status: container.querySelector("#taskEditStatus")?.value || task.status,
-    reference: container.querySelector("#taskEditReference")?.value?.trim() || ""
+    reference: container.querySelector("#taskEditReference")?.value?.trim() || "",
+    _confirmed: (container.querySelector("#taskEditStatus")?.value || task.status) === "done"
   });
 }
 
@@ -1290,6 +1376,11 @@ export function bindEvents() {
       if (taskId) dismissAiTaskResult(taskId);
       return;
     }
+    if (action === "confirm-complete") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) confirmCompleteTask(taskId);
+      return;
+    }
   });
 
   refs.editorDashboard?.addEventListener("input", (event) => {
@@ -1508,16 +1599,16 @@ export function bindEvents() {
   // Layout Toggles
   refs.leftRailToggle?.addEventListener("click", () => {
     togglePane("left");
-    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "▶" : "◀");
   });
   refs.rightRailToggle?.addEventListener("click", () => {
     togglePane("right");
-    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "◀" : "▶");
   });
   refs.toolStripToggle.addEventListener("click", () => {
         state.toolStripCollapsed = !state.toolStripCollapsed;
         applyToolbarState();
-        setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "&#9660;" : "&#9650;");
+        setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "▼" : "▲");
         persistProjects(false);
     });
 
@@ -1564,11 +1655,11 @@ export function bindEvents() {
 
   refs.leftPaneSectionToggle.addEventListener("click", () => {
     togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle);
-    setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+    setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
   });
   refs.rightPaneSectionToggle.addEventListener("click", () => {
     togglePaneSection(refs.rightPaneBody, refs.rightPaneSectionToggle);
-    setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+    setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
   });
 
   refs.leftPaneBody.addEventListener("click", (event) => {
@@ -1678,6 +1769,13 @@ export function bindEvents() {
       if (!event.target.closest("#suggestionTray") && !event.target.closest(".script-block")) {
         hideSuggestionTray(true);
         clearSuggestionContext();
+      }
+      // Workspace switcher chips (outside projectGrid, needs document-level delegation)
+      const workspaceChipDoc = event.target.closest('[data-workspace-chip]');
+      if (workspaceChipDoc) {
+        const chipId = workspaceChipDoc.dataset.workspaceChip;
+        state.homeWorkspaceFilter = chipId === 'all' ? null : chipId;
+        renderHome();
       }
   });
 
@@ -1826,11 +1924,21 @@ export function bindEvents() {
           renderHome();
           return;
       }
-      const editorTrigger = e.target.closest("[data-open-editor-id]");
-      if (editorTrigger) {
-          openEditorDashboard(editorTrigger.dataset.openEditorId);
+      // Pinned project chips
+      const pinnedChip = e.target.closest('.pinned-project-chip');
+      if (pinnedChip) {
+          if (!e.target.closest('.pinned-chip-unpin')) {
+              openProject(pinnedChip.dataset.projectId);
+          }
           return;
       }
+
+      const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
+      if (workspaceTrigger) {
+          openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
+          return;
+      }
+
       const card = e.target.closest(".project-card");
       if (!card) return;
       const projectId = card.dataset.projectId;
@@ -1841,6 +1949,10 @@ export function bindEvents() {
           renameProjectById(projectId);
       } else if (e.target.closest('[data-project-action="duplicate"]')) {
           duplicateProjectById(projectId);
+      } else if (e.target.closest('[data-project-action="pin"]')) {
+          const pinBtn = e.target.closest('[data-project-action="pin"]');
+          togglePinProject(pinBtn.dataset.projectId || projectId);
+          renderHome();
       } else {
           openProject(projectId);
       }
@@ -2045,13 +2157,13 @@ export function renderStudio() {
   applyViewState();
   applyToolbarState();
   if (refs.leftRailToggle) {
-    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "▶" : "◀");
   }
   if (refs.rightRailToggle) {
-    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "◀" : "▶");
   }
-  setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
-  setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
+  setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
   applyTranslations();
   updateSuggestions();
   updateCommentIcons();
@@ -2081,7 +2193,7 @@ function handleMetaInput() {
 
 function togglePaneSection(body, button) {
   body.classList.toggle("is-collapsed");
-  button.innerHTML = body.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;";
+  button.textContent = body.classList.contains("is-collapsed") ? "▼" : "▲";
 }
 
 function readEditableText(element) {
@@ -2195,6 +2307,11 @@ function handleBlockInput(id, element) {
   project.updatedAt = new Date().toISOString();
   clearSuggestionContext();
 
+  if (!_funnelFirstLineTracked && normalized.trim()) {
+    _funnelFirstLineTracked = true;
+    Funnel.milestone('first_line_typed');
+  }
+
   const shouldRefreshSpelling = state.grammarCheck
     && hasLanguageDictionary(state.writingLanguage)
     && Boolean(window.getSelection()?.isCollapsed);
@@ -2218,6 +2335,7 @@ function handleBlockInput(id, element) {
 
 let lastKeyDownCode = "";
 let _enterPrevBlockId = null;  // tracks block left behind when Enter creates a new one
+let _funnelFirstLineTracked = false;
 
 function insertSoftLineBreak(id, element) {
   if (!element) {
@@ -2600,7 +2718,7 @@ function togglePane(side) {
   const collapsed = pane.classList.toggle("is-hidden");
   if (handle) handle.classList.toggle("is-hidden", collapsed);
   refs.studioLayout.classList.toggle(isLeft ? "left-pane-hidden" : "right-pane-hidden", collapsed);
-  button.innerHTML = collapsed ? (isLeft ? "&#9654;" : "&#9664;") : (isLeft ? "&#9664;" : "&#9654;");
+  button.textContent = collapsed ? (isLeft ? "▶" : "◀") : (isLeft ? "◀" : "▶");
 }
 
 function initResizeHandle(handle, side) {
@@ -3118,9 +3236,9 @@ function getPointContext(block, clientX, clientY) {
   };
 }
 
-function setButtonGlyph(button, entity) {
+function setButtonGlyph(button, glyph) {
   if (button) {
-    button.innerHTML = entity;
+    button.textContent = glyph;
   }
 }
 
@@ -3196,33 +3314,30 @@ async function removeProject(id) {
   const target = state.projects.find((item) => item.id === id);
   if (!target) return;
 
-  const entityLabel = target.isEditorRoot ? "editor" : "project";
-  const confirmation = await customPrompt(`This will permanently delete the ${entityLabel} "${target.title}".\n\nTo confirm, please retype the ${entityLabel} name below:`, "", "Confirm Deletion");
+  const entityLabel = target.isWorkspaceRoot ? "workspace" : "project";
+  const confirmed = await customConfirm(
+    `Move "${target.title}" to the archive? You can restore it from the "Recently Deleted" section on your home screen.`,
+    `Archive ${entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1)}`
+  );
+  if (!confirmed) return;
 
-  if (confirmation !== target.title) {
-    if (confirmation !== null) {
-      await customAlert("Deletion cancelled. The name you typed did not match.", "Cancelled");
-    }
+  const result = await archiveProject(id);
+  if (!result.ok) {
+    await customAlert(result.reason || 'Could not archive the project.', 'Archive Failed');
     return;
   }
 
-  const editorId = target.editor?.id || target.id;
-  state.projects = state.projects.filter((item) => {
-    if (target.isEditorRoot) {
-      return item.editor?.id !== editorId;
-    }
-    return item.id !== id;
-  });
-  if (!state.projects.length) {
-    const fallback = createProjectWithOptions();
-    state.projects = [fallback];
+  // If the archived project was currently open, navigate to the first active project.
+  const workspaceId = target.workspace?.id || target.id;
+  const wasCurrentProject = target.isWorkspaceRoot
+    ? state.projects.find(p => p.workspace?.id === workspaceId && p.id === state.currentProjectId)
+    : target.id === state.currentProjectId;
+
+  if (wasCurrentProject || (target.isWorkspaceRoot && state.currentWorkspaceId === workspaceId)) {
+    state.currentWorkspaceId = null;
+    state.currentProjectId = state.projects.find(p => !p.isArchived)?.id || state.projects[0]?.id || null;
   }
-  if (target.isEditorRoot || state.currentEditorId === editorId) {
-    state.currentEditorId = null;
-  }
-  state.currentProjectId = state.projects[0].id;
-  persistProjects(true, { syncInputs: false });
-  deleteProjectFromCloud(id);
+
   showHome();
   renderHome();
 }
@@ -3399,15 +3514,15 @@ function exportTxt() {
   const pageBreak = "\n\n" + "-".repeat(60) + "\n\n";
     const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
 
-    const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
-    downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
-    showToast("Export complete.", "success");
+  const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
+  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+  showToast('Script exported as TXT', 'success');
 }
 
 function exportJson() {
-    const project = syncProjectFromInputs() || getCurrentProject();
-    downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
-    showToast("Export complete.", "success");
+  const project = syncProjectFromInputs() || getCurrentProject();
+  downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+  showToast('Script exported as JSON', 'success');
 }
 
 async function exportWord() {
@@ -3415,18 +3530,31 @@ async function exportWord() {
       if (!project) return;
       const exportToast = showToast("Preparing Word export...", "loading", { duration: 0 });
 
-      try {
-        const blob = await buildWordDocxBlob(project);
-        downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
-        updateToast(exportToast, "Export complete.", "success");
-      } catch (error) {
-        console.error("DOCX export failed", error);
-        updateToast(exportToast, "Word export failed.", "error", { duration: 4200 });
-        customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
-      }
+    if (!window.docx?.Document) {
+      showToast('Word export engine is still loading — please try again in a moment', 'warning', 4000);
+      return;
+    }
+
+    const btns = [refs.exportWordBtn, document.querySelector('[data-menu-action="export-word"]')].filter(Boolean);
+    const origLabels = btns.map(b => b.textContent);
+    btns.forEach(b => { b.disabled = true; b.textContent = 'Exporting…'; });
+
+    try {
+      const blob = await buildWordDocxBlob(project);
+      downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
+      Telemetry.track('export_docx', { projectId: project.id });
+      showToast('Script exported as Word document', 'success');
+    } catch (error) {
+      Logger.capture('exportWord', error);
+      showToast('Word export failed — try again once the DOCX engine loads', 'error', 5000);
+    } finally {
+      btns.forEach((b, i) => { b.disabled = false; b.textContent = origLabels[i]; });
+    }
 }
 
 function exportPdf() {
+  const p = syncProjectFromInputs() || getCurrentProject();
+  if (p) Telemetry.track('export_pdf', { projectId: p.id });
   printWithHiddenFrame();
 }
 
@@ -3531,6 +3659,7 @@ function importFile(event) {
         nextProject = sanitizeProject(JSON.parse(text));
       } catch (error) {
         console.error("Invalid JSON import", error);
+        showToast('Could not import file — invalid JSON format', 'error');
         return;
       }
     } else {
@@ -3546,6 +3675,8 @@ function importFile(event) {
     upsertProject(nextProject);
     openProject(nextProject.id);
     persistProjects(true);
+    const lineCount = nextProject.lines.filter(l => l.text.trim()).length;
+    showToast(`Imported "${nextProject.title}" — ${lineCount} line${lineCount !== 1 ? 's' : ''}`, 'success');
   };
 
   reader.readAsText(file);

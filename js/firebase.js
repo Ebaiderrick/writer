@@ -1,7 +1,8 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
+// Firebase credentials are intentionally hardcoded — they are client-side config, not secrets
 const firebaseConfig = {
   apiKey: "AIzaSyC6gi34BQRKkxQ77A50KPvQRIhNWcrWpmo",
   authDomain: "eya-writer.firebaseapp.com",
@@ -14,3 +15,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Explicitly persist auth across browser sessions (this is the SDK default; stated for clarity)
+setPersistence(auth, browserLocalPersistence).catch(() => {});

@@ -3,11 +3,25 @@ import { uid, normalizeLineText, stripWrapperChars, clamp } from './utils.js';
 import { refs } from './dom.js';
 import { t } from './i18n.js';
 import { auth, db } from './firebase.js';
-import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch, limit, query } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { Recovery } from './recovery.js';
+import { logActivity, logEditActivity, ACTIVITY_CATEGORIES } from './activity.js';
+import { showToast } from './toast.js';
 
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const RECOVERY_KEY = `${STORAGE_KEY}:recovery`;
+
+// Track last-synced version per project to skip redundant Firestore writes
+const _syncedVersions = new Map();
+
+function _membershipHash(project) {
+  return Object.keys(project.collaborators || {}).sort().join(',') || 'none';
+}
+
+function _projectVersionKey(project) {
+  return `${project.updatedAt}|${project.lines.length}|${project.title}|${_membershipHash(project)}`;
+}
 
 function generateScriptId() {
   const bytes = new Uint8Array(6);
@@ -31,96 +45,15 @@ function queueFirestoreSync() {
   firestoreSyncTimer = setTimeout(syncCurrentProjectToFirestore, 1500);
 }
 
-function buildPersistencePayload(savedAt = new Date().toISOString()) {
-  return {
-    savedAt,
-    currentProjectId: state.currentProjectId,
-    currentEditorId: state.currentEditorId,
-    projects: state.projects,
-    aiAssist: state.aiAssist,
-    toolStripCollapsed: state.toolStripCollapsed,
-    autoNumberScenes: state.autoNumberScenes,
-    backgroundAnimation: state.backgroundAnimation,
-    theme: state.theme,
-    language: state.language,
-    writingLanguage: state.writingLanguage,
-    grammarCheck: state.grammarCheck,
-    localBackupEnabled: state.localBackupEnabled,
-    localSaveIntervalMinutes: state.localSaveIntervalMinutes,
-    backupPrompted: state.backupPrompted,
-    viewOptions: state.viewOptions,
-    leftPaneBlocks: state.leftPaneBlocks,
-    leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
-    rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
-  };
-}
-
-function parseStoredPayload(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  } catch (error) {
-    console.error(`Unable to parse storage payload for ${key}`, error);
-    return null;
-  }
-}
-
-function chooseLatestPayload(primary, recovery) {
-  const primaryAt = new Date(primary?.savedAt || 0).getTime() || 0;
-  const recoveryAt = new Date(recovery?.savedAt || 0).getTime() || 0;
-  if (recoveryAt > primaryAt) {
-    state.pendingRecoveryNotice = true;
-    return recovery;
-  }
-  state.pendingRecoveryNotice = false;
-  return primary;
-}
-
-function updateSaveBadge(mode = "saved", savedAt = state.lastSavedAt) {
-  if (!refs.saveBadge) return;
-  refs.saveBadge.classList.remove("saving", "is-saved", "is-local");
-  const formattedTime = savedAt
-    ? new Date(savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    : "";
-  if (mode === "saving") {
-    refs.saveBadge.textContent = t("save.saving");
-    refs.saveBadge.classList.add("saving");
-  } else {
-    refs.saveBadge.textContent = mode === "local" ? t("save.savedLocal") : t("save.saved");
-    refs.saveBadge.classList.add("is-saved");
-    if (mode === "local") refs.saveBadge.classList.add("is-local");
-  }
-  refs.saveBadge.title = savedAt
-    ? `Last saved ${new Date(savedAt).toLocaleString()}`
-    : "";
-  if (refs.saveMetaText) {
-    if (mode === "saving") {
-      refs.saveMetaText.textContent = formattedTime
-        ? `Saving changes... Last saved at ${formattedTime}.`
-        : "Saving changes...";
-    } else if (mode === "local") {
-      refs.saveMetaText.textContent = formattedTime
-        ? `Saved locally at ${formattedTime}.`
-        : "Saved locally.";
-    } else {
-      refs.saveMetaText.textContent = formattedTime
-        ? `Saved at ${formattedTime}.`
-        : "All changes synced.";
-    }
-  }
-}
-
-function writeRecoverySnapshot({ syncInputs = false } = {}) {
-  if (syncInputs) syncProjectFromInputs();
-  const savedAt = new Date().toISOString();
-  localStorage.setItem(RECOVERY_KEY, JSON.stringify(buildPersistencePayload(savedAt)));
-}
-
-async function syncCurrentProjectToFirestore() {
+async function syncCurrentProjectToFirestore(attempt = 0) {
   const userId = auth.currentUser?.uid;
   if (!userId) return;
   const project = getCurrentProject();
   if (!project) return;
+
+  // Skip sync if nothing has changed since the last successful write
+  const versionKey = _projectVersionKey(project);
+  if (_syncedVersions.get(project.id) === versionKey) return;
 
   // Ensure script identity exists for traceability
   if (!project.scriptId) {
@@ -155,20 +88,28 @@ async function syncCurrentProjectToFirestore() {
 
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
-      // Only sync content fields — never overwrite ownership/membership on the shared doc.
-      const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
-      'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
-      'activityLog', 'lastEditorName', 'lastActivityAt', 'editor'];
-      const contentPayload = Object.fromEntries(
-        CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
-      );
-      await setDoc(doc(db, 'sharedProjects', project.id), {
-        ...contentPayload,
-        syncedAt: new Date().toISOString(),
-        updatedBy: userId,
-        lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
-        lastActivityAt: new Date().toISOString()
-      }, { merge: true });
+      // Skip shared project write for viewers — they have read-only access.
+      // Check against the local collaborators map; Firestore rules enforce the same constraint.
+      const isViewer = project.ownerId !== userId &&
+        project.collaborators?.[userId]?.role === 'viewer';
+
+      if (!isViewer) {
+        // Only sync content fields — never overwrite ownership/membership on the shared doc.
+        const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
+        'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
+        'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace'];
+        const contentPayload = Object.fromEntries(
+          CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
+        );
+        await setDoc(doc(db, 'sharedProjects', project.id), {
+          ...contentPayload,
+          syncedAt: new Date().toISOString(),
+          updatedBy: userId,
+          lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+          lastActivityAt: new Date().toISOString()
+        }, { merge: true });
+        logEditActivity(project.id).catch(() => {});
+      }
     }
 
     // Update local storage with the new scriptId and notify UI
@@ -181,34 +122,225 @@ async function syncCurrentProjectToFirestore() {
     state.lastSaveSource = "remote";
     updateSaveBadge("saved", state.lastSavedAt || now);
     window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
+    _syncedVersions.set(project.id, versionKey);
+    Recovery.clearOfflineSyncPending();
 
   } catch (err) {
-    console.error('Firestore sync failed', err);
+    if (attempt < 2) {
+      const delay = Math.pow(2, attempt + 1) * 1000; // 2s then 4s
+      setTimeout(() => syncCurrentProjectToFirestore(attempt + 1), delay);
+    } else {
+      console.error('Firestore sync failed after retries', err);
+      Recovery.markOfflineSyncPending();
+    }
   }
 }
 
 export async function fetchCloudProjects(userId) {
-  const snapshot = await getDocs(collection(db, 'users', userId, 'projects'));
+  const q = query(collection(db, 'users', userId, 'projects'), limit(200));
+  const snapshot = await getDocs(q);
   return snapshot.docs.map(d => sanitizeProject(d.data()));
 }
 
 export async function importLocalProjectsToCloud(userId, projects) {
+  if (!projects.length) return;
+  const now = new Date().toISOString();
+  const BATCH_LIMIT = 499;
+  let batch = writeBatch(db);
+  let count = 0;
+
   for (const p of projects) {
-    await setDoc(doc(db, 'users', userId, 'projects', p.id), {
-      ...p,
-      syncedAt: new Date().toISOString()
-    });
+    batch.set(doc(db, 'users', userId, 'projects', p.id), { ...p, syncedAt: now });
+    count++;
+    if (count === BATCH_LIMIT) {
+      await batch.commit();
+      batch = writeBatch(db);
+      count = 0;
+    }
   }
+
+  if (count > 0) await batch.commit();
 }
 
 export async function deleteProjectFromCloud(projectId) {
   const userId = auth.currentUser?.uid;
   if (!userId) return;
   try {
+    // Cascade-delete shared project document when the owner removes it.
+    const project = state.projects.find(p => p.id === projectId);
+    if (project?.isShared && (!project.ownerId || project.ownerId === userId)) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        await fetch('/api/delete-shared-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ projectId })
+        });
+      } catch (err) {
+        console.warn('[deleteProjectFromCloud] Cascade delete failed:', err.message);
+      }
+    }
     await deleteDoc(doc(db, 'users', userId, 'projects', projectId));
   } catch (err) {
     console.error('Firestore delete failed', err);
   }
+}
+
+export async function archiveProject(projectId) {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return { ok: false, reason: 'Not signed in.' };
+
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return { ok: false, reason: 'Project not found.' };
+
+  const user = auth.currentUser;
+  const now = new Date().toISOString();
+  const archiveMeta = {
+    isArchived: true,
+    archivedAt: now,
+    archivedBy: userId,
+    archivedByName: user?.displayName || user?.email || 'Unknown',
+    restoredAt: null,
+    restoredBy: null
+  };
+
+  // Archive workspace siblings when the workspace root is archived.
+  const workspaceId = project.workspace?.id || project.id;
+  const toArchive = project.isWorkspaceRoot
+    ? state.projects.filter(p => p.workspace?.id === workspaceId)
+    : [project];
+
+  toArchive.forEach(p => Object.assign(p, archiveMeta));
+
+  try {
+    for (const p of toArchive) {
+      await setDoc(doc(db, 'users', userId, 'projects', p.id), archiveMeta, { merge: true });
+    }
+    if (project.isShared && (!project.ownerId || project.ownerId === userId)) {
+      try {
+        const token = await user.getIdToken();
+        await fetch('/api/archive-shared-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ projectId })
+        });
+      } catch (err) {
+        console.warn('[archiveProject] Server archive failed:', err.message);
+      }
+    }
+    logActivity(projectId, `Archived "${project.title}".`, { category: ACTIVITY_CATEGORIES.system });
+    persistProjects(false, { syncInputs: false });
+    return { ok: true };
+  } catch (err) {
+    console.error('[archiveProject]', err);
+    return { ok: false, reason: err.message || 'Archive failed.' };
+  }
+}
+
+export async function restoreProject(projectId) {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return { ok: false, reason: 'Not signed in.' };
+
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return { ok: false, reason: 'Project not found.' };
+
+  // Re-validate shared project membership before restoring.
+  if (project.isShared) {
+    const isOwner = !project.ownerId || project.ownerId === userId;
+    const isCollaborator = Boolean(project.collaborators?.[userId]);
+    if (!isOwner && !isCollaborator) {
+      return { ok: false, reason: 'You are no longer a member of this shared project.' };
+    }
+  }
+
+  const user = auth.currentUser;
+  const now = new Date().toISOString();
+  const restoreMeta = {
+    isArchived: false,
+    archivedAt: null,
+    archivedBy: null,
+    archivedByName: '',
+    restoredAt: now,
+    restoredBy: userId
+  };
+
+  const workspaceId = project.workspace?.id || project.id;
+  const toRestore = project.isWorkspaceRoot
+    ? state.projects.filter(p => p.workspace?.id === workspaceId)
+    : [project];
+
+  toRestore.forEach(p => Object.assign(p, restoreMeta));
+
+  try {
+    for (const p of toRestore) {
+      await setDoc(doc(db, 'users', userId, 'projects', p.id), restoreMeta, { merge: true });
+    }
+    if (project.isShared && (!project.ownerId || project.ownerId === userId)) {
+      try {
+        const token = await user.getIdToken();
+        await fetch('/api/restore-shared-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ projectId })
+        });
+      } catch (err) {
+        console.warn('[restoreProject] Server restore failed:', err.message);
+      }
+    }
+    logActivity(projectId, `Restored "${project.title}".`, { category: ACTIVITY_CATEGORIES.system });
+    persistProjects(false, { syncInputs: false });
+    return { ok: true };
+  } catch (err) {
+    console.error('[restoreProject]', err);
+    return { ok: false, reason: err.message || 'Restore failed.' };
+  }
+}
+
+export async function permanentlyDeleteProject(projectId) {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return { ok: false, reason: 'Not signed in.' };
+
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return { ok: false, reason: 'Project not found.' };
+  if (!project.isArchived) return { ok: false, reason: 'Archive the project first before permanent deletion.' };
+
+  const workspaceId = project.workspace?.id || project.id;
+  const toDelete = project.isWorkspaceRoot
+    ? state.projects.filter(p => p.workspace?.id === workspaceId)
+    : [project];
+
+  if (project.isWorkspaceRoot) {
+    state.projects = state.projects.filter(p => p.workspace?.id !== workspaceId);
+  } else {
+    state.projects = state.projects.filter(p => p.id !== projectId);
+  }
+
+  // Ensure at least one active project remains.
+  if (!state.projects.some(p => !p.isArchived)) {
+    const fallback = createProjectWithOptions();
+    state.projects.unshift(fallback);
+  }
+
+  if (toDelete.some(p => p.id === state.currentProjectId)) {
+    state.currentProjectId = state.projects.find(p => !p.isArchived)?.id || state.projects[0]?.id || null;
+  }
+  if (project.isWorkspaceRoot && state.currentWorkspaceId === workspaceId) {
+    state.currentWorkspaceId = null;
+  }
+
+  persistProjects(false, { syncInputs: false });
+  for (const p of toDelete) {
+    await deleteProjectFromCloud(p.id);
+  }
+  return { ok: true };
+}
+
+export function togglePinProject(projectId) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return;
+  project.isPinned = !project.isPinned;
+  project.pinnedAt = project.isPinned ? new Date().toISOString() : null;
+  persistProjects(false);
 }
 
 export function setProjectsFromCloud(cloudProjects) {
@@ -306,6 +438,14 @@ export function sanitizeProject(project) {
     createdAt: project.createdAt || new Date().toISOString(),
     updatedAt: project.updatedAt || new Date().toISOString(),
     isShared: Boolean(project.isShared),
+    isArchived: Boolean(project.isArchived),
+    archivedAt: project.archivedAt || null,
+    archivedBy: project.archivedBy || null,
+    archivedByName: project.archivedByName || '',
+    restoredAt: project.restoredAt || null,
+    restoredBy: project.restoredBy || null,
+    isPinned: Boolean(project.isPinned),
+    pinnedAt: project.pinnedAt || null,
     ownerId: project.ownerId || null,
     storyMemory: sanitizeStoryMemory(project.storyMemory),
     activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
@@ -390,6 +530,8 @@ export function createProjectWithOptions(options = {}) {
   });
   upsertProject(project);
   persistProjects(true);
+  // Fire-and-forget: records creation in the project's own timeline.
+  logActivity(project.id, `Created "${project.title}".`, { category: ACTIVITY_CATEGORIES.system });
   return project;
 }
 
@@ -405,7 +547,21 @@ export function getEditorRootProject(editorId) {
   return state.projects.find((project) => project.editor?.id === editorId && project.isEditorRoot) || null;
 }
 
-export function updateEditorAcrossProjects(editorId, updater) {
+export function getOwnedProjects(userId) {
+  const id = userId || auth.currentUser?.uid;
+  return state.projects.filter(p => !p.isArchived && (!p.isShared || !p.ownerId || p.ownerId === id));
+}
+
+export function getSharedProjects(userId) {
+  const id = userId || auth.currentUser?.uid;
+  return state.projects.filter(p => !p.isArchived && p.isShared && p.ownerId && p.ownerId !== id);
+}
+
+export function getArchivedProjects() {
+  return state.projects.filter(p => p.isArchived);
+}
+
+export function updateWorkspaceAcrossProjects(workspaceId, updater) {
   let changed = false;
   state.projects = state.projects.map((project) => {
     if (project.editor?.id !== editorId) {
@@ -443,13 +599,45 @@ export function upsertProject(project) {
 
 export function persistProjects(forceSavedBadge = false, { syncInputs = true } = {}) {
   if (syncInputs) syncProjectFromInputs();
-  const savedAt = new Date().toISOString();
-  const payload = buildPersistencePayload(savedAt);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload));
-  state.lastSavedAt = savedAt;
-  state.lastSaveSource = "local";
-  updateSaveBadge("local", savedAt);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      currentProjectId: state.currentProjectId,
+      currentWorkspaceId: state.currentWorkspaceId,
+      projects: state.projects,
+      aiAssist: state.aiAssist,
+      toolStripCollapsed: state.toolStripCollapsed,
+        autoNumberScenes: state.autoNumberScenes,
+        backgroundAnimation: state.backgroundAnimation,
+        theme: state.theme,
+        language: state.language,
+        writingLanguage: state.writingLanguage,
+        grammarCheck: state.grammarCheck,
+        localBackupEnabled: state.localBackupEnabled,
+        localSaveIntervalMinutes: state.localSaveIntervalMinutes,
+        backupPrompted: state.backupPrompted,
+        viewOptions: state.viewOptions,
+      leftPaneBlocks: state.leftPaneBlocks,
+      leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
+      rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
+    }));
+  } catch (e) {
+    if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+      showToast('Local storage is full — your work is syncing to the cloud only. Export a backup to be safe.', 'warning', 8000);
+    }
+  }
+  Recovery.writeSnapshot(state.projects);
+  if (refs.saveBadge) {
+    const offline = !Recovery.isOnline();
+    if (offline) {
+      refs.saveBadge.textContent = t("save.savedLocal");
+      refs.saveBadge.classList.remove("saving");
+      refs.saveBadge.classList.add("is-saved", "is-offline");
+    } else {
+      refs.saveBadge.textContent = forceSavedBadge ? t("save.savedLocal") : t("save.saved");
+      refs.saveBadge.classList.remove("saving", "is-offline");
+      refs.saveBadge.classList.add("is-saved");
+    }
+  }
   queueFirestoreSync();
 }
 
@@ -489,6 +677,7 @@ export function pushHistory() {
   } else {
     state.historyIndex++;
   }
+  Recovery.persistHistory(state.currentProjectId);
 }
 
 export function undo() {

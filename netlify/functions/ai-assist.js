@@ -1,45 +1,161 @@
+import { adminAuth, adminDb } from './_admin.js';
+
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "openai/gpt-3.5-turbo";
 const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
 
-export const handler = async (event) => {
-  if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Method Not Allowed" })
+const ALLOWED_TYPES = new Set(["scene", "dialogue", "action", "character", "parenthetical", "transition", "shot", "general", "script"]);
+const ALLOWED_ACTIONS = new Set(["Predict", "Expand", "Fix", "Add Conflict", "Cinematic", "Suggest Reply", "Rephrase", "Add Emotion", "Shorten", "Subtext", "Continue", "Visualize", "Add Tension", "Describe", "Grammar", "Camera Angle", "Improve Shot", "Add Movement", "Improve"]);
+const MAX_CURRENT = 4000;
+const MAX_CONTEXT = 15000;
+const MAX_INSTRUCTION = 500;
+
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+function newRequestId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function jsonHeaders(requestId) {
+  return { ...JSON_HEADERS, "X-Request-Id": requestId };
+}
+
+function badRequest(msg, requestId = "") {
+  return { statusCode: 400, headers: jsonHeaders(requestId), body: JSON.stringify({ error: msg }) };
+}
+
+async function _recordUsage(adminDb, uid, { action, type, status, latencyMs, tokensUsed, model }) {
+  if (!adminDb || !uid) return;
+  try {
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const ref = adminDb.doc(`users/${uid}/aiUsage/${monthKey}`);
+    const event = {
+      ts: now.toISOString(),
+      action: action || 'unknown',
+      type: type || 'unknown',
+      status,
+      latencyMs: latencyMs || 0,
+      tokensUsed: tokensUsed || 0,
+      model: model || 'unknown'
     };
+    const updates = {
+      requestCount: (status === 'success' || status === 'failure') ? 1 : 0,
+      failureCount: status === 'failure' ? 1 : 0,
+      tokensTotal: tokensUsed || 0,
+      latencyTotal: latencyMs || 0,
+      latencyCount: latencyMs > 0 ? 1 : 0,
+    };
+    // Firestore field increment via batch-style update
+    const snap = await ref.get().catch(() => null);
+    const existing = snap?.exists ? snap.data() : {};
+    const recentEvents = (existing.recentEvents || []).slice(-19);
+    recentEvents.push(event);
+    await ref.set({
+      requestCount: (existing.requestCount || 0) + (updates.requestCount || 0),
+      failureCount: (existing.failureCount || 0) + updates.failureCount,
+      tokensTotal: (existing.tokensTotal || 0) + updates.tokensTotal,
+      latencyTotal: (existing.latencyTotal || 0) + updates.latencyTotal,
+      latencyCount: (existing.latencyCount || 0) + updates.latencyCount,
+      recentEvents,
+      updatedAt: now.toISOString()
+    }, { merge: false });
+  } catch { /* non-critical — never block the response */ }
+}
+
+export const handler = async (event) => {
+  const requestId = newRequestId();
+
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, headers: jsonHeaders(requestId), body: JSON.stringify({ error: "Method Not Allowed" }) };
   }
 
   let body;
   try {
     body = JSON.parse(event.body);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Invalid JSON" })
-    };
+  } catch {
+    return badRequest("Invalid JSON", requestId);
   }
 
   const { type, action, current, context: screenplayContext, instruction } = body;
 
-  if (current === undefined || current === null) {
-    return {
-      statusCode: 400,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Missing current block" }),
-    };
+  if (current === undefined || current === null) return badRequest("Missing current block", requestId);
+  if (type && !ALLOWED_TYPES.has(type)) return badRequest("Invalid block type", requestId);
+  if (action && !ALLOWED_ACTIONS.has(action)) return badRequest("Invalid action", requestId);
+  if (typeof current === "string" && current.length > MAX_CURRENT) return badRequest("Content too long", requestId);
+  if (typeof screenplayContext === "string" && screenplayContext.length > MAX_CONTEXT) return badRequest("Context too long", requestId);
+  if (typeof instruction === "string" && instruction.length > MAX_INSTRUCTION) return badRequest("Instruction too long", requestId);
+
+  console.log(`[${requestId}] AI request type=${type || "?"} action=${action || "?"}`);
+
+  // Quota enforcement
+  const PLAN_QUOTAS = {
+    free:          parseInt(process.env.PLAN_QUOTA_FREE          || '50',   10),
+    pro:           parseInt(process.env.PLAN_QUOTA_PRO           || '300',  10),
+    premium_plus:  parseInt(process.env.PLAN_QUOTA_PREMIUM_PLUS  || '1000', 10),
+  };
+  let quotaUid = null;
+  let quotaPlan = 'free';
+
+  if (adminAuth && adminDb) {
+    const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    if (token) {
+      try {
+        const decoded = await adminAuth.verifyIdToken(token);
+        quotaUid = decoded.uid;
+      } catch { /* treat as anonymous */ }
+    }
+    if (quotaUid) {
+      try {
+        // Fetch billing and quota in parallel; billing/data is server-write only (authoritative for plan)
+        const [bSnap, qSnap] = await Promise.all([
+          adminDb.doc(`users/${quotaUid}/billing/data`).get(),
+          adminDb.doc(`users/${quotaUid}/quota/current`).get()
+        ]);
+        if (bSnap.exists) {
+          const b = bSnap.data();
+          const subStatus = b.status;
+          if (b.plan && (subStatus === 'active' || subStatus === 'trialing')) {
+            quotaPlan = b.plan;
+          }
+        }
+        if (qSnap.exists) {
+          const q = qSnap.data();
+          const monthlyLimit = PLAN_QUOTAS[quotaPlan] ?? PLAN_QUOTAS.free;
+          const pastReset = q.resetAt && new Date() >= new Date(q.resetAt);
+          const usedCount = pastReset ? 0 : (q.count || 0);
+          if (usedCount >= monthlyLimit) {
+            return {
+              statusCode: 429,
+              headers: jsonHeaders(requestId),
+              body: JSON.stringify({ error: 'quota_exceeded', remaining: 0, plan: quotaPlan })
+            };
+          }
+        }
+      } catch { /* quota check failed — allow request */ }
+    }
   }
 
   if (!process.env.OPENAI_API_KEY) {
+    // Test-mode: no key configured — return a deterministic mock so validation
+    // and integration tests can run without a live API dependency.
+    if (process.env.NODE_ENV !== 'production') {
+      return {
+        statusCode: 200,
+        headers: jsonHeaders(requestId),
+        body: JSON.stringify({ output: `[test-mode] ${action || 'response'} for: ${String(current).slice(0, 60)}` })
+      };
+    }
+    console.error(`[${requestId}] OPENAI_API_KEY environment variable is not configured`);
     return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        output: `AI is working (test mode) - You wanted to ${action || "assist with"} this ${type || "block"}.`
-      }),
+      statusCode: 503,
+      headers: jsonHeaders(requestId),
+      body: JSON.stringify({ error: 'AI service is not configured. Please contact support.' })
     };
   }
+
+  const requestStartMs = Date.now();
 
   try {
     const systemPrompt = `You are an elite Hollywood Screenwriter and Script Doctor.
@@ -87,11 +203,15 @@ YOUR OUTPUT:`;
     });
 
     const data = await response.json().catch(() => ({}));
+    const latencyMs = Date.now() - requestStartMs;
+    const tokensUsed = data?.usage?.total_tokens || data?.usage?.prompt_tokens || 0;
 
     if (!response.ok) {
+      console.error(`[${requestId}] Upstream API error status=${response.status}`);
+      _recordUsage(adminDb, quotaUid, { action, type, status: 'failure', latencyMs, tokensUsed: 0, model: DEFAULT_MODEL });
       return {
         statusCode: response.status,
-        headers: { "Content-Type": "application/json" },
+        headers: jsonHeaders(requestId),
         body: JSON.stringify({
           error: extractApiError(data) || `AI request failed with status ${response.status}`
         }),
@@ -102,25 +222,41 @@ YOUR OUTPUT:`;
     output = cleanAiResponse(output, current);
 
     if (!output) {
-      return {
-        statusCode: 500,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "AI assistant returned no text." }),
-      };
+      _recordUsage(adminDb, quotaUid, { action, type, status: 'failure', latencyMs, tokensUsed: 0, model: DEFAULT_MODEL });
+      return { statusCode: 500, headers: jsonHeaders(requestId), body: JSON.stringify({ error: "AI assistant returned no text." }) };
     }
 
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ output }),
-    };
+    console.log(`[${requestId}] AI request completed successfully latency=${latencyMs}ms tokens=${tokensUsed}`);
+
+    // Increment quota for all authenticated users (all plans have limits)
+    if (adminDb && quotaUid) {
+      try {
+        const ref = adminDb.doc(`users/${quotaUid}/quota/current`);
+        const now = new Date();
+        const nextReset = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const qSnap = await ref.get();
+        const q = qSnap.exists ? qSnap.data() : {};
+        const pastReset = !q.resetAt || now >= new Date(q.resetAt);
+        if (pastReset) {
+          await ref.set({ count: 1, resetAt: nextReset.toISOString() }, { merge: true });
+        } else {
+          await ref.set({ count: (q.count || 0) + 1 }, { merge: true });
+        }
+      } catch { /* silent */ }
+    }
+
+    // Record detailed usage (non-blocking — fire and forget)
+    _recordUsage(adminDb, quotaUid, { action, type, status: 'success', latencyMs, tokensUsed, model: DEFAULT_MODEL });
+
+    return { statusCode: 200, headers: jsonHeaders(requestId), body: JSON.stringify({ output }) };
   } catch (error) {
+    const latencyMs = Date.now() - requestStartMs;
+    console.error(`[${requestId}] AI function error:`, error.message || error);
+    _recordUsage(adminDb, quotaUid, { action, type, status: 'failure', latencyMs, tokensUsed: 0, model: DEFAULT_MODEL });
     return {
       statusCode: 500,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        error: `AI request failed: ${error.message}`
-      }),
+      headers: jsonHeaders(requestId),
+      body: JSON.stringify({ error: "AI request failed. Please try again." }),
     };
   }
 };
