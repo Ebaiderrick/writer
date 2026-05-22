@@ -16,7 +16,7 @@ let commentFilter = { user: 'all', sort: 'line', status: 'all' };
 let allComments = [];
 
 const MAX_COLLABORATORS = 5;
-export const WORKSPACE_ROLES = {
+export const EDITOR_ROLES = {
   owner: 'owner',
   editor: 'editor',
   viewer: 'viewer'
@@ -148,18 +148,18 @@ export function getUserProjectRole(project = getCurrentProject(), user = auth.cu
   }
 
   if (!project.ownerId || project.ownerId === user.uid) {
-    return WORKSPACE_ROLES.owner;
+    return EDITOR_ROLES.owner;
   }
 
   return project.collaborators?.[user.uid]?.role || WORKSPACE_ROLES.viewer;
 }
 
 export function canEditProject(project = getCurrentProject(), user = auth.currentUser) {
-  return getUserProjectRole(project, user) !== WORKSPACE_ROLES.viewer;
+  return getUserProjectRole(project, user) !== EDITOR_ROLES.viewer;
 }
 
-export function canManageWorkspace(project = getCurrentProject(), user = auth.currentUser) {
-  return getUserProjectRole(project, user) === WORKSPACE_ROLES.owner;
+export function canManageEditor(project = getCurrentProject(), user = auth.currentUser) {
+  return getUserProjectRole(project, user) === EDITOR_ROLES.owner;
 }
 
 // ── Centralized permission utility ────────────────────────────
@@ -198,15 +198,15 @@ function updateCollabBadge(count) {
 
 // ── Invite ────────────────────────────────────────────────────
 
-export async function inviteCollaborator(email, role = WORKSPACE_ROLES.editor) {
+export async function inviteCollaborator(email, role = EDITOR_ROLES.editor) {
   try {
     const user = auth.currentUser;
     if (!user) return { ok: false, reason: 'Not signed in.' };
 
     const project = getCurrentProject();
     if (!project) return { ok: false, reason: 'No project open. Open a project first.' };
-    if (!canManageWorkspace(project, user)) {
-      return { ok: false, reason: 'Only the workspace owner can invite teammates.' };
+    if (!canManageEditor(project, user)) {
+      return { ok: false, reason: 'Only the Editor owner can invite teammates.' };
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -258,7 +258,7 @@ export async function inviteCollaborator(email, role = WORKSPACE_ROLES.editor) {
       fromName: user.displayName || user.email,
       fromEmail: user.email,
       toEmail: normalizedEmail,
-      role: role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor,
+      role: role === EDITOR_ROLES.viewer ? EDITOR_ROLES.viewer : EDITOR_ROLES.editor,
       projectId: project.id,
       projectTitle: project.title,
       status: 'pending',
@@ -312,9 +312,9 @@ async function ensureSharedProject(project, user) {
       ownerName: user.displayName || user.email,
       ownerEmail: user.email,
       ownerPhotoURL: user.photoURL || '',
-      workspace: project.workspace || {
+      editor: project.editor || {
         id: project.id,
-        name: project.title || 'Team Workspace',
+        name: project.title || 'Team Editor',
         inviteCode: project.scriptId || '',
         reminders: []
       },
@@ -462,7 +462,7 @@ export async function kickCollaborator(projectId, collaboratorUid) {
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
   if (!project) return;
 
-  if (!canManageWorkspace(project, user)) {
+  if (!canManageEditor(project, user)) {
     await customAlert('Only the project owner can remove collaborators.', 'Not Authorized');
     return;
   }
@@ -496,8 +496,8 @@ export async function updateCollaboratorRole(projectId, collaboratorUid, role) {
 
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
   if (!project) return { ok: false, reason: 'No project found.' };
-  if (!canManageWorkspace(project, user)) {
-    return { ok: false, reason: 'Only the workspace owner can change roles.' };
+  if (!canManageEditor(project, user)) {
+    return { ok: false, reason: 'Only the Editor owner can change roles.' };
   }
 
   const collaborator = project.collaborators?.[collaboratorUid];
@@ -530,29 +530,29 @@ export async function updateCollaboratorRole(projectId, collaboratorUid, role) {
   return { ok: true };
 }
 
-export async function renameWorkspace(projectId, name) {
+export async function renameEditor(projectId, name) {
   const user = auth.currentUser;
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
-  if (!user || !project) return { ok: false, reason: 'No workspace found.' };
-  if (!canManageWorkspace(project, user)) {
-    return { ok: false, reason: 'Only the workspace owner can rename the workspace.' };
+  if (!user || !project) return { ok: false, reason: 'No Editor found.' };
+  if (!canManageEditor(project, user)) {
+    return { ok: false, reason: 'Only the Editor owner can rename the Editor.' };
   }
 
   const nextName = String(name || '').trim();
   if (!nextName) {
-    return { ok: false, reason: 'Workspace name cannot be empty.' };
+    return { ok: false, reason: 'Editor name cannot be empty.' };
   }
 
-  project.workspace = {
-    ...(project.workspace || {}),
-    id: project.workspace?.id || project.id,
-    inviteCode: project.workspace?.inviteCode || project.scriptId || '',
-    reminders: Array.isArray(project.workspace?.reminders) ? project.workspace.reminders : [],
+  project.editor = {
+    ...(project.editor || {}),
+    id: project.editor?.id || project.id,
+    inviteCode: project.editor?.inviteCode || project.scriptId || '',
+    reminders: Array.isArray(project.editor?.reminders) ? project.editor.reminders : [],
     name: nextName
   };
 
   await updateDoc(doc(db, 'sharedProjects', projectId), {
-    workspace: project.workspace,
+    editor: project.editor,
     updatedBy: user.uid
   });
   await logActivity(projectId, `Renamed the workspace to ${nextName}.`, { category: ACTIVITY_CATEGORIES.workspace });
@@ -561,10 +561,10 @@ export async function renameWorkspace(projectId, name) {
   return { ok: true };
 }
 
-export async function addWorkspaceReminder(projectId, reminder) {
+export async function addEditorReminder(projectId, reminder) {
   const user = auth.currentUser;
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
-  if (!user || !project) return { ok: false, reason: 'No workspace found.' };
+  if (!user || !project) return { ok: false, reason: 'No Editor found.' };
   if (!canEditProject(project, user)) {
     return { ok: false, reason: 'Viewers cannot edit reminders.' };
   }
@@ -584,12 +584,12 @@ export async function addWorkspaceReminder(projectId, reminder) {
     createdByName: user.displayName || user.email || 'Unknown'
   };
 
-  const workspace = project.workspace || { id: project.id, name: project.title || 'Team Workspace', inviteCode: project.scriptId || '', reminders: [] };
-  const reminders = [...(workspace.reminders || []), nextReminder];
-  project.workspace = { ...workspace, reminders };
+  const editor = project.editor || { id: project.id, name: project.title || 'Team Editor', inviteCode: project.scriptId || '', reminders: [] };
+  const reminders = [...(editor.reminders || []), nextReminder];
+  project.editor = { ...editor, reminders };
 
   await updateDoc(doc(db, 'sharedProjects', projectId), {
-    workspace: project.workspace,
+    editor: project.editor,
     updatedBy: user.uid
   });
   await logActivity(projectId, `Added reminder: ${text}.`, { category: ACTIVITY_CATEGORIES.workspace });
@@ -597,16 +597,16 @@ export async function addWorkspaceReminder(projectId, reminder) {
   return { ok: true };
 }
 
-export async function toggleWorkspaceReminder(projectId, reminderId) {
+export async function toggleEditorReminder(projectId, reminderId) {
   const user = auth.currentUser;
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
-  if (!user || !project) return { ok: false, reason: 'No workspace found.' };
+  if (!user || !project) return { ok: false, reason: 'No Editor found.' };
   if (!canEditProject(project, user)) {
     return { ok: false, reason: 'Viewers cannot edit reminders.' };
   }
 
-  const workspace = project.workspace || { id: project.id, name: project.title || 'Team Workspace', inviteCode: project.scriptId || '', reminders: [] };
-  const reminders = (workspace.reminders || []).map((item) => item.id === reminderId
+  const editor = project.editor || { id: project.id, name: project.title || 'Team Editor', inviteCode: project.scriptId || '', reminders: [] };
+  const reminders = (editor.reminders || []).map((item) => item.id === reminderId
     ? { ...item, completed: !item.completed, updatedAt: new Date().toISOString() }
     : item
   );
@@ -615,9 +615,9 @@ export async function toggleWorkspaceReminder(projectId, reminderId) {
     return { ok: false, reason: 'Reminder not found.' };
   }
 
-  project.workspace = { ...workspace, reminders };
+  project.editor = { ...editor, reminders };
   await updateDoc(doc(db, 'sharedProjects', projectId), {
-    workspace: project.workspace,
+    editor: project.editor,
     updatedBy: user.uid
   });
   await logActivity(projectId, `${changed.completed ? 'Completed' : 'Reopened'} reminder: ${changed.text}.`, { category: ACTIVITY_CATEGORIES.workspace });
@@ -625,27 +625,27 @@ export async function toggleWorkspaceReminder(projectId, reminderId) {
   return { ok: true };
 }
 
-export async function deleteWorkspaceReminder(projectId, reminderId) {
+export async function deleteEditorReminder(projectId, reminderId) {
   const user = auth.currentUser;
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
-  if (!user || !project) return { ok: false, reason: 'No workspace found.' };
+  if (!user || !project) return { ok: false, reason: 'No Editor found.' };
   if (!canEditProject(project, user)) {
     return { ok: false, reason: 'Viewers cannot edit reminders.' };
   }
 
-  const workspace = project.workspace || { id: project.id, name: project.title || 'Team Workspace', inviteCode: project.scriptId || '', reminders: [] };
-  const existing = (workspace.reminders || []).find((item) => item.id === reminderId);
+  const editor = project.editor || { id: project.id, name: project.title || 'Team Editor', inviteCode: project.scriptId || '', reminders: [] };
+  const existing = (editor.reminders || []).find((item) => item.id === reminderId);
   if (!existing) {
     return { ok: false, reason: 'Reminder not found.' };
   }
 
-  project.workspace = {
-    ...workspace,
-    reminders: (workspace.reminders || []).filter((item) => item.id !== reminderId)
+  project.editor = {
+    ...editor,
+    reminders: (editor.reminders || []).filter((item) => item.id !== reminderId)
   };
 
   await updateDoc(doc(db, 'sharedProjects', projectId), {
-    workspace: project.workspace,
+    editor: project.editor,
     updatedBy: user.uid
   });
   await logActivity(projectId, `Removed reminder: ${existing.text}.`, { category: ACTIVITY_CATEGORIES.workspace });
@@ -868,7 +868,7 @@ export async function addComment(projectId, text, { lineId = null, parentId = nu
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
   if (!canEditProject(project, user)) {
-    await customAlert('Viewer access is read-only. Ask the owner for Editor access to comment.', 'Read-only Workspace');
+    await customAlert('Viewer access is read-only. Ask the owner for Editor access to comment.', 'Read-only Editor');
     return;
   }
   const ref = commentDocRef(project, makeId('cmt'));
@@ -918,7 +918,7 @@ export async function resolveComment(projectId, commentId, resolved) {
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
   if (!canEditProject(project, user)) {
-    await customAlert('Viewer access is read-only.', 'Read-only Workspace');
+    await customAlert('Viewer access is read-only.', 'Read-only Editor');
     return;
   }
   const ref = commentDocRef(project, commentId);
@@ -951,7 +951,7 @@ export function renderCollaboratorList() {
   renderWorkspaceAwareness(project);
 
   const user = auth.currentUser;
-  const isOwner = canManageWorkspace(project, user);
+  const isOwner = canManageEditor(project, user);
   const collaboratorEntries = Object.entries(project.collaborators || {});
 
   const countEl = document.getElementById('collabCount');
@@ -987,7 +987,7 @@ export function renderCollaboratorList() {
     <div class="collaborator-item">
       ${buildCollaboratorAvatarMarkup({ uid, name: c.name || c.email, email: c.email || '', photoURL: c.photoURL || '' })}
       <div class="collaborator-info">
-        <span class="collaborator-name">${esc(c.name || c.email)} <span class="role-badge">${esc((c.role || WORKSPACE_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))}</span></span>
+        <span class="collaborator-name">${esc(c.name || c.email)} <span class="role-badge">${esc((c.role || EDITOR_ROLES.editor).replace(/^./, (char) => char.toUpperCase()))}</span></span>
         <button class="collaborator-email collab-profile-trigger collaborator-link-trigger" type="button" data-uid="${esc(uid)}" data-name="${esc(c.name || '')}" data-email="${esc(c.email || '')}" data-photourl="${esc(c.photoURL || '')}">${esc(c.name || c.email || 'Collaborator')}</button>
         ${isOwner ? `<label class="collab-role-field"><span>Role</span><select class="collab-role-select" data-uid="${esc(uid)}">
           <option value="editor" ${(c.role || WORKSPACE_ROLES.editor) === WORKSPACE_ROLES.editor ? 'selected' : ''}>Editor</option>
@@ -1034,7 +1034,7 @@ export function renderCollaboratorList() {
       const result = await updateCollaboratorRole(project.id, select.dataset.uid, select.value);
       select.disabled = false;
       if (!result?.ok) {
-        await customAlert(result?.reason || 'Unable to update role right now.', 'Workspace Role');
+        await customAlert(result?.reason || 'Unable to update role right now.', 'Editor Role');
         renderCollaboratorList();
       }
     });
@@ -1075,6 +1075,17 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
   }
   bioEl.textContent = '—';
   imgEl.src = photoURL || generateCollabAvatar(displayName);
+
+  if (uid === 'ai_assist') {
+    nameEl.textContent = 'Eya';
+    const handle = document.createElement('div');
+    handle.style.fontSize = '0.85rem';
+    handle.style.color = 'var(--muted)';
+    handle.textContent = '@AIassist';
+    nameEl.appendChild(handle);
+    bioEl.textContent = 'Eya is your creative AI companion, helping you bridge gaps in your story and refine your cinematic voice.';
+    imgEl.src = generateCollabAvatar('Eya');
+  }
 
   popup.classList.add('active');
 

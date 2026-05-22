@@ -29,11 +29,12 @@ export const DEFAULT_VIEW_OPTIONS = {
   pageNumbers: true,
   pageCount: false,
   showOutline: true,
-  textSize: 12
+  textSize: 12,
+  focusMode: false
 };
 export const LEFT_PANE_BLOCK_DEFS = [
   { key: "current", label: "Current Script" },
-  { key: "workspace", label: "Team Workspace" },
+  { key: "editor", label: "Team Editor" },
   { key: "characters", label: "Characters" },
   { key: "scenes", label: "Scenes" },
   { key: "comments", label: "Comments" },
@@ -63,7 +64,7 @@ export const DEFAULT_STORY_MEMORY = {
   plotPoints: []
 };
 
-export const WORKSPACE_TASK_TEMPLATES = [
+export const EDITOR_TASK_TEMPLATES = [
   {
     key: "custom",
     label: "Custom Task",
@@ -125,12 +126,15 @@ export const WORKSPACE_TASK_TEMPLATES = [
 export const state = {
   projects: [],
   currentProjectId: null,
-  currentWorkspaceId: null,
+  currentEditorId: null,
   activeBlockId: null,
   activeType: "action",
   visibleSuggestions: [],
   suggestionContext: null,
   saveTimer: null,
+  lastSavedAt: "",
+  lastSaveSource: "remote",
+  pendingRecoveryNotice: false,
   aiAssist: false,
   grammarCheck: false,
   toolStripCollapsed: false,

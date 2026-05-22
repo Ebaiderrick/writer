@@ -1,4 +1,4 @@
-import { state, WORKSPACE_TASK_TEMPLATES } from "./config.js";
+import { state, EDITOR_TASK_TEMPLATES } from "./config.js";
 import { refs } from "./dom.js";
 import { getCurrentProject, getLine, getLineIndex, queueSave } from "./project.js";
 import { renderStudio, addBlock } from "./events.js";
@@ -860,7 +860,18 @@ export const AI = (() => {
       }
     } else {
       openMenu(blockRow);
+      showInput(action);
     }
+  }
+
+  function triggerSelectionAction(action) {
+    const selectedBlock = document.activeElement?.closest?.(".script-block")
+      || document.querySelector(".script-block-row.is-active .script-block")
+      || refs.screenplayEditor?.querySelector(".script-block");
+    if (!selectedBlock) return;
+    const row = selectedBlock.closest(".script-block-row");
+    if (!row) return;
+    triggerAction(row, action);
   }
 
   function triggerSmartProofread() {
@@ -1668,11 +1679,11 @@ export const AI = (() => {
     }
   }
 
-  function getWorkspaceTaskTemplate(templateKey) {
-    return WORKSPACE_TASK_TEMPLATES.find((template) => template.key === templateKey) || WORKSPACE_TASK_TEMPLATES[0];
+  function getEditorTaskTemplate(templateKey) {
+    return EDITOR_TASK_TEMPLATES.find((template) => template.key === templateKey) || EDITOR_TASK_TEMPLATES[0];
   }
 
-  async function runWorkspaceTaskAssistant(task, project) {
+  async function runEditorTaskAssistant(task, project) {
     const projectContext = project?.lines?.map((line) => `[${line.type.toUpperCase()}] ${line.text}`).join("\n") || "";
     const sceneContext = task.sceneId
       ? (() => {
@@ -1689,9 +1700,9 @@ export const AI = (() => {
       : "";
     const storyMemory = buildStoryMemoryContext(project);
     const context = sceneContext || projectContext;
-    const template = getWorkspaceTaskTemplate(task.templateKey);
+    const template = getEditorTaskTemplate(task.templateKey);
     const instruction = [
-      "You are @AIassist inside a screenplay workspace.",
+      "You are @AIassist inside a screenplay editor.",
       "Complete the assigned writing task and return screenplay-ready text only.",
       "Do not explain your answer. Do not include markdown fences.",
       "Preserve screenplay formatting with sensible line breaks.",
@@ -1706,7 +1717,7 @@ export const AI = (() => {
     });
   }
 
-  return { init, triggerAction, triggerSmartProofread, triggerAssistant, runWorkspaceTaskAssistant };
+  return { init, triggerAction, triggerSelectionAction, triggerSmartProofread, triggerAssistant, runEditorTaskAssistant };
 })();
 
 function getSelectedTextInBlock(block) {

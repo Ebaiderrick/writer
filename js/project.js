@@ -10,6 +10,7 @@ import { showToast } from './toast.js';
 
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const RECOVERY_KEY = `${STORAGE_KEY}:recovery`;
 
 // Track last-synced version per project to skip redundant Firestore writes
 const _syncedVersions = new Map();
@@ -118,6 +119,8 @@ async function syncCurrentProjectToFirestore(attempt = 0) {
       parsed.projects = state.projects;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
+    state.lastSaveSource = "remote";
+    updateSaveBadge("saved", state.lastSavedAt || now);
     window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
     _syncedVersions.set(project.id, versionKey);
     Recovery.clearOfflineSyncPending();
@@ -343,15 +346,14 @@ export function togglePinProject(projectId) {
 export function setProjectsFromCloud(cloudProjects) {
   state.projects = cloudProjects.length > 0 ? cloudProjects : [cloneProject(sampleProject, true)];
   state.currentProjectId = state.projects[0].id;
-  state.currentWorkspaceId = null;
+  state.currentEditorId = null;
+  const savedAt = new Date().toISOString();
+  state.lastSavedAt = savedAt;
+  state.lastSaveSource = "remote";
   try {
-    const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      ...existing,
-      currentProjectId: state.currentProjectId,
-      currentWorkspaceId: state.currentWorkspaceId,
-      projects: state.projects
-    }));
+    const payload = buildPersistencePayload(savedAt);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload));
   } catch (err) {
     console.error('Failed to cache cloud projects locally', err);
   }
@@ -383,13 +385,12 @@ export const sampleProject = {
 
 export function loadProjects() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
+    const parsed = chooseLatestPayload(parseStoredPayload(STORAGE_KEY), parseStoredPayload(RECOVERY_KEY));
     state.projects = Array.isArray(parsed?.projects) && parsed.projects.length
       ? parsed.projects.map(sanitizeProject)
       : [cloneProject(sampleProject, true)];
     state.currentProjectId = parsed?.currentProjectId || state.projects[0].id;
-    state.currentWorkspaceId = typeof parsed?.currentWorkspaceId === "string" ? parsed.currentWorkspaceId : null;
+    state.currentEditorId = typeof parsed?.currentEditorId === "string" ? parsed.currentEditorId : null;
     state.aiAssist = Boolean(parsed?.aiAssist);
       state.toolStripCollapsed = Boolean(parsed?.toolStripCollapsed);
       state.autoNumberScenes = Boolean(parsed?.autoNumberScenes);
@@ -402,6 +403,8 @@ export function loadProjects() {
       state.localSaveIntervalMinutes = [5, 10, 60].includes(parsed?.localSaveIntervalMinutes) ? parsed.localSaveIntervalMinutes : 5;
       state.backupPrompted = Boolean(parsed?.backupPrompted);
       state.viewOptions = sanitizeViewOptions(parsed?.viewOptions);
+    state.lastSavedAt = parsed?.savedAt || "";
+    state.lastSaveSource = state.localBackupEnabled ? "local" : "remote";
     state.leftPaneBlocks = sanitizeLeftPaneBlocks(parsed?.leftPaneBlocks);
     document.documentElement.style.setProperty("--left-pane-width", `${clamp(parsed?.leftWidth || 286, 220, 460)}px`);
     document.documentElement.style.setProperty("--right-pane-width", `${clamp(parsed?.rightWidth || 324, 260, 520)}px`);
@@ -409,7 +412,7 @@ export function loadProjects() {
     console.error("Unable to load projects", error);
       state.projects = [cloneProject(sampleProject, true)];
       state.currentProjectId = state.projects[0].id;
-      state.currentWorkspaceId = null;
+      state.currentEditorId = null;
       state.backgroundAnimation = false;
       state.language = "en";
       state.writingLanguage = "en";
@@ -425,8 +428,8 @@ export function sanitizeProject(project) {
     scriptId: normalizeScriptId(project.scriptId),
     title: project.title || "Untitled Script",
     workType: project.workType === "prose-poetry" ? "prose-poetry" : "film-script",
-    creationKind: project.creationKind === "workspace" ? "workspace" : "project",
-    isWorkspaceRoot: Boolean(project.isWorkspaceRoot),
+    creationKind: project.creationKind === "editor" ? "editor" : "project",
+    isEditorRoot: Boolean(project.isEditorRoot),
     author: project.author || "",
     contact: project.contact || "",
     company: project.company || "",
@@ -451,7 +454,7 @@ export function sanitizeProject(project) {
     ownerPhotoURL: project.ownerPhotoURL || "",
     lastEditorName: project.lastEditorName || "",
     lastActivityAt: project.lastActivityAt || project.updatedAt || new Date().toISOString(),
-    workspace: sanitizeWorkspace(project.workspace, project),
+    editor: sanitizeEditor(project.editor, project),
     collaborators: sanitizeCollaborators(project.collaborators),
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     wordCountHistory: Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [],
@@ -494,34 +497,34 @@ export function createProject() {
 }
 
 export function createProjectWithOptions(options = {}) {
-  const creationKind = options.creationKind === "workspace" ? "workspace" : "project";
+  const creationKind = options.creationKind === "editor" ? "editor" : "project";
   const workType = options.workType === "prose-poetry" ? "prose-poetry" : "film-script";
-  const isWorkspaceRoot = Boolean(options.isWorkspaceRoot);
-  const workspaceSeed = options.workspace && typeof options.workspace === "object" ? options.workspace : null;
+  const isEditorRoot = Boolean(options.isEditorRoot);
+  const editorSeed = options.editor && typeof options.editor === "object" ? options.editor : null;
   const peerProjects = state.projects.filter((project) => {
-    if (creationKind === "workspace" || isWorkspaceRoot) {
-      return project.isWorkspaceRoot;
+    if (creationKind === "editor" || isEditorRoot) {
+      return project.isEditorRoot;
     }
-    if (workspaceSeed?.id) {
-      return !project.isWorkspaceRoot && project.workspace?.id === workspaceSeed.id;
+    if (editorSeed?.id) {
+      return !project.isEditorRoot && project.editor?.id === editorSeed.id;
     }
-    return !project.isWorkspaceRoot && project.workspace?.id === project.id;
+    return !project.isEditorRoot && project.editor?.id === project.id;
   });
   const index = peerProjects.length + 1;
-  const defaultTitle = creationKind === "workspace"
-    ? `Film Workspace ${index}`
+  const defaultTitle = creationKind === "editor"
+    ? `Film Editor ${index}`
     : `Film Script ${index}`;
   const project = sanitizeProject({
     id: uid("project"),
     title: options.title || defaultTitle,
     workType,
     creationKind,
-    isWorkspaceRoot,
-    workspace: workspaceSeed ? {
-      ...workspaceSeed,
-      name: options.workspaceName || workspaceSeed.name || `Workspace ${index}`
+    isEditorRoot,
+    editor: editorSeed ? {
+      ...editorSeed,
+      name: options.editorName || editorSeed.name || `Editor ${index}`
     } : {
-      name: options.workspaceName || (creationKind === "workspace" ? defaultTitle : `Workspace ${index}`)
+      name: options.editorName || (creationKind === "editor" ? defaultTitle : `Editor ${index}`)
     },
     lines: [{ id: uid(), type: "action", text: "" }]
   });
@@ -536,12 +539,12 @@ export function getCurrentProject() {
   return state.projects.find((project) => project.id === state.currentProjectId) || null;
 }
 
-export function getWorkspaceProjects(workspaceId) {
-  return state.projects.filter((project) => project.workspace?.id === workspaceId);
+export function getEditorProjects(editorId) {
+  return state.projects.filter((project) => project.editor?.id === editorId);
 }
 
-export function getWorkspaceRootProject(workspaceId) {
-  return state.projects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot) || null;
+export function getEditorRootProject(editorId) {
+  return state.projects.find((project) => project.editor?.id === editorId && project.isEditorRoot) || null;
 }
 
 export function getOwnedProjects(userId) {
@@ -561,14 +564,14 @@ export function getArchivedProjects() {
 export function updateWorkspaceAcrossProjects(workspaceId, updater) {
   let changed = false;
   state.projects = state.projects.map((project) => {
-    if (project.workspace?.id !== workspaceId) {
+    if (project.editor?.id !== editorId) {
       return project;
     }
-    const nextWorkspace = updater({ ...(project.workspace || {}) }, project);
+    const nextEditor = updater({ ...(project.editor || {}) }, project);
     changed = true;
     return sanitizeProject({
       ...project,
-      workspace: nextWorkspace || project.workspace,
+      editor: nextEditor || project.editor,
       updatedAt: new Date().toISOString()
     });
   });
@@ -639,16 +642,13 @@ export function persistProjects(forceSavedBadge = false, { syncInputs = true } =
 }
 
 export function queueSave() {
-  if (refs.saveBadge) {
-      refs.saveBadge.textContent = t("save.saving");
-      refs.saveBadge.classList.add("saving");
-      refs.saveBadge.classList.remove("is-saved");
-  }
+  updateSaveBadge("saving");
+  writeRecoverySnapshot();
   clearTimeout(state.saveTimer);
   state.saveTimer = window.setTimeout(() => {
     persistProjects(false);
     pushHistory();
-  }, 200);
+  }, 1200);
 }
 
 export function pushHistory() {
@@ -774,19 +774,19 @@ function sanitizeStoryMemory(storyMemory) {
   };
 }
 
-function sanitizeWorkspace(workspace, project) {
+function sanitizeEditor(editor, project) {
   return {
-    id: workspace?.id || project.id || uid("workspace"),
-    name: String(workspace?.name || project.title || "Team Workspace").trim() || "Team Workspace",
-    inviteCode: String(workspace?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
-    reminders: sanitizeWorkspaceReminders(workspace?.reminders),
-    targets: sanitizeWorkspaceTargets(workspace?.targets),
-    tasks: sanitizeWorkspaceTasks(workspace?.tasks),
-    notifications: sanitizeWorkspaceNotifications(workspace?.notifications)
+    id: editor?.id || project.id || uid("editor"),
+    name: String(editor?.name || project.title || "Team Editor").trim() || "Team Editor",
+    inviteCode: String(editor?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
+    reminders: sanitizeEditorReminders(editor?.reminders),
+    targets: sanitizeEditorTargets(editor?.targets),
+    tasks: sanitizeEditorTasks(editor?.tasks),
+    notifications: sanitizeEditorNotifications(editor?.notifications)
   };
 }
 
-function sanitizeWorkspaceReminders(reminders) {
+function sanitizeEditorReminders(reminders) {
   if (!Array.isArray(reminders)) {
     return [];
   }
@@ -802,7 +802,7 @@ function sanitizeWorkspaceReminders(reminders) {
   })).filter((reminder) => reminder.text);
 }
 
-function sanitizeWorkspaceTargets(targets) {
+function sanitizeEditorTargets(targets) {
   return {
     scenes: clamp(Number(targets?.scenes || 0), 0, 9999),
     pages: clamp(Number(targets?.pages || 0), 0, 9999),
@@ -810,7 +810,7 @@ function sanitizeWorkspaceTargets(targets) {
   };
 }
 
-function sanitizeWorkspaceTasks(tasks) {
+function sanitizeEditorTasks(tasks) {
   if (!Array.isArray(tasks)) {
     return [];
   }
@@ -858,7 +858,7 @@ function sanitizeWorkspaceTasks(tasks) {
   })).filter((task) => task.title);
 }
 
-function sanitizeWorkspaceNotifications(notifications) {
+function sanitizeEditorNotifications(notifications) {
   if (!Array.isArray(notifications)) {
     return [];
   }

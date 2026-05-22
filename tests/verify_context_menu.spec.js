@@ -121,7 +121,7 @@ test('active block customization lives in settings and updates the left pane', a
   await page.locator('#studioSettingsMenu [data-menu-action="customize-active-blocks"]').click();
   await expect(page.locator('#customModal')).toHaveAttribute('open', '');
   await expect(page.locator('#modalTitle')).toHaveText('Customize Active Blocks');
-  await expect(page.locator('#customModal')).toContainText('Workspace');
+  await expect(page.locator('#customModal')).toContainText('Editor');
   await expect(page.locator('#customModal')).toContainText('Writing');
   await expect(page.locator('#customModal')).toContainText('Revision & Insight');
 
@@ -146,7 +146,7 @@ test('active block customization lives in settings and updates the left pane', a
   await expect(page.locator('[data-left-pane-block="metrics"] .panel-section-body')).toBeHidden();
 });
 
-test('toolbar tools open popups for workspace, story memory, and grammar check', async ({ page }) => {
+test('toolbar tools open popups for editor, story memory, and grammar check', async ({ page }) => {
   const block = await openEditor(page);
 
   await block.click();
@@ -166,9 +166,9 @@ test('toolbar tools open popups for workspace, story memory, and grammar check',
       group.open = true;
     });
   });
-  await page.locator('#studioToolsMenu [data-menu-action="open-workspace"]').click();
-  await expect(page.locator('#modalTitle')).toHaveText('Workspace');
-  await expect(page.locator('#customModal')).toContainText('Team Workspace');
+  await page.locator('#studioToolsMenu [data-menu-action="open-editor"]').click();
+  await expect(page.locator('#modalTitle')).toHaveText('Editor');
+  await expect(page.locator('#customModal')).toContainText('Team Editor');
   await page.locator('#modalCancelBtn').click();
 
   await page.locator('[data-menu-trigger="studioToolsMenu"]').hover();

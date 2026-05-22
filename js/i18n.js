@@ -38,7 +38,7 @@ const TRANSLATIONS = {
     "home.tagline": "Where your stories take flight.",
     "home.scripts": "Scripts:",
     "home.newScript": "New Project",
-    "home.workspace": "Workspace",
+    "home.editor": "Editor",
 
     "menu.newProject": "New Project",
     "menu.openProject": "Open Project",
@@ -274,7 +274,7 @@ const TRANSLATIONS = {
     "home.tagline": "Là où vos histoires prennent leur envol.",
     "home.scripts": "Scripts :",
     "home.newScript": "Nouveau script",
-    "home.workspace": "Espace de travail",
+    "home.editor": "Espace de travail",
 
     "menu.newProject": "Nouveau projet",
     "menu.openProject": "Ouvrir un projet",
@@ -510,7 +510,7 @@ const TRANSLATIONS = {
     "home.tagline": "Wo Ihre Geschichten Flügel bekommen.",
     "home.scripts": "Skripte:",
     "home.newScript": "Neues Skript",
-    "home.workspace": "Arbeitsbereich",
+    "home.editor": "Arbeitsbereich",
 
     "menu.newProject": "Neues Projekt",
     "menu.openProject": "Projekt öffnen",
@@ -730,7 +730,7 @@ const SELECTOR_BINDINGS = [
   [".home-tagline", "home.tagline"],
   [".home-projects-head h2", "home.scripts"],
   ["#newProjectBtn", "home.newScript"],
-  [".workspace-brand span", "home.workspace"],
+  [".editor-brand span", "home.editor"],
   [".studio-nav [data-menu-trigger='studioFileMenu']", "nav.file"],
   [".studio-nav [data-menu-trigger='studioEditMenu']", "nav.edit"],
   [".studio-nav [data-menu-trigger='studioFormatMenu']", "nav.format"],
