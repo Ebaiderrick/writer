@@ -9,8 +9,13 @@ export const ACTIVITY_CATEGORIES = {
   role: 'role',
   workspace: 'workspace',
   governance: 'governance',
-  system: 'system'
+  system: 'system',
+  edit: 'edit',
+  create: 'create',
+  restore: 'restore'
 };
+
+const _editThrottle = new Map();
 
 export async function logActivity(projectId, message, { category = ACTIVITY_CATEGORIES.system } = {}) {
   const project = state.projects.find(p => p.id === projectId);
@@ -48,6 +53,16 @@ export async function logActivity(projectId, message, { category = ACTIVITY_CATE
       console.error('Failed to sync activity log', err);
     }
   }
+}
+
+export async function logEditActivity(projectId) {
+  const FIVE_MIN = 5 * 60 * 1000;
+  const last = _editThrottle.get(projectId) || 0;
+  if (Date.now() - last < FIVE_MIN) return;
+  _editThrottle.set(projectId, Date.now());
+  return logActivity(projectId, 'Saved changes to the script.', {
+    category: ACTIVITY_CATEGORIES.edit
+  });
 }
 
 export async function logCommentActivity(projectId, action, { text = '' } = {}) {

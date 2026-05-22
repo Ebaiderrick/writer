@@ -166,11 +166,8 @@
           <nav class="home-nav" aria-label="Primary navigation">
             <button class="nav-link" type="button" data-home-nav="file" data-menu-trigger="homeFileMenu">File</button>
             <button class="nav-link" type="button" data-home-nav="view" data-menu-trigger="homeThemeMenu">View</button>
-            <button class="nav-link" type="button" data-home-nav="format">Format</button>
-            <button class="nav-link" type="button" data-home-nav="metrics">Metrics</button>
-            <button class="nav-link" type="button" data-home-nav="revision">Revision</button>
             <button class="nav-link" type="button" data-menu-trigger="homeCollabMenu">Collaborate</button>
-            <button class="nav-link" type="button" data-home-nav="shortcuts">Shortcuts</button>
+            <button class="nav-link" type="button" data-home-nav="shortcuts">Help</button>
           </nav>
           <div id="homeFileMenu" class="nav-menu nav-menu-wide" hidden>
             <div class="nav-menu-section">
@@ -491,6 +488,28 @@
                 <button class="primary-button billing-upgrade-btn" id="billingUpgradePlusBtn" style="margin-bottom:8px">Upgrade to Premium Plus — $25/mo</button>
                 <button class="ghost-button" id="billingPortalBtn">Manage Subscription</button>
               </div>
+
+              <details class="plan-compare-details">
+                <summary class="plan-compare-summary">Compare plans</summary>
+                <table class="plan-compare-table" aria-label="Plan comparison">
+                  <thead>
+                    <tr>
+                      <th>Feature</th>
+                      <th>Free</th>
+                      <th class="plan-col-pro">Premium</th>
+                      <th class="plan-col-plus">Plus</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>AI requests / month</td><td>50</td><td>300</td><td>1,000</td></tr>
+                    <tr><td>Projects</td><td>2</td><td>Unlimited</td><td>Unlimited</td></tr>
+                    <tr><td>Collaborators</td><td>—</td><td>✓</td><td>✓</td></tr>
+                    <tr><td>Comments &amp; replies</td><td>—</td><td>✓</td><td>✓</td></tr>
+                    <tr><td>Workspace dashboard</td><td>—</td><td>✓</td><td>✓</td></tr>
+                    <tr><td>Priority support</td><td>—</td><td>—</td><td>✓</td></tr>
+                  </tbody>
+                </table>
+              </details>
             </div>
           </section>
 
@@ -757,7 +776,7 @@
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
             <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
             <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tool</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate <span id="studioCollabBadge" class="collab-badge" hidden></span></button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
 
@@ -1263,6 +1282,7 @@
                 </div>
                 <div class="panel-section-body">
                   <div id="workspaceAwareness" class="workspace-awareness" hidden></div>
+                  <div id="miniActivityFeed" class="mini-activity-feed" hidden></div>
                   <button class="ghost-button btn-sm" data-menu-action="open-workspace">Open Workspace</button>
                 </div>
               </section>
@@ -1631,7 +1651,8 @@
       <span class="comment-compose-label">Add comment</span>
       <button id="commentComposeCancel" class="comment-compose-close" type="button" aria-label="Cancel">✕</button>
     </div>
-    <textarea id="commentComposeText" class="comment-compose-textarea" placeholder="Write a comment…" rows="3"></textarea>
+    <textarea id="commentComposeText" class="comment-compose-textarea" placeholder="Write a comment… (type @ to mention)" rows="3"></textarea>
+    <div id="mentionDropdown" class="mention-dropdown" hidden></div>
     <div class="comment-compose-footer">
       <button id="commentComposeSubmit" class="ghost-button comment-compose-submit" type="button">Post</button>
     </div>

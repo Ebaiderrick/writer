@@ -31,6 +31,10 @@ let unsubComments = null;
 let unsubSharedProject = null;
 let sharedProjectWatchers = new Map();
 
+let _presenceInterval = null;
+let _unsubPresence = null;
+let _activePresence = [];
+
 // ── Comments collection path ──────────────────────────────────
 // Personal projects → users/{uid}/projects/{id}/comments
 // Shared projects   → sharedProjects/{id}/comments
@@ -85,6 +89,7 @@ export function initCollaboration() {
 }
 
 export function cleanupCollaboration() {
+  stopPresenceHeartbeat();
   [unsubInvites, unsubSentInvites, unsubComments, unsubSharedProject].forEach(fn => fn?.());
   unsubInvites = unsubSentInvites = unsubComments = unsubSharedProject = null;
   sharedProjectWatchers.forEach(fn => fn?.());
@@ -97,11 +102,44 @@ export function onStudioEnter(projectId) {
   renderCollaboratorList();
   if (project.isShared) {
     subscribeToSharedProject(projectId);
+    startPresenceHeartbeat(projectId);
   } else {
+    stopPresenceHeartbeat();
     if (unsubSharedProject) { unsubSharedProject(); unsubSharedProject = null; }
   }
   syncSharedProjectWatchers();
   subscribeToComments(project);
+  _initMentionAutocomplete();
+}
+
+export function startPresenceHeartbeat(projectId) {
+  stopPresenceHeartbeat();
+  const user = auth.currentUser;
+  if (!user) return;
+  const presRef = doc(db, 'sharedProjects', projectId, 'presence', user.uid);
+  const write = () => setDoc(presRef, {
+    uid: user.uid,
+    name: user.displayName || user.email || 'Someone',
+    seenAt: new Date().toISOString()
+  }, { merge: true }).catch(() => {});
+  write();
+  _presenceInterval = setInterval(write, 60000);
+  const presCol = collection(db, 'sharedProjects', projectId, 'presence');
+  _unsubPresence = onSnapshot(presCol, snap => {
+    const now = Date.now();
+    const STALE = 3 * 60 * 1000;
+    _activePresence = snap.docs.map(d => d.data())
+      .filter(p => p.seenAt && (now - new Date(p.seenAt).getTime()) < STALE)
+      .filter(p => p.uid !== user.uid);
+    const proj = state.projects.find(p => p.id === projectId);
+    if (proj) renderWorkspaceAwareness(proj);
+  }, () => {});
+}
+
+export function stopPresenceHeartbeat() {
+  if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
+  if (_unsubPresence) { _unsubPresence(); _unsubPresence = null; }
+  _activePresence = [];
 }
 
 export function getUserProjectRole(project = getCurrentProject(), user = auth.currentUser) {
@@ -812,6 +850,7 @@ export function subscribeToComments(projectOrId) {
     renderCommentList(allComments, project.id);
     renderLeftPaneComments();
     updateCommentIcons(allComments);
+    _updateUnresolvedBadge(allComments);
   }, err => console.error('[comments]', err));
 }
 
@@ -1263,6 +1302,7 @@ export function renderLeftPaneComments() {
   const countEl = document.getElementById('commentCount');
   const topLevel = allComments.filter(c => !c.parentId);
   if (countEl) countEl.textContent = `${topLevel.length} comment${topLevel.length !== 1 ? 's' : ''}`;
+  _updateUnresolvedBadge(allComments);
   // If the list dialog is open, refresh it in place
   const dialog = document.getElementById('commentListDialog');
   if (dialog?.open) populateCommentListDialog();
@@ -1632,6 +1672,12 @@ export function renderWorkspaceAwareness(project) {
 
   el.hidden = false;
   el.innerHTML = [
+    _activePresence.length
+      ? `<div class="awareness-row awareness-online">
+           <span class="awareness-pulse" aria-hidden="true"></span>
+           <span>${_activePresence.map(p => esc(p.name.split(' ')[0])).join(', ')} ${_activePresence.length === 1 ? 'is' : 'are'} here now</span>
+         </div>`
+      : '',
     lastEditor && lastAt
       ? `<div class="awareness-row">
            <span class="awareness-icon" aria-hidden="true">✏️</span>
@@ -1653,6 +1699,102 @@ export function renderWorkspaceAwareness(project) {
        <span>${openCount} open comment${openCount !== 1 ? 's' : ''}</span>
      </div>`
   ].filter(Boolean).join('');
+
+  // Mini activity feed (last 4 entries)
+  _renderMiniActivityFeed(log);
+}
+
+function _renderMiniActivityFeed(log) {
+  const feed = document.getElementById('miniActivityFeed');
+  if (!feed) return;
+  const entries = [...(log || [])].reverse().slice(0, 4);
+  if (!entries.length) { feed.hidden = true; return; }
+  const ICONS = { comment: '💬', invite: '✉️', member: '👤', role: '🔑', workspace: '🏷️', edit: '✏️', create: '🎬', restore: '↩️', system: '⚙️' };
+  feed.hidden = false;
+  feed.innerHTML = `<div class="mini-feed-label">Recent Activity</div>` +
+    entries.map(e => `
+      <div class="mini-feed-item">
+        <span class="mini-feed-icon">${ICONS[e.category] || '⚙️'}</span>
+        <div class="mini-feed-body">
+          <span class="mini-feed-user">${esc(e.user)}</span>
+          <span class="mini-feed-msg">${esc(e.message)}</span>
+          <span class="mini-feed-time">${relativeTime(e.timestamp)}</span>
+        </div>
+      </div>`
+    ).join('');
+}
+
+function _updateUnresolvedBadge(comments) {
+  const count = (comments || allComments).filter(c => !c.parentId && !c.resolved).length;
+  const badge = document.getElementById('studioCollabBadge');
+  if (!badge) return;
+  badge.textContent = count || '';
+  badge.hidden = !count;
+}
+
+function _getMentionCandidates(project, query) {
+  if (!project) return [];
+  const q = (query || '').toLowerCase();
+  const results = [];
+  const seen = new Set();
+  const add = (name, email) => {
+    const display = name || email || '';
+    const handle = display.split('@')[0].replace(/\s+/g, '');
+    if (!handle || seen.has(handle)) return;
+    if (!q || handle.toLowerCase().includes(q) || display.toLowerCase().includes(q)) {
+      results.push({ handle, display });
+      seen.add(handle);
+    }
+  };
+  add(project.ownerName, project.ownerEmail);
+  Object.values(project.collaborators || {}).forEach(c => add(c.name, c.email));
+  return results.slice(0, 5);
+}
+
+function _initMentionAutocomplete() {
+  const textarea = document.getElementById('commentComposeText');
+  const dropdown = document.getElementById('mentionDropdown');
+  if (!textarea || !dropdown || textarea.dataset.mentionBound) return;
+  textarea.dataset.mentionBound = '1';
+
+  textarea.addEventListener('input', () => {
+    const text = textarea.value;
+    const pos = textarea.selectionStart;
+    const before = text.slice(0, pos);
+    const m = before.match(/@([\w.]*)$/);
+    if (!m) { dropdown.hidden = true; return; }
+    const project = getCurrentProject();
+    const candidates = _getMentionCandidates(project, m[1]);
+    if (!candidates.length) { dropdown.hidden = true; return; }
+    dropdown.innerHTML = candidates.map(c =>
+      `<button class="mention-option" type="button" data-handle="${esc(c.handle)}" data-query-len="${m[0].length}">
+         <span class="mention-name">${esc(c.display)}</span>
+         <span class="mention-handle">@${esc(c.handle)}</span>
+       </button>`
+    ).join('');
+    dropdown.hidden = false;
+    dropdown.querySelectorAll('.mention-option').forEach(btn => {
+      btn.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const qLen = parseInt(btn.dataset.queryLen, 10);
+        const pos2 = textarea.selectionStart;
+        const newText = textarea.value.slice(0, pos2 - qLen) + `@${btn.dataset.handle} ` + textarea.value.slice(pos2);
+        textarea.value = newText;
+        textarea.focus();
+        dropdown.hidden = true;
+      });
+    });
+  });
+
+  textarea.addEventListener('blur', () => setTimeout(() => { dropdown.hidden = true; }, 150));
+  textarea.addEventListener('keydown', e => {
+    if (dropdown.hidden) return;
+    if (e.key === 'Escape') { dropdown.hidden = true; }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      dropdown.querySelector('.mention-option')?.focus();
+    }
+  });
 }
 
 function esc(str) {

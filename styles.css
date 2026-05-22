@@ -8132,3 +8132,185 @@ html[data-theme="white"] .user-trigger {
   vertical-align: middle;
   margin-left: 4px;
 }
+
+/* ── BATCH 7: Presence, Mention Autocomplete, Mini Activity Feed ── */
+
+/* Presence pulse indicator */
+.awareness-online {
+  color: var(--accent, #f43f5e);
+  font-weight: 500;
+}
+.awareness-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  margin-right: 6px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  animation: presencePulse 2s ease-in-out infinite;
+}
+@keyframes presencePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+/* Mention autocomplete dropdown */
+.mention-dropdown {
+  width: 100%;
+  background: var(--panel, #1e1e2e);
+  border: 1px solid var(--line, rgba(255,255,255,.12));
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  overflow: hidden;
+}
+.mention-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+  transition: background 0.12s;
+}
+.mention-option:hover,
+.mention-option:focus {
+  background: var(--line, rgba(255,255,255,.08));
+  outline: none;
+}
+.mention-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mention-handle {
+  font-size: 0.74rem;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+/* Mini activity feed in left pane workspace section */
+.mini-activity-feed {
+  margin-top: 8px;
+  border-top: 1px solid var(--line, rgba(255,255,255,.08));
+  padding-top: 8px;
+}
+.mini-feed-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.45;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.mini-feed-item {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  padding: 4px 0;
+}
+.mini-feed-icon {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+.mini-feed-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.mini-feed-user {
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mini-feed-msg {
+  font-size: 0.72rem;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mini-feed-time {
+  font-size: 0.65rem;
+  opacity: 0.45;
+}
+
+/* Collaborate button badge in studio nav */
+#studioCollabBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: var(--accent, #f43f5e);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 4px;
+  vertical-align: middle;
+  margin-left: 3px;
+  line-height: 1;
+}
+
+/* ── BATCH 8: Plan comparison table ── */
+.plan-compare-details {
+  margin-top: 20px;
+  border-top: 1px solid var(--line, rgba(255,255,255,.1));
+  padding-top: 12px;
+}
+.plan-compare-summary {
+  font-size: 0.8rem;
+  opacity: 0.6;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.plan-compare-summary::-webkit-details-marker { display: none; }
+.plan-compare-summary::before {
+  content: '▶';
+  font-size: 0.6rem;
+  transition: transform 0.15s;
+}
+details[open] .plan-compare-summary::before { transform: rotate(90deg); }
+.plan-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin-top: 10px;
+}
+.plan-compare-table th,
+.plan-compare-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--line, rgba(255,255,255,.06));
+}
+.plan-compare-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+  font-weight: 600;
+}
+.plan-compare-table .plan-col-pro { color: var(--accent, #f43f5e); }
+.plan-compare-table .plan-col-plus { background: linear-gradient(90deg, #7c3aed, #f43f5e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.plan-compare-table td:first-child { opacity: 0.75; }
+.plan-compare-table tr:last-child td { border-bottom: none; }

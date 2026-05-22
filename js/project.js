@@ -5,7 +5,7 @@ import { t } from './i18n.js';
 import { auth, db } from './firebase.js';
 import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch, limit, query } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { Recovery } from './recovery.js';
-import { logActivity, ACTIVITY_CATEGORIES } from './activity.js';
+import { logActivity, logEditActivity, ACTIVITY_CATEGORIES } from './activity.js';
 import { showToast } from './toast.js';
 
 let firestoreSyncTimer = null;
@@ -107,6 +107,7 @@ async function syncCurrentProjectToFirestore(attempt = 0) {
           lastEditorName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
           lastActivityAt: new Date().toISOString()
         }, { merge: true });
+        logEditActivity(project.id).catch(() => {});
       }
     }
 
