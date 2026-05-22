@@ -4,6 +4,7 @@ import { Logger } from './logger.js';
 import { Funnel } from './funnel.js';
 import { showToast } from './toast.js';
 import { refs } from './dom.js';
+import { Billing, FREE_SCRIPT_LIMIT } from './billing.js';
 import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
@@ -115,7 +116,16 @@ function ensureDefaultWorkspaceRoot() {
   });
 }
 
+function _ownedScriptCount() {
+  return state.projects.filter(p => !p.isWorkspaceRoot && !p.isShared).length;
+}
+
 async function launchNewCreationFlow() {
+  if (!Billing.canCreateScript(_ownedScriptCount())) {
+    Billing.showUpgradeModal(`You've reached the ${FREE_SCRIPT_LIMIT}-script limit on the Free plan. Upgrade to Premium for unlimited scripts.`);
+    return;
+  }
+
   const selection = await showNewCreationFlow();
   if (!selection || selection.workType !== "film-script") {
     return;
@@ -157,6 +167,11 @@ function openWorkspaceDashboard(workspaceId) {
 }
 
 async function createProjectInsideCurrentWorkspace() {
+  if (!Billing.canCreateScript(_ownedScriptCount())) {
+    Billing.showUpgradeModal(`You've reached the ${FREE_SCRIPT_LIMIT}-script limit on the Free plan. Upgrade to Premium for unlimited scripts.`);
+    return;
+  }
+
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId) || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId);
   if (!workspaceProject) {
     launchNewCreationFlow();

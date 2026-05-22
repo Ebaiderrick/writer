@@ -8116,6 +8116,10 @@ html[data-theme="white"] .user-trigger {
   background: var(--accent, #f43f5e);
   color: #fff;
 }
+.plan-badge-plus-active {
+  background: linear-gradient(90deg, #7c3aed, #f43f5e);
+  color: #fff;
+}
 #headerProBadge {
   font-size: 0.65rem;
   font-weight: 700;
