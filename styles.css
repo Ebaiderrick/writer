@@ -5716,6 +5716,12 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   border-color: var(--accent);
 }
 
+.btn-google:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .google-icon {
   width: 20px;
   height: 20px;

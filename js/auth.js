@@ -33,6 +33,12 @@ import { Billing } from './billing.js';
 const SESSION_KEY = 'eyawriter_session';
 
 const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+let _googleAuthInProgress = false;
+
 const PROFILE_BIO_PLACEHOLDER = 'About me';
 const USERNAME_CHANGE_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -105,9 +111,22 @@ export const Auth = (() => {
       }
     });
 
-    // Handle Google redirect result
-    getRedirectResult(auth).catch(err => {
-      console.error('Google redirect result error:', err.code, err);
+    // Handle return from signInWithRedirect — show loading state if we triggered one
+    const _isRedirectReturn = sessionStorage.getItem('eyawriter_google_redirect') === '1';
+    if (_isRedirectReturn) {
+      sessionStorage.removeItem('eyawriter_google_redirect');
+      _googleAuthInProgress = true;
+      _setGoogleBtnsLoading('Signing in…');
+    }
+    getRedirectResult(auth).then(result => {
+      if (result?.user) {
+        // Redirect succeeded; onAuthStateChanged handles the transition
+        // Leave buttons in loading state — auth view will be hidden when home renders
+      }
+    }).catch(err => {
+      if (_isRedirectReturn) {
+        _resetGoogleBtns();
+      }
       const msg = friendlyError(err);
       if (msg) customAlert(msg);
     });
@@ -190,11 +209,15 @@ export const Auth = (() => {
 
     onAuthStateChanged(auth, async firebaseUser => {
       if (firebaseUser) {
-        if (!firebaseUser.emailVerified) {
+        // Google accounts are always verified; only block unverified email/password accounts
+        const isGoogleUser = firebaseUser.providerData?.some(p => p.providerId === 'google.com');
+        if (!firebaseUser.emailVerified && !isGoogleUser) {
+          _resetGoogleBtns();
           await firebaseSignOut(auth);
           showToast('Please verify your email before signing in.', 'warning', 5000);
           return;
         }
+        _googleAuthInProgress = false;
         cacheSession(firebaseUser);
         Telemetry.track('login', { method: firebaseUser.providerData?.[0]?.providerId || 'email' });
         await ensureUsersByEmail(firebaseUser);
@@ -214,6 +237,7 @@ export const Auth = (() => {
         Billing.init().catch(() => {});
         setTimeout(() => Onboarding.maybeShow(), 800);
       } else {
+        _resetGoogleBtns();
         cleanupCollaboration();
         const session = getCachedSession();
         if (!session?.isDemoSession) {
@@ -365,23 +389,59 @@ export const Auth = (() => {
   }
 
   async function handleGoogleSignIn() {
+    if (_googleAuthInProgress) return;
+    _googleAuthInProgress = true;
+    _setGoogleBtnsLoading('Connecting…');
+
     try {
       await signInWithPopup(auth, googleProvider);
+      // onAuthStateChanged fires next and transitions the view
+      // Leave buttons loading — they will be hidden when auth view disappears
     } catch (err) {
-      console.error('Google sign-in error:', err.code, err);
       if (err.code === 'auth/popup-blocked') {
         try {
+          sessionStorage.setItem('eyawriter_google_redirect', '1');
           await signInWithRedirect(auth, googleProvider);
+          // Page navigates away — no reset needed
         } catch (redirectErr) {
-          console.error('Google redirect error:', redirectErr.code, redirectErr);
+          sessionStorage.removeItem('eyawriter_google_redirect');
+          _resetGoogleBtns();
           const msg = friendlyError(redirectErr);
           if (msg) customAlert(msg);
         }
+      } else if (err.code === 'auth/cancelled-popup-request' || err.code === 'auth/popup-closed-by-user') {
+        _resetGoogleBtns();
+        // Silent — user dismissed the popup
       } else {
+        _resetGoogleBtns();
         const msg = friendlyError(err);
         if (msg) customAlert(msg);
       }
     }
+  }
+
+  function _setGoogleBtnsLoading(label) {
+    _getGoogleBtns().forEach(b => {
+      b.disabled = true;
+      const span = b.querySelector('.btn-google-label');
+      if (span) span.textContent = label;
+    });
+  }
+
+  function _resetGoogleBtns() {
+    _googleAuthInProgress = false;
+    _getGoogleBtns().forEach(b => {
+      b.disabled = false;
+      const span = b.querySelector('.btn-google-label');
+      if (span) span.textContent = 'Continue with Google';
+    });
+  }
+
+  function _getGoogleBtns() {
+    return [
+      document.getElementById('google-signup'),
+      document.getElementById('google-signin')
+    ].filter(Boolean);
   }
 
   async function handleSignOut() {
@@ -830,24 +890,37 @@ export const Auth = (() => {
 
   function friendlyError(err) {
     const map = {
+      // Email / password
       'auth/email-already-in-use': 'An account with this email already exists. Please sign in instead.',
       'auth/invalid-email': 'Please enter a valid email address.',
       'auth/wrong-password': 'Incorrect email or password. Please try again.',
       'auth/user-not-found': 'Incorrect email or password. Please try again.',
       'auth/invalid-credential': 'Incorrect email or password. Please try again.',
-      'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
       'auth/weak-password': 'Password must be at least 6 characters.',
-      'auth/network-request-failed': 'Network error. Please check your connection.',
-      'auth/popup-blocked': 'Pop-up was blocked. Please allow pop-ups and try again.',
-      'auth/unauthorized-domain': 'Sign-in is not allowed from this domain. Please contact support.',
-      'auth/operation-not-allowed': 'Google sign-in is not enabled. Please contact support.',
-      'auth/internal-error': 'An authentication error occurred. Please try again.',
+      // Rate limiting / access
+      'auth/too-many-requests': 'Too many sign-in attempts. Please wait a few minutes and try again.',
+      'auth/user-disabled': 'This account has been disabled. Please contact support.',
+      // Google / OAuth
+      'auth/popup-blocked': 'Google sign-in popup was blocked. Please allow pop-ups for this site and try again.',
+      'auth/popup-closed-by-user': null,
       'auth/cancelled-popup-request': null,
-      'auth/popup-closed-by-user': null
+      'auth/account-exists-with-different-credential': 'An account already exists with this email. Please sign in with the method you used originally.',
+      'auth/credential-already-in-use': 'This Google account is already linked to a different user.',
+      'auth/unauthorized-domain': 'Google sign-in is not authorized for this domain. Please contact support.',
+      'auth/operation-not-allowed': 'Google sign-in is not enabled for this app. Please contact support.',
+      // Configuration
+      'auth/invalid-api-key': 'Firebase configuration error. Please contact support.',
+      'auth/app-not-authorized': 'This app is not authorized to use Firebase Authentication. Please contact support.',
+      'auth/web-storage-unsupported': 'Your browser has cookies or storage disabled. Please enable them and try again.',
+      // Network / general
+      'auth/network-request-failed': 'Network error. Please check your connection and try again.',
+      'auth/timeout': 'Sign-in timed out. Please try again.',
+      'auth/internal-error': 'An authentication error occurred. Please try again.',
+      'auth/requires-recent-login': 'Please sign out and sign back in before making this change.'
     };
     const msg = map[err.code];
     if (msg === null) return null;
-    return msg || 'Something went wrong. Please try again.';
+    return msg || `Sign-in failed (${err.code || 'unknown error'}). Please try again.`;
   }
 
   function normalizeEmail(email) {
