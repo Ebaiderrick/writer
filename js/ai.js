@@ -7,6 +7,7 @@ import { customAlert, showModal } from "./ui.js";
 import { Telemetry } from "./telemetry.js";
 import { Logger } from "./logger.js";
 import { auth } from "./firebase.js";
+import { Quota, FREE_MONTHLY_QUOTA, PREMIUM_MONTHLY_QUOTA, PREMIUM_PLUS_MONTHLY_QUOTA } from "./quota.js";
 
 // ── AI response cache (in-memory, 5-minute TTL, max 50 entries) ──────────────
 
@@ -201,6 +202,20 @@ export const AI = (() => {
 
       menuEl.appendChild(item);
     });
+
+    // Show low-quota warning using cached quota data (non-blocking)
+    const cached = Quota.getCached();
+    if (cached && cached.remaining <= 10 && cached.remaining > 0) {
+      const footer = document.createElement("div");
+      footer.style.cssText = "margin-top:8px;padding:5px 8px;border-top:1px solid var(--line);font-size:0.78rem;color:var(--muted);";
+      footer.textContent = `⚠ ${cached.remaining} AI request${cached.remaining !== 1 ? 's' : ''} left this month`;
+      menuEl.appendChild(footer);
+    } else if (cached && cached.remaining === 0) {
+      const footer = document.createElement("div");
+      footer.style.cssText = "margin-top:8px;padding:5px 8px;border-top:1px solid var(--line);font-size:0.78rem;color:#ef4444;";
+      footer.textContent = "AI limit reached — upgrade for more requests";
+      menuEl.appendChild(footer);
+    }
 
     blockRow.appendChild(menuEl);
   }
@@ -415,7 +430,10 @@ export const AI = (() => {
       if (error?.code === 'quota_exceeded') {
         closeMenu();
         import('./billing.js').then(({ Billing }) => {
-          Billing.showUpgradeModal('You\'ve used all 50 free AI requests this month.');
+          const plan = error.plan || Quota.getCached()?.plan || 'free';
+          const planLabel = plan === 'premium_plus' ? 'Premium Plus' : plan === 'pro' ? 'Premium' : 'Free';
+          const limit = plan === 'premium_plus' ? PREMIUM_PLUS_MONTHLY_QUOTA : plan === 'pro' ? PREMIUM_MONTHLY_QUOTA : FREE_MONTHLY_QUOTA;
+          Billing.showUpgradeModal(`You've used all ${limit} AI requests on the ${planLabel} plan this month.`);
         });
         return;
       }
@@ -473,6 +491,18 @@ export const AI = (() => {
       const id = activeBlock?.dataset.id;
       const line = id ? getLine(id) : null;
       if (line) {
+        // Overwrite protection: warn if the block was edited while AI was working
+        const currentText = activeBlock?.innerText?.trim() || '';
+        if (currentText !== request.current && currentText) {
+          showMessage('Block was edited while AI was working — replacing with AI output anyway.', 'info');
+          setTimeout(() => {
+            line.text = text;
+            renderStudio();
+            queueSave();
+            closeMenu();
+          }, 1500);
+          return;
+        }
         line.text = text;
         renderStudio();
         queueSave();
@@ -703,17 +733,32 @@ export const AI = (() => {
       } catch { /* skip token if unavailable */ }
     }
 
-    const response = await fetch(getAiEndpoint(), {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ ...request, stream: Boolean(onChunk) })
-    });
+    const controller = new AbortController();
+    // Streaming responses can legitimately take longer
+    const timeoutMs = onChunk ? 90000 : 30000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response;
+    try {
+      response = await fetch(getAiEndpoint(), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...request, stream: Boolean(onChunk) }),
+        signal: controller.signal
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw new Error('AI request timed out. Please try again.');
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       if (response.status === 429 && data.error === 'quota_exceeded') {
         const err = new Error('quota_exceeded');
         err.code = 'quota_exceeded';
+        err.plan = data.plan;
         throw err;
       }
       let msg = data.error || `AI assistant failed (Status ${response.status})`;

@@ -50,9 +50,9 @@ export const handler = async (event) => {
   console.log(`[${requestId}] AI request type=${type || "?"} action=${action || "?"}`);
 
   // Quota enforcement
-  const FREE_MONTHLY_QUOTA = 50;
+  const PLAN_QUOTAS = { free: 50, pro: 300, premium_plus: 1000 };
   let quotaUid = null;
-  let isProUser = false;
+  let quotaPlan = 'free';
 
   if (adminAuth && adminDb) {
     const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
@@ -68,17 +68,16 @@ export const handler = async (event) => {
         const qSnap = await adminDb.doc(`users/${quotaUid}/quota/current`).get();
         if (qSnap.exists) {
           const q = qSnap.data();
-          isProUser = q.plan === 'pro';
-          if (!isProUser) {
-            const pastReset = q.resetAt && new Date() >= new Date(q.resetAt);
-            const usedCount = pastReset ? 0 : (q.count || 0);
-            if (usedCount >= FREE_MONTHLY_QUOTA) {
-              return {
-                statusCode: 429,
-                headers: jsonHeaders(requestId),
-                body: JSON.stringify({ error: 'quota_exceeded', remaining: 0 })
-              };
-            }
+          quotaPlan = q.plan || 'free';
+          const monthlyLimit = PLAN_QUOTAS[quotaPlan] ?? PLAN_QUOTAS.free;
+          const pastReset = q.resetAt && new Date() >= new Date(q.resetAt);
+          const usedCount = pastReset ? 0 : (q.count || 0);
+          if (usedCount >= monthlyLimit) {
+            return {
+              statusCode: 429,
+              headers: jsonHeaders(requestId),
+              body: JSON.stringify({ error: 'quota_exceeded', remaining: 0, plan: quotaPlan })
+            };
           }
         }
       } catch { /* quota check failed — allow request */ }
@@ -161,8 +160,8 @@ YOUR OUTPUT:`;
 
     console.log(`[${requestId}] AI request completed successfully`);
 
-    // Increment quota for non-pro authenticated users
-    if (adminDb && quotaUid && !isProUser) {
+    // Increment quota for all authenticated users (all plans have limits)
+    if (adminDb && quotaUid) {
       try {
         const ref = adminDb.doc(`users/${quotaUid}/quota/current`);
         const now = new Date();

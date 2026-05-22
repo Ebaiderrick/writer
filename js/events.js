@@ -3259,6 +3259,15 @@ async function exportWord() {
     const project = syncProjectFromInputs() || getCurrentProject();
     if (!project) return;
 
+    if (!window.docx?.Document) {
+      showToast('Word export engine is still loading — please try again in a moment', 'warning', 4000);
+      return;
+    }
+
+    const btns = [refs.exportWordBtn, document.querySelector('[data-menu-action="export-word"]')].filter(Boolean);
+    const origLabels = btns.map(b => b.textContent);
+    btns.forEach(b => { b.disabled = true; b.textContent = 'Exporting…'; });
+
     try {
       const blob = await buildWordDocxBlob(project);
       downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
@@ -3267,6 +3276,8 @@ async function exportWord() {
     } catch (error) {
       Logger.capture('exportWord', error);
       showToast('Word export failed — try again once the DOCX engine loads', 'error', 5000);
+    } finally {
+      btns.forEach((b, i) => { b.disabled = false; b.textContent = origLabels[i]; });
     }
 }
 

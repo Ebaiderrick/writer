@@ -8097,6 +8097,11 @@ html[data-theme="white"] .user-trigger {
   color: var(--accent, #f43f5e);
   font-weight: 600;
 }
+.quota-warning-label {
+  font-size: 0.78rem;
+  color: #f59e0b;
+  font-weight: 600;
+}
 .plan-badge-current {
   font-size: 0.8rem;
   font-weight: 700;

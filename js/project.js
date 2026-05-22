@@ -6,6 +6,7 @@ import { auth, db } from './firebase.js';
 import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch, limit, query } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { Recovery } from './recovery.js';
 import { logActivity, ACTIVITY_CATEGORIES } from './activity.js';
+import { showToast } from './toast.js';
 
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -43,7 +44,7 @@ function queueFirestoreSync() {
   firestoreSyncTimer = setTimeout(syncCurrentProjectToFirestore, 1500);
 }
 
-async function syncCurrentProjectToFirestore() {
+async function syncCurrentProjectToFirestore(attempt = 0) {
   const userId = auth.currentUser?.uid;
   if (!userId) return;
   const project = getCurrentProject();
@@ -121,8 +122,13 @@ async function syncCurrentProjectToFirestore() {
     Recovery.clearOfflineSyncPending();
 
   } catch (err) {
-    console.error('Firestore sync failed', err);
-    Recovery.markOfflineSyncPending();
+    if (attempt < 2) {
+      const delay = Math.pow(2, attempt + 1) * 1000; // 2s then 4s
+      setTimeout(() => syncCurrentProjectToFirestore(attempt + 1), delay);
+    } else {
+      console.error('Firestore sync failed after retries', err);
+      Recovery.markOfflineSyncPending();
+    }
   }
 }
 
@@ -589,26 +595,32 @@ export function upsertProject(project) {
 
 export function persistProjects(forceSavedBadge = false, { syncInputs = true } = {}) {
   if (syncInputs) syncProjectFromInputs();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    currentProjectId: state.currentProjectId,
-    currentWorkspaceId: state.currentWorkspaceId,
-    projects: state.projects,
-    aiAssist: state.aiAssist,
-    toolStripCollapsed: state.toolStripCollapsed,
-      autoNumberScenes: state.autoNumberScenes,
-      backgroundAnimation: state.backgroundAnimation,
-      theme: state.theme,
-      language: state.language,
-      writingLanguage: state.writingLanguage,
-      grammarCheck: state.grammarCheck,
-      localBackupEnabled: state.localBackupEnabled,
-      localSaveIntervalMinutes: state.localSaveIntervalMinutes,
-      backupPrompted: state.backupPrompted,
-      viewOptions: state.viewOptions,
-    leftPaneBlocks: state.leftPaneBlocks,
-    leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
-    rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
-  }));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      currentProjectId: state.currentProjectId,
+      currentWorkspaceId: state.currentWorkspaceId,
+      projects: state.projects,
+      aiAssist: state.aiAssist,
+      toolStripCollapsed: state.toolStripCollapsed,
+        autoNumberScenes: state.autoNumberScenes,
+        backgroundAnimation: state.backgroundAnimation,
+        theme: state.theme,
+        language: state.language,
+        writingLanguage: state.writingLanguage,
+        grammarCheck: state.grammarCheck,
+        localBackupEnabled: state.localBackupEnabled,
+        localSaveIntervalMinutes: state.localSaveIntervalMinutes,
+        backupPrompted: state.backupPrompted,
+        viewOptions: state.viewOptions,
+      leftPaneBlocks: state.leftPaneBlocks,
+      leftWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--left-pane-width"), 10),
+      rightWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--right-pane-width"), 10)
+    }));
+  } catch (e) {
+    if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+      showToast('Local storage is full — your work is syncing to the cloud only. Export a backup to be safe.', 'warning', 8000);
+    }
+  }
   Recovery.writeSnapshot(state.projects);
   if (refs.saveBadge) {
     const offline = !Recovery.isOnline();
