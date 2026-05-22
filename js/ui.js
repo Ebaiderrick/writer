@@ -861,7 +861,7 @@ export function showNewCreationFlow() {
         <button class="creation-option-card is-disabled" type="button" disabled>
           <span class="creation-option-icon">TEXT</span>
           <strong>Prose / Poetry</strong>
-          <small>Coming soon. This path will open after the film workflow is fully polished.</small>
+          <small>Coming soon.</small>
           <span class="creation-option-badge">Soon</span>
         </button>
       </div>

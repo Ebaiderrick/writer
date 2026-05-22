@@ -51,11 +51,11 @@ export const Billing = {
         window.location.href = data.url;
       } else {
         showToast(data.error || 'Checkout failed — try again', 'error');
-        btns.forEach(b => { b.disabled = false; b.textContent = 'Upgrade to Pro — $12/mo'; });
+        btns.forEach(b => { b.disabled = false; b.textContent = 'Upgrade to Premium — $10/mo'; });
       }
     } catch {
       showToast('Network error — try again', 'error');
-      btns.forEach(b => { b.disabled = false; b.textContent = 'Upgrade to Pro — $12/mo'; });
+      btns.forEach(b => { b.disabled = false; b.textContent = 'Upgrade to Premium — $10/mo'; });
     }
   },
 
@@ -80,7 +80,7 @@ export const Billing = {
     const modal = document.getElementById('upgradeModal');
     if (!modal) return;
     const reasonEl = document.getElementById('upgradeModalReason');
-    if (reasonEl) reasonEl.textContent = reason || "Unlock unlimited AI requests and Pro features.";
+    if (reasonEl) reasonEl.textContent = reason || "Unlock unlimited AI requests and Premium features.";
     modal.showModal();
   },
 
@@ -98,7 +98,7 @@ export const Billing = {
     const freeSection = document.getElementById('billingFreeSection');
     const proSection = document.getElementById('billingProSection');
 
-    if (planEl) planEl.textContent = isPro ? 'Pro' : 'Free';
+    if (planEl) planEl.textContent = isPro ? 'Premium' : 'Free';
     if (statusEl) statusEl.textContent = isPro ? (status.status || 'active') : '—';
     if (renewEl) renewEl.textContent = status.currentPeriodEnd
       ? new Date(status.currentPeriodEnd).toLocaleDateString() : '—';
@@ -126,7 +126,7 @@ function _applyPlanUI() {
   document.querySelectorAll('[data-pro-only]').forEach(el => { el.hidden = !isPro; });
   document.querySelectorAll('[data-free-only]').forEach(el => { el.hidden = isPro; });
   document.querySelectorAll('.plan-badge-current').forEach(el => {
-    el.textContent = isPro ? 'Pro' : 'Free';
+    el.textContent = isPro ? 'Premium' : 'Free';
     el.className = `plan-badge-current ${isPro ? 'plan-badge-pro-active' : ''}`;
   });
   const proBadge = document.getElementById('headerProBadge');
@@ -145,7 +145,7 @@ async function _handleUpgradeReturn(sessionId) {
     if (data.success) {
       _status = { plan: 'pro', status: 'active' };
       _applyPlanUI();
-      showToast('🎉 Welcome to Pro! All features unlocked.', 'success', 6000);
+      showToast('Welcome to Premium! All features unlocked.', 'success', 6000);
     }
   } catch {
     // Silent — subscription will sync via webhook

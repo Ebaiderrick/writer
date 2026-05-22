@@ -157,8 +157,6 @@ export const Auth = (() => {
 
     document.getElementById('google-signup')?.addEventListener('click', handleGoogleSignIn);
     document.getElementById('google-signin')?.addEventListener('click', handleGoogleSignIn);
-    document.getElementById('demo-login-btn')?.addEventListener('click', handleDemoLogin);
-
     // Profile Listeners
     profileTriggerBtns.forEach(btn => btn.addEventListener('click', openProfilePopup));
     profileClose?.addEventListener('click', closeProfilePopup);
@@ -384,25 +382,6 @@ export const Auth = (() => {
         if (msg) customAlert(msg);
       }
     }
-  }
-
-  function handleDemoLogin() {
-    const username = generateRandomUsername('demo');
-    const timestamp = new Date().toISOString();
-    localStorage.setItem(SESSION_KEY, JSON.stringify({
-      userId: 'user_demo123',
-      email: 'demo@eyawriter.com',
-      fullName: 'Demo Writer',
-      name: username,
-      username,
-      usernameCreatedAt: timestamp,
-      usernameUpdatedAt: timestamp,
-      loggedIn: true,
-      isDemoSession: true,
-      loggedInAt: timestamp
-    }));
-    showHome();
-    renderHome();
   }
 
   async function handleSignOut() {

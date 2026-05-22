@@ -68,7 +68,7 @@ export const Quota = {
     if (!el) return;
     const q = await Quota.get();
     if (q.plan === 'pro') {
-      el.innerHTML = '<span class="quota-pro-label">Pro — Unlimited AI</span>';
+      el.innerHTML = '<span class="quota-pro-label">Premium — Unlimited AI</span>';
       return;
     }
     const pct = Math.min(100, Math.round(((q.count || 0) / FREE_MONTHLY_QUOTA) * 100));
