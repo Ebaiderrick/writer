@@ -1,6 +1,9 @@
 import Stripe from 'stripe';
+import { adminAuth } from './_admin.js';
 
 const SITE_URL = process.env.URL || 'https://eyawriter.com';
+
+const JSON_CT = { 'Content-Type': 'application/json' };
 
 export const handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -8,24 +11,46 @@ export const handler = async (event) => {
   }
 
   if (!process.env.STRIPE_SECRET_KEY) {
-    return { statusCode: 503, body: JSON.stringify({ error: 'Billing not configured' }) };
+    return { statusCode: 503, headers: JSON_CT, body: JSON.stringify({ error: 'Billing not configured' }) };
   }
 
-  let body;
-  try { body = JSON.parse(event.body); } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
+  const priceId = process.env.STRIPE_PRO_PRICE_ID;
+  if (!priceId) {
+    return { statusCode: 503, headers: JSON_CT, body: JSON.stringify({ error: 'Premium price not configured' }) };
   }
 
-  const { uid, email } = body;
+  let uid, email;
+
+  if (adminAuth) {
+    // Primary path: verify the caller's identity via Firebase ID token
+    const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    if (!token) {
+      return { statusCode: 401, headers: JSON_CT, body: JSON.stringify({ error: 'Authorization required' }) };
+    }
+    try {
+      const decoded = await adminAuth.verifyIdToken(token);
+      uid = decoded.uid;
+      email = decoded.email;
+    } catch {
+      return { statusCode: 401, headers: JSON_CT, body: JSON.stringify({ error: 'Invalid or expired token' }) };
+    }
+  } else {
+    // Fallback: Admin SDK not configured — read from body (dev/staging only)
+    let body;
+    try { body = JSON.parse(event.body); } catch {
+      return { statusCode: 400, headers: JSON_CT, body: JSON.stringify({ error: 'Invalid JSON' }) };
+    }
+    uid = body?.uid;
+    email = body?.email;
+    console.warn('[create-checkout] Admin SDK not configured — using unverified body uid/email');
+  }
+
   if (!uid || !email) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'uid and email required' }) };
+    return { statusCode: 400, headers: JSON_CT, body: JSON.stringify({ error: 'User identity could not be determined' }) };
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const priceId = process.env.STRIPE_PRO_PRICE_ID;
-  if (!priceId) {
-    return { statusCode: 503, body: JSON.stringify({ error: 'Pro price not configured' }) };
-  }
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -41,14 +66,14 @@ export const handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: JSON_CT,
       body: JSON.stringify({ url: session.url })
     };
   } catch (err) {
     console.error('[create-checkout]', err.message);
     return {
       statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: JSON_CT,
       body: JSON.stringify({ error: err.message })
     };
   }

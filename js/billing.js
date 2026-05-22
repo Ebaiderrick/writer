@@ -41,9 +41,15 @@ export const Billing = {
     btns.forEach(b => { b.disabled = true; b.textContent = 'Redirecting to checkout…'; });
 
     try {
+      let token = '';
+      try { token = await user.getIdToken(); } catch { /* send uid/email fallback */ }
+
       const res = await fetch('/api/create-checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ uid: user.uid, email: user.email })
       });
       const data = await res.json();
@@ -60,12 +66,19 @@ export const Billing = {
   },
 
   async openPortal() {
+    const user = auth.currentUser;
     const customerId = _status?.stripeCustomerId;
     if (!customerId) { showToast('No billing account found', 'warning'); return; }
     try {
+      let token = '';
+      try { if (user) token = await user.getIdToken(); } catch { /* use customerId fallback */ }
+
       const res = await fetch('/api/billing-portal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ customerId })
       });
       const data = await res.json();

@@ -86,12 +86,11 @@ export const handler = async (event) => {
   }
 
   if (!process.env.OPENAI_API_KEY) {
+    console.error(`[${requestId}] OPENAI_API_KEY environment variable is not configured`);
     return {
-      statusCode: 200,
+      statusCode: 503,
       headers: jsonHeaders(requestId),
-      body: JSON.stringify({
-        output: `AI is working (test mode) - You wanted to ${action || "assist with"} this ${type || "block"}.`
-      }),
+      body: JSON.stringify({ error: 'AI service is not configured. Please contact support.' })
     };
   }
 

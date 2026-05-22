@@ -6,7 +6,7 @@
   NODE_VERSION = "20"
 
 [functions]
-  external_node_modules = ["firebase-admin"]
+  external_node_modules = ["firebase-admin", "stripe"]
   node_bundler = "esbuild"
 
 [[redirects]]
@@ -52,7 +52,7 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com https://unpkg.com https://code.jquery.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://openrouter.ai; font-src 'self' https://cdn.jsdelivr.net; frame-src https://eya-writer.firebaseapp.com; object-src 'none'; base-uri 'self'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com https://unpkg.com https://code.jquery.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://openrouter.ai https://securetoken.googleapis.com https://identitytoolkit.googleapis.com; font-src 'self' https://cdn.jsdelivr.net; frame-src https://eya-writer.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self'"
 
 [[headers]]
   for = "/assets/*"
