@@ -26,7 +26,7 @@ jobs:
       - run: npm ci
 
       - name: Run function tests
-        run: node --test tests/function.test.mjs
+        run: node --test --test-reporter=tap tests/function.test.mjs
 
   # ── 2. Firestore security rules tests (needs Firebase emulator) ─────────────
   test-rules:
@@ -51,7 +51,7 @@ jobs:
           firebase emulators:exec
           --only firestore
           --project demo-eyawriter
-          "node --test tests/rules.test.mjs"
+          "node --test --test-reporter=tap tests/rules.test.mjs"
 
   # ── 3. Playwright E2E tests ─────────────────────────────────────────────────
   test-e2e:
@@ -80,3 +80,39 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # ── 4. Deployment readiness check ───────────────────────────────────────────
+  audit:
+    name: Deployment audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Check required env var placeholders exist in netlify.toml
+        run: |
+          echo "Verifying netlify.toml build config..."
+          grep -q 'functions = "netlify/functions"' netlify.toml && echo "✓ functions dir" || exit 1
+          grep -q 'node_bundler' netlify.toml && echo "✓ bundler config" || exit 1
+
+      - name: Check all function files are present
+        run: |
+          for f in health ai-assist create-checkout billing-portal stripe-webhook verify-payment; do
+            test -f "netlify/functions/${f}.js" && echo "✓ ${f}.js" || { echo "✗ missing ${f}.js"; exit 1; }
+          done
+
+      - name: Verify APP_VERSION is set
+        run: |
+          grep -q 'APP_VERSION' js/config.js && echo "✓ APP_VERSION defined" || exit 1
+
+      - name: Check firestore.rules is valid (has required collections)
+        run: |
+          for rule in sharedProjects invitations users admins config webhookEvents; do
+            grep -q "$rule" firestore.rules && echo "✓ $rule" || { echo "✗ missing $rule in rules"; exit 1; }
+          done

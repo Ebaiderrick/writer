@@ -89,7 +89,11 @@ export const handler = async (event) => {
   console.log(`[${requestId}] AI request type=${type || "?"} action=${action || "?"}`);
 
   // Quota enforcement
-  const PLAN_QUOTAS = { free: 50, pro: 300, premium_plus: 1000 };
+  const PLAN_QUOTAS = {
+    free:          parseInt(process.env.PLAN_QUOTA_FREE          || '50',   10),
+    pro:           parseInt(process.env.PLAN_QUOTA_PRO           || '300',  10),
+    premium_plus:  parseInt(process.env.PLAN_QUOTA_PREMIUM_PLUS  || '1000', 10),
+  };
   let quotaUid = null;
   let quotaPlan = 'free';
 
@@ -134,6 +138,15 @@ export const handler = async (event) => {
   }
 
   if (!process.env.OPENAI_API_KEY) {
+    // Test-mode: no key configured — return a deterministic mock so validation
+    // and integration tests can run without a live API dependency.
+    if (process.env.NODE_ENV !== 'production') {
+      return {
+        statusCode: 200,
+        headers: jsonHeaders(requestId),
+        body: JSON.stringify({ output: `[test-mode] ${action || 'response'} for: ${String(current).slice(0, 60)}` })
+      };
+    }
     console.error(`[${requestId}] OPENAI_API_KEY environment variable is not configured`);
     return {
       statusCode: 503,

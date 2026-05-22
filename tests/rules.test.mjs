@@ -261,3 +261,150 @@ await test("unknown root collection is denied for writes", async () => {
     setDoc(doc(alice.firestore(), "unknownCollection/someDoc"), { data: "hack" })
   );
 });
+
+// ── 10. Presence subcollection ────────────────────────────────────────────
+
+await test("member can write their own presence heartbeat", async () => {
+  await seed("sharedProjects/sp-presence", { ownerId: "alice", collaborators: { bob: { role: "editor" } } });
+  const bob = testEnv.authenticatedContext("bob");
+  await assertSucceeds(
+    setDoc(doc(bob.firestore(), "sharedProjects/sp-presence/presence/bob"), {
+      uid: "bob", name: "Bob", seenAt: new Date().toISOString()
+    })
+  );
+});
+
+await test("member cannot write another member's presence record", async () => {
+  await seed("sharedProjects/sp-presence", { ownerId: "alice", collaborators: { bob: { role: "editor" } } });
+  const bob = testEnv.authenticatedContext("bob");
+  await assertFails(
+    setDoc(doc(bob.firestore(), "sharedProjects/sp-presence/presence/alice"), {
+      uid: "alice", name: "Alice", seenAt: new Date().toISOString()
+    })
+  );
+});
+
+await test("non-member cannot write to presence subcollection", async () => {
+  await seed("sharedProjects/sp-presence2", { ownerId: "alice", collaborators: {} });
+  const outsider = testEnv.authenticatedContext("outsider");
+  await assertFails(
+    setDoc(doc(outsider.firestore(), "sharedProjects/sp-presence2/presence/outsider"), {
+      uid: "outsider", name: "Outsider", seenAt: new Date().toISOString()
+    })
+  );
+});
+
+await test("member can read presence subcollection", async () => {
+  await seed("sharedProjects/sp-presence", { ownerId: "alice", collaborators: { bob: { role: "editor" } } });
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "sharedProjects/sp-presence/presence/alice"), {
+      uid: "alice", name: "Alice", seenAt: new Date().toISOString()
+    });
+  });
+  const bob = testEnv.authenticatedContext("bob");
+  await assertSucceeds(
+    getDoc(doc(bob.firestore(), "sharedProjects/sp-presence/presence/alice"))
+  );
+});
+
+// ── 11. Billing / aiUsage — client write denied ───────────────────────────
+
+await test("client cannot write to billing/data (server-only)", async () => {
+  const alice = testEnv.authenticatedContext("alice");
+  await assertFails(
+    setDoc(doc(alice.firestore(), "users/alice/billing/data"), { plan: "pro" })
+  );
+});
+
+await test("client cannot write to aiUsage (server-only)", async () => {
+  const alice = testEnv.authenticatedContext("alice");
+  await assertFails(
+    setDoc(doc(alice.firestore(), "users/alice/aiUsage/2024-01"), { requestCount: 1 })
+  );
+});
+
+await test("user can read their own billing data", async () => {
+  await seed("users/alice/billing/data", { plan: "pro", status: "active" });
+  const alice = testEnv.authenticatedContext("alice");
+  await assertSucceeds(getDoc(doc(alice.firestore(), "users/alice/billing/data")));
+});
+
+// ── 12. Quota — plan field write restriction ──────────────────────────────
+
+await test("user can write quota count and resetAt without plan field", async () => {
+  const alice = testEnv.authenticatedContext("alice");
+  await assertSucceeds(
+    setDoc(doc(alice.firestore(), "users/alice/quota/current"), {
+      count: 5, resetAt: new Date().toISOString()
+    }, { merge: true })
+  );
+});
+
+await test("user cannot write plan field to quota/current (privilege escalation block)", async () => {
+  const alice = testEnv.authenticatedContext("alice");
+  await assertFails(
+    setDoc(doc(alice.firestore(), "users/alice/quota/current"), {
+      count: 0, plan: "pro"
+    }, { merge: true })
+  );
+});
+
+// ── 13. webhookEvents — fully denied to clients ───────────────────────────
+
+await test("client cannot read webhookEvents", async () => {
+  await seed("webhookEvents/evt_123", { handled: true });
+  const alice = testEnv.authenticatedContext("alice");
+  await assertFails(getDoc(doc(alice.firestore(), "webhookEvents/evt_123")));
+});
+
+await test("client cannot write webhookEvents", async () => {
+  const alice = testEnv.authenticatedContext("alice");
+  await assertFails(
+    setDoc(doc(alice.firestore(), "webhookEvents/evt_fake"), { handled: true })
+  );
+});
+
+// ── 14. Comments on sharedProjects ────────────────────────────────────────
+
+await test("editor can create a comment stamped with their uid", async () => {
+  await seed("sharedProjects/sp-comments", { ownerId: "alice", collaborators: { bob: { role: "editor" } } });
+  const bob = testEnv.authenticatedContext("bob");
+  await assertSucceeds(
+    setDoc(doc(bob.firestore(), "sharedProjects/sp-comments/comments/c1"), {
+      uid: "bob", text: "Great scene!", resolved: false, createdAt: new Date().toISOString()
+    })
+  );
+});
+
+await test("member cannot create a comment stamped with another uid", async () => {
+  await seed("sharedProjects/sp-comments", { ownerId: "alice", collaborators: { bob: { role: "editor" } } });
+  const bob = testEnv.authenticatedContext("bob");
+  await assertFails(
+    setDoc(doc(bob.firestore(), "sharedProjects/sp-comments/comments/c-spoof"), {
+      uid: "alice", text: "I am Alice!", resolved: false, createdAt: new Date().toISOString()
+    })
+  );
+});
+
+await test("non-member cannot read comments", async () => {
+  await seed("sharedProjects/sp-comments", { ownerId: "alice", collaborators: {} });
+  await seed("sharedProjects/sp-comments/comments/c2", { uid: "alice", text: "Private note" });
+  const outsider = testEnv.authenticatedContext("outsider");
+  await assertFails(getDoc(doc(outsider.firestore(), "sharedProjects/sp-comments/comments/c2")));
+});
+
+// ── 15. adminSignups — own record creation ───────────────────────────────
+
+await test("user can create their own adminSignups record", async () => {
+  const alice = testEnv.authenticatedContext("alice");
+  await assertSucceeds(
+    setDoc(doc(alice.firestore(), "adminSignups/alice"), { email: "alice@test.com" })
+  );
+});
+
+await test("user cannot create another user's adminSignups record", async () => {
+  const bob = testEnv.authenticatedContext("bob");
+  await assertFails(
+    setDoc(doc(bob.firestore(), "adminSignups/alice"), { email: "alice@test.com" })
+  );
+});

@@ -1,5 +1,5 @@
 export const STORAGE_KEY = "eyawriter-projects-v5";
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.1.0";
 export const TYPE_SEQUENCE = ["scene", "action", "character", "dialogue", "transition", "parenthetical", "shot", "text", "note", "dual", "image"];
 export const TYPE_LABELS = {
   scene: "Scene",

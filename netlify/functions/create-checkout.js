@@ -4,18 +4,25 @@ import { adminAuth } from './_admin.js';
 const SITE_URL = process.env.URL || 'https://eyawriter.com';
 const JSON_CT = { 'Content-Type': 'application/json' };
 
+function reqId() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10).toUpperCase();
+}
+
 const TIER_PRICE_MAP = {
   pro: process.env.STRIPE_PRO_PRICE_ID,
   premium_plus: process.env.STRIPE_PREMIUM_PLUS_PRICE_ID
 };
 
 export const handler = async (event) => {
+  const rid = reqId();
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { statusCode: 405, headers: { ...JSON_CT, 'X-Request-Id': rid }, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
   if (!process.env.STRIPE_SECRET_KEY) {
-    return { statusCode: 503, headers: JSON_CT, body: JSON.stringify({ error: 'Billing not configured' }) };
+    return { statusCode: 503, headers: { ...JSON_CT, 'X-Request-Id': rid }, body: JSON.stringify({ error: 'Billing not configured' }) };
   }
 
   // Parse body early to read tier (needed even for auth path)
