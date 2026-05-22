@@ -23,9 +23,11 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;
     }
-    // Quota — owner read/write (client-tracked for free users)
+    // Quota — owner can read and update count/resetAt; plan is server-managed only
     match /users/{userId}/quota/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId
+        && !request.resource.data.keys().hasAny(['plan']);
     }
 
     // Public user lookup by email (read: any signed-in user; write: own record only)
@@ -182,6 +184,11 @@ service cloud.firestore {
     match /adminActiveUsers/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
       allow read, update, delete: if isAdmin();
+    }
+
+    // Webhook event idempotency store — admin SDK writes only; no client access
+    match /webhookEvents/{eventId} {
+      allow read, write: if false;
     }
 
     // Deny all other access

@@ -62,7 +62,7 @@ export const Quota = {
       const needsReset = !q?.resetAt || now >= new Date(q.resetAt);
 
       if (needsReset) {
-        await setDoc(ref, { count: 1, resetAt: nextReset.toISOString(), plan: q?.plan || 'free' }, { merge: true });
+        await setDoc(ref, { count: 1, resetAt: nextReset.toISOString() }, { merge: true });
       } else {
         await setDoc(ref, { count: increment(1) }, { merge: true });
       }

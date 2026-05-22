@@ -55,24 +55,6 @@ export const handler = async (event) => {
     }
   }
 
-  // Fallback: Admin SDK not configured — trust client-provided customerId (dev/staging)
-  let body;
-  try { body = JSON.parse(event.body); } catch {
-    return { statusCode: 400, headers: JSON_CT, body: JSON.stringify({ error: 'Invalid JSON' }) };
-  }
-
-  const { customerId } = body;
-  if (!customerId) return { statusCode: 400, headers: JSON_CT, body: JSON.stringify({ error: 'customerId required' }) };
-  console.warn('[billing-portal] Admin SDK not configured — using unverified body customerId');
-
-  try {
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: `${SITE_URL}/app`
-    });
-    return { statusCode: 200, headers: JSON_CT, body: JSON.stringify({ url: session.url }) };
-  } catch (err) {
-    console.error('[billing-portal]', err.message);
-    return { statusCode: 500, headers: JSON_CT, body: JSON.stringify({ error: err.message }) };
-  }
+  // Admin SDK not configured — cannot safely verify caller identity
+  return { statusCode: 503, headers: JSON_CT, body: JSON.stringify({ error: 'Billing service not fully configured' }) };
 };

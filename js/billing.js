@@ -135,9 +135,11 @@ export const Billing = {
     const statusEl = document.getElementById('billingSubStatus');
     const renewEl = document.getElementById('billingRenewDate');
     const cancelEl = document.getElementById('billingCanceledDate');
+    const cancelRow = document.getElementById('billingCanceledRow');
     const upgradeBtn = document.getElementById('billingUpgradeBtn');
     const upgradePlusBtn = document.getElementById('billingUpgradePlusBtn');
     const portalBtn = document.getElementById('billingPortalBtn');
+    const proHint = document.getElementById('billingProHint');
     const freeSection = document.getElementById('billingFreeSection');
     const proSection = document.getElementById('billingProSection');
 
@@ -146,16 +148,18 @@ export const Billing = {
     if (statusEl) statusEl.textContent = isPro ? (status.status || 'active') : '—';
     if (renewEl) renewEl.textContent = status.currentPeriodEnd
       ? new Date(status.currentPeriodEnd).toLocaleDateString() : '—';
-    if (cancelEl) {
-      cancelEl.textContent = status.canceledAt
-        ? new Date(status.canceledAt).toLocaleDateString() : '—';
-      if (cancelEl.closest('tr')) {
-        cancelEl.closest('tr').hidden = !status.canceledAt;
-      }
-    }
+    if (cancelEl) cancelEl.textContent = status.canceledAt
+      ? new Date(status.canceledAt).toLocaleDateString() : '—';
+    if (cancelRow) cancelRow.hidden = !status.canceledAt;
 
     if (freeSection) freeSection.hidden = isPro;
     if (proSection) proSection.hidden = !isPro;
+
+    // Premium Plus upgrade button only shown to Pro (not Premium Plus) subscribers
+    if (upgradePlusBtn) upgradePlusBtn.hidden = isPremiumPlus;
+    if (proHint) proHint.textContent = isPremiumPlus
+      ? 'You\'re on Premium Plus — 1,000 AI requests/month and unlimited projects.'
+      : 'You\'re on Premium — 300 AI requests/month and unlimited projects. Upgrade to Premium Plus for 1,000 AI requests/month.';
 
     if (upgradeBtn) upgradeBtn.addEventListener('click', () => Billing.startCheckout('pro'));
     if (upgradePlusBtn) upgradePlusBtn.addEventListener('click', () => Billing.startCheckout('premium_plus'));
@@ -195,9 +199,14 @@ function _applyPlanUI() {
 async function _handleUpgradeReturn(sessionId) {
   if (!sessionId) return;
   try {
+    let token = '';
+    try { if (auth.currentUser) token = await auth.currentUser.getIdToken(); } catch { /* best-effort */ }
     const res = await fetch('/api/verify-payment', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify({ sessionId })
     });
     const data = await res.json();

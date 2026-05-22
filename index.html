@@ -474,16 +474,21 @@
                   <span class="settings-label">Renews</span>
                   <span id="billingRenewDate">—</span>
                 </div>
+                <div class="billing-plan-row" id="billingCanceledRow" hidden>
+                  <span class="settings-label">Canceled</span>
+                  <span id="billingCanceledDate">—</span>
+                </div>
               </div>
 
               <div id="billingFreeSection">
                 <div id="billingQuotaBar" class="billing-quota-wrap"></div>
-                <p class="settings-hint">Free plan includes 50 AI requests per month. Upgrade to Premium for unlimited AI.</p>
+                <p class="settings-hint">Free plan includes 50 AI requests/month and up to 2 projects. Upgrade to Premium for 300 AI requests and unlimited projects.</p>
                 <button class="primary-button billing-upgrade-btn" id="billingUpgradeBtn">Upgrade to Premium — $10/mo</button>
               </div>
 
               <div id="billingProSection" hidden>
-                <p class="settings-hint">You're on the Premium plan — enjoy unlimited AI requests.</p>
+                <p class="settings-hint" id="billingProHint">You're on the Premium plan — 300 AI requests/month and unlimited projects.</p>
+                <button class="primary-button billing-upgrade-btn" id="billingUpgradePlusBtn" style="margin-bottom:8px">Upgrade to Premium Plus — $25/mo</button>
                 <button class="ghost-button" id="billingPortalBtn">Manage Subscription</button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { adminDb } from './_admin.js';
+import { adminAuth, adminDb } from './_admin.js';
 
 const JSON_CT = { 'Content-Type': 'application/json' };
 
@@ -21,6 +21,22 @@ export const handler = async (event) => {
   if (!sessionId) return { statusCode: 400, headers: JSON_CT, body: JSON.stringify({ error: 'sessionId required' }) };
   if (!process.env.STRIPE_SECRET_KEY) return { statusCode: 503, headers: JSON_CT, body: JSON.stringify({ error: 'Billing not configured' }) };
 
+  // Verify caller identity when Admin SDK is available
+  let callerUid = null;
+  if (adminAuth) {
+    const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    if (!token) {
+      return { statusCode: 401, headers: JSON_CT, body: JSON.stringify({ error: 'Authorization required' }) };
+    }
+    try {
+      const decoded = await adminAuth.verifyIdToken(token);
+      callerUid = decoded.uid;
+    } catch {
+      return { statusCode: 401, headers: JSON_CT, body: JSON.stringify({ error: 'Invalid or expired token' }) };
+    }
+  }
+
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
   try {
@@ -34,6 +50,11 @@ export const handler = async (event) => {
 
     const uid = session.metadata?.uid;
     if (!uid) return { statusCode: 400, headers: JSON_CT, body: JSON.stringify({ error: 'No uid in session metadata' }) };
+
+    // Ensure the caller owns this checkout session
+    if (callerUid && callerUid !== uid) {
+      return { statusCode: 403, headers: JSON_CT, body: JSON.stringify({ error: 'Forbidden' }) };
+    }
 
     const plan = _planFromMetadata(session.metadata);
     const sub = session.subscription;

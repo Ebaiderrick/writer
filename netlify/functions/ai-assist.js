@@ -104,10 +104,20 @@ export const handler = async (event) => {
     }
     if (quotaUid) {
       try {
-        const qSnap = await adminDb.doc(`users/${quotaUid}/quota/current`).get();
+        // Fetch billing and quota in parallel; billing/data is server-write only (authoritative for plan)
+        const [bSnap, qSnap] = await Promise.all([
+          adminDb.doc(`users/${quotaUid}/billing/data`).get(),
+          adminDb.doc(`users/${quotaUid}/quota/current`).get()
+        ]);
+        if (bSnap.exists) {
+          const b = bSnap.data();
+          const subStatus = b.status;
+          if (b.plan && (subStatus === 'active' || subStatus === 'trialing')) {
+            quotaPlan = b.plan;
+          }
+        }
         if (qSnap.exists) {
           const q = qSnap.data();
-          quotaPlan = q.plan || 'free';
           const monthlyLimit = PLAN_QUOTAS[quotaPlan] ?? PLAN_QUOTAS.free;
           const pastReset = q.resetAt && new Date() >= new Date(q.resetAt);
           const usedCount = pastReset ? 0 : (q.count || 0);
@@ -215,7 +225,7 @@ YOUR OUTPUT:`;
         const q = qSnap.exists ? qSnap.data() : {};
         const pastReset = !q.resetAt || now >= new Date(q.resetAt);
         if (pastReset) {
-          await ref.set({ count: 1, resetAt: nextReset.toISOString(), plan: q.plan || 'free' }, { merge: true });
+          await ref.set({ count: 1, resetAt: nextReset.toISOString() }, { merge: true });
         } else {
           await ref.set({ count: (q.count || 0) + 1 }, { merge: true });
         }
