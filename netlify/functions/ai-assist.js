@@ -24,6 +24,45 @@ function badRequest(msg, requestId = "") {
   return { statusCode: 400, headers: jsonHeaders(requestId), body: JSON.stringify({ error: msg }) };
 }
 
+async function _recordUsage(adminDb, uid, { action, type, status, latencyMs, tokensUsed, model }) {
+  if (!adminDb || !uid) return;
+  try {
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const ref = adminDb.doc(`users/${uid}/aiUsage/${monthKey}`);
+    const event = {
+      ts: now.toISOString(),
+      action: action || 'unknown',
+      type: type || 'unknown',
+      status,
+      latencyMs: latencyMs || 0,
+      tokensUsed: tokensUsed || 0,
+      model: model || 'unknown'
+    };
+    const updates = {
+      requestCount: (status === 'success' || status === 'failure') ? 1 : 0,
+      failureCount: status === 'failure' ? 1 : 0,
+      tokensTotal: tokensUsed || 0,
+      latencyTotal: latencyMs || 0,
+      latencyCount: latencyMs > 0 ? 1 : 0,
+    };
+    // Firestore field increment via batch-style update
+    const snap = await ref.get().catch(() => null);
+    const existing = snap?.exists ? snap.data() : {};
+    const recentEvents = (existing.recentEvents || []).slice(-19);
+    recentEvents.push(event);
+    await ref.set({
+      requestCount: (existing.requestCount || 0) + (updates.requestCount || 0),
+      failureCount: (existing.failureCount || 0) + updates.failureCount,
+      tokensTotal: (existing.tokensTotal || 0) + updates.tokensTotal,
+      latencyTotal: (existing.latencyTotal || 0) + updates.latencyTotal,
+      latencyCount: (existing.latencyCount || 0) + updates.latencyCount,
+      recentEvents,
+      updatedAt: now.toISOString()
+    }, { merge: false });
+  } catch { /* non-critical — never block the response */ }
+}
+
 export const handler = async (event) => {
   const requestId = newRequestId();
 
@@ -93,6 +132,8 @@ export const handler = async (event) => {
     };
   }
 
+  const requestStartMs = Date.now();
+
   try {
     const systemPrompt = `You are an elite Hollywood Screenwriter and Script Doctor.
 
@@ -139,9 +180,12 @@ YOUR OUTPUT:`;
     });
 
     const data = await response.json().catch(() => ({}));
+    const latencyMs = Date.now() - requestStartMs;
+    const tokensUsed = data?.usage?.total_tokens || data?.usage?.prompt_tokens || 0;
 
     if (!response.ok) {
       console.error(`[${requestId}] Upstream API error status=${response.status}`);
+      _recordUsage(adminDb, quotaUid, { action, type, status: 'failure', latencyMs, tokensUsed: 0, model: DEFAULT_MODEL });
       return {
         statusCode: response.status,
         headers: jsonHeaders(requestId),
@@ -155,10 +199,11 @@ YOUR OUTPUT:`;
     output = cleanAiResponse(output, current);
 
     if (!output) {
+      _recordUsage(adminDb, quotaUid, { action, type, status: 'failure', latencyMs, tokensUsed: 0, model: DEFAULT_MODEL });
       return { statusCode: 500, headers: jsonHeaders(requestId), body: JSON.stringify({ error: "AI assistant returned no text." }) };
     }
 
-    console.log(`[${requestId}] AI request completed successfully`);
+    console.log(`[${requestId}] AI request completed successfully latency=${latencyMs}ms tokens=${tokensUsed}`);
 
     // Increment quota for all authenticated users (all plans have limits)
     if (adminDb && quotaUid) {
@@ -177,9 +222,14 @@ YOUR OUTPUT:`;
       } catch { /* silent */ }
     }
 
+    // Record detailed usage (non-blocking — fire and forget)
+    _recordUsage(adminDb, quotaUid, { action, type, status: 'success', latencyMs, tokensUsed, model: DEFAULT_MODEL });
+
     return { statusCode: 200, headers: jsonHeaders(requestId), body: JSON.stringify({ output }) };
   } catch (error) {
+    const latencyMs = Date.now() - requestStartMs;
     console.error(`[${requestId}] AI function error:`, error.message || error);
+    _recordUsage(adminDb, quotaUid, { action, type, status: 'failure', latencyMs, tokensUsed: 0, model: DEFAULT_MODEL });
     return {
       statusCode: 500,
       headers: jsonHeaders(requestId),
