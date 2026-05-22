@@ -220,8 +220,8 @@ export const Auth = (() => {
         _googleAuthInProgress = false;
         cacheSession(firebaseUser);
         Telemetry.track('login', { method: firebaseUser.providerData?.[0]?.providerId || 'email' });
-        await ensureUsersByEmail(firebaseUser);
-        await trackRetention(firebaseUser);
+        await ensureUsersByEmail(firebaseUser).catch(err => Logger.capture('ensureUsersByEmail', err));
+        await trackRetention(firebaseUser).catch(() => {});
         Funnel.milestone('first_login');
         // Update admin active-user record (best-effort)
         setDoc(doc(db, 'adminActiveUsers', firebaseUser.uid), {
@@ -330,10 +330,21 @@ export const Auth = (() => {
     if (!/[0-9]/.test(password)) return customAlert('Password must contain at least one number.');
     if (password !== password2) return customAlert('Passwords do not match.');
 
+    // Step 1: create the Auth account — fatal if this fails.
+    let credential;
     try {
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
-      const username = generateRandomUsername(name);
-      const createdAt = new Date().toISOString();
+      credential = await createUserWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      Logger.capture('handleSignUp', err);
+      customAlert(friendlyError(err));
+      return;
+    }
+
+    // Step 2: profile setup in Firestore — best-effort; a rules misconfiguration
+    // must not prevent the user from receiving their verification email.
+    const username = generateRandomUsername(name);
+    const createdAt = new Date().toISOString();
+    try {
       await updateProfile(credential.user, { displayName: username });
       await setDoc(doc(db, 'users', credential.user.uid, 'profile', 'data'), {
         uid: credential.user.uid,
@@ -349,26 +360,25 @@ export const Auth = (() => {
         name: username,
         username
       });
-      await enqueueWelcomeEmail(credential.user);
-      await Referral.processSignup(credential.user.uid);
-      await Funnel.milestone('signed_up', credential.user.uid);
-      // Write admin signup record (idempotent — create only)
-      setDoc(doc(db, 'adminSignups', credential.user.uid), {
-        uid: credential.user.uid,
-        email,
-        createdAt,
-        referredBy: localStorage.getItem('eyawriter_ref') || null
-      }).catch(() => {});
-      await sendEmailVerification(credential.user);
-      Telemetry.track('signup', { method: 'email' });
-      await firebaseSignOut(auth);
-      signupForm.reset();
-      localStorage.removeItem('eyawriter_onboarded_v1');
-      customAlert(`Account created! Check ${email} for a verification link, then sign in.`, 'Verify Your Email');
     } catch (err) {
-      Logger.capture('handleSignUp', err);
-      customAlert(friendlyError(err));
+      Logger.capture('handleSignUp/profile', err);
+      // profile writes failed — will be retried on first login via ensureUsersByEmail
     }
+    enqueueWelcomeEmail(credential.user);
+    Referral.processSignup(credential.user.uid);
+    Funnel.milestone('signed_up', credential.user.uid);
+    setDoc(doc(db, 'adminSignups', credential.user.uid), {
+      uid: credential.user.uid,
+      email,
+      createdAt,
+      referredBy: localStorage.getItem('eyawriter_ref') || null
+    }).catch(() => {});
+    try { await sendEmailVerification(credential.user); } catch { /* best-effort */ }
+    Telemetry.track('signup', { method: 'email' });
+    await firebaseSignOut(auth).catch(() => {});
+    signupForm.reset();
+    localStorage.removeItem('eyawriter_onboarded_v1');
+    customAlert(`Account created! Check ${email} for a verification link, then sign in.`, 'Verify Your Email');
   }
 
   async function handleSignIn(e) {
