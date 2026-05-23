@@ -5781,7 +5781,7 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
 
 /* ===== HEADER ===== */
 .auth-header {
-  text-align: left;
+  text-align: center;
   margin-bottom: 24px;
 }
 
@@ -5939,7 +5939,7 @@ body.ai-assist-active .script-block-row:focus-within .ai-btn {
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 10px;
   transition: background 0.2s ease, border-color 0.2s ease;
 }

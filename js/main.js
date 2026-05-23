@@ -15,7 +15,7 @@ import { NPS } from './nps.js';
 import { Onboarding } from './onboarding.js';
 import { Referral } from './referral.js';
 import { Recovery } from './recovery.js';
-import { showToast } from './toast.js';
+
 import './logger.js';
 import './telemetry.js';
 
