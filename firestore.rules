@@ -1,10 +1,15 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
 
     // Personal projects and profile — owner only
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAdmin();
     }
 
     // Public user lookup by email (read: any signed-in user; write: own email only)
@@ -197,6 +202,42 @@ service cloud.firestore {
             )
           )
         );
+    }
+
+    match /waitlist/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /config/{document} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    match /incidents/{incidentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /adminSignups/{uid} {
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /adminFeedback/{feedbackId} {
+      allow create: if request.auth != null &&
+        request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /adminActiveUsers/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, update, delete: if isAdmin();
     }
 
     // Deny all other access

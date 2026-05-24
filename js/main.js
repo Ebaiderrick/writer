@@ -8,6 +8,7 @@ import { ContextMenu } from './contextMenu.js';
 import { Auth } from './auth.js';
 import { applyTranslations } from './i18n.js';
 import { restoreLocalSaveFile, startLocalSaveTimer } from './localSave.js';
+import { Admin } from './admin.js';
 
 function boot() {
   loadProjects();
@@ -40,6 +41,7 @@ function boot() {
   initBackground();
   AI.init();
   ContextMenu.init();
+  Admin.init();
 }
 
 if (document.readyState === 'loading') {
