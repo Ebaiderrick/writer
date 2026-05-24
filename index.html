@@ -270,6 +270,82 @@
       </section>
     </section>
 
+    <section id="settingsView" class="settings-view" hidden>
+      <header class="settings-topbar">
+        <button class="ghost-button settings-back-btn" id="settingsBackBtn" type="button">&larr; Back</button>
+        <h1 class="settings-topbar-title">Settings</h1>
+        <div class="home-topbar-user">
+          <button class="user-trigger open-profile-btn" aria-label="Open profile">
+            <div class="user-avatar-circle">
+              <img src="" alt="" class="user-avatar-img" hidden>
+            </div>
+            <span class="user-name" id="settingsUserNameDisplay">User</span>
+            <span class="user-arrow">▾</span>
+          </button>
+        </div>
+      </header>
+      <div class="settings-body">
+        <nav class="settings-nav">
+          <button class="settings-tab is-active" type="button" data-settings-tab="general">General</button>
+          <button class="settings-tab" type="button" data-settings-tab="account">Account</button>
+        </nav>
+        <main class="settings-content">
+          <section class="settings-section is-active" data-settings-section="general">
+            <div class="settings-section-inner">
+              <h2>General</h2>
+              <div class="settings-group">
+                <label class="settings-label">Theme</label>
+                <div class="settings-theme-grid">
+                  <button class="settings-theme-btn" type="button" data-settings-theme="cedar">Cedar</button>
+                  <button class="settings-theme-btn" type="button" data-settings-theme="dark">Dark</button>
+                  <button class="settings-theme-btn" type="button" data-settings-theme="white">White</button>
+                  <button class="settings-theme-btn" type="button" data-settings-theme="navy">Dark Blue</button>
+                </div>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label" for="settingsLang">Interface Language</label>
+                <select id="settingsLang" class="settings-select">
+                  <option value="en">English</option>
+                  <option value="fr">French</option>
+                  <option value="de">German</option>
+                </select>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label">Editor</label>
+                <label class="settings-toggle-row">
+                  <span>Auto-number scenes</span>
+                  <input type="checkbox" id="settingsAutoNumber" class="settings-toggle">
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" data-settings-section="account">
+            <div class="settings-section-inner">
+              <h2>Account</h2>
+              <div class="settings-group">
+                <label class="settings-label">Name</label>
+                <p class="settings-value" id="settingsAccountName">—</p>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label">Email</label>
+                <p class="settings-value" id="settingsAccountEmail">—</p>
+              </div>
+              <div class="settings-actions">
+                <button id="settingsChangePassword" class="ghost-button btn-sm" type="button">Send Password Reset Email</button>
+              </div>
+              <div class="settings-group" id="settingsAdminGroup" hidden>
+                <label class="settings-label">Administration</label>
+                <div class="settings-actions">
+                  <button class="ghost-button btn-sm open-admin-btn" id="settingsAdminBtn" hidden type="button">Open Admin Dashboard</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </section>
+
     <section id="adminView" class="admin-view" hidden>
       <header class="admin-topbar">
         <button class="ghost-button admin-back-btn" id="adminBackBtn" type="button">&larr; Back</button>
@@ -1455,6 +1531,13 @@
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
           <span>Edit</span>
+        </button>
+        <button class="profile-action-btn open-settings-btn" id="open-settings-btn" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Settings</span>
         </button>
         <button class="profile-action-btn profile-action-logout" id="profile-signout-btn">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">

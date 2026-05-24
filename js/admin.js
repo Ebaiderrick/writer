@@ -50,15 +50,22 @@ export const Admin = {
     _isAdmin = await _checkAdmin(uid);
     if (!_isAdmin) {
       showToast('Admin access required', 'error');
-      return;
+      return false;
     }
     document.querySelectorAll('.app-shell > section').forEach(el => { el.hidden = true; });
     _view.hidden = false;
+    if (window.location.pathname === '/app') {
+      window.history.replaceState({}, '', '/admin');
+    }
     _activateTab('overview');
+    return true;
   },
 
   hide() {
     if (_view) _view.hidden = true;
+    if (window.location.pathname === '/admin') {
+      window.history.replaceState({}, '', '/app');
+    }
     const home = document.getElementById('homeView');
     if (home) home.hidden = false;
   },

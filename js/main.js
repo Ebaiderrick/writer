@@ -9,6 +9,7 @@ import { Auth } from './auth.js';
 import { applyTranslations } from './i18n.js';
 import { restoreLocalSaveFile, startLocalSaveTimer } from './localSave.js';
 import { Admin } from './admin.js';
+import { Settings } from './settings.js';
 
 function boot() {
   loadProjects();
@@ -42,6 +43,7 @@ function boot() {
   AI.init();
   ContextMenu.init();
   Admin.init();
+  Settings.init();
 }
 
 if (document.readyState === 'loading') {

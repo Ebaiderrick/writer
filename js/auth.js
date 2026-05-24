@@ -21,6 +21,7 @@ import {
   setProjectsFromCloud
 } from './project.js';
 import { initCollaboration, cleanupCollaboration } from './collaborate.js';
+import { Admin } from './admin.js';
 
 const SESSION_KEY = 'eyawriter_session';
 const EMAILJS_SERVICE = 'service_j18y8zo';
@@ -200,6 +201,10 @@ export const Auth = (() => {
     profilePopup?.addEventListener('click', e => { if (e.target === profilePopup) closeProfilePopup(); });
     profileEditBtn?.addEventListener('click', handleEditToggle);
     profileSignOutBtn?.addEventListener('click', handleSignOut);
+    document.getElementById('open-settings-btn')?.addEventListener('click', () => {
+      closeProfilePopup();
+      import('./settings.js').then(({ Settings }) => Settings.show());
+    });
     profileUploadBtn?.addEventListener('click', () => profileUpload.click());
     profileUpload?.addEventListener('change', handleImageUpload);
     profileBio?.addEventListener('input', () => {
@@ -231,6 +236,13 @@ export const Auth = (() => {
         renderHome();
         updateTriggerUI(firebaseUser);
         initCollaboration();
+        if (window.location.pathname === '/admin') {
+          const opened = await Admin.show();
+          if (!opened) {
+            window.history.replaceState({}, '', '/app');
+            showHome();
+          }
+        }
       } else {
         cleanupCollaboration();
         const session = getCachedSession();
@@ -243,6 +255,9 @@ export const Auth = (() => {
             showAuth();
           }
         } else {
+          if (window.location.pathname === '/admin') {
+            window.history.replaceState({}, '', '/app');
+          }
           await loadUserProfile();
           updateTriggerUI({ photoURL: session.photoURL, displayName: session.name });
           if (refs.authView && !refs.authView.hidden) showHome();
@@ -384,6 +399,9 @@ export const Auth = (() => {
     closeProfilePopup();
     clearSession();
     try { await firebaseSignOut(auth); } catch { /* ignore */ }
+    if (window.location.pathname === '/admin') {
+      window.history.replaceState({}, '', '/app');
+    }
     showAuth();
   }
 
