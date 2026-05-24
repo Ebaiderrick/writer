@@ -126,9 +126,9 @@ export const Auth = (() => {
     }).catch(err => {
       if (_isRedirectReturn) {
         _resetGoogleBtns();
+        const msg = friendlyError(err);
+        if (msg) customAlert(msg);
       }
-      const msg = friendlyError(err);
-      if (msg) customAlert(msg);
     });
 
     // Tab switching logic
