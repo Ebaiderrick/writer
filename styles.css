@@ -276,7 +276,7 @@ html[data-theme="rose"] .mesh-background {
 
 .home-topbar {
   position: relative;
-  justify-content: flex-start;
+  justify-content: center;
   padding-top: 0;
 }
 
