@@ -518,14 +518,14 @@ export function renderEditorView() {
     return true;
   });
 
-  if (refs.editorViewTitle) refs.editorViewTitle.textContent = editorLead.editor?.name || editorLead.title || "Editor";
+  if (refs.editorViewTitle) refs.editorViewTitle.textContent = editorLead.editor?.name || editorLead.title || "Workspace";
   if (refs.editorViewSubtitle) refs.editorViewSubtitle.textContent = `${projects.length} project${projects.length === 1 ? "" : "s"}, ${allTaskItems.length} task${allTaskItems.length === 1 ? "" : "s"}, and shared activity in one calm view.`;
 
   refs.editorDashboard.innerHTML = `
     <div class="editor-home-shell">
       <section class="editor-home-hero-card">
         <div class="editor-home-hero-copy">
-          <h3>${escapeHtml(editorLead.editor?.name || editorLead.title || "Editor")}</h3>
+          <h3>${escapeHtml(editorLead.editor?.name || editorLead.title || "Workspace")}</h3>
           <p>${escapeHtml(editorLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
           ${editorOptions.length > 1 ? `
             <div class="editor-switch-row">
@@ -1017,7 +1017,7 @@ export function renderHome() {
       <div class="editor-home-shell">
         <section class="editor-home-hero-card">
           <div class="editor-home-hero-copy">
-          <h3>${escapeHtml(editorLead.editor?.name || editorLead.title || "Editor")}</h3>
+          <h3>${escapeHtml(editorLead.editor?.name || editorLead.title || "Workspace")}</h3>
           <p>${escapeHtml(editorLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
         </div>
           <div class="editor-home-hero-metrics">

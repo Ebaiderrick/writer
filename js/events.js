@@ -1932,9 +1932,9 @@ export function bindEvents() {
           return;
       }
 
-      const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
+      const workspaceTrigger = e.target.closest("[data-open-editor-id]");
       if (workspaceTrigger) {
-          openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
+          openEditorDashboard(workspaceTrigger.dataset.openEditorId);
           return;
       }
 
