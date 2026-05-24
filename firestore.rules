@@ -34,7 +34,7 @@ service cloud.firestore {
     match /usersByEmail/{email} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
-        && request.auth.token.email == email
+        && request.auth.token.email.lower() == email
         && request.resource.data.uid == request.auth.uid;
     }
 

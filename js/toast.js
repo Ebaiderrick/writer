@@ -11,11 +11,20 @@ function getContainer() {
   return el;
 }
 
-const ICONS = { success: '✓', error: '✕', info: 'i', warning: '!' };
+const ICONS = { success: '✓', error: '✕', info: 'i', warning: '!', loading: '...' };
+const activeToasts = new Map();
 
-export function showToast(message, type = 'success', duration = 3500) {
+export function displayAppToast(message, type = 'success', options = {}) {
+  const duration = typeof options === 'number' ? options : (options.duration ?? 3500);
+  const id = options.id || `toast-${Math.random().toString(36).substr(2, 9)}`;
+
+  if (activeToasts.has(id)) {
+    return updateToast(id, message, type, options);
+  }
+
   const container = getContainer();
   const toast = document.createElement('div');
+  toast.id = id;
   toast.className = `toast toast-${type}`;
   toast.setAttribute('role', 'status');
   toast.setAttribute('aria-live', 'polite');
@@ -27,14 +36,45 @@ export function showToast(message, type = 'success', duration = 3500) {
   const dismiss = () => {
     if (!toast.isConnected) return;
     toast.classList.remove('is-visible');
-    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    toast.addEventListener('transitionend', () => {
+      toast.remove();
+      activeToasts.delete(id);
+    }, { once: true });
   };
 
-  const timer = setTimeout(dismiss, duration);
+  let timer = null;
+  if (duration > 0) {
+    timer = setTimeout(dismiss, duration);
+  }
+
   toast.querySelector('.toast-close').addEventListener('click', () => {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
     dismiss();
   });
 
-  return { dismiss };
+  activeToasts.set(id, { toast, timer, dismiss });
+  return id;
+}
+
+export function updateToast(id, message, type = 'success', options = {}) {
+  const instance = activeToasts.get(id);
+  if (!instance) {
+    return displayAppToast(message, type, { ...options, id });
+  }
+
+  const { toast, timer, dismiss } = instance;
+  if (timer) clearTimeout(timer);
+
+  toast.className = `toast toast-${type}`;
+  toast.querySelector('.toast-icon').textContent = ICONS[type] ?? '·';
+  toast.querySelector('.toast-msg').textContent = message;
+
+  const duration = typeof options === 'number' ? options : (options.duration ?? 3500);
+  let newTimer = null;
+  if (duration > 0) {
+    newTimer = setTimeout(dismiss, duration);
+  }
+
+  activeToasts.set(id, { toast, timer: newTimer, dismiss });
+  return id;
 }

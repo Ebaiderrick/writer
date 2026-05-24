@@ -168,7 +168,7 @@ export function canManageEditor(project = getCurrentProject(), user = auth.curre
 export const Permissions = {
   getRole: getUserProjectRole,
   canEdit: canEditProject,
-  canManage: canManageWorkspace,
+  canManage: canManageEditor,
 
   /** True if user is the project owner or any listed collaborator. */
   isMember(project = getCurrentProject(), user = auth.currentUser) {
@@ -180,7 +180,7 @@ export const Permissions = {
   /** Comment author or project owner can delete a comment. */
   canDeleteComment(comment, project = getCurrentProject(), user = auth.currentUser) {
     if (!comment || !project || !user) return false;
-    return comment.uid === user.uid || canManageWorkspace(project, user);
+    return comment.uid === user.uid || canManageEditor(project, user);
   },
 
   /** Non-viewer members can resolve/unresolve comments. */
@@ -659,7 +659,7 @@ export async function transferOwnership(projectId, newOwnerUid) {
 
   const project = state.projects.find(p => p.id === projectId) || getCurrentProject();
   if (!project) return { ok: false, reason: 'No project found.' };
-  if (!canManageWorkspace(project, user)) {
+  if (!canManageEditor(project, user)) {
     return { ok: false, reason: 'Only the current owner can transfer ownership.' };
   }
   if (newOwnerUid === user.uid) {

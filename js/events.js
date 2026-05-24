@@ -1,8 +1,8 @@
-import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
+import { state, TYPE_SEQUENCE, TYPE_LABELS, EDITOR_TASK_TEMPLATES } from './config.js';
 import { Telemetry } from './telemetry.js';
 import { Logger } from './logger.js';
 import { Funnel } from './funnel.js';
-import { showToast } from './toast.js';
+import { displayAppToast } from './toast.js';
 import { refs } from './dom.js';
 import { Billing, FREE_SCRIPT_LIMIT } from './billing.js';
 import { ContextMenu } from './contextMenu.js';
@@ -30,7 +30,7 @@ import {
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
-  showModal, showToast, updateToast,
+  showModal,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderEditorView, renderStudioProjectContext,
@@ -696,7 +696,7 @@ function addEditorTaskFromDashboard() {
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
   renderEditorView();
-  showToast(
+  displayAppToast(
     assignee?.assigneeType === "system"
       ? `AI task queued for ${nextTask.assignedLabel}.`
       : `${nextTask.title} assigned to ${nextTask.assignedLabel || "the editor"}.`,
@@ -704,11 +704,11 @@ function addEditorTaskFromDashboard() {
   );
 }
 
-function updateWorkspaceTask(taskId, patch) {
-  if (!state.currentWorkspaceId || !taskId) return;
-  const previousTask = getWorkspaceTaskById(taskId);
+function updateEditorTask(taskId, patch) {
+  if (!state.currentEditorId || !taskId) return;
+  const previousTask = getEditorTaskById(taskId);
   const currentUid = auth.currentUser?.uid || "";
-  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member";
+  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Editor member";
 
   // When a non-assignee marks a human task "done", route to pending-confirmation instead.
   const effectivePatch = { ...patch };
@@ -726,9 +726,9 @@ function updateWorkspaceTask(taskId, patch) {
   }
   delete effectivePatch._confirmed;
 
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
-    ...workspace,
-    tasks: (workspace.tasks || []).map((task) => task.id === taskId
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    tasks: (editor.tasks || []).map((task) => task.id === taskId
       ? { ...task, ...effectivePatch, updatedAt: new Date().toISOString() }
       : task)
   }));
@@ -737,7 +737,7 @@ function updateWorkspaceTask(taskId, patch) {
   if (task && previousTask) {
     if (effectivePatch.status && effectivePatch.status !== previousTask.status) {
       if (effectivePatch.status === "pending-confirmation") {
-        createWorkspaceNotification({
+        createEditorNotification({
           task,
           category: "task",
           title: "Task awaiting your confirmation",
@@ -745,7 +745,7 @@ function updateWorkspaceTask(taskId, patch) {
           actor: currentLabel
         });
       } else {
-        createWorkspaceNotification({
+        createEditorNotification({
           task,
           category: effectivePatch.status === "done" ? "completed" : "task",
           title: effectivePatch.status === "done" ? "Task completed" : "Task status updated",
@@ -755,7 +755,7 @@ function updateWorkspaceTask(taskId, patch) {
       }
     }
     if (patch.assignedTo && patch.assignedTo !== previousTask.assignedTo) {
-      showToast(`${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`, "success");
+      displayAppToast(`${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`, "success");
       createEditorNotification({
         task,
         category: task.assigneeType === "system" ? "ai" : "task",
@@ -765,7 +765,7 @@ function updateWorkspaceTask(taskId, patch) {
       });
     }
     if (patch.dueAt && patch.dueAt !== previousTask.dueAt) {
-      showToast(`${task.title} due date updated.`, "success");
+      displayAppToast(`${task.title} due date updated.`, "success");
       createEditorNotification({
         task,
         category: "task",
@@ -780,18 +780,18 @@ function updateWorkspaceTask(taskId, patch) {
 }
 
 function confirmCompleteTask(taskId) {
-  const task = getWorkspaceTaskById(taskId);
+  const task = getEditorTaskById(taskId);
   if (!task) return;
   const currentUid = auth.currentUser?.uid || "";
   if (task.assignedTo !== currentUid && task.pendingConfirmBy !== currentUid) {
-    showToast("Only the assigned member can confirm task completion.", "warning");
+    displayAppToast("Only the assigned member can confirm task completion.", "warning");
     return;
   }
-  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member";
+  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Editor member";
   const requesterLabel = task.pendingConfirmRequestedByLabel || "a teammate";
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
-    ...workspace,
-    tasks: (workspace.tasks || []).map((t) => t.id === taskId
+  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
+    ...editor,
+    tasks: (editor.tasks || []).map((t) => t.id === taskId
       ? {
           ...t,
           status: "done",
@@ -803,8 +803,8 @@ function confirmCompleteTask(taskId) {
       : t)
   }));
   persistProjects(true, { syncInputs: false });
-  const updatedTask = getWorkspaceTaskById(taskId);
-  createWorkspaceNotification({
+  const updatedTask = getEditorTaskById(taskId);
+  createEditorNotification({
     task: updatedTask || task,
     category: "completed",
     title: "Task confirmed complete",
@@ -812,7 +812,7 @@ function confirmCompleteTask(taskId) {
     actor: currentLabel
   });
   Telemetry.track('task_completed', { taskId, assigneeType: task.assigneeType });
-  renderWorkspaceView();
+  renderEditorView();
 }
 
 async function runAiTask(taskId) {
@@ -822,7 +822,7 @@ async function runAiTask(taskId) {
   const project = state.projects.find((item) => item.id === task.projectId) || getCurrentProject();
   if (!project) {
     updateEditorTask(taskId, { aiState: "failed", aiError: "The linked project could not be found." });
-    updateToast(taskToastId, "AI task could not find its linked project.", "error", { duration: 4200 });
+    displayAppToast("AI task could not find its linked project.", "error", { id: taskToastId, duration: 4200 });
     createEditorNotification({
       task,
       category: "ai",
@@ -838,7 +838,7 @@ async function runAiTask(taskId) {
     status: task.status === "done" ? "done" : "in-progress",
     aiLastRunAt: new Date().toISOString()
   });
-  updateToast(taskToastId, `${task.title} is processing...`, "loading", { duration: 0 });
+  displayAppToast(`${task.title} is processing...`, "loading", { id: taskToastId, duration: 0 });
   try {
     const resultText = String(await AI.runEditorTaskAssistant(task, project) || "").trim();
     if (!resultText) {
@@ -850,7 +850,7 @@ async function runAiTask(taskId) {
       aiResultSummary: task.title,
       aiError: ""
     });
-    updateToast(taskToastId, "AI task finished.", "success");
+    displayAppToast("AI task finished.", "success", { id: taskToastId });
     createEditorNotification({
       task: { ...task, aiResultText: resultText },
       category: "review",
@@ -863,7 +863,7 @@ async function runAiTask(taskId) {
       aiState: "failed",
       aiError: error instanceof Error ? error.message : "AI task failed."
     });
-    updateToast(taskToastId, "AI task failed.", "error", { duration: 4200 });
+    displayAppToast("AI task failed.", "error", { id: taskToastId, duration: 4200 });
     createEditorNotification({
       task,
       category: "ai",
@@ -939,7 +939,7 @@ async function applyAiTaskResult(taskId, applyMode = null) {
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
   });
   openProject(task.projectId, { focusLineId: task.lineId || task.sceneId || "" });
-  showToast("AI result applied to the script.", "success");
+  displayAppToast("AI result applied to the script.", "success");
 }
 
 function dismissAiTaskResult(taskId) {
@@ -953,7 +953,7 @@ function dismissAiTaskResult(taskId) {
     message: `${task.title} was reviewed and dismissed.`,
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
   });
-  showToast("AI result dismissed.", "success");
+  displayAppToast("AI result dismissed.", "success");
 }
 
 async function editEditorTask(taskId) {
@@ -1079,7 +1079,7 @@ async function deleteEditorTask(taskId) {
   }));
   persistProjects(true, { syncInputs: false });
   renderEditorView();
-  showToast("Task deleted.", "success");
+  displayAppToast("Task deleted.", "success");
 }
 
 async function commentOnEditorTask(taskId) {
@@ -1147,7 +1147,7 @@ async function commentOnEditorTask(taskId) {
       actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
     });
   }
-  showToast("Comment added to task.", "success");
+  displayAppToast("Comment added to task.", "success");
 }
 
 function showMentionSuggestions(input, query) {
@@ -2099,7 +2099,7 @@ export function openProject(projectId, options = {}) {
       openEditorDashboard(project.editor?.id || project.id);
       return;
     }
-    const projectLoadToast = options.silentLoadToast ? null : showToast("Opening project...", "loading", { duration: 0 });
+    const projectLoadToast = options.silentLoadToast ? null : displayAppToast("Opening project...", "loading", { duration: 0 });
     state.currentProjectId = project.id;
   state.currentEditorId = project.editor?.id !== project.id ? project.editor?.id || null : null;
   hasShownReadOnlyNotice = false;
@@ -2135,7 +2135,7 @@ export function openProject(projectId, options = {}) {
 
     checkFirstWorkBackup();
     if (projectLoadToast) {
-      updateToast(projectLoadToast, "Project opened.", "success", { duration: 1200 });
+      displayAppToast("Project opened.", "success", { id: projectLoadToast, duration: 1200 });
     }
 }
 
@@ -3516,22 +3516,22 @@ function exportTxt() {
 
   const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
   downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
-  showToast('Script exported as TXT', 'success');
+  displayAppToast('Script exported as TXT', 'success');
 }
 
 function exportJson() {
   const project = syncProjectFromInputs() || getCurrentProject();
   downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
-  showToast('Script exported as JSON', 'success');
+  displayAppToast('Script exported as JSON', 'success');
 }
 
 async function exportWord() {
       const project = syncProjectFromInputs() || getCurrentProject();
       if (!project) return;
-      const exportToast = showToast("Preparing Word export...", "loading", { duration: 0 });
+      const exportToast = displayAppToast("Preparing Word export...", "loading", { duration: 0 });
 
     if (!window.docx?.Document) {
-      showToast('Word export engine is still loading — please try again in a moment', 'warning', 4000);
+      displayAppToast('Word export engine is still loading — please try again in a moment', 'warning', 4000);
       return;
     }
 
@@ -3543,10 +3543,10 @@ async function exportWord() {
       const blob = await buildWordDocxBlob(project);
       downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
       Telemetry.track('export_docx', { projectId: project.id });
-      showToast('Script exported as Word document', 'success');
+      displayAppToast('Script exported as Word document', 'success');
     } catch (error) {
       Logger.capture('exportWord', error);
-      showToast('Word export failed — try again once the DOCX engine loads', 'error', 5000);
+      displayAppToast('Word export failed — try again once the DOCX engine loads', 'error', 5000);
     } finally {
       btns.forEach((b, i) => { b.disabled = false; b.textContent = origLabels[i]; });
     }
@@ -3575,7 +3575,7 @@ function openPreviewWindow(autoPrint) {
 function printWithHiddenFrame() {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
-  const exportToast = showToast("Preparing PDF export...", "loading", { duration: 0 });
+  const exportToast = displayAppToast("Preparing PDF export...", "loading", { duration: 0 });
 
   const existingFrame = document.querySelector("#printExportFrame");
   if (existingFrame) {
@@ -3598,7 +3598,7 @@ function printWithHiddenFrame() {
     const frameWindow = frame.contentWindow;
       if (!frameWindow) {
         cleanup();
-        updateToast(exportToast, "PDF export failed.", "error", { duration: 4200 });
+        displayAppToast("PDF export failed.", "error", { id: exportToast, duration: 4200 });
         customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
         return;
       }
@@ -3607,10 +3607,10 @@ function printWithHiddenFrame() {
       window.setTimeout(() => {
         try {
           frameWindow.print();
-          updateToast(exportToast, "Print dialog opened.", "success", { duration: 2400 });
+          displayAppToast("Print dialog opened.", "success", { id: exportToast, duration: 2400 });
         } catch (error) {
           console.error("Unable to start PDF print flow", error);
-          updateToast(exportToast, "PDF export failed.", "error", { duration: 4200 });
+          displayAppToast("PDF export failed.", "error", { id: exportToast, duration: 4200 });
           customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
         } finally {
           cleanup();
@@ -3659,7 +3659,7 @@ function importFile(event) {
         nextProject = sanitizeProject(JSON.parse(text));
       } catch (error) {
         console.error("Invalid JSON import", error);
-        showToast('Could not import file — invalid JSON format', 'error');
+        displayAppToast('Could not import file — invalid JSON format', 'error');
         return;
       }
     } else {
@@ -3676,7 +3676,7 @@ function importFile(event) {
     openProject(nextProject.id);
     persistProjects(true);
     const lineCount = nextProject.lines.filter(l => l.text.trim()).length;
-    showToast(`Imported "${nextProject.title}" — ${lineCount} line${lineCount !== 1 ? 's' : ''}`, 'success');
+    displayAppToast(`Imported "${nextProject.title}" — ${lineCount} line${lineCount !== 1 ? 's' : ''}`, 'success');
   };
 
   reader.readAsText(file);

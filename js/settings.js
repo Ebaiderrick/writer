@@ -1,7 +1,7 @@
 import { state, APP_VERSION } from './config.js';
 import { setTheme, showHome, applyViewState, applyToolbarState, showModal, customAlert } from './ui.js';
 import { applyTranslations } from './i18n.js';
-import { showToast } from './toast.js';
+import { displayAppToast } from './toast.js';
 import { persistProjects } from './project.js';
 import { auth, db } from './firebase.js';
 import { sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -201,14 +201,14 @@ function _bindGeneral() {
       setTheme(theme);
       _settingsView.querySelectorAll('[data-settings-theme]').forEach(b => b.classList.remove('is-active'));
       btn.classList.add('is-active');
-      showToast('Theme applied');
+      displayAppToast('Theme applied');
     });
   });
 
   document.getElementById('settingsLang')?.addEventListener('change', e => {
     state.language = e.target.value;
     applyTranslations();
-    showToast('Language updated');
+    displayAppToast('Language updated');
   });
 }
 
@@ -217,33 +217,33 @@ function _bindEditor() {
     state.autoNumberScenes = val;
     document.getElementById('autoNumberToggle')?.dispatchEvent(new Event('change'));
     persistProjects();
-    showToast(val ? 'Scene numbering on' : 'Scene numbering off', 'info');
+    displayAppToast(val ? 'Scene numbering on' : 'Scene numbering off', 'info');
   });
 
   _onCheck('settingsBgAnim', val => {
     state.backgroundAnimation = val;
     const bgToggle = document.getElementById('bgAnimationToggle');
     if (bgToggle) { bgToggle.checked = val; bgToggle.dispatchEvent(new Event('change')); }
-    showToast('Background animation ' + (val ? 'on' : 'off'), 'info');
+    displayAppToast('Background animation ' + (val ? 'on' : 'off'), 'info');
   });
 
   _onCheck('settingsPageNumbers', val => {
     state.viewOptions = { ...state.viewOptions, pageNumbers: val };
     applyViewState();
-    showToast('Page numbers ' + (val ? 'on' : 'off'), 'info');
+    displayAppToast('Page numbers ' + (val ? 'on' : 'off'), 'info');
   });
 
   _onCheck('settingsOutline', val => {
     state.viewOptions = { ...state.viewOptions, showOutline: val };
     applyViewState();
-    showToast('Outline ' + (val ? 'on' : 'off'), 'info');
+    displayAppToast('Outline ' + (val ? 'on' : 'off'), 'info');
   });
 
   document.getElementById('settingsTextSize')?.addEventListener('change', e => {
     const size = parseInt(e.target.value, 10);
     state.viewOptions = { ...state.viewOptions, textSize: size };
     applyViewState();
-    showToast('Text size updated', 'info');
+    displayAppToast('Text size updated', 'info');
   });
 }
 
@@ -255,14 +255,14 @@ function _bindAI() {
     } else {
       localStorage.removeItem('eyawriter.aiApiUrl');
     }
-    showToast('AI endpoint saved');
+    displayAppToast('AI endpoint saved');
   });
 
   document.getElementById('settingsAiReset')?.addEventListener('click', () => {
     localStorage.removeItem('eyawriter.aiApiUrl');
     const urlEl = document.getElementById('settingsAiUrl');
     if (urlEl) urlEl.value = '';
-    showToast('AI endpoint reset to default', 'info');
+    displayAppToast('AI endpoint reset to default', 'info');
   });
 
   document.getElementById('settingsAiTest')?.addEventListener('click', async () => {
@@ -279,12 +279,12 @@ function _bindAI() {
         body: JSON.stringify({ type: 'action', action: 'Grammar', current: 'Test.', context: '', instruction: '' })
       });
       if (res.ok) {
-        showToast('AI endpoint is reachable ✓');
+        displayAppToast('AI endpoint is reachable ✓');
       } else {
-        showToast(`AI returned ${res.status}`, 'warning');
+        displayAppToast(`AI returned ${res.status}`, 'warning');
       }
     } catch {
-      showToast('Could not reach AI endpoint', 'error');
+      displayAppToast('Could not reach AI endpoint', 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = 'Test Connection';
@@ -306,12 +306,12 @@ function _bindBilling() {
 function _bindAccount() {
   document.getElementById('settingsChangePassword')?.addEventListener('click', async () => {
     const email = auth.currentUser?.email || _getSession()?.email;
-    if (!email) { showToast('No email on file', 'error'); return; }
+    if (!email) { displayAppToast('No email on file', 'error'); return; }
     try {
       await sendPasswordResetEmail(auth, email);
-      showToast('Password reset email sent');
+      displayAppToast('Password reset email sent');
     } catch (err) {
-      showToast(err.message || 'Failed to send reset email', 'error');
+      displayAppToast(err.message || 'Failed to send reset email', 'error');
     }
   });
 
@@ -320,10 +320,10 @@ function _bindAccount() {
     if (!linkEl?.value) return;
     navigator.clipboard?.writeText(linkEl.value)
       .then(() => {
-        showToast('Referral link copied!');
+        displayAppToast('Referral link copied!');
         Referral.trackShare();
       })
-      .catch(() => showToast('Could not copy — try manually', 'warning'));
+      .catch(() => displayAppToast('Could not copy — try manually', 'warning'));
   });
 
   document.getElementById('settingsAdminBtn')?.addEventListener('click', () => {
@@ -356,22 +356,22 @@ function _bindSupport() {
     const panel = document.getElementById('settingsDiagnosticsPanel');
     const text = panel?.dataset.diagnostics || JSON.stringify({ error: 'No diagnostics available' });
     navigator.clipboard?.writeText(text).then(() => {
-      showToast('Diagnostics copied to clipboard');
+      displayAppToast('Diagnostics copied to clipboard');
     }).catch(() => {
-      showToast('Could not copy — try manually', 'warning');
+      displayAppToast('Could not copy — try manually', 'warning');
     });
   });
 
   document.getElementById('settingsClearErrorLog')?.addEventListener('click', async () => {
     const uid = auth.currentUser?.uid;
-    if (!uid) { showToast('Sign in first', 'warning'); return; }
+    if (!uid) { displayAppToast('Sign in first', 'warning'); return; }
     try {
       const snap = await getDocs(collection(db, 'users', uid, 'errorLog'));
       await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-      showToast('Error log cleared');
+      displayAppToast('Error log cleared');
       _populateSupport();
     } catch {
-      showToast('Could not clear error log', 'error');
+      displayAppToast('Could not clear error log', 'error');
     }
   });
 
@@ -399,7 +399,7 @@ function _bindSupport() {
     const type = container.querySelector('#feedbackType')?.value || 'other';
     const subject = container.querySelector('#feedbackSubject')?.value?.trim() || '';
     const body = container.querySelector('#feedbackBody')?.value?.trim() || '';
-    if (!body) { showToast('Please describe your feedback', 'warning'); return; }
+    if (!body) { displayAppToast('Please describe your feedback', 'warning'); return; }
 
     const attachDiag = container.querySelector('#feedbackAttachDiag')?.checked;
     const uid = auth.currentUser?.uid;
@@ -417,9 +417,9 @@ function _bindSupport() {
 
     try {
       await addDoc(collection(db, 'adminFeedback'), { ...entry, uid: uid || null });
-      showToast('Feedback sent — thank you!');
+      displayAppToast('Feedback sent — thank you!');
     } catch {
-      showToast('Could not send feedback right now', 'error');
+      displayAppToast('Could not send feedback right now', 'error');
     }
   });
 }

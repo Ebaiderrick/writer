@@ -14,7 +14,7 @@ import {
 import { doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { auth, db } from './firebase.js';
 import { showHome, showAuth, renderHome, setTheme, customAlert, customConfirm } from './ui.js';
-import { showToast } from './toast.js';
+import { displayAppToast } from './toast.js';
 import { Onboarding } from './onboarding.js';
 import { state } from './config.js';
 import { refs } from './dom.js';
@@ -214,22 +214,29 @@ export const Auth = (() => {
         if (!firebaseUser.emailVerified && !isGoogleUser) {
           _resetGoogleBtns();
           await firebaseSignOut(auth);
-          showToast('Please verify your email before signing in.', 'warning', 5000);
+          displayAppToast('Please verify your email before signing in.', 'warning', 5000);
           return;
         }
         _googleAuthInProgress = false;
         cacheSession(firebaseUser);
-        Telemetry.track('login', { method: firebaseUser.providerData?.[0]?.providerId || 'email' });
-        await ensureUsersByEmail(firebaseUser).catch(err => Logger.capture('ensureUsersByEmail', err));
-        await trackRetention(firebaseUser).catch(() => {});
-        Funnel.milestone('first_login');
-        // Update admin active-user record (best-effort)
-        setDoc(doc(db, 'adminActiveUsers', firebaseUser.uid), {
-          uid: firebaseUser.uid,
-          lastActiveAt: new Date().toISOString()
-        }, { merge: true }).catch(() => {});
-        await syncProjectsOnLogin(firebaseUser.uid);
-        await loadUserProfile(firebaseUser);
+
+        try {
+          Telemetry.track('login', { method: firebaseUser.providerData?.[0]?.providerId || 'email' });
+          await ensureUsersByEmail(firebaseUser).catch(err => Logger.capture('ensureUsersByEmail', err));
+          await trackRetention(firebaseUser).catch(() => {});
+          Funnel.milestone('first_login');
+          // Update admin active-user record (best-effort)
+          setDoc(doc(db, 'adminActiveUsers', firebaseUser.uid), {
+            uid: firebaseUser.uid,
+            lastActiveAt: new Date().toISOString()
+          }, { merge: true }).catch(() => {});
+          await syncProjectsOnLogin(firebaseUser.uid);
+          await loadUserProfile(firebaseUser);
+        } catch (err) {
+          Logger.capture('onAuthStateChanged/init', err);
+          console.error('Initialization background tasks failed', err);
+        }
+
         if (refs.authView && !refs.authView.hidden) showHome();
         renderHome();
         updateTriggerUI(firebaseUser);
@@ -461,7 +468,7 @@ export const Auth = (() => {
     Telemetry.track('logout');
     clearSession();
     try { await firebaseSignOut(auth); } catch { /* ignore */ }
-    showToast('Signed out', 'info');
+    displayAppToast('Signed out', 'info');
     showAuth();
   }
 
@@ -698,7 +705,7 @@ export const Auth = (() => {
       profileName.textContent = formatUsernameForDisplay(requestedUsername);
       if (user) updateTriggerUI({ photoURL: nextPhotoURL, displayName: requestedUsername });
       else if (isDemo) updateTriggerUI({ photoURL: session.photoURL, displayName: requestedUsername });
-      showToast('Profile updated');
+      displayAppToast('Profile updated');
 
     } catch (err) {
       console.error('Bio save failed', err);
@@ -752,7 +759,7 @@ export const Auth = (() => {
         profileData = snap.exists() ? snap.data() : {};
       }
       const username = profileData.username || sanitizeUsername(displayName) || generateRandomUsername();
-      const fullName = profileData.name || (isDemo ? (session.fullName || session.name) : username);
+      const fullName = profileData.name || (isDemo ? (session.fullName || session.name) : (user.displayName || username));
       cachedProfileMeta = {
         ...profileData,
         username,
@@ -800,6 +807,19 @@ export const Auth = (() => {
             displayName: username,
             photoURL: photo || user.photoURL || ''
           });
+
+          // Trigger first-time setup sequence (matches handleSignUp logic)
+          enqueueWelcomeEmail(user);
+          Referral.processSignup(user.uid);
+          Funnel.milestone('signed_up', user.uid);
+          setDoc(doc(db, 'adminSignups', user.uid), {
+            uid: user.uid,
+            email: user.email,
+            createdAt: cachedProfileMeta.usernameCreatedAt,
+            referredBy: localStorage.getItem('eyawriter_ref') || null
+          }).catch(() => {});
+          Telemetry.track('signup', { method: 'google' });
+          localStorage.removeItem('eyawriter_onboarded_v1');
         }
       }
     } catch (err) {

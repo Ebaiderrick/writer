@@ -3,7 +3,7 @@ import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   query, orderBy, limit, addDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { showToast } from './toast.js';
+import { displayAppToast } from './toast.js';
 import { FeatureFlags } from './featureFlags.js';
 
 let _view = null;
@@ -49,7 +49,7 @@ export const Admin = {
     const uid = auth.currentUser?.uid;
     _isAdmin = await _checkAdmin(uid);
     if (!_isAdmin) {
-      showToast('Admin access required', 'error');
+      displayAppToast('Admin access required', 'error');
       return;
     }
     document.querySelectorAll('.app-shell > section').forEach(el => { el.hidden = true; });
@@ -207,10 +207,10 @@ async function _searchUser(email) {
       try {
         await setDoc(doc(db, 'adminSignups', uid),
           { uid, flagged: nowFlagged, flaggedAt: new Date().toISOString() }, { merge: true });
-        showToast(nowFlagged ? 'User flagged' : 'User unflagged');
+        displayAppToast(nowFlagged ? 'User flagged' : 'User unflagged');
         _searchUser(email);
       } catch (err) {
-        showToast('Failed: ' + err.message, 'error');
+        displayAppToast('Failed: ' + err.message, 'error');
       }
     });
   } catch (err) {
@@ -251,9 +251,9 @@ async function _loadFeedback() {
       btn.addEventListener('click', async () => {
         try {
           await deleteDoc(doc(db, 'adminFeedback', btn.dataset.id));
-          showToast('Feedback deleted');
+          displayAppToast('Feedback deleted');
           _loadFeedback();
-        } catch (err) { showToast('Delete failed: ' + err.message, 'error'); }
+        } catch (err) { displayAppToast('Delete failed: ' + err.message, 'error'); }
       });
     });
   } catch (err) {
@@ -268,7 +268,7 @@ function _bindFlags() {
   document.getElementById('adminFlagAddBtn')?.addEventListener('click', () => {
     const nameEl = document.getElementById('adminFlagNewName');
     const name = nameEl?.value.trim();
-    if (!name) { showToast('Enter a flag name', 'warning'); return; }
+    if (!name) { displayAppToast('Enter a flag name', 'warning'); return; }
     _addFlagRow(name, false);
     if (nameEl) nameEl.value = '';
   });
@@ -317,9 +317,9 @@ async function _saveFlags() {
   try {
     await setDoc(doc(db, 'config', 'featureFlags'), flags);
     await FeatureFlags.refresh();
-    showToast('Feature flags saved');
+    displayAppToast('Feature flags saved');
   } catch (err) {
-    showToast('Save failed: ' + err.message, 'error');
+    displayAppToast('Save failed: ' + err.message, 'error');
   }
 }
 
@@ -371,7 +371,7 @@ async function _createIncident() {
   const title = titleEl?.value.trim();
   const severity = document.getElementById('adminIncidentSeverity')?.value || 'low';
   const body = bodyEl?.value.trim() || '';
-  if (!title) { showToast('Enter a title', 'warning'); return; }
+  if (!title) { displayAppToast('Enter a title', 'warning'); return; }
   try {
     await addDoc(collection(db, 'incidents'), {
       title, severity, body,
@@ -379,12 +379,12 @@ async function _createIncident() {
       createdAt: new Date().toISOString(),
       createdBy: auth.currentUser?.uid || 'admin'
     });
-    showToast('Incident created');
+    displayAppToast('Incident created');
     if (titleEl) titleEl.value = '';
     if (bodyEl) bodyEl.value = '';
     _loadIncidents();
   } catch (err) {
-    showToast('Failed: ' + err.message, 'error');
+    displayAppToast('Failed: ' + err.message, 'error');
   }
 }
 
@@ -392,15 +392,15 @@ async function _incidentAction(action, id) {
   try {
     if (action === 'delete') {
       await deleteDoc(doc(db, 'incidents', id));
-      showToast('Incident deleted');
+      displayAppToast('Incident deleted');
     } else {
       const status = action === 'resolve' ? 'resolved' : 'investigating';
       await updateDoc(doc(db, 'incidents', id), { status, updatedAt: new Date().toISOString() });
-      showToast(`Status → ${status}`);
+      displayAppToast(`Status → ${status}`);
     }
     _loadIncidents();
   } catch (err) {
-    showToast('Failed: ' + err.message, 'error');
+    displayAppToast('Failed: ' + err.message, 'error');
   }
 }
 
@@ -454,7 +454,7 @@ async function _exportWaitlist() {
     a.href = url; a.download = 'eyawriter-waitlist.csv'; a.click();
     URL.revokeObjectURL(url);
   } catch (err) {
-    showToast('Export failed: ' + err.message, 'error');
+    displayAppToast('Export failed: ' + err.message, 'error');
   }
 }
 
@@ -468,10 +468,10 @@ function _bindAnnouncements() {
       // Hide the live banner immediately for this admin session
       const banner = document.getElementById('announcementBanner');
       if (banner) banner.hidden = true;
-      showToast('Announcement banner disabled');
+      displayAppToast('Announcement banner disabled');
       _loadAnnouncements();
     } catch (err) {
-      showToast('Failed: ' + err.message, 'error');
+      displayAppToast('Failed: ' + err.message, 'error');
     }
   });
 }
@@ -520,7 +520,7 @@ async function _saveAnnouncement() {
   const enabled = document.getElementById('adminAnnEnabled')?.checked || false;
   const dismissible = document.getElementById('adminAnnDismissible')?.checked !== false;
 
-  if (!message) { showToast('Enter a message', 'warning'); return; }
+  if (!message) { displayAppToast('Enter a message', 'warning'); return; }
 
   try {
     await setDoc(doc(db, 'config', 'announcement'), {
@@ -542,10 +542,10 @@ async function _saveAnnouncement() {
       }
     }
 
-    showToast(enabled ? 'Announcement published' : 'Announcement saved (disabled)');
+    displayAppToast(enabled ? 'Announcement published' : 'Announcement saved (disabled)');
     _loadAnnouncements();
   } catch (err) {
-    showToast('Save failed: ' + err.message, 'error');
+    displayAppToast('Save failed: ' + err.message, 'error');
   }
 }
 

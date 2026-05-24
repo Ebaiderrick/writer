@@ -6,7 +6,7 @@ import { auth, db } from './firebase.js';
 import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch, limit, query } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { Recovery } from './recovery.js';
 import { logActivity, logEditActivity, ACTIVITY_CATEGORIES } from './activity.js';
-import { showToast } from './toast.js';
+import { displayAppToast } from './toast.js';
 
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -383,6 +383,23 @@ export const sampleProject = {
   ]
 };
 
+
+function parseStoredPayload(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function chooseLatestPayload(p1, p2) {
+  if (!p1 && !p2) return null;
+  if (!p1) return p2;
+  if (!p2) return p1;
+  const t1 = new Date(p1.savedAt || 0).getTime();
+  const t2 = new Date(p2.savedAt || 0).getTime();
+  return t1 >= t2 ? p1 : p2;
+}
+
 export function loadProjects() {
   try {
     const parsed = chooseLatestPayload(parseStoredPayload(STORAGE_KEY), parseStoredPayload(RECOVERY_KEY));
@@ -561,7 +578,7 @@ export function getArchivedProjects() {
   return state.projects.filter(p => p.isArchived);
 }
 
-export function updateWorkspaceAcrossProjects(workspaceId, updater) {
+export function updateEditorAcrossProjects(editorId, updater) {
   let changed = false;
   state.projects = state.projects.map((project) => {
     if (project.editor?.id !== editorId) {
@@ -622,7 +639,7 @@ export function persistProjects(forceSavedBadge = false, { syncInputs = true } =
     }));
   } catch (e) {
     if (e?.name === 'QuotaExceededError' || e?.code === 22) {
-      showToast('Local storage is full — your work is syncing to the cloud only. Export a backup to be safe.', 'warning', 8000);
+      displayAppToast('Local storage is full — your work is syncing to the cloud only. Export a backup to be safe.', 'warning', 8000);
     }
   }
   Recovery.writeSnapshot(state.projects);

@@ -1,5 +1,5 @@
 import { state } from './config.js';
-import { showToast } from './toast.js';
+import { displayAppToast } from './toast.js';
 
 const STORAGE_KEY_MAIN = 'eyawriter-projects-v5';
 const SNAPSHOT_KEY     = 'eyawriter-recovery-v1';
@@ -167,7 +167,7 @@ function _handleStorageConflict(event) {
     if (currentProjectId && currentProjectId === state.currentProjectId) {
       _conflictCooldown = true;
       setTimeout(() => { _conflictCooldown = false; }, 10000);
-      showToast('This project was saved in another tab. Reload to see those changes.', 'warning', 6000);
+      displayAppToast('This project was saved in another tab. Reload to see those changes.', 'warning', 6000);
     }
   } catch { /* ignore */ }
 }
