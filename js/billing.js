@@ -1,6 +1,6 @@
 import { auth, db } from './firebase.js';
 import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { showToast } from './toast.js';
+import { displayAppToast } from './toast.js';
 
 // Free plan: max 2 owned scripts
 export const FREE_SCRIPT_LIMIT = 2;
@@ -54,7 +54,7 @@ export const Billing = {
 
   async startCheckout(tier = 'pro') {
     const user = auth.currentUser;
-    if (!user) { showToast('Please sign in to upgrade', 'warning'); return; }
+    if (!user) { displayAppToast('Please sign in to upgrade', 'warning'); return; }
 
     const validTier = tier === 'premium_plus' ? 'premium_plus' : 'pro';
     const label = validTier === 'premium_plus' ? 'Premium Plus — $25/mo' : 'Premium — $10/mo';
@@ -78,11 +78,11 @@ export const Billing = {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        showToast(data.error || 'Checkout failed — try again', 'error');
+        displayAppToast(data.error || 'Checkout failed — try again', 'error');
         btns.forEach(b => { b.disabled = false; b.textContent = `Upgrade to ${label}`; });
       }
     } catch {
-      showToast('Network error — try again', 'error');
+      displayAppToast('Network error — try again', 'error');
       btns.forEach(b => { b.disabled = false; b.textContent = `Upgrade to ${label}`; });
     }
   },
@@ -90,7 +90,7 @@ export const Billing = {
   async openPortal() {
     const user = auth.currentUser;
     const customerId = _status?.stripeCustomerId;
-    if (!customerId) { showToast('No billing account found', 'warning'); return; }
+    if (!customerId) { displayAppToast('No billing account found', 'warning'); return; }
     try {
       let token = '';
       try { if (user) token = await user.getIdToken(); } catch { /* use customerId fallback */ }
@@ -105,9 +105,9 @@ export const Billing = {
       });
       const data = await res.json();
       if (data.url) window.location.href = data.url;
-      else showToast(data.error || 'Could not open portal', 'error');
+      else displayAppToast(data.error || 'Could not open portal', 'error');
     } catch {
-      showToast('Network error — try again', 'error');
+      displayAppToast('Network error — try again', 'error');
     }
   },
 
@@ -214,7 +214,7 @@ async function _handleUpgradeReturn(sessionId) {
       _status = { plan: data.plan || 'pro', status: 'active' };
       _applyPlanUI();
       const planLabel = data.plan === 'premium_plus' ? 'Premium Plus' : 'Premium';
-      showToast(`Welcome to ${planLabel}! All features unlocked.`, 'success', 6000);
+      displayAppToast(`Welcome to ${planLabel}! All features unlocked.`, 'success', 6000);
     }
   } catch {
     // Silent — subscription will sync via webhook

@@ -1,7 +1,8 @@
 import { state } from './config.js';
 import { loadProjects, persistProjects } from './project.js';
 import { bindEvents, renderStudio, applySaveModeButtons } from './events.js';
-import { showAuth, showHome, renderHome, applyToolbarState, applyTheme, applyViewState, showToast } from './ui.js';
+import { showAuth, showHome, renderHome, applyToolbarState, applyTheme, applyViewState } from './ui.js';
+import { displayAppToast } from './toast.js';
 import { initBackground } from './background.js';
 import { AI } from './ai.js';
 import { ContextMenu } from './contextMenu.js';
@@ -25,13 +26,13 @@ function boot() {
 
   Recovery.init({
     onOnline() {
-      showToast('Back online — syncing changes', 'info', 3000);
+      displayAppToast('Back online — syncing changes', 'info', 3000);
       if (Recovery.hasOfflineSyncPending()) {
         persistProjects(false, { syncInputs: false });
       }
     },
     onOffline() {
-      showToast("You're offline — changes saved locally", 'warning', 4000);
+      displayAppToast("You're offline — changes saved locally", 'warning', 4000);
     }
   });
   Recovery.restoreHistory(state.currentProjectId);
@@ -55,7 +56,7 @@ function boot() {
   applyTranslations();
   applySaveModeButtons();
   if (state.pendingRecoveryNotice) {
-    showToast("Recovered your latest local session.", "success", { duration: 3400 });
+    displayAppToast("Recovered your latest local session.", "success", { duration: 3400 });
   }
   if (state.localBackupEnabled) {
     restoreLocalSaveFile().then((restored) => {
