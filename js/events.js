@@ -2450,17 +2450,23 @@ function handleBlockKeydown(event, id) {
       return;
     }
     const offset = getCaretOffset(event.target);
-    const textBefore = line.text.substring(0, offset);
-    const textAfter = line.text.substring(offset);
-
-    line.text = textBefore;
+    const originalText = line.text;
+    const textBefore = originalText.substring(0, offset);
+    const textAfter = originalText.substring(offset);
     const nextType = inferNextType(index);
+    const createFreshLine = offset === 0 && Boolean(originalText.trim());
+
+    line.text = createFreshLine ? originalText : textBefore;
     _enterPrevBlockId = id;  // protect this block from focusout deletion during render
-    const newId = addBlock(nextType, textAfter || getDefaultText(nextType, index), index + 1);
+    const newId = addBlock(
+      nextType,
+      createFreshLine ? getDefaultText(nextType, index + 1) : (textAfter || getDefaultText(nextType, index + 1)),
+      index + 1
+    );
 
     renderStudio();
     _enterPrevBlockId = null;
-    focusBlock(newId, !textAfter);
+    focusBlock(newId, createFreshLine || !textAfter);
     queueSave();
     return;
   }
