@@ -242,6 +242,9 @@ export const Auth = (() => {
             window.history.replaceState({}, '', '/app');
             showHome();
           }
+        } else if (window.location.pathname === '/settings') {
+          const { Settings } = await import('./settings.js');
+          Settings.show();
         }
       } else {
         cleanupCollaboration();
@@ -262,6 +265,10 @@ export const Auth = (() => {
           updateTriggerUI({ photoURL: session.photoURL, displayName: session.name });
           if (refs.authView && !refs.authView.hidden) showHome();
           renderHome();
+          if (window.location.pathname === '/settings') {
+            const { Settings } = await import('./settings.js');
+            Settings.show();
+          }
         }
       }
     });
@@ -399,7 +406,7 @@ export const Auth = (() => {
     closeProfilePopup();
     clearSession();
     try { await firebaseSignOut(auth); } catch { /* ignore */ }
-    if (window.location.pathname === '/admin') {
+    if (window.location.pathname === '/admin' || window.location.pathname === '/settings') {
       window.history.replaceState({}, '', '/app');
     }
     showAuth();

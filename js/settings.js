@@ -8,6 +8,19 @@ import { Admin } from './admin.js';
 let settingsView = null;
 let previousView = null;
 
+function setSettingsPath() {
+  if (window.location.pathname !== '/settings') {
+    window.history.replaceState({}, '', '/settings');
+  }
+}
+
+function restoreAppPath() {
+  const nextPath = previousView?.id === 'adminView' ? '/admin' : '/app';
+  if (window.location.pathname !== nextPath) {
+    window.history.replaceState({}, '', nextPath);
+  }
+}
+
 function detectCurrentView() {
   const ids = ['homeView', 'workspaceView', 'studioView', 'adminView'];
   for (const id of ids) {
@@ -139,6 +152,7 @@ export const Settings = {
       section.hidden = true;
     });
     settingsView.hidden = false;
+    setSettingsPath();
     settingsView.querySelector('[data-settings-tab="general"]')?.click();
     populateSettings();
   },
@@ -148,6 +162,7 @@ export const Settings = {
       return;
     }
     settingsView.hidden = true;
+    restoreAppPath();
     (previousView || document.getElementById('homeView'))?.removeAttribute('hidden');
     previousView = null;
   }
