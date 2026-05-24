@@ -30,7 +30,7 @@ import {
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
-  showModal, showToast, updateToast,
+  showModal, updateToast,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderEditorView, renderStudioProjectContext,
