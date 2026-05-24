@@ -315,14 +315,32 @@ export function focusBlock(id, selectAll = false) {
   if (!target) {
     return;
   }
-  target.focus();
+  try {
+    target.focus({ preventScroll: true });
+  } catch {
+    target.focus();
+  }
   if (selectAll && target.textContent) {
     selectElementText(target);
   } else {
     placeCaretAtEnd(target);
   }
   setActiveBlock(id);
-  target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  const scrollContainer = target.closest(".editor-scroll");
+  if (!scrollContainer) {
+    target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    return;
+  }
+
+  const targetRect = target.getBoundingClientRect();
+  const containerRect = scrollContainer.getBoundingClientRect();
+  const padding = 24;
+  const isAboveViewport = targetRect.top < containerRect.top + padding;
+  const isBelowViewport = targetRect.bottom > containerRect.bottom - padding;
+
+  if (isAboveViewport || isBelowViewport) {
+    target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
 }
 
 export function getActiveEditableBlock() {
