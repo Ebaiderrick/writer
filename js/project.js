@@ -383,6 +383,22 @@ export const sampleProject = {
   ]
 };
 
+function parseStoredPayload(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function chooseLatestPayload(a, b) {
+  if (!a && !b) return null;
+  if (!a) return b;
+  if (!b) return a;
+  const dateA = a.savedAt ? new Date(a.savedAt) : new Date(0);
+  const dateB = b.savedAt ? new Date(b.savedAt) : new Date(0);
+  return dateA >= dateB ? a : b;
+}
+
 export function loadProjects() {
   try {
     const parsed = chooseLatestPayload(parseStoredPayload(STORAGE_KEY), parseStoredPayload(RECOVERY_KEY));

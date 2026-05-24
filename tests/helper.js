@@ -56,6 +56,7 @@ export function startAfter() { return null; }
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET',
+  'Cache-Control': 'no-store',
 };
 
 async function mockFirebase(page) {
