@@ -4,7 +4,7 @@ import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, upsertProject, sanitizeProject, cloneProject,
   syncProjectFromInputs, serializeScript, replaceWithSample as restoreSample,
-  getDefaultText
+  getDefaultText, getSuggestedNextSpeaker
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, getActiveEditableBlock,
@@ -29,6 +29,17 @@ export function bindEvents() {
   refs.newProjectBtn.addEventListener("click", () => {
     const project = createProject();
     openProject(project.id);
+  });
+
+  refs.demoLoginBtn?.addEventListener("click", () => {
+    const project = createProject();
+    openProject(project.id);
+    const demoProject = restoreSample();
+    if (demoProject) {
+      demoProject.title = "Demo Script";
+      renderStudio();
+      persistProjects(true);
+    }
   });
 
   refs.goHomeBtn.addEventListener("click", () => {
@@ -344,6 +355,7 @@ export function openProject(projectId) {
   if (state.activeBlockId) {
     focusBlock(state.activeBlockId);
   }
+  queueSave();
 }
 
 export function renderStudio() {
@@ -417,21 +429,20 @@ function handleBlockKeydown(event, id) {
   if (!line) return;
 
   if (event.key === "Delete") {
-    event.preventDefault();
-    project.updatedAt = new Date().toISOString();
-    if (project.lines.length === 1) {
-      line.text = "";
-      renderStudio();
-      focusBlock(line.id, true);
-    } else {
-      const fallbackIndex = Math.min(index, project.lines.length - 2);
-      const targetId = project.lines[fallbackIndex >= index ? fallbackIndex + 1 : fallbackIndex]?.id || project.lines[Math.max(0, index - 1)].id;
+    if (!line.text.trim() && project.lines.length > 1) {
+      event.preventDefault();
+      const targetId = project.lines[index + 1]?.id || project.lines[Math.max(0, index - 1)]?.id;
       project.lines.splice(index, 1);
       state.activeBlockId = targetId;
+      project.updatedAt = new Date().toISOString();
       renderStudio();
-      focusBlock(targetId);
+      if (targetId) {
+        focusBlock(targetId);
+      }
+      queueSave();
+      return;
     }
-    queueSave();
+
     return;
   }
 

@@ -5,6 +5,7 @@ export const refs = {
   studioLayout: document.querySelector("#studioLayout"),
   projectGrid: document.querySelector("#projectGrid"),
   newProjectBtn: document.querySelector("#newProjectBtn"),
+  demoLoginBtn: document.querySelector("#demoLoginBtn"),
   goHomeBtn: document.querySelector("#goHomeBtn"),
   saveBadge: document.querySelector("#saveBadge"),
   titleInput: document.querySelector("#titleInput"),

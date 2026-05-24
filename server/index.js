@@ -7,15 +7,20 @@ import { buildPrompt } from "./promptBuilder.js";
 dotenv.config();
 
 const app = express();
-const DEFAULT_PORT = Number(process.env.PORT) || 3001;
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.4-mini";
-const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+const PORT = Number(process.env.PORT) || 3001;
+const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
+const OPENAI_MODEL = String(process.env.OPENAI_MODEL || "").trim();
+const OPENAI_BASE_URL = String(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").trim().replace(/\/$/, "");
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/", (req, res) => {
-  res.send("AI Server Running");
+  res.json({
+    ok: true,
+    mode: OPENAI_API_KEY ? "live" : "mock",
+    modelConfigured: Boolean(OPENAI_MODEL)
+  });
 });
 
 app.post("/api/ai-assist", async (req, res) => {
@@ -25,22 +30,28 @@ app.post("/api/ai-assist", async (req, res) => {
     return res.status(400).json({ error: "Missing current block" });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!OPENAI_API_KEY) {
     return res.json({
       output: `AI is working (test mode) - You wanted to ${action || "assist with"} this ${type || "block"}.`
     });
   }
 
+  if (!OPENAI_MODEL) {
+    return res.status(500).json({
+      error: "OPENAI_MODEL is not configured. Set it in server/.env before using live AI assistance."
+    });
+  }
+
   try {
     const prompt = buildPrompt({ type, action, current, context, instruction });
-    const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, "")}/responses`, {
+    const response = await fetch(`${OPENAI_BASE_URL}/responses`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model: OPENAI_MODEL,
         input: prompt,
         max_output_tokens: 800
       })
@@ -67,8 +78,10 @@ app.post("/api/ai-assist", async (req, res) => {
   }
 });
 
-app.listen(DEFAULT_PORT, () => {
-  console.log(`Server running on http://localhost:${DEFAULT_PORT}`);
+app.listen(PORT, () => {
+  console.log(
+    `Server running on http://localhost:${PORT} (${OPENAI_API_KEY ? `live mode: ${OPENAI_MODEL || "model missing"}` : "mock mode: set OPENAI_API_KEY to enable live AI"})`
+  );
 });
 
 function extractOutputText(data) {
