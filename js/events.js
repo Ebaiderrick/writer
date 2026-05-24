@@ -2972,19 +2972,21 @@ function execEditorCommand(command) {
   }
 }
 
-function saveAndGoHome() {
-  if (isDisposableUntitledDraft()) {
-    discardUntitledDraftIfNeeded().then(() => {
-      state.currentWorkspaceId = null;
-      showHome();
-      renderHome();
-    });
-    return;
+async function saveAndGoHome() {
+  try {
+    if (isDisposableUntitledDraft()) {
+      await discardUntitledDraftIfNeeded();
+    } else {
+      persistProjects(true);
+    }
+  } catch (error) {
+    console.error("Save & Home failed during save", error);
+  } finally {
+    state.currentWorkspaceId = null;
+    closeMenus();
+    showHome();
+    renderHome();
   }
-  persistProjects(true);
-  state.currentWorkspaceId = null;
-  showHome();
-  renderHome();
 }
 
 function setGrammarCheck(enabled) {
