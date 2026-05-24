@@ -2,7 +2,6 @@ import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './c
 import { Telemetry } from './telemetry.js';
 import { Logger } from './logger.js';
 import { Funnel } from './funnel.js';
-import { showToast } from './toast.js';
 import { refs } from './dom.js';
 import { Billing, FREE_SCRIPT_LIMIT } from './billing.js';
 import { ContextMenu } from './contextMenu.js';
@@ -30,7 +29,7 @@ import {
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
-  showModal, updateToast,
+  showModal, showToast, updateToast,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderEditorView, renderStudioProjectContext,
