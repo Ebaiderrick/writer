@@ -316,7 +316,7 @@ export function focusBlock(id, selectAll = false) {
     return;
   }
   target.focus();
-  if (selectAll) {
+  if (selectAll && target.textContent) {
     selectElementText(target);
   } else {
     placeCaretAtEnd(target);

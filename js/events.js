@@ -2598,19 +2598,22 @@ function changeBlockType(id, nextType) {
   const project = getCurrentProject();
   if (!line || !project) return;
 
+  const contextIndex = getLineIndex(id);
+  const previousText = line.text;
   line.type = nextType;
-  line.text = normalizeConvertedText(line.text, nextType);
+  line.text = normalizeConvertedText(previousText, nextType, contextIndex);
   project.updatedAt = new Date().toISOString();
+  state.activeBlockId = id;
   state.activeType = nextType;
   renderStudio();
-  focusBlock(id, !line.text);
+  focusBlock(id, !stripWrapperChars(String(previousText || "").trim()) && Boolean(line.text));
   queueSave();
 }
 
-function normalizeConvertedText(text, type) {
+function normalizeConvertedText(text, type, contextIndex = getLineIndex(state.activeBlockId)) {
   const stripped = stripWrapperChars(String(text || "").trim());
   if (!stripped && type === "character") {
-      return getSuggestedNextSpeaker(getLineIndex(state.activeBlockId));
+      return getSuggestedNextSpeaker(contextIndex);
   }
   return normalizeLineText(stripped, type);
 }
