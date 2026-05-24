@@ -21,6 +21,7 @@ export const EDITOR_ROLES = {
   editor: 'editor',
   viewer: 'viewer'
 };
+const WORKSPACE_ROLES = EDITOR_ROLES;
 const EMAILJS_SERVICE = 'service_j18y8zo';
 const EMAILJS_TEMPLATE = 'template_6qr97mn';
 const EMAILJS_PUBLIC_KEY = 'VI5qc4g4cH9d0vpvr';

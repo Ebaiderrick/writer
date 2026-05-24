@@ -7,7 +7,18 @@ export function initializeApp(config) { return { name: '[DEFAULT]', options: con
 `;
 
 const FIREBASE_AUTH_STUB = `
-export function getAuth(app) { return { app, currentUser: null }; }
+export function getAuth(app) {
+  return {
+    app,
+    currentUser: {
+      uid: 'user_test',
+      email: 'test@example.com',
+      displayName: 'Tester',
+      emailVerified: true,
+      providerData: [{ providerId: 'google.com' }],
+    },
+  };
+}
 export function setPersistence(auth, p) { return Promise.resolve(); }
 export const browserLocalPersistence = 'local';
 export function onAuthStateChanged(auth, callback) {

@@ -6930,6 +6930,10 @@ html[data-theme="white"] .user-trigger {
   overflow: hidden;
 }
 
+.settings-view[hidden] {
+  display: none !important;
+}
+
 .settings-topbar {
   display: flex;
   align-items: center;

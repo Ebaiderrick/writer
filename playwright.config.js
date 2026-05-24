@@ -16,6 +16,7 @@ export default defineConfig({
     baseURL: 'http://localhost:8000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    serviceWorkers: 'block',
     launchOptions: {
       executablePath: process.env.CHROME_PATH || undefined,
     },

@@ -2,7 +2,7 @@ import { state, LEFT_PANE_BLOCK_DEFS, EDITOR_TASK_TEMPLATES } from './config.js'
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript, restoreProject, permanentlyDeleteProject, togglePinProject } from './project.js';
-import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode } from './utils.js';
+import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode, uid } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
 import { calculateAnalytics } from './analytics.js';
