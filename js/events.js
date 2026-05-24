@@ -2449,6 +2449,10 @@ function handleBlockKeydown(event, id) {
       focusSecondaryBlock(id);
       return;
     }
+    if (!line.text.trim()) {
+      focusBlock(id, true);
+      return;
+    }
     const offset = getCaretOffset(event.target);
     const originalText = line.text;
     const textBefore = originalText.substring(0, offset);
