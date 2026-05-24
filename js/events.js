@@ -1,4 +1,4 @@
-import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
+import { state, TYPE_SEQUENCE, TYPE_LABELS, EDITOR_TASK_TEMPLATES } from './config.js';
 import { Telemetry } from './telemetry.js';
 import { Logger } from './logger.js';
 import { Funnel } from './funnel.js';

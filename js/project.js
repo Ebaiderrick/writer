@@ -547,6 +547,14 @@ export function getEditorRootProject(editorId) {
   return state.projects.find((project) => project.editor?.id === editorId && project.isEditorRoot) || null;
 }
 
+export function updateEditorAcrossProjects(editorId, updaterFn) {
+  if (!editorId) return;
+  state.projects = state.projects.map(project => {
+    if (project.editor?.id !== editorId) return project;
+    return { ...project, editor: updaterFn(project.editor) };
+  });
+}
+
 export function getOwnedProjects(userId) {
   const id = userId || auth.currentUser?.uid;
   return state.projects.filter(p => !p.isArchived && (!p.isShared || !p.ownerId || p.ownerId === id));

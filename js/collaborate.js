@@ -162,6 +162,10 @@ export function canManageEditor(project = getCurrentProject(), user = auth.curre
   return getUserProjectRole(project, user) === EDITOR_ROLES.owner;
 }
 
+export function canManageWorkspace(project = getCurrentProject(), user = auth.currentUser) {
+  return getUserProjectRole(project, user) === EDITOR_ROLES.owner;
+}
+
 // ── Centralized permission utility ────────────────────────────
 // Single authoritative source for all workspace permission checks.
 
