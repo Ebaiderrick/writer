@@ -241,32 +241,34 @@
     </section>
 
     <section id="workspaceView" class="workspace-view" hidden>
-      <header class="home-topbar workspace-topbar">
-        <div class="workspace-topbar-slot workspace-topbar-slot-left">
-          <div class="workspace-view-brand">
-            <strong id="workspaceViewTitle">Workspace</strong>
-          </div>
-        </div>
-        <div class="workspace-topbar-slot workspace-topbar-slot-center">
-          <div id="workspaceViewClock" class="workspace-view-clock" aria-live="polite">--:-- --</div>
-        </div>
-        <div class="workspace-topbar-slot workspace-topbar-slot-right">
-          <button id="workspaceRefreshBtn" class="icon-button workspace-icon-button" type="button" aria-label="Refresh workspace">&#x21bb;</button>
-          <button id="workspaceCloseBtn" class="ghost-button workspace-exit-button" type="button" aria-label="Exit workspace">Exit</button>
-        </div>
-      </header>
-      <section class="workspace-view-body">
-        <section id="workspaceDashboard" class="workspace-home"></section>
-        <section class="workspace-projects">
-          <div class="home-projects-head workspace-projects-head">
-            <div class="home-projects-copy">
-              <h2>Workspace Projects</h2>
-              <p class="home-projects-subtitle">Every script in this workspace stays connected to the same team context.</p>
+      <div class="workspace-shell">
+        <header class="home-topbar workspace-topbar">
+          <div class="workspace-topbar-slot workspace-topbar-slot-left">
+            <div class="workspace-view-brand">
+              <strong id="workspaceViewTitle">Workspace</strong>
             </div>
           </div>
-          <div id="workspaceProjectGrid" class="project-grid"></div>
+          <div class="workspace-topbar-slot workspace-topbar-slot-center">
+            <div id="workspaceViewClock" class="workspace-view-clock" aria-live="polite">--:-- --</div>
+          </div>
+          <div class="workspace-topbar-slot workspace-topbar-slot-right">
+            <button id="workspaceRefreshBtn" class="icon-button workspace-icon-button" type="button" aria-label="Refresh workspace">&#x21bb;</button>
+            <button id="workspaceCloseBtn" class="ghost-button workspace-exit-button" type="button" aria-label="Exit workspace">Exit</button>
+          </div>
+        </header>
+        <section class="workspace-view-body">
+          <section id="workspaceDashboard" class="workspace-home"></section>
+          <section class="workspace-projects">
+            <div class="home-projects-head workspace-projects-head">
+              <div class="home-projects-copy">
+                <h2>Workspace Projects</h2>
+                <p class="home-projects-subtitle">Every script in this workspace stays connected to the same team context.</p>
+              </div>
+            </div>
+            <div id="workspaceProjectGrid" class="project-grid"></div>
+          </section>
         </section>
-      </section>
+      </div>
     </section>
 
     <section id="settingsView" class="settings-view" hidden>

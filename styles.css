@@ -629,11 +629,11 @@ html[data-theme="rose"] .mesh-background {
   gap: 16px;
   margin-bottom: 0;
   padding: 10px 12px;
-  background: color-mix(in srgb, var(--panel) 90%, rgba(255, 255, 255, 0.08));
-  border: 1px solid color-mix(in srgb, var(--line) 88%, rgba(255, 255, 255, 0.08));
-  border-bottom: 0;
-  border-radius: 28px 28px 0 0;
-  box-shadow: 0 26px 70px rgba(3, 7, 18, 0.22);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 88%, rgba(255, 255, 255, 0.08));
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .workspace-view-brand {
@@ -649,8 +649,24 @@ html[data-theme="rose"] .mesh-background {
   width: min(1080px, calc(100vw - 40px));
 }
 
+.workspace-shell {
+  width: min(1080px, calc(100vw - 40px));
+  display: grid;
+  gap: 0;
+  background: color-mix(in srgb, var(--panel) 90%, rgba(255, 255, 255, 0.08));
+  border: 1px solid color-mix(in srgb, var(--line) 88%, rgba(255, 255, 255, 0.08));
+  border-radius: 28px;
+  box-shadow: 0 26px 70px rgba(3, 7, 18, 0.22);
+  overflow: hidden;
+}
+
+.workspace-shell > * {
+  width: 100%;
+}
+
 .workspace-view-body,
-.workspace-topbar {
+.workspace-topbar,
+.workspace-shell {
   max-width: min(1080px, calc(100vw - 40px));
 }
 
@@ -663,6 +679,10 @@ html[data-theme="rose"] .mesh-background {
   padding: 12px;
   gap: 12px;
   margin-top: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
 }
 
 .workspace-view-brand strong {
@@ -686,14 +706,6 @@ html[data-theme="rose"] .mesh-background {
 .workspace-view-body {
   position: relative;
   z-index: 1;
-}
-
-.workspace-view-body {
-  background: color-mix(in srgb, var(--panel) 90%, rgba(255, 255, 255, 0.08));
-  border: 1px solid color-mix(in srgb, var(--line) 88%, rgba(255, 255, 255, 0.08));
-  border-top: 0;
-  box-shadow: 0 26px 70px rgba(3, 7, 18, 0.22);
-  border-radius: 0 0 28px 28px;
 }
 
 .workspace-topbar-slot {
