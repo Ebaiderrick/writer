@@ -6834,9 +6834,9 @@ html[data-theme="white"] .user-trigger {
 .admin-view {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background: var(--bg, #1a1a2e);
-  color: var(--text, #e2e8f0);
+  min-height: 100vh;
+  background: var(--bg-gradient);
+  color: var(--ink);
 }
 
 .admin-view[hidden] {
@@ -6848,8 +6848,9 @@ html[data-theme="white"] .user-trigger {
   align-items: center;
   gap: 12px;
   padding: 14px 20px;
-  border-bottom: 1px solid var(--border, rgba(255,255,255,.08));
-  background: var(--surface, rgba(255,255,255,.03));
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(12px);
 }
 
 .admin-topbar-title {
@@ -6866,7 +6867,7 @@ html[data-theme="white"] .user-trigger {
   text-transform: uppercase;
   padding: 3px 8px;
   border-radius: 4px;
-  background: var(--accent, #f43f5e);
+  background: var(--accent);
   color: #fff;
 }
 
@@ -6883,14 +6884,15 @@ html[data-theme="white"] .user-trigger {
   padding: 16px 10px;
   width: 170px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border, rgba(255,255,255,.08));
-  background: var(--surface, rgba(255,255,255,.02));
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  overflow-y: auto;
 }
 
 .admin-tab {
   background: none;
   border: none;
-  color: var(--text-muted, rgba(255,255,255,.5));
+  color: var(--muted);
   font-size: 0.88rem;
   text-align: left;
   padding: 8px 12px;
@@ -6900,13 +6902,13 @@ html[data-theme="white"] .user-trigger {
 }
 
 .admin-tab:hover {
-  background: var(--hover, rgba(255,255,255,.06));
-  color: var(--text, #e2e8f0);
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 .admin-tab.is-active {
-  background: var(--accent-muted, rgba(244,63,94,.15));
-  color: var(--accent, #f43f5e);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   font-weight: 600;
 }
 
@@ -6933,14 +6935,14 @@ html[data-theme="white"] .user-trigger {
   font-size: 1.1rem;
   font-weight: 600;
   margin: 0 0 16px;
-  color: var(--text, #e2e8f0);
+  color: var(--ink);
 }
 
 .admin-section-inner h3 {
   font-size: 0.92rem;
   font-weight: 600;
   margin: 0 0 12px;
-  color: var(--text-muted, rgba(255,255,255,.6));
+  color: var(--ink-muted);
 }
 
 .admin-stats-grid {
@@ -6951,25 +6953,26 @@ html[data-theme="white"] .user-trigger {
 }
 
 .admin-stat-card {
-  background: var(--surface, rgba(255,255,255,.04));
-  border: 1px solid var(--border, rgba(255,255,255,.08));
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 10px;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-shadow: var(--shadow);
 }
 
 .admin-stat-value {
   font-size: 1.8rem;
   font-weight: 700;
-  color: var(--accent, #f43f5e);
+  color: var(--accent-strong);
   line-height: 1;
 }
 
 .admin-stat-label {
   font-size: 0.78rem;
-  color: var(--text-muted, rgba(255,255,255,.5));
+  color: var(--muted);
 }
 
 .admin-badge {
@@ -7018,9 +7021,10 @@ html[data-theme="white"] .user-trigger {
 .admin-incident-item,
 .admin-incident-form,
 .admin-ann-current {
-  background: var(--surface, rgba(255,255,255,.04));
-  border: 1px solid var(--border, rgba(255,255,255,.08));
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 8px;
+  box-shadow: var(--shadow);
 }
 
 .admin-user-card,
@@ -7056,7 +7060,7 @@ html[data-theme="white"] .user-trigger {
 .admin-feedback-body,
 .admin-incident-body,
 .admin-loading {
-  color: var(--text-muted, rgba(255,255,255,.55));
+  color: var(--ink-muted);
 }
 
 .admin-user-email,
@@ -7076,7 +7080,8 @@ html[data-theme="white"] .user-trigger {
 .admin-flag-label code {
   font-family: monospace;
   font-size: 0.78rem;
-  background: rgba(255,255,255,.06);
+  background: var(--accent-soft);
+  color: var(--ink);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -7084,7 +7089,7 @@ html[data-theme="white"] .user-trigger {
 .admin-user-funnel strong,
 .admin-user-errors strong {
   font-size: 0.82rem;
-  color: var(--text-muted, rgba(255,255,255,.55));
+  color: var(--ink-muted);
   display: block;
   margin-bottom: 6px;
 }
@@ -7094,14 +7099,14 @@ html[data-theme="white"] .user-trigger {
   padding: 2px 8px;
   border-radius: 4px;
   background: rgba(99,102,241,.15);
-  color: #a5b4fc;
+  color: var(--accent-strong);
 }
 
 .admin-error-row {
   font-size: 0.78rem;
   padding: 4px 0;
-  border-bottom: 1px solid var(--border, rgba(255,255,255,.06));
-  color: var(--text-muted, rgba(255,255,255,.55));
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-muted);
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -7122,7 +7127,7 @@ html[data-theme="white"] .user-trigger {
 .admin-feedback-header small,
 .admin-incident-header small {
   margin-left: auto;
-  color: var(--text-muted, rgba(255,255,255,.4));
+  color: var(--muted);
   font-size: 0.75rem;
 }
 
@@ -7138,8 +7143,8 @@ html[data-theme="white"] .user-trigger {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: var(--surface, rgba(255,255,255,.03));
-  border: 1px solid var(--border, rgba(255,255,255,.07));
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--line);
   border-radius: 6px;
   margin-bottom: 6px;
 }
@@ -7218,19 +7223,19 @@ html[data-theme="white"] .user-trigger {
 
 .admin-waitlist-table th {
   text-align: left;
-  color: var(--text-faint, rgba(255,255,255,.35));
+  color: var(--muted);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .05em;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border, rgba(255,255,255,.08));
+  border-bottom: 1px solid var(--line);
 }
 
 .admin-waitlist-table td {
   padding: 9px 12px;
-  color: var(--text-muted, rgba(255,255,255,.55));
-  border-bottom: 1px solid var(--border, rgba(255,255,255,.06));
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--line);
 }
 
 .admin-waitlist-table tr:hover td {
