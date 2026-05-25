@@ -283,7 +283,13 @@
       <div class="settings-body">
         <nav class="settings-nav">
           <button class="settings-tab is-active" type="button" data-settings-tab="general">General</button>
+          <button class="settings-tab" type="button" data-settings-tab="editor">Editor</button>
+          <button class="settings-tab" type="button" data-settings-tab="ai">AI</button>
           <button class="settings-tab" type="button" data-settings-tab="account">Account</button>
+          <button class="settings-tab" type="button" data-settings-tab="billing">Billing</button>
+          <button class="settings-tab" type="button" data-settings-tab="usage">Usage</button>
+          <button class="settings-tab" type="button" data-settings-tab="legal">Legal</button>
+          <button class="settings-tab" type="button" data-settings-tab="support">Support</button>
         </nav>
         <main class="settings-content">
           <section class="settings-section is-active" data-settings-section="general">
@@ -306,12 +312,61 @@
                   <option value="de">German</option>
                 </select>
               </div>
+            </div>
+          </section>
+
+          <section class="settings-section" data-settings-section="editor">
+            <div class="settings-section-inner">
+              <h2>Editor</h2>
               <div class="settings-group">
-                <label class="settings-label">Editor</label>
-                <label class="settings-toggle-row">
-                  <span>Auto-number scenes</span>
-                  <input type="checkbox" id="settingsAutoNumber" class="settings-toggle">
-                </label>
+                <label class="settings-label">Display</label>
+                <div class="settings-toggle-list">
+                  <label class="settings-toggle-row">
+                    <span>Auto-number scenes</span>
+                    <input type="checkbox" id="settingsAutoNumber" class="settings-toggle">
+                  </label>
+                  <label class="settings-toggle-row">
+                    <span>Background animation</span>
+                    <input type="checkbox" id="settingsBgAnim" class="settings-toggle">
+                  </label>
+                  <label class="settings-toggle-row">
+                    <span>Page numbers</span>
+                    <input type="checkbox" id="settingsPageNumbers" class="settings-toggle">
+                  </label>
+                  <label class="settings-toggle-row">
+                    <span>Show outline</span>
+                    <input type="checkbox" id="settingsOutline" class="settings-toggle">
+                  </label>
+                </div>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label" for="settingsTextSize">Script Text Size</label>
+                <select id="settingsTextSize" class="settings-select">
+                  <option value="10">10pt</option>
+                  <option value="11">11pt</option>
+                  <option value="12">12pt (Default)</option>
+                  <option value="13">13pt</option>
+                  <option value="14">14pt</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" data-settings-section="ai">
+            <div class="settings-section-inner">
+              <h2>AI Assistant</h2>
+              <div class="settings-group">
+                <label class="settings-label" for="settingsAiUrl">Custom AI Endpoint</label>
+                <p class="settings-hint">Override the default endpoint. Leave blank to use the built-in server or Netlify function.</p>
+                <input type="url" id="settingsAiUrl" class="settings-input" placeholder="https://your-server.com/api/ai-assist">
+              </div>
+              <div class="settings-actions">
+                <button id="settingsAiSave" class="primary-button btn-sm" type="button">Save Endpoint</button>
+                <button id="settingsAiTest" class="ghost-button btn-sm" type="button">Test Connection</button>
+                <button id="settingsAiReset" class="ghost-button btn-sm" type="button">Reset to Default</button>
+              </div>
+              <div class="settings-info-card">
+                <p>EyaWriter routes AI requests through OpenRouter. You need an <code>OPENAI_API_KEY</code> set on the server to enable AI features. Without a key, the server runs in test mode and returns stub responses.</p>
               </div>
             </div>
           </section>
@@ -330,10 +385,159 @@
               <div class="settings-actions">
                 <button id="settingsChangePassword" class="ghost-button btn-sm" type="button">Send Password Reset Email</button>
               </div>
-              <div class="settings-group" id="settingsAdminGroup" hidden>
+              <div class="settings-group" id="settingsReferralGroup" style="display:none">
+                <label class="settings-label">Invite Friends</label>
+                <p class="settings-hint">Share your personal link — help grow the community.</p>
+                <div class="settings-referral-row">
+                  <input type="text" id="settingsReferralLink" class="settings-input" readonly aria-label="Referral link">
+                  <button id="settingsCopyReferral" class="ghost-button btn-sm" type="button">Copy</button>
+                </div>
+              </div>
+              <div class="settings-danger-zone">
+                <h3>Profile</h3>
+                <p>Manage your display name, avatar, and bio from the profile popup in the top-right corner.</p>
+              </div>
+              <div class="settings-group" id="settingsAdminGroup" style="display:none">
                 <label class="settings-label">Administration</label>
                 <div class="settings-actions">
-                  <button class="ghost-button btn-sm open-admin-btn" id="settingsAdminBtn" hidden type="button">Open Admin Dashboard</button>
+                  <button class="ghost-button btn-sm open-admin-btn" id="settingsAdminBtn" type="button">Open Admin Dashboard</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" data-settings-section="billing">
+            <div class="settings-section-inner">
+              <h2>Billing</h2>
+              <div class="billing-plan-summary">
+                <div class="billing-plan-row">
+                  <span class="settings-label">Current plan</span>
+                  <strong id="billingCurrentPlan" class="plan-badge-current">Free</strong>
+                </div>
+                <div class="billing-plan-row">
+                  <span class="settings-label">Status</span>
+                  <span id="billingSubStatus">Active</span>
+                </div>
+                <div class="billing-plan-row">
+                  <span class="settings-label">Renews</span>
+                  <span id="billingRenewDate">—</span>
+                </div>
+              </div>
+              <div id="billingFreeSection">
+                <div id="billingQuotaBar" class="billing-quota-wrap">
+                  <div class="billing-quota-bar">
+                    <span class="billing-quota-fill" style="width:0%;"></span>
+                  </div>
+                </div>
+                <p class="settings-hint">Free plan includes 50 AI requests each month and up to 2 projects. Upgrade options from the original billing stack can be connected back here later.</p>
+                <button class="primary-button btn-sm" id="billingUpgradeBtn" type="button">Upgrade to Premium</button>
+              </div>
+              <details class="plan-compare-details">
+                <summary class="plan-compare-summary">Compare plans</summary>
+                <table class="plan-compare-table" aria-label="Plan comparison">
+                  <thead>
+                    <tr>
+                      <th>Feature</th>
+                      <th>Free</th>
+                      <th>Premium</th>
+                      <th>Plus</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>AI requests / month</td><td>50</td><td>300</td><td>1,000</td></tr>
+                    <tr><td>Projects</td><td>2</td><td>Unlimited</td><td>Unlimited</td></tr>
+                    <tr><td>Collaborators</td><td>—</td><td>✓</td><td>✓</td></tr>
+                    <tr><td>Comments &amp; replies</td><td>—</td><td>✓</td><td>✓</td></tr>
+                    <tr><td>Workspace dashboard</td><td>—</td><td>✓</td><td>✓</td></tr>
+                    <tr><td>Priority support</td><td>—</td><td>—</td><td>✓</td></tr>
+                  </tbody>
+                </table>
+              </details>
+            </div>
+          </section>
+
+          <section class="settings-section" data-settings-section="usage">
+            <div class="settings-section-inner">
+              <h2>Usage</h2>
+              <div class="settings-usage-grid">
+                <div class="usage-stat">
+                  <span class="usage-stat-value" id="settingsUsageProjects">0</span>
+                  <span class="usage-stat-label">Projects</span>
+                </div>
+                <div class="usage-stat">
+                  <span class="usage-stat-value" id="settingsUsageWords">0</span>
+                  <span class="usage-stat-label">Total Words</span>
+                </div>
+                <div class="usage-stat">
+                  <span class="usage-stat-value" id="settingsUsageScenes">0</span>
+                  <span class="usage-stat-label">Scenes Written</span>
+                </div>
+                <div class="usage-stat">
+                  <span class="usage-stat-value" id="settingsUsageJoined">—</span>
+                  <span class="usage-stat-label">Member Since</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" data-settings-section="legal">
+            <div class="settings-section-inner">
+              <h2>Legal</h2>
+              <div class="settings-legal-links">
+                <button class="settings-legal-btn" id="settingsPrivacyBtn" type="button">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <div>
+                    <strong>Privacy Policy</strong>
+                    <span>How we collect and use your data</span>
+                  </div>
+                  <span class="legal-arrow">›</span>
+                </button>
+                <button class="settings-legal-btn" id="settingsTosBtn" type="button">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <div>
+                    <strong>Terms of Service</strong>
+                    <span>Rules for using EyaWriter</span>
+                  </div>
+                  <span class="legal-arrow">›</span>
+                </button>
+                <button class="settings-legal-btn" id="settingsAiDisclosureBtn" type="button">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div>
+                    <strong>AI Usage Disclosure</strong>
+                    <span>How AI features work in EyaWriter</span>
+                  </div>
+                  <span class="legal-arrow">›</span>
+                </button>
+              </div>
+              <p class="settings-hint" style="margin-top:24px;">EyaWriter version 1.0.0 — Last updated May 2026</p>
+            </div>
+          </section>
+
+          <section class="settings-section" data-settings-section="support">
+            <div class="settings-section-inner">
+              <h2>Support &amp; Diagnostics</h2>
+              <div class="settings-group">
+                <label class="settings-label">Send Feedback</label>
+                <p class="settings-hint">Report a bug, suggest a feature, or ask a question.</p>
+                <div class="settings-actions">
+                  <button id="settingsFeedbackBtn" class="primary-button btn-sm" type="button">Send Feedback</button>
+                </div>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label">Diagnostics</label>
+                <p class="settings-hint">Session and environment info. Copy to share with support.</p>
+                <div id="settingsDiagnosticsPanel" class="diagnostics-panel">
+                  <p class="settings-hint">Loading diagnostics…</p>
+                </div>
+                <div class="settings-actions" style="margin-top:10px;">
+                  <button id="settingsCopyDiagnostics" class="ghost-button btn-sm" type="button">Copy Diagnostics</button>
+                  <button id="settingsClearErrorLog" class="ghost-button btn-sm" type="button">Clear Error Log</button>
+                </div>
+              </div>
+              <div class="settings-group">
+                <label class="settings-label">Recent Errors</label>
+                <div id="settingsRecentErrors" class="diagnostics-error-list">
+                  <p class="settings-hint">No errors logged this session.</p>
                 </div>
               </div>
             </div>
