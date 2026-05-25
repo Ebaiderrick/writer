@@ -935,7 +935,13 @@
         <div id="suggestionList" class="suggestion-list"></div>
       </div>
 
-      <section id="studioLayout" class="studio-layout">
+      <nav class="studio-mobile-nav" aria-label="Studio mobile panes">
+        <button class="studio-mobile-nav-btn is-active" type="button" data-mobile-pane="details">Details</button>
+        <button class="studio-mobile-nav-btn" type="button" data-mobile-pane="editor">Editor</button>
+        <button class="studio-mobile-nav-btn" type="button" data-mobile-pane="preview">Preview</button>
+      </nav>
+
+      <section id="studioLayout" class="studio-layout mobile-pane-editor">
         <aside id="leftPane" class="left-pane">
           <div class="pane-shell">
             <div class="pane-shell-header">

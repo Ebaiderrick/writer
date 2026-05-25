@@ -1689,6 +1689,11 @@ export function bindEvents() {
     applyViewState();
     persistProjects(false);
   });
+  document.querySelectorAll("[data-mobile-pane]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setMobileStudioPane(button.dataset.mobilePane);
+    });
+  });
   refs.quickDisplayFocusMode?.addEventListener("change", () => {
     state.viewOptions.focusMode = refs.quickDisplayFocusMode.checked;
     if (!state.viewOptions.focusMode) {
@@ -2799,6 +2804,17 @@ function togglePane(side) {
   if (handle) handle.classList.toggle("is-hidden", collapsed);
   refs.studioLayout.classList.toggle(isLeft ? "left-pane-hidden" : "right-pane-hidden", collapsed);
   button.innerHTML = collapsed ? (isLeft ? "&#9654;" : "&#9664;") : (isLeft ? "&#9664;" : "&#9654;");
+}
+
+function setMobileStudioPane(pane) {
+  const layout = refs.studioLayout;
+  if (!layout) return;
+  const normalizedPane = ["details", "editor", "preview"].includes(pane) ? pane : "editor";
+  layout.classList.remove("mobile-pane-details", "mobile-pane-editor", "mobile-pane-preview");
+  layout.classList.add(`mobile-pane-${normalizedPane}`);
+  document.querySelectorAll("[data-mobile-pane]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.mobilePane === normalizedPane);
+  });
 }
 
 function initResizeHandle(handle, side) {
