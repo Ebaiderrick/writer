@@ -782,7 +782,7 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-hero-card {
   display: grid;
-  grid-template-columns: minmax(250px, 1.5fr) repeat(4, minmax(90px, 0.78fr));
+  grid-template-columns: minmax(250px, 1.5fr) 80px 80px 80px minmax(160px, 1fr);
   gap: 8px;
   padding: 8px 10px;
   align-items: stretch;
@@ -842,7 +842,8 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-hero-card > .workspace-home-metric:nth-child(3),
 .workspace-home-hero-card > .workspace-home-metric:nth-child(4) {
   width: 80px;
-  justify-self: end;
+  min-width: 80px;
+  justify-self: stretch;
 }
 
 .workspace-home-grid {

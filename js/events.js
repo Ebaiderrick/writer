@@ -1187,6 +1187,7 @@ async function commentOnWorkspaceTask(taskId) {
 }
 
 export function bindEvents() {
+  ensureWorkspaceClock();
   syncAiTaskSchedules();
   applyWorkspaceTaskTemplateToForm(refs.workspaceDashboard, "custom", { force: true });
   // Navigation
