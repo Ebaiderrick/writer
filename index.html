@@ -30,6 +30,10 @@
       <!-- Auth Container -->
       <div class="auth-wrapper">
         <div class="auth-card">
+          <div id="authPendingState" class="auth-pending-state" hidden aria-live="polite" aria-busy="true">
+            <div class="auth-pending-spinner" aria-hidden="true"></div>
+            <p id="authPendingMessage" class="auth-pending-message">Signing you in...</p>
+          </div>
           <!-- Logo/Header -->
           <div class="auth-header">
             <h1>Eya<span>Writer</span></h1>

@@ -37,6 +37,7 @@ export const Auth = (() => {
   let signupForm, loginForm;
   let signupNameInput, signupEmailInput, signupPassInput, signupPass2Input;
   let loginEmailInput, loginPassInput;
+  let authPendingState, authPendingMessage;
 
   // Profile Popup Elements
   let profilePopup, profileClose, profileTriggerBtns;
@@ -84,6 +85,8 @@ export const Auth = (() => {
     signupPass2Input = document.getElementById('signup-pass2');
     loginEmailInput = document.getElementById('login-email');
     loginPassInput = document.getElementById('login-pass');
+    authPendingState = document.getElementById('authPendingState');
+    authPendingMessage = document.getElementById('authPendingMessage');
 
     // Profile Elements
     profilePopup = document.getElementById('profile-popup');
@@ -228,6 +231,7 @@ export const Auth = (() => {
 
     onAuthStateChanged(auth, async firebaseUser => {
       if (firebaseUser) {
+        setAuthPending(false);
         cacheSession(firebaseUser);
         await ensureUsersByEmail(firebaseUser);
         await syncProjectsOnLogin(firebaseUser.uid);
@@ -247,6 +251,7 @@ export const Auth = (() => {
           Settings.show();
         }
       } else {
+        setAuthPending(false);
         cleanupCollaboration();
         const session = getCachedSession();
         if (!session?.isDemoSession) {
@@ -356,9 +361,11 @@ export const Auth = (() => {
     if (!password) return customAlert('Please enter your password.');
 
     try {
+      setAuthPending(true, 'Signing you in...');
       await signInWithEmailAndPassword(auth, email, password);
       loginForm.reset();
     } catch (err) {
+      setAuthPending(false);
       console.error('Sign-in error:', err.code, err);
       customAlert(friendlyError(err));
     }
@@ -366,14 +373,18 @@ export const Auth = (() => {
 
   async function handleGoogleSignIn() {
     try {
+      setAuthPending(true, 'Signing you in...');
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
+      setAuthPending(false);
       console.error('Google sign-in error:', err.code, err);
       if (err.code === 'auth/popup-blocked') {
         // Popup blocked — fall back to redirect
         try {
+          setAuthPending(true, 'Redirecting to Google...');
           await signInWithRedirect(auth, googleProvider);
         } catch (redirectErr) {
+          setAuthPending(false);
           console.error('Google redirect error:', redirectErr.code, redirectErr);
           customAlert(friendlyError(redirectErr));
         }
@@ -384,6 +395,7 @@ export const Auth = (() => {
   }
 
   function handleDemoLogin() {
+    setAuthPending(false);
     const username = 'Demo Writer';
     const timestamp = new Date().toISOString();
     localStorage.setItem(SESSION_KEY, JSON.stringify({
@@ -400,7 +412,32 @@ export const Auth = (() => {
     renderHome();
   }
 
+  function setAuthPending(isPending, message = 'Signing you in...') {
+    const card = document.querySelector('.auth-card');
+    if (!card) return;
+    card.classList.toggle('is-pending', Boolean(isPending));
+    if (authPendingState) {
+      authPendingState.hidden = !isPending;
+    }
+    if (authPendingMessage) {
+      authPendingMessage.textContent = message;
+    }
+
+    [loginForm, signupForm].forEach((form) => {
+      form?.querySelectorAll('input, button, select, textarea, a').forEach((el) => {
+        if ('disabled' in el) {
+          el.disabled = Boolean(isPending);
+        }
+        if (el.tagName === 'A') {
+          el.setAttribute('aria-disabled', isPending ? 'true' : 'false');
+          el.tabIndex = isPending ? -1 : 0;
+        }
+      });
+    });
+  }
+
   async function handleSignOut() {
+    setAuthPending(false);
     const confirmed = await customConfirm('Sign out of your account?', 'Sign Out');
     if (!confirmed) return;
     closeProfilePopup();
