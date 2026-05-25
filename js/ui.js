@@ -905,7 +905,7 @@ export function renderHome() {
     ];
 
     refs.homeHero.hidden = true;
-    refs.workspaceBackBtn.hidden = false;
+    if (refs.workspaceBackBtn) refs.workspaceBackBtn.hidden = false;
     refs.homeProjectsTitle.textContent = workspaceLead.workspace?.name || workspaceLead.title || "Workspace";
     refs.homeProjectsSubtitle.textContent = "A focused studio view for projects, members, tasks, and recent movement inside this workspace.";
     if (refs.homeWorkspaceDashboard) {
@@ -1020,7 +1020,7 @@ export function renderHome() {
     }
   } else {
     refs.homeHero.hidden = false;
-    refs.workspaceBackBtn.hidden = true;
+    if (refs.workspaceBackBtn) refs.workspaceBackBtn.hidden = true;
     refs.homeProjectsTitle.textContent = "Projects";
     refs.homeProjectsSubtitle.innerHTML = `
       <div class="project-toolbar">
@@ -3793,6 +3793,7 @@ window.addEventListener('scriptIdUpdated', () => {
     renderCurrentScriptId();
     renderHome();
 });
+
 
 
 
