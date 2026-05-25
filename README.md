@@ -19,4 +19,5 @@ The frontend can be opened separately, but the AI assistant needs the backend ru
 - Pick an action, optionally add an instruction, then submit.
 
 ---
-Last updated: 2026-04-30
+Best working version: `9e87904`
+Date: 2026-05-25
