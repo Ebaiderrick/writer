@@ -2,6 +2,13 @@ import { db } from './firebase.js';
 import { collection, addDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const SESSION_KEY = 'eyawriter_session';
+const THEME_KEY = 'eyawriter-theme';
+
+function applyMarketingTheme() {
+  const savedTheme = localStorage.getItem(THEME_KEY) || 'cedar';
+  const normalizedTheme = savedTheme === 'rose' ? 'cedar' : savedTheme;
+  document.documentElement.dataset.theme = normalizedTheme;
+}
 
 function getAppHomeHref() {
   return window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost'
@@ -39,6 +46,7 @@ function syncMarketingNavForSession() {
   });
 }
 
+applyMarketingTheme();
 syncMarketingNavForSession();
 
 document.querySelectorAll('.faq-item').forEach(item => {
