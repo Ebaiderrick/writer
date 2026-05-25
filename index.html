@@ -242,18 +242,17 @@
 
     <section id="workspaceView" class="workspace-view" hidden>
       <header class="home-topbar workspace-topbar">
-        <div class="nav-stack">
+        <div class="workspace-topbar-slot workspace-topbar-slot-left">
           <div class="workspace-view-brand">
             <strong id="workspaceViewTitle">Workspace</strong>
-            <span id="workspaceViewSubtitle">Projects, members, and delegation live here.</span>
           </div>
         </div>
-        <div class="home-projects-actions">
-          <button id="workspaceBackBtn" class="ghost-button" type="button">All Projects</button>
-          <button id="workspaceRefreshBtn" class="ghost-button" type="button">Refresh</button>
-          <button id="workspaceLeaveBtn" class="ghost-button" type="button" hidden>Leave Workspace</button>
-          <button id="workspaceDeleteBtn" class="ghost-button danger-text" type="button" hidden>Delete Workspace</button>
-          <button id="workspaceCloseBtn" class="icon-button workspace-close-button" type="button" aria-label="Close workspace">✕</button>
+        <div class="workspace-topbar-slot workspace-topbar-slot-center">
+          <div id="workspaceViewClock" class="workspace-view-clock" aria-live="polite">--:-- --</div>
+        </div>
+        <div class="workspace-topbar-slot workspace-topbar-slot-right">
+          <button id="workspaceRefreshBtn" class="icon-button workspace-icon-button" type="button" aria-label="Refresh workspace">&#x21bb;</button>
+          <button id="workspaceCloseBtn" class="ghost-button workspace-exit-button" type="button" aria-label="Exit workspace">Exit</button>
         </div>
       </header>
       <section class="workspace-view-body">
@@ -1843,3 +1842,4 @@
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
+

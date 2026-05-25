@@ -623,16 +623,21 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-topbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
   margin-bottom: 10px;
-  padding: 0 6px;
+  padding: 10px 12px;
   border: 0;
-  background: transparent;
-  box-shadow: none;
+  background: color-mix(in srgb, var(--surface-strong) 84%, transparent);
+  border-radius: 22px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.06);
 }
 
 .workspace-view-brand {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .workspace-view[hidden] {
@@ -659,13 +664,9 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-view-brand strong {
-  font-size: clamp(1.8rem, 2.2vw, 2.4rem);
+  font-size: clamp(1.25rem, 1.8vw, 1.7rem);
   letter-spacing: -0.03em;
-}
-
-.workspace-view-brand span {
-  color: var(--muted);
-  font-size: 0.92rem;
+  line-height: 1.1;
 }
 
 .workspace-projects {
@@ -685,19 +686,52 @@ html[data-theme="rose"] .mesh-background {
   z-index: 1;
 }
 
-.workspace-topbar,
 .workspace-view-body {
   background: color-mix(in srgb, var(--panel) 90%, rgba(255, 255, 255, 0.08));
   border: 1px solid color-mix(in srgb, var(--line) 88%, rgba(255, 255, 255, 0.08));
   box-shadow: 0 26px 70px rgba(3, 7, 18, 0.22);
-}
-
-.workspace-topbar {
-  border-radius: 0;
-}
-
-.workspace-view-body {
   border-radius: 28px;
+}
+
+.workspace-topbar-slot {
+  min-width: 0;
+}
+
+.workspace-topbar-slot-center {
+  justify-self: center;
+}
+
+.workspace-topbar-slot-right {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workspace-view-clock {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.workspace-icon-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-exit-button {
+  min-width: 88px;
 }
 
 .workspace-projects-head {

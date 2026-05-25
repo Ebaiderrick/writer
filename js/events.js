@@ -63,6 +63,7 @@ let studioSidebarRefreshFrame = 0;
 let previewRefreshTimer = 0;
 let focusModeTimer = 0;
 let hasShownReadOnlyNotice = false;
+let workspaceClockTimer = 0;
 const aiTaskTimers = new Map();
 const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
 const PROJECT_CARD_CLICK_SUPPRESSION_MS = 750;
@@ -323,8 +324,6 @@ async function launchNewCreationFlow() {
 
 function syncWorkspaceHeaderActions() {
   const refreshBtn = document.getElementById("workspaceRefreshBtn");
-  const leaveBtn = document.getElementById("workspaceLeaveBtn");
-  const deleteBtn = document.getElementById("workspaceDeleteBtn");
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId)
     || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId)
     || null;
@@ -332,12 +331,23 @@ function syncWorkspaceHeaderActions() {
   if (refreshBtn) {
     refreshBtn.hidden = !workspaceProject;
   }
-  if (leaveBtn) {
-    leaveBtn.hidden = !workspaceProject || getWorkspacePermissions(workspaceProject).isOwner;
-  }
-  if (deleteBtn) {
-    deleteBtn.hidden = !workspaceProject || !canDeleteWorkspace(workspaceProject);
-  }
+}
+
+function updateWorkspaceClock() {
+  const clock = document.getElementById("workspaceViewClock");
+  if (!clock) return;
+  const now = new Date();
+  clock.textContent = now.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function ensureWorkspaceClock() {
+  updateWorkspaceClock();
+  if (workspaceClockTimer) return;
+  workspaceClockTimer = window.setInterval(updateWorkspaceClock, 1000);
 }
 
 async function openWorkspaceDashboard(workspaceId) {
@@ -354,6 +364,7 @@ async function openWorkspaceDashboard(workspaceId) {
   persistProjects(false, { syncInputs: false });
   showWorkspaceView();
   renderWorkspaceView();
+  ensureWorkspaceClock();
   syncWorkspaceHeaderActions();
   updateToast(loadToast, "Workspace ready.", "success", { duration: 1200 });
 }
@@ -1185,13 +1196,6 @@ export function bindEvents() {
 
   refs.workspaceNewProjectBtn?.addEventListener("click", () => {
     createProjectInsideCurrentWorkspace();
-  });
-
-  refs.workspaceBackBtn?.addEventListener("click", () => {
-    state.currentWorkspaceId = null;
-    persistProjects(false, { syncInputs: false });
-    showHome();
-    renderHome();
   });
 
   refs.workspaceCloseBtn?.addEventListener("click", () => {
