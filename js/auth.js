@@ -231,12 +231,11 @@ export const Auth = (() => {
 
     onAuthStateChanged(auth, async firebaseUser => {
       if (firebaseUser) {
-        setAuthPending(false);
         cacheSession(firebaseUser);
         await ensureUsersByEmail(firebaseUser);
         await syncProjectsOnLogin(firebaseUser.uid);
         await loadUserProfile(firebaseUser);
-        if (refs.authView && !refs.authView.hidden) showHome();
+        if (refs.authView && !refs.authView.hidden) revealHomeShell();
         renderHome();
         updateTriggerUI(firebaseUser);
         initCollaboration();
@@ -250,8 +249,8 @@ export const Auth = (() => {
           const { Settings } = await import('./settings.js');
           Settings.show();
         }
+        await settleAuthTransition();
       } else {
-        setAuthPending(false);
         cleanupCollaboration();
         const session = getCachedSession();
         if (!session?.isDemoSession) {
@@ -262,18 +261,20 @@ export const Auth = (() => {
           ) {
             showAuth();
           }
+          await settleAuthTransition();
         } else {
           if (window.location.pathname === '/admin') {
             window.history.replaceState({}, '', '/app');
           }
           await loadUserProfile();
           updateTriggerUI({ photoURL: session.photoURL, displayName: session.name });
-          if (refs.authView && !refs.authView.hidden) showHome();
+          if (refs.authView && !refs.authView.hidden) revealHomeShell();
           renderHome();
           if (window.location.pathname === '/settings') {
             const { Settings } = await import('./settings.js');
             Settings.show();
           }
+          await settleAuthTransition();
         }
       }
     });
@@ -434,6 +435,21 @@ export const Auth = (() => {
         }
       });
     });
+  }
+
+  function revealHomeShell() {
+    document.querySelectorAll('.app-shell > section').forEach((section) => {
+      section.hidden = true;
+    });
+    refs.homeView.hidden = false;
+    if (window.location.pathname !== '/app') {
+      window.history.replaceState({}, '', '/app');
+    }
+  }
+
+  async function settleAuthTransition() {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    setAuthPending(false);
   }
 
   async function handleSignOut() {

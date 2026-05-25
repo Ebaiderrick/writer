@@ -3104,7 +3104,13 @@ async function saveAndGoHome() {
   } finally {
     state.currentWorkspaceId = null;
     closeMenus();
-    showHome();
+    document.querySelectorAll(".app-shell > section").forEach((section) => {
+      section.hidden = true;
+    });
+    if (window.location.pathname !== "/app") {
+      window.history.replaceState({}, "", "/app");
+    }
+    refs.homeView.hidden = false;
     renderHome();
   }
 }
