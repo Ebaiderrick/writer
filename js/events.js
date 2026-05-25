@@ -3103,6 +3103,10 @@ async function saveAndGoHome() {
     console.error("Save & Home failed during save", error);
   } finally {
     state.currentWorkspaceId = null;
+    state.homeWorkspaceFilter = "all";
+    state.homeProjectFilter = "all";
+    state.homeProjectFormat = "all";
+    state.homeProjectSort = "latest";
     closeMenus();
     document.querySelectorAll(".app-shell > section").forEach((section) => {
       section.hidden = true;
