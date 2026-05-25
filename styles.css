@@ -6709,40 +6709,6 @@ html[data-theme="white"] .user-trigger {
   background: rgba(255,255,255,.03);
 }
 
-.announcement-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 10px 18px;
-  background: #17324d;
-  color: #fff;
-  font-size: 0.9rem;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-}
-
-.announcement-banner[data-type="warning"] {
-  background: #6b4f12;
-}
-
-.announcement-banner[data-type="success"] {
-  background: #14532d;
-}
-
-.announcement-dismiss {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-size: 1.15rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
 .ghost-button,
 .primary-button,
 .nav-link,
