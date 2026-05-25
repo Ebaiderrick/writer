@@ -3,7 +3,7 @@ import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   query, orderBy, limit, addDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { showToast } from './ui.js';
+import { showToast, renderHome } from './ui.js';
 import { FeatureFlags } from './featureFlags.js';
 
 let _view = null;
@@ -62,12 +62,14 @@ export const Admin = {
   },
 
   hide() {
+    document.querySelectorAll('.app-shell > section').forEach(el => { el.hidden = true; });
     if (_view) _view.hidden = true;
     if (window.location.pathname === '/admin') {
       window.history.replaceState({}, '', '/app');
     }
     const home = document.getElementById('homeView');
     if (home) home.hidden = false;
+    renderHome();
   },
 
   async maybeRevealButton() {
