@@ -419,12 +419,21 @@ export const Auth = (() => {
 
     profilePopup.classList.add('active');
 
-    // Position card under trigger
+    // Keep the popup fully inside the viewport so the action row stays reachable.
     const cardWidth = 336;
+    const viewportPadding = 12;
     let left = rect.right - cardWidth;
-    if (left < 10) left = 10;
+    if (left < viewportPadding) left = viewportPadding;
+    if (left + cardWidth > window.innerWidth - viewportPadding) {
+      left = Math.max(viewportPadding, window.innerWidth - cardWidth - viewportPadding);
+    }
 
-    card.style.top = `${rect.bottom + 8}px`;
+    const preferredTop = rect.bottom + 8;
+    const cardHeight = card.offsetHeight || 0;
+    const maxTop = Math.max(viewportPadding, window.innerHeight - cardHeight - viewportPadding);
+    const top = Math.min(preferredTop, maxTop);
+
+    card.style.top = `${top}px`;
     card.style.left = `${left}px`;
   }
 

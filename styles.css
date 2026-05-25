@@ -5916,6 +5916,8 @@ html[data-theme="white"] .user-trigger {
 .popup-card {
   position: absolute;
   width: 336px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
   background: var(--panel);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
