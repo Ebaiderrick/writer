@@ -838,6 +838,8 @@ html[data-theme="rose"] .mesh-background {
   line-height: 1.16;
 }
 
+.workspace-home-hero-card > .workspace-home-metric:nth-child(2),
+.workspace-home-hero-card > .workspace-home-metric:nth-child(3),
 .workspace-home-hero-card > .workspace-home-metric:nth-child(4) {
   width: 80px;
   justify-self: end;
