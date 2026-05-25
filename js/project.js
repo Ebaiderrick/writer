@@ -691,7 +691,7 @@ function sanitizeStoryMemory(storyMemory) {
 function sanitizeWorkspace(workspace, project) {
   return {
     id: workspace?.id || project.id || uid("workspace"),
-    name: String(workspace?.name || project.title || "Team Workspace").trim() || "Team Workspace",
+    name: String(workspace?.name || project.title || "Team Assembly").trim() || "Team Assembly",
     inviteCode: String(workspace?.inviteCode || project.scriptId || generateScriptId()).trim().toUpperCase(),
     commentingEnabled: Boolean(workspace?.commentingEnabled),
     reminders: sanitizeWorkspaceReminders(workspace?.reminders),

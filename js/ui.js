@@ -1326,7 +1326,7 @@ function getLeftPaneBlockLabel(key) {
   const meta = getLeftPaneBlockMeta(key);
   const translationKeys = {
     current: "pane.currentScript",
-    workspace: "Team Workspace",
+    workspace: "Team Assembly",
     tools: "pane.projectTools",
     scenes: "pane.scenes",
     characters: "pane.characters",
@@ -2259,7 +2259,7 @@ export async function showWorkspacePopup() {
   const activeUsers = [ownerLabel, ...collaborators.map(([, person]) => getMemberDisplayName(person))].filter(Boolean);
   const inviteLink = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(project.id)}&script=${encodeURIComponent(project.scriptId || "")}`;
   const lastEditedBy = project.lastEditorName || ownerLabel;
-  const workspace = project.workspace || { name: project.title || "Team Workspace", reminders: [] };
+  const workspace = project.workspace || { name: project.title || "Team Assembly", reminders: [] };
   const reminders = workspace.reminders || [];
   const activity = [...(project.activityLog || [])].slice(-5).reverse();
   const permissions = getWorkspacePopupPermissions(project);
@@ -2270,10 +2270,10 @@ export async function showWorkspacePopup() {
   container.className = "workspace-popup";
   container.innerHTML = `
     <section class="workspace-popup-section">
-      <h4>Team Workspace</h4>
+      <h4>Team Assembly</h4>
       <p>Create shared writing spaces where projects belong to the workspace, not just one user.</p>
       <div class="workspace-title-row">
-        <input id="workspaceNameInput" class="modal-input" type="text" value="${escapeHtml(workspace.name || project.title || 'Team Workspace')}" ${permissions.canManageSettings ? '' : 'readonly'}>
+        <input id="workspaceNameInput" class="modal-input" type="text" value="${escapeHtml(workspace.name || project.title || 'Team Assembly')}" ${permissions.canManageSettings ? '' : 'readonly'}>
         ${permissions.canManageSettings ? '<button class="ghost-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
       </div>
       <div class="workspace-metric-columns">
@@ -3793,6 +3793,7 @@ window.addEventListener('scriptIdUpdated', () => {
     renderCurrentScriptId();
     renderHome();
 });
+
 
 
 

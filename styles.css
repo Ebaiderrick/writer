@@ -623,9 +623,11 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-topbar {
-  margin-bottom: 18px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .workspace-view-brand {
@@ -649,10 +651,11 @@ html[data-theme="rose"] .mesh-background {
 .workspace-view-body {
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
   align-items: start;
-  height: calc(100vh - 126px);
-  max-height: calc(100vh - 126px);
+  height: calc(100vh - 104px);
+  max-height: calc(100vh - 104px);
   overflow: hidden;
-  padding: 0;
+  padding: 12px;
+  gap: 12px;
 }
 
 .workspace-view-brand strong {
@@ -690,13 +693,11 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-topbar {
-  border-radius: 26px 26px 0 0;
-  margin-bottom: 0;
-  padding: 8px 12px;
+  border-radius: 0;
 }
 
 .workspace-view-body {
-  border-radius: 0 0 26px 26px;
+  border-radius: 28px;
 }
 
 .workspace-projects-head {
@@ -707,7 +708,7 @@ html[data-theme="rose"] .mesh-background {
 .workspace-projects {
   min-height: 0;
   height: 100%;
-  padding: 10px;
+  padding: 0;
   overflow-x: hidden;
   overflow-y: scroll;
   scrollbar-gutter: stable;
@@ -718,15 +719,15 @@ html[data-theme="rose"] .mesh-background {
 
 .workspace-home-shell {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .workspace-home-hero-card,
 .workspace-home-panel {
   border: 1px solid var(--line);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface-strong) 84%, transparent);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.06);
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 

@@ -650,7 +650,7 @@ async function ensureSharedProject(project, user) {
       ownerPhotoURL: user.photoURL || '',
       workspace: project.workspace || {
         id: project.id,
-        name: project.title || 'Team Workspace',
+        name: project.title || 'Team Assembly',
         inviteCode: project.scriptId || '',
         reminders: [],
         commentingEnabled: false
@@ -1026,7 +1026,7 @@ export async function addWorkspaceReminder(projectId, reminder) {
     createdByName: user.displayName || user.email || 'Unknown'
   };
 
-  const workspace = project.workspace || { id: project.id, name: project.title || 'Team Workspace', inviteCode: project.scriptId || '', reminders: [] };
+  const workspace = project.workspace || { id: project.id, name: project.title || 'Team Assembly', inviteCode: project.scriptId || '', reminders: [] };
   const reminders = [...(workspace.reminders || []), nextReminder];
   project.workspace = { ...workspace, reminders };
 
@@ -1047,7 +1047,7 @@ export async function toggleWorkspaceReminder(projectId, reminderId) {
     return { ok: false, reason: 'Viewers cannot edit reminders.' };
   }
 
-  const workspace = project.workspace || { id: project.id, name: project.title || 'Team Workspace', inviteCode: project.scriptId || '', reminders: [] };
+  const workspace = project.workspace || { id: project.id, name: project.title || 'Team Assembly', inviteCode: project.scriptId || '', reminders: [] };
   const reminders = (workspace.reminders || []).map((item) => item.id === reminderId
     ? { ...item, completed: !item.completed, updatedAt: new Date().toISOString() }
     : item
@@ -1075,7 +1075,7 @@ export async function deleteWorkspaceReminder(projectId, reminderId) {
     return { ok: false, reason: 'Viewers cannot edit reminders.' };
   }
 
-  const workspace = project.workspace || { id: project.id, name: project.title || 'Team Workspace', inviteCode: project.scriptId || '', reminders: [] };
+  const workspace = project.workspace || { id: project.id, name: project.title || 'Team Assembly', inviteCode: project.scriptId || '', reminders: [] };
   const existing = (workspace.reminders || []).find((item) => item.id === reminderId);
   if (!existing) {
     return { ok: false, reason: 'Reminder not found.' };
