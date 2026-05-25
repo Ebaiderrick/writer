@@ -29,10 +29,10 @@ function detectCurrentView() {
 }
 
 function pathForView(view) {
-  if (!view) return '/app';
+  if (!view) return '/';
   if (view.id === 'adminView') return '/admin';
   if (view.id === 'authView') return '/';
-  return '/app';
+  return '/';
 }
 
 function setSettingsPath() {

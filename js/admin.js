@@ -54,7 +54,7 @@ export const Admin = {
     }
     document.querySelectorAll('.app-shell > section').forEach(el => { el.hidden = true; });
     _view.hidden = false;
-    if (window.location.pathname === '/app') {
+    if (window.location.pathname !== '/admin') {
       window.history.replaceState({}, '', '/admin');
     }
     _activateTab('overview');
@@ -65,7 +65,7 @@ export const Admin = {
     document.querySelectorAll('.app-shell > section').forEach(el => { el.hidden = true; });
     if (_view) _view.hidden = true;
     if (window.location.pathname === '/admin') {
-      window.history.replaceState({}, '', '/app');
+      window.history.replaceState({}, '', '/');
     }
     const home = document.getElementById('homeView');
     if (home) home.hidden = false;

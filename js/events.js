@@ -3111,8 +3111,8 @@ async function saveAndGoHome() {
     document.querySelectorAll(".app-shell > section").forEach((section) => {
       section.hidden = true;
     });
-    if (window.location.pathname !== "/app") {
-      window.history.replaceState({}, "", "/app");
+    if (window.location.pathname !== "/") {
+      window.history.replaceState({}, "", "/");
     }
     refs.homeView.hidden = false;
     renderHome();

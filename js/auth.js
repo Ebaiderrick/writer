@@ -242,7 +242,7 @@ export const Auth = (() => {
         if (window.location.pathname === '/admin') {
           const opened = await Admin.show();
           if (!opened) {
-            window.history.replaceState({}, '', '/app');
+            window.history.replaceState({}, '', '/');
             showHome();
           }
         } else if (window.location.pathname === '/settings') {
@@ -264,7 +264,7 @@ export const Auth = (() => {
           await settleAuthTransition();
         } else {
           if (window.location.pathname === '/admin') {
-            window.history.replaceState({}, '', '/app');
+            window.history.replaceState({}, '', '/');
           }
           await loadUserProfile();
           updateTriggerUI({ photoURL: session.photoURL, displayName: session.name });
@@ -442,8 +442,8 @@ export const Auth = (() => {
       section.hidden = true;
     });
     refs.homeView.hidden = false;
-    if (window.location.pathname !== '/app') {
-      window.history.replaceState({}, '', '/app');
+    if (window.location.pathname !== '/') {
+      window.history.replaceState({}, '', '/');
     }
   }
 
@@ -460,7 +460,7 @@ export const Auth = (() => {
     clearSession();
     try { await firebaseSignOut(auth); } catch { /* ignore */ }
     if (window.location.pathname === '/admin' || window.location.pathname === '/settings') {
-      window.history.replaceState({}, '', '/app');
+      window.history.replaceState({}, '', '/');
     }
     showAuth();
   }
