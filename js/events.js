@@ -7,7 +7,8 @@ import {
   getWorkspaceProjects, getWorkspaceRootProject, updateWorkspaceAcrossProjects,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
-  deleteProjectFromCloud
+  deleteProjectFromCloud, getDeletedProjects, archiveDeletedProjects,
+  recoverDeletedProject, permanentlyDeleteRecoveredProject
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
@@ -72,6 +73,55 @@ const INLINE_SELECTION_TOOLS = [
   { label: "Rewrite", action: "Rephrase", requiresAi: true },
   { label: "Fix Grammar", action: "Grammar", requiresGrammar: true }
 ];
+
+function renderRecoveryList() {
+  const dialog = document.getElementById("fileRecoveryDialog");
+  const list = document.getElementById("fileRecoveryList");
+  const empty = document.getElementById("fileRecoveryEmpty");
+  if (!dialog || !list || !empty) return;
+
+  const deletedProjects = getDeletedProjects();
+  empty.hidden = deletedProjects.length > 0;
+  list.hidden = deletedProjects.length === 0;
+
+  if (!deletedProjects.length) {
+    list.innerHTML = "";
+    return;
+  }
+
+  list.innerHTML = deletedProjects.map((entry) => {
+    const deletedAt = entry.deletedAt
+      ? new Date(entry.deletedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+      : "Unknown";
+    const lineCount = Array.isArray(entry.project?.lines)
+      ? entry.project.lines.filter((line) => String(line?.text || "").trim() || String(line?.secondary || "").trim()).length
+      : 0;
+    return `
+      <article class="recovery-item" data-recovery-id="${entry.id}">
+        <div class="recovery-item-copy">
+          <h3 class="recovery-item-title">${entry.project?.title || "Untitled Script"}</h3>
+          <p class="recovery-item-meta">Deleted ${deletedAt}</p>
+          <p class="recovery-item-meta">${lineCount} line${lineCount === 1 ? "" : "s"}</p>
+        </div>
+        <div class="recovery-item-actions">
+          <button class="ghost-button btn-sm" type="button" data-recovery-action="recover">Recover</button>
+          <button class="ghost-button btn-sm recovery-delete-button" type="button" data-recovery-action="permanent-delete">Permanently Delete</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function openFileRecoveryDialog() {
+  const dialog = document.getElementById("fileRecoveryDialog");
+  if (!dialog) return;
+  renderRecoveryList();
+  dialog.showModal();
+}
+
+function closeFileRecoveryDialog() {
+  document.getElementById("fileRecoveryDialog")?.close();
+}
 
 function ensureSelectionToolbar() {
   let toolbar = document.getElementById("selectionAiToolbar");
@@ -1491,6 +1541,44 @@ export function bindEvents() {
     button.addEventListener("click", () => handleMenuAction(button.dataset.menuAction));
   });
 
+  document.getElementById("fileRecoveryCloseBtn")?.addEventListener("click", closeFileRecoveryDialog);
+  document.getElementById("fileRecoveryDialog")?.addEventListener("click", (event) => {
+    if (event.target?.id === "fileRecoveryDialog") {
+      closeFileRecoveryDialog();
+    }
+  });
+  document.getElementById("fileRecoveryList")?.addEventListener("click", async (event) => {
+    const actionButton = event.target.closest("[data-recovery-action]");
+    const item = event.target.closest("[data-recovery-id]");
+    if (!actionButton || !item) return;
+
+    const recoveryId = item.dataset.recoveryId;
+    if (actionButton.dataset.recoveryAction === "recover") {
+      const restoredProject = await recoverDeletedProject(recoveryId);
+      if (restoredProject) {
+        renderRecoveryList();
+        renderHome();
+        if (!refs.studioView.hidden) {
+          renderStudio();
+        }
+        showToast(`Recovered "${restoredProject.title}".`, "success");
+      }
+      return;
+    }
+
+    if (actionButton.dataset.recoveryAction === "permanent-delete") {
+      const confirmed = await customConfirm(
+        "Permanently delete this file from recovery? This cannot be undone.",
+        "Permanent Delete"
+      );
+      if (!confirmed) return;
+      if (permanentlyDeleteRecoveredProject(recoveryId)) {
+        renderRecoveryList();
+        showToast("File permanently deleted.", "success");
+      }
+    }
+  });
+
   document.querySelectorAll("[data-format-type]").forEach((button) => {
     button.addEventListener("click", () => {
       handleToolSelection(button.dataset.formatType);
@@ -2752,6 +2840,9 @@ function handleMenuAction(action) {
       showHome();
       renderHome();
       break;
+    case "open-file-recovery":
+      openFileRecoveryDialog();
+      break;
     case "save-project":
       persistProjects(true);
       break;
@@ -3339,6 +3430,12 @@ async function removeProject(id) {
   if (!target) return;
 
   const workspaceId = target.workspace?.id || target.id;
+  const removedProjects = state.projects.filter((item) => {
+    if (target.isWorkspaceRoot) {
+      return item.workspace?.id === workspaceId;
+    }
+    return item.id === id;
+  });
   const workspaceProject = getWorkspaceRootProject(workspaceId)
     || state.projects.find((item) => item.id === workspaceId)
     || target;
@@ -3380,6 +3477,7 @@ async function removeProject(id) {
     });
   }
 
+  archiveDeletedProjects(removedProjects);
   state.projects = state.projects.filter((item) => {
     if (target.isWorkspaceRoot) {
       return item.workspace?.id !== workspaceId;
@@ -3395,9 +3493,7 @@ async function removeProject(id) {
   }
   state.currentProjectId = state.projects[0].id;
   persistProjects(true, { syncInputs: false });
-  if (!target.isWorkspaceRoot) {
-    deleteProjectFromCloud(id);
-  }
+  await Promise.all(removedProjects.map((project) => deleteProjectFromCloud(project.id)));
   showHome();
   renderHome();
 }

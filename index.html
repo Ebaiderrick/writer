@@ -163,6 +163,7 @@
               <span class="nav-menu-label">File</span>
               <button class="nav-menu-button" type="button" data-menu-action="new-project">New Project</button>
               <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
+              <button class="nav-menu-button" type="button" data-menu-action="open-file-recovery">File Recovery</button>
             </div>
             <div class="nav-menu-section">
               <details id="homeRecentProjectsToggle" class="recent-projects-group" open>
@@ -514,6 +515,7 @@
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="new-project">New Project</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-file-recovery">File Recovery</button>
                 <button class="nav-menu-button" type="button" data-menu-action="import-file">Import</button>
                 <details id="studioRecentProjectsToggle" class="recent-projects-group menu-group-inline" open>
                   <summary class="recent-projects-summary">
@@ -1441,6 +1443,20 @@
         <p><kbd>1-9</kbd><span>Choose suggestion</span></p>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="fileRecoveryDialog" class="file-recovery-dialog">
+    <div class="file-recovery-sheet">
+      <div class="file-recovery-head">
+        <div>
+          <h3>File Recovery</h3>
+          <p>Recover files deleted in the last 60 days.</p>
+        </div>
+        <button id="fileRecoveryCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+      </div>
+      <p id="fileRecoveryEmpty" class="file-recovery-empty">No deleted files are available for recovery.</p>
+      <div id="fileRecoveryList" class="file-recovery-list" hidden></div>
+    </div>
   </dialog>
 
   <!-- Notepad Modal -->

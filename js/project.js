@@ -8,6 +8,8 @@ import { doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic
 let firestoreSyncTimer = null;
 const SCRIPT_ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const RECOVERY_KEY = `${STORAGE_KEY}:recovery`;
+const DELETED_PROJECTS_KEY = `${STORAGE_KEY}:deleted`;
+const RECOVERY_RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
 
 function generateScriptId() {
   const bytes = new Uint8Array(6);
@@ -63,6 +65,27 @@ function parseStoredPayload(key) {
     console.error(`Unable to parse storage payload for ${key}`, error);
     return null;
   }
+}
+
+function parseDeletedProjectsPayload() {
+  const payload = parseStoredPayload(DELETED_PROJECTS_KEY);
+  return Array.isArray(payload) ? payload : [];
+}
+
+function saveDeletedProjectsPayload(entries) {
+  localStorage.setItem(DELETED_PROJECTS_KEY, JSON.stringify(entries));
+}
+
+function pruneExpiredDeletedProjects(entries = parseDeletedProjectsPayload()) {
+  const now = Date.now();
+  const filtered = entries.filter((entry) => {
+    const deletedAt = new Date(entry?.deletedAt || 0).getTime();
+    return deletedAt && (now - deletedAt) <= RECOVERY_RETENTION_MS;
+  });
+  if (filtered.length !== entries.length) {
+    saveDeletedProjectsPayload(filtered);
+  }
+  return filtered;
 }
 
 function chooseLatestPayload(primary, recovery) {
@@ -201,6 +224,19 @@ async function syncCurrentProjectToFirestore() {
   }
 }
 
+async function syncProjectRecordToFirestore(project) {
+  const userId = auth.currentUser?.uid;
+  if (!userId || !project?.id) return;
+  try {
+    await setDoc(doc(db, 'users', userId, 'projects', project.id), {
+      ...project,
+      syncedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Firestore restore sync failed', err);
+  }
+}
+
 export async function fetchCloudProjects(userId) {
   const snapshot = await getDocs(collection(db, 'users', userId, 'projects'));
   return snapshot.docs.map(d => sanitizeProject(d.data()));
@@ -223,6 +259,58 @@ export async function deleteProjectFromCloud(projectId) {
   } catch (err) {
     console.error('Firestore delete failed', err);
   }
+}
+
+export function getDeletedProjects() {
+  return pruneExpiredDeletedProjects()
+    .map((entry) => ({
+      ...entry,
+      project: sanitizeProject(entry.project || {})
+    }))
+    .sort((a, b) => new Date(b.deletedAt || 0) - new Date(a.deletedAt || 0));
+}
+
+export function archiveDeletedProjects(projects) {
+  const nextEntries = pruneExpiredDeletedProjects();
+  const now = new Date().toISOString();
+  projects.forEach((project) => {
+    if (!project?.id) return;
+    const entry = {
+      id: project.id,
+      deletedAt: now,
+      project: sanitizeProject(project)
+    };
+    const existingIndex = nextEntries.findIndex((item) => item.id === project.id);
+    if (existingIndex >= 0) {
+      nextEntries.splice(existingIndex, 1, entry);
+    } else {
+      nextEntries.unshift(entry);
+    }
+  });
+  saveDeletedProjectsPayload(nextEntries);
+}
+
+export async function recoverDeletedProject(projectId) {
+  const entries = pruneExpiredDeletedProjects();
+  const index = entries.findIndex((entry) => entry.id === projectId);
+  if (index < 0) return null;
+  const [entry] = entries.splice(index, 1);
+  saveDeletedProjectsPayload(entries);
+  const restoredProject = sanitizeProject(entry.project || {});
+  upsertProject(restoredProject);
+  if (!state.currentProjectId) {
+    state.currentProjectId = restoredProject.id;
+  }
+  persistProjects(true, { syncInputs: false });
+  await syncProjectRecordToFirestore(restoredProject);
+  return restoredProject;
+}
+
+export function permanentlyDeleteRecoveredProject(projectId) {
+  const entries = pruneExpiredDeletedProjects();
+  const nextEntries = entries.filter((entry) => entry.id !== projectId);
+  saveDeletedProjectsPayload(nextEntries);
+  return nextEntries.length !== entries.length;
 }
 
 export function setProjectsFromCloud(cloudProjects) {
