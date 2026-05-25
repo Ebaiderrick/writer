@@ -57,6 +57,74 @@ export const Auth = (() => {
   let generatedOTP = '';
   let pendingSignup = null;
 
+  function shouldPreferGoogleRedirect() {
+    const ua = navigator.userAgent || '';
+    const coarsePointer = typeof window.matchMedia === 'function'
+      ? window.matchMedia('(pointer: coarse)').matches
+      : false;
+    const mobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const inAppBrowser = /FBAN|FBAV|Instagram|Line|LinkedInApp|wv\)|; wv|WebView/i.test(ua);
+    return coarsePointer || mobileOrTablet || inAppBrowser;
+  }
+
+  async function startGoogleRedirect(message = 'Redirecting to Google...') {
+    setAuthPending(true, message);
+    await signInWithRedirect(auth, googleProvider);
+  }
+
+  function describeGoogleAuthError(err) {
+    const map = {
+      'auth/popup-blocked': 'Google sign-in pop-up was blocked. We can continue with redirect sign-in instead.',
+      'auth/popup-closed-by-user': 'Google sign-in was closed before completion.',
+      'auth/cancelled-popup-request': 'Another Google sign-in is already in progress. Please wait a moment and try again.',
+      'auth/web-storage-unsupported': 'This browser blocks the storage Google sign-in needs. Try again in a standard browser tab.',
+      'auth/operation-not-supported-in-this-environment': 'This browser does not support Google pop-up sign-in. Redirect sign-in should work instead.',
+      'auth/operation-not-allowed': 'Google sign-in is not enabled yet for this Firebase project.',
+      'auth/unauthorized-domain': 'This domain is not authorized for Google sign-in in Firebase yet.',
+      'auth/internal-error': 'Google sign-in hit an internal Firebase error. Please try again in a moment.'
+    };
+    return map[err?.code] || friendlyError(err);
+  }
+
+  async function beginGoogleSignIn() {
+    if (shouldPreferGoogleRedirect()) {
+      try {
+        await startGoogleRedirect();
+      } catch (redirectErr) {
+        setAuthPending(false);
+        console.error('Google redirect error:', redirectErr.code, redirectErr);
+        customAlert(describeGoogleAuthError(redirectErr));
+      }
+      return;
+    }
+
+    try {
+      setAuthPending(true, 'Signing you in...');
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      setAuthPending(false);
+      console.error('Google sign-in error:', err.code, err);
+      if (
+        err.code === 'auth/popup-blocked' ||
+        err.code === 'auth/cancelled-popup-request' ||
+        err.code === 'auth/web-storage-unsupported' ||
+        err.code === 'auth/operation-not-supported-in-this-environment'
+      ) {
+        try {
+          await startGoogleRedirect();
+        } catch (redirectErr) {
+          setAuthPending(false);
+          console.error('Google redirect error:', redirectErr.code, redirectErr);
+          customAlert(describeGoogleAuthError(redirectErr));
+        }
+        return;
+      }
+      if (err.code !== 'auth/popup-closed-by-user') {
+        customAlert(describeGoogleAuthError(err));
+      }
+    }
+  }
+
   function init() {
     tabBtns = document.querySelectorAll('.tab-btn');
     forms = document.querySelectorAll('.auth-form');
@@ -123,7 +191,7 @@ export const Auth = (() => {
     getRedirectResult(auth).catch(err => {
       console.error('Google redirect result error:', err.code, err);
       if (err.code && err.code !== 'auth/cancelled-popup-request') {
-        customAlert(friendlyError(err));
+        customAlert(describeGoogleAuthError(err));
       }
     });
 
@@ -194,8 +262,8 @@ export const Auth = (() => {
     signupForm.addEventListener('submit', handleSignUp);
     loginForm.addEventListener('submit', handleSignIn);
 
-    document.getElementById('google-signup')?.addEventListener('click', handleGoogleSignIn);
-    document.getElementById('google-signin')?.addEventListener('click', handleGoogleSignIn);
+    document.getElementById('google-signup')?.addEventListener('click', beginGoogleSignIn);
+    document.getElementById('google-signin')?.addEventListener('click', beginGoogleSignIn);
     document.getElementById('demo-login-btn')?.addEventListener('click', handleDemoLogin);
 
     // Profile Listeners
