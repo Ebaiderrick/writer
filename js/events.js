@@ -3108,13 +3108,10 @@ async function saveAndGoHome() {
     state.homeProjectFormat = "all";
     state.homeProjectSort = "latest";
     closeMenus();
-    document.querySelectorAll(".app-shell > section").forEach((section) => {
-      section.hidden = true;
-    });
     if (window.location.pathname !== "/") {
       window.history.replaceState({}, "", "/");
     }
-    refs.homeView.hidden = false;
+    showHome();
     renderHome();
   }
 }

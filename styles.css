@@ -6184,6 +6184,10 @@ html[data-theme="white"] .user-trigger {
   animation: none !important;
 }
 
+.settings-view[hidden] {
+  display: none !important;
+}
+
 .settings-topbar {
   display: flex;
   align-items: center;
@@ -6833,6 +6837,10 @@ html[data-theme="white"] .user-trigger {
   height: 100%;
   background: var(--bg, #1a1a2e);
   color: var(--text, #e2e8f0);
+}
+
+.admin-view[hidden] {
+  display: none !important;
 }
 
 .admin-topbar {
