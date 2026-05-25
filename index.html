@@ -1772,6 +1772,70 @@
     </div>
   </div>
 
+  <dialog id="privacyDialog" class="legal-dialog">
+    <div class="legal-dialog-inner">
+      <div class="legal-dialog-header">
+        <h2>Privacy Policy</h2>
+        <form method="dialog"><button class="ghost-button btn-sm" type="submit">Close</button></form>
+      </div>
+      <div class="legal-dialog-body">
+        <p><strong>Last updated: May 2026</strong></p>
+        <h3>What we collect</h3>
+        <p>EyaWriter collects the minimum information needed to provide the service: your email address and display name through Firebase Authentication, plus screenplay projects you save in cloud storage through Firestore.</p>
+        <h3>How we use your data</h3>
+        <p>Your data is used only to provide the EyaWriter service, including syncing projects, enabling collaboration, and authenticating your account. We do not sell or share your personal data for marketing purposes.</p>
+        <h3>Firebase and third-party services</h3>
+        <p>EyaWriter uses Firebase for authentication and data storage. Projects saved to the cloud are stored in Firestore under your user account.</p>
+        <h3>AI features</h3>
+        <p>When you use AI writing features, the text of the current screenplay block and recent story context are sent to an AI provider to generate suggestions. No personal identifying information is included in these requests.</p>
+        <h3>Local storage</h3>
+        <p>EyaWriter stores application preferences such as theme, language, and editor settings in your browser's localStorage. This data stays on your device.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="tosDialog" class="legal-dialog">
+    <div class="legal-dialog-inner">
+      <div class="legal-dialog-header">
+        <h2>Terms of Service</h2>
+        <form method="dialog"><button class="ghost-button btn-sm" type="submit">Close</button></form>
+      </div>
+      <div class="legal-dialog-body">
+        <p><strong>Last updated: May 2026</strong></p>
+        <h3>Acceptance</h3>
+        <p>By using EyaWriter, you agree to these Terms of Service. If you do not agree, please discontinue use of the service.</p>
+        <h3>Your content</h3>
+        <p>You retain ownership of all screenplay content you create with EyaWriter. By storing projects in the cloud, you grant EyaWriter a limited non-exclusive licence to store and display your content solely to provide the service to you.</p>
+        <h3>Acceptable use</h3>
+        <p>You may not use EyaWriter to create, distribute, or store illegal, harmful, defamatory, or rights-violating content. You may not attempt to bypass security measures or disrupt service for other users.</p>
+        <h3>AI features</h3>
+        <p>AI-generated content is a writing aid. You are responsible for reviewing, editing, and using AI suggestions in your work.</p>
+        <h3>Service availability</h3>
+        <p>EyaWriter is provided as-is without warranty of any kind. We do not guarantee uninterrupted availability and may modify or discontinue features over time.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="aiDisclosureDialog" class="legal-dialog">
+    <div class="legal-dialog-inner">
+      <div class="legal-dialog-header">
+        <h2>AI Usage Disclosure</h2>
+        <form method="dialog"><button class="ghost-button btn-sm" type="submit">Close</button></form>
+      </div>
+      <div class="legal-dialog-body">
+        <p><strong>Last updated: May 2026</strong></p>
+        <h3>What gets sent to the AI</h3>
+        <p>When you use an AI writing action, EyaWriter sends the text of the current screenplay block, recent story context, and the action or instruction you selected. No account information or email address is included in those requests.</p>
+        <h3>AI provider</h3>
+        <p>By default, EyaWriter routes AI requests through an OpenAI-compatible endpoint. You can configure a custom compatible endpoint in Settings.</p>
+        <h3>Data retention</h3>
+        <p>EyaWriter does not store AI request or response data in the app itself. Requests are processed in real time and returned to your editor.</p>
+        <h3>Your control</h3>
+        <p>AI features are opt-in and only run when you explicitly trigger an AI action. You can disable AI assistance at any time.</p>
+      </div>
+    </div>
+  </dialog>
+
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
