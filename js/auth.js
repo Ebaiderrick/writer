@@ -67,6 +67,15 @@ export const Auth = (() => {
     return coarsePointer || mobileOrTablet || inAppBrowser;
   }
 
+  function isEmbeddedBrowser() {
+    const ua = navigator.userAgent || '';
+    return /Electron|FBAN|FBAV|Instagram|Line|LinkedInApp|wv\)|; wv|WebView/i.test(ua);
+  }
+
+  function isLocalDevHost() {
+    return window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+  }
+
   async function startGoogleRedirect(message = 'Redirecting to Google...') {
     setAuthPending(true, message);
     await signInWithRedirect(auth, googleProvider);
@@ -87,6 +96,14 @@ export const Auth = (() => {
   }
 
   async function beginGoogleSignIn() {
+    if (isEmbeddedBrowser() && !isLocalDevHost()) {
+      customAlert(
+        'Google sign-in should be opened in Chrome, Edge, or Safari for this site. This in-app browser can fail on the return step. Please open wraita.netlify.app in a standard browser and try again.',
+        'Open in Browser'
+      );
+      return;
+    }
+
     if (shouldPreferGoogleRedirect()) {
       try {
         await startGoogleRedirect();
