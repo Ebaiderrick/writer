@@ -59,12 +59,8 @@ export const Auth = (() => {
 
   function shouldPreferGoogleRedirect() {
     const ua = navigator.userAgent || '';
-    const coarsePointer = typeof window.matchMedia === 'function'
-      ? window.matchMedia('(pointer: coarse)').matches
-      : false;
-    const mobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
     const inAppBrowser = /FBAN|FBAV|Instagram|Line|LinkedInApp|wv\)|; wv|WebView/i.test(ua);
-    return coarsePointer || mobileOrTablet || inAppBrowser;
+    return inAppBrowser;
   }
 
   function isEmbeddedBrowser() {
