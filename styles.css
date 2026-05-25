@@ -481,6 +481,10 @@ html[data-theme="rose"] .mesh-background {
   text-align: left;
 }
 
+.nav-menu-link {
+  text-decoration: none;
+}
+
 .theme-option.is-active,
 .nav-menu-button.is-active {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
@@ -507,6 +511,33 @@ html[data-theme="rose"] .mesh-background {
 
 .recent-project-button {
   justify-content: space-between;
+}
+
+.home-resource-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+}
+
+.home-resource-links a {
+  color: color-mix(in srgb, var(--ink) 74%, var(--muted));
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.home-resource-links a:hover,
+.home-resource-links a:focus-visible,
+.nav-menu-link:hover,
+.nav-menu-link:focus-visible {
+  color: var(--accent-strong);
+}
+
+.settings-resource-actions {
+  flex-wrap: wrap;
 }
 
 .recent-project-button small {
