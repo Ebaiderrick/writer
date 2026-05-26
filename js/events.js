@@ -117,12 +117,12 @@ function renderRecoveryList() {
           <p class="recovery-item-meta">Deleted ${deletedAt}</p>
           <p class="recovery-item-meta">${lineCount} line${lineCount === 1 ? "" : "s"}</p>
         </div>
-        <div class="recovery-item-actions">
-          <button class="ghost-button btn-sm" type="button" data-recovery-action="recover">Recover</button>
-          <button class="ghost-button btn-sm recovery-delete-button" type="button" data-recovery-action="permanent-delete">Permanently Delete</button>
-        </div>
-      </article>
-    `;
+          <div class="recovery-item-actions">
+            <button class="ghost-button btn-sm" type="button" data-recovery-action="recover">Recover</button>
+            <button class="ghost-button btn-sm recovery-delete-button" type="button" data-recovery-action="permanent-delete">Delete</button>
+          </div>
+        </article>
+      `;
   }).join("");
 }
 
@@ -152,40 +152,44 @@ async function renderConversionJobsList() {
     return;
   }
 
-  list.innerHTML = jobs.map((job) => {
-    const updatedAt = job.updatedAt || job.createdAt;
-    const timestamp = updatedAt
-      ? new Date(updatedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
-      : "Unknown";
-    const lineCount = Number(job.structuredLineCount || job.structuredLines?.length || 0);
-    return `
-      <button class="conversion-job-item" type="button" data-conversion-job-id="${job.id}">
-        <div class="conversion-job-item-top">
-          <div>
-            <h4 class="conversion-job-item-title">${escapeHtml(job.fileName || "Untitled upload")}</h4>
-            <p class="conversion-job-item-meta">Updated ${escapeHtml(timestamp)}</p>
+    list.innerHTML = jobs.map((job) => {
+      const updatedAt = job.updatedAt || job.createdAt;
+      const timestamp = updatedAt
+        ? new Date(updatedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+        : "Unknown";
+      const lineCount = Number(job.structuredLineCount || job.structuredLines?.length || 0);
+      const warningCount = Array.isArray(job.warnings) ? job.warnings.filter(Boolean).length : 0;
+      return `
+        <button class="conversion-job-item" type="button" data-conversion-job-id="${job.id}" data-conversion-job-status="${escapeHtml(String(job.status || "queued"))}">
+          <span class="conversion-job-item-rail" aria-hidden="true"></span>
+          <div class="conversion-job-item-main">
+            <div class="conversion-job-item-top">
+              <div>
+                <h4 class="conversion-job-item-title">${escapeHtml(job.fileName || "Untitled upload")}</h4>
+                <p class="conversion-job-item-meta">Updated ${escapeHtml(timestamp)}</p>
+              </div>
+              <span class="conversion-job-item-status">${escapeHtml(String(job.status || "queued"))}</span>
+            </div>
+            <p class="conversion-job-item-stage">${escapeHtml(job.stageLabel || "No stage available")}</p>
+            <div class="conversion-job-item-grid">
+              <div>
+                <span>Project</span>
+                <strong>${escapeHtml(job.projectId || "Not linked")}</strong>
+              </div>
+              <div>
+                <span>Structured lines</span>
+                <strong>${lineCount}</strong>
+              </div>
+              <div>
+                <span>Warnings</span>
+                <strong>${warningCount}</strong>
+              </div>
+            </div>
           </div>
-          <span class="conversion-job-item-status">${escapeHtml(String(job.status || "queued"))}</span>
-        </div>
-        <p class="conversion-job-item-stage">${escapeHtml(job.stageLabel || "No stage available")}</p>
-        <div class="conversion-job-item-grid">
-          <div>
-            <span>Project</span>
-            <strong>${escapeHtml(job.projectId || "Not linked")}</strong>
-          </div>
-          <div>
-            <span>Structured lines</span>
-            <strong>${lineCount}</strong>
-          </div>
-          <div>
-            <span>Warnings</span>
-            <strong>${Array.isArray(job.warnings) ? job.warnings.filter(Boolean).length : 0}</strong>
-          </div>
-        </div>
-      </button>
-    `;
-  }).join("");
-}
+        </button>
+      `;
+    }).join("");
+  }
 
 async function openConversionJobsDialog() {
   const dialog = document.getElementById("conversionJobsDialog");
@@ -4057,8 +4061,8 @@ async function openConversionReviewDialog(jobId, projectId = "") {
   const closeBtn = document.getElementById("conversionReviewCloseBtn");
   const retryBtn = document.getElementById("conversionReviewRetryBtn");
 
-  if (title) title.textContent = `Conversion Review${record.fileName ? ` - ${record.fileName}` : ""}`;
-  if (meta) meta.textContent = "Inspect the extracted text, normalized screenplay text, and the final import status.";
+  if (title) title.textContent = record.fileName ? `Review "${record.fileName}"` : "Review Converted Script";
+  if (meta) meta.textContent = "Follow the script from extracted source text through normalization and into the final EyaWriter screenplay structure.";
   if (status) status.textContent = String(record.status || "unknown");
   if (stage) stage.textContent = String(record.stageLabel || "Unknown stage");
   if (file) file.textContent = record.sourceFile?.name || record.fileName || "Unknown";

@@ -544,6 +544,7 @@
                 <label class="settings-label">Resources</label>
                 <p class="settings-hint">Open help, review product details, or contact the team directly.</p>
                 <div class="settings-actions settings-resource-actions">
+                  <button id="settingsConversionJobsBtn" class="ghost-button btn-sm" type="button">Conversion Jobs</button>
                   <a class="ghost-button btn-sm" href="/help">Help Center</a>
                   <a class="ghost-button btn-sm" href="/faq">FAQ</a>
                   <a class="ghost-button btn-sm" href="/features">Features</a>
@@ -1710,49 +1711,70 @@
   </dialog>
 
   <dialog id="conversionReviewDialog" class="conversion-review-dialog">
-    <div class="conversion-review-sheet">
-      <div class="conversion-review-head">
-        <div>
-          <h3 id="conversionReviewTitle">Conversion Review</h3>
-          <p id="conversionReviewMeta">Inspect how the uploaded script moved through extraction and conversion.</p>
+      <div class="conversion-review-sheet">
+        <div class="conversion-review-head">
+          <div>
+            <h3 id="conversionReviewTitle">Conversion Review</h3>
+            <p id="conversionReviewMeta">Inspect how the uploaded script moved through extraction and conversion.</p>
+          </div>
+          <div class="conversion-review-head-actions">
+            <button id="conversionReviewRetryBtn" class="ghost-button btn-sm" type="button">Retry</button>
+            <button id="conversionReviewCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+          </div>
         </div>
-        <div class="conversion-review-head-actions">
-          <button id="conversionReviewRetryBtn" class="ghost-button btn-sm" type="button">Retry</button>
-          <button id="conversionReviewCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+        <div class="conversion-review-summary">
+          <div><span>Status</span><strong id="conversionReviewStatus">-</strong></div>
+          <div><span>Stage</span><strong id="conversionReviewStage">-</strong></div>
+          <div><span>Source file</span><strong id="conversionReviewFile">-</strong></div>
+          <div><span>Structured lines</span><strong id="conversionReviewLineCount">0</strong></div>
         </div>
-      </div>
-      <div class="conversion-review-summary">
-        <div><span>Status</span><strong id="conversionReviewStatus">-</strong></div>
-        <div><span>Stage</span><strong id="conversionReviewStage">-</strong></div>
-        <div><span>Source file</span><strong id="conversionReviewFile">-</strong></div>
-        <div><span>Structured lines</span><strong id="conversionReviewLineCount">0</strong></div>
-      </div>
-        <div id="conversionReviewWarnings" class="conversion-review-warnings" hidden></div>
-        <div id="conversionReviewTypeGrid" class="conversion-review-type-grid" hidden></div>
-        <div class="conversion-review-block">
-          <label for="conversionReviewRaw">Extracted text</label>
-          <textarea id="conversionReviewRaw" readonly spellcheck="false"></textarea>
-        </div>
-        <div class="conversion-review-block">
-          <label for="conversionReviewNormalized">Normalized screenplay text</label>
-          <textarea id="conversionReviewNormalized" readonly spellcheck="false"></textarea>
-        </div>
-        <div class="conversion-review-block">
-          <label>Structured screenplay preview</label>
-          <div id="conversionReviewStructured" class="conversion-review-structured"></div>
+        <div class="conversion-review-body">
+          <section class="conversion-review-panel conversion-review-panel-source">
+            <div class="conversion-review-panel-head">
+              <div>
+                <span class="conversion-review-eyebrow">Source</span>
+                <h4>Document Preparation</h4>
+                <p>Check the extracted text and the cleaned screenplay pass before the final block structure is applied.</p>
+              </div>
+            </div>
+            <div id="conversionReviewWarnings" class="conversion-review-warnings" hidden></div>
+            <div class="conversion-review-block">
+              <label for="conversionReviewRaw">Extracted text</label>
+              <textarea id="conversionReviewRaw" readonly spellcheck="false"></textarea>
+            </div>
+            <div class="conversion-review-block">
+              <label for="conversionReviewNormalized">Normalized screenplay text</label>
+              <textarea id="conversionReviewNormalized" readonly spellcheck="false"></textarea>
+            </div>
+          </section>
+          <section class="conversion-review-panel conversion-review-panel-structure">
+            <div class="conversion-review-panel-head">
+              <div>
+                <span class="conversion-review-eyebrow">Output</span>
+                <h4>Structured Screenplay</h4>
+                <p>Review how the converter mapped the screenplay into EyaWriter block types before you continue editing.</p>
+              </div>
+            </div>
+            <div id="conversionReviewTypeGrid" class="conversion-review-type-grid" hidden></div>
+            <div class="conversion-review-block">
+              <label>Structured screenplay preview</label>
+              <div id="conversionReviewStructured" class="conversion-review-structured"></div>
+            </div>
+          </section>
         </div>
       </div>
     </dialog>
 
   <dialog id="conversionJobsDialog" class="conversion-jobs-dialog">
-    <div class="conversion-jobs-sheet">
-      <div class="conversion-jobs-head">
-        <div>
-          <h3>Conversion Jobs</h3>
-          <p>Review recent upload, normalization, and import jobs.</p>
+      <div class="conversion-jobs-sheet">
+        <div class="conversion-jobs-head">
+          <div>
+            <span class="conversion-review-eyebrow">History</span>
+            <h3>Conversion Jobs</h3>
+            <p>Review recent upload, normalization, and import jobs.</p>
+          </div>
+          <button id="conversionJobsCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
         </div>
-        <button id="conversionJobsCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
-      </div>
       <p id="conversionJobsEmpty" class="conversion-jobs-empty">No conversion jobs yet.</p>
       <div id="conversionJobsList" class="conversion-jobs-list" hidden></div>
     </div>

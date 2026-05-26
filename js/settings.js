@@ -381,6 +381,11 @@ function bindLegal() {
 }
 
 function bindSupport() {
+  document.getElementById('settingsConversionJobsBtn')?.addEventListener('click', () => {
+    Settings.hide();
+    document.querySelector('[data-menu-action="open-conversion-jobs"]')?.click();
+  });
+
   document.getElementById('settingsCopyDiagnostics')?.addEventListener('click', async () => {
     const text = document.getElementById('settingsDiagnosticsPanel')?.dataset.diagnostics || '';
     if (!text) {

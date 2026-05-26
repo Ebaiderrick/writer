@@ -805,18 +805,27 @@ export function showNewCreationFlow() {
       <div class="creation-flow-header">
         <span class="creation-flow-step">Start Writing</span>
         <h4>What do you want to create?</h4>
-        <p>Choose a writing format. We'll place it in your workspace automatically.</p>
+        <p>Pick the writing lane you want to begin with. Your project will open in the right workspace flow automatically.</p>
       </div>
       <div class="creation-flow-grid">
         <button class="creation-option-card is-primary" type="button" data-create-work-type="film-script">
-          <span class="creation-option-icon">FILM</span>
-          <strong>Film Script</strong>
-          <small>Scene-driven writing with screenplay tools, collaboration, and story memory.</small>
+          <span class="creation-option-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"></rect><path d="M8 5v14"></path><path d="M16 5v14"></path><path d="M3.5 9.5h17"></path><path d="M3.5 14.5h17"></path></svg>
+          </span>
+          <span class="creation-option-copy">
+            <strong>Film Script</strong>
+            <small>Scene-driven writing with screenplay tools, collaboration, and story memory.</small>
+          </span>
         </button>
         <button class="creation-option-card is-disabled" type="button" disabled>
-          <span class="creation-option-icon">TEXT</span>
-          <strong>Prose / Poetry</strong>
-          <small>Coming soon. This path will open after the film workflow is fully polished.</small>
+          <span class="creation-option-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5h14"></path><path d="M5 12h14"></path><path d="M5 16.5h9"></path></svg>
+          </span>
+          <span class="creation-option-copy">
+            <strong>Prose / Poetry</strong>
+            <small>Coming soon. This path will open after the film workflow is fully polished.</small>
+          </span>
+          <span class="creation-option-badge">Soon</span>
         </button>
       </div>
     `;
@@ -3719,7 +3728,7 @@ export function showToast(message, type = "success", { duration = 2600, id = uid
             <strong class="app-toast-title"></strong>
             <span class="app-toast-message"></span>
           </div>
-          <button class="app-toast-close" type="button" aria-label="Dismiss notification">Ã—</button>
+          <button class="app-toast-close" type="button" aria-label="Dismiss notification">&times;</button>
         `;
         host.appendChild(toast);
         toast.querySelector(".app-toast-close")?.addEventListener("click", () => dismissToast(id));
