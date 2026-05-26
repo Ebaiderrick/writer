@@ -31,7 +31,7 @@ import {
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView, renderStudioProjectContext,
-  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow
+  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow, showFilmProjectSetupFlow
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -40,6 +40,7 @@ import {
   placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
   formatLineText
 } from './utils.js';
+import { extractScriptTextFromFile, convertScriptTextToLines } from './scriptConversion.js';
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
 import {
   applyWordCase, clearSpellingHighlights, ensureLanguageDictionary, getSpellingContextAtOffset,
@@ -64,6 +65,7 @@ let previewRefreshTimer = 0;
 let focusModeTimer = 0;
 let hasShownReadOnlyNotice = false;
 let workspaceClockTimer = 0;
+let pendingConvertImportProjectId = "";
 const aiTaskTimers = new Map();
 const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
 const PROJECT_CARD_CLICK_SUPPRESSION_MS = 750;
@@ -299,16 +301,15 @@ async function launchNewCreationFlow() {
     return;
   }
 
-  const projectName = await customPrompt("Name this project before creating it.", "", "New Project");
-  if (!projectName || !projectName.trim()) {
-    await customAlert("A project name is required before creation.", "Project Not Created");
+  const setup = await showFilmProjectSetupFlow();
+  if (!setup?.projectName || !setup.action) {
     return;
   }
   const workspaceRoot = ensureDefaultWorkspaceRoot();
   const project = createProjectWithOptions({
     creationKind: "project",
     workType: selection.workType,
-    title: projectName.trim(),
+    title: setup.projectName.trim(),
     workspace: {
       id: workspaceRoot.workspace?.id || workspaceRoot.id,
       name: workspaceRoot.workspace?.name || workspaceRoot.title,
@@ -319,6 +320,20 @@ async function launchNewCreationFlow() {
     }
   });
   openProject(project.id, { silentLoadToast: true });
+
+  if (setup.action === "import") {
+    showToast("Choose a file to import into this script.", "success");
+    refs.fileInput?.click();
+    return;
+  }
+
+  if (setup.action === "convert-import") {
+    pendingConvertImportProjectId = project.id;
+    showToast("Choose a script to convert and import.", "success");
+    refs.convertImportInput?.click();
+    return;
+  }
+
   showToast("Project created.", "success");
 }
 
@@ -1618,6 +1633,7 @@ export function bindEvents() {
   refs.exportWordBtn.addEventListener("click", exportWord);
   refs.exportPdfBtn.addEventListener("click", exportPdf);
   refs.fileInput.addEventListener("change", importFile);
+  refs.convertImportInput?.addEventListener("change", convertImportFile);
 
   refs.autoNumberToggle.addEventListener("change", () => {
     state.autoNumberScenes = refs.autoNumberToggle.checked;
@@ -3837,9 +3853,11 @@ function importFile(event) {
         return;
       }
     } else {
+      const hasCustomProjectTitle = String(project.title || "").trim()
+        && !/^(Untitled Script|Film Script \d+)$/i.test(String(project.title || "").trim());
       nextProject = sanitizeProject({
         ...project,
-        title: file.name.replace(/\.[^.]+$/, ""),
+        title: hasCustomProjectTitle ? project.title : file.name.replace(/\.[^.]+$/, ""),
         lines: parseTextToLines(text)
       });
     }
@@ -3853,6 +3871,54 @@ function importFile(event) {
 
   reader.readAsText(file);
   refs.fileInput.value = "";
+}
+
+async function convertImportFile(event) {
+  const [file] = event.target.files || [];
+  const project = state.projects.find((entry) => entry.id === pendingConvertImportProjectId)
+    || getCurrentProject();
+
+  refs.convertImportInput.value = "";
+  pendingConvertImportProjectId = "";
+
+  if (!file || !project) return;
+
+  const loadingToast = showToast("Preparing your script for conversion...", "loading", { duration: 0 });
+
+  try {
+    const rawText = await extractScriptTextFromFile(file, {
+      onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
+    });
+
+    updateToast(loadingToast, "Converting your script into screenplay blocks...", "loading", { duration: 0 });
+
+    const result = await convertScriptTextToLines(rawText, {
+      fileName: file.name,
+      onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
+    });
+
+    const nextProject = sanitizeProject({
+      ...project,
+      lines: result.lines
+    });
+    upsertProject(nextProject);
+    openProject(nextProject.id, { silentLoadToast: true });
+    persistProjects(true);
+
+    if (result.usedFallback) {
+      updateToast(loadingToast, "Imported with a plain-text fallback. Review the structure.", "error", { duration: 5200 });
+    } else {
+      updateToast(loadingToast, "Converted script imported.", "success", { duration: 3200 });
+    }
+
+    if (result.warnings.length) {
+      customAlert(result.warnings.join("\n\n"), "Conversion Notes");
+    }
+  } catch (error) {
+    console.error("Convert & import failed", error);
+    updateToast(loadingToast, error.message || "Conversion failed.", "error", { duration: 5200 });
+    customAlert(error.message || "We could not convert that file yet.", "Convert & Import");
+  }
 }
 
 function openNotepad() {

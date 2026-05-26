@@ -1,88 +1,44 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import fetch from "node-fetch";
-import { buildPrompt } from "./promptBuilder.js";
-
-dotenv.config();
-
-const app = express();
-const DEFAULT_PORT = Number(process.env.PORT) || 3001;
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "openai/gpt-3.5-turbo";
 const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
 
-app.use(cors());
-app.use(express.json({ limit: "4mb" }));
-
-app.get("/", (req, res) => {
-  res.send("AI Server Running");
-});
-
-app.post("/api/ai-assist", async (req, res) => {
-  console.log(`[${new Date().toISOString()}] AI Request: ${req.body.action} (${req.body.type})`);
-  const { type, action, current, context, instruction } = req.body;
-
-  if (current === undefined || current === null) {
-    return res.status(400).json({ error: "Missing current block" });
+export const handler = async (event) => {
+  if (event.httpMethod !== "POST") {
+    return {
+      statusCode: 405,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Method Not Allowed" })
+    };
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return res.json({
-      output: `AI is working (test mode) - You wanted to ${action || "assist with"} this ${type || "block"}.`
-    });
-  }
-
+  let body;
   try {
-    const prompt = buildPrompt({ type, action, current, context, instruction });
-    const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://eyawriter.com",
-        "X-Title": "EyaWriter"
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 800
-      })
-    });
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      console.error("OpenRouter Error:", data);
-      return res.status(response.status).json({
-        error: extractApiError(data) || `AI request failed with status ${response.status}`
-      });
-    }
-
-    const output = extractOutputText(data);
-    if (!output) {
-      return res.status(502).json({ error: "AI assistant returned no text." });
-    }
-
-    return res.json({ output });
-  } catch (error) {
-    console.error("AI ERROR:", error);
-    return res.status(500).json({
-      error: "AI request failed. Check your server connection and OpenAI configuration."
-    });
+    body = JSON.parse(event.body);
+  } catch {
+    return {
+      statusCode: 400,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Invalid JSON" })
+    };
   }
-});
 
-app.post("/api/convert-script", async (req, res) => {
-  const { text, chunkIndex = 0, chunkCount = 1, fileName = "" } = req.body || {};
-
+  const { text, chunkIndex = 0, chunkCount = 1, fileName = "" } = body || {};
   if (!String(text || "").trim()) {
-    return res.status(400).json({ error: "Missing script text to convert." });
+    return {
+      statusCode: 400,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Missing script text to convert." })
+    };
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return res.json({
-      lines: simpleConvertTextToLines(text),
-      warnings: ["AI key not configured, so a plain conversion fallback was used."]
-    });
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lines: simpleConvertTextToLines(text),
+        warnings: ["AI key not configured, so a plain conversion fallback was used."]
+      })
+    };
   }
 
   try {
@@ -102,93 +58,43 @@ app.post("/api/convert-script", async (req, res) => {
         temperature: 0.1
       })
     });
-    const data = await response.json().catch(() => ({}));
 
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      return res.status(response.status).json({
-        error: extractApiError(data) || `Conversion failed with status ${response.status}`
-      });
+      return {
+        statusCode: response.status,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error: extractApiError(data) || `Conversion failed with status ${response.status}`
+        })
+      };
     }
 
     const output = extractOutputText(data);
     const parsed = parseConversionResponse(output);
     if (!parsed.lines.length) {
-      return res.status(502).json({ error: "The conversion model returned no screenplay blocks." });
+      return {
+        statusCode: 502,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "The conversion model returned no screenplay blocks." })
+      };
     }
 
-    return res.json(parsed);
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsed)
+    };
   } catch (error) {
-    console.error("SCRIPT CONVERSION ERROR:", error);
-    return res.status(500).json({
-      error: "Script conversion failed. Check your AI configuration and try again."
-    });
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        error: "Script conversion failed. Check your AI configuration and try again."
+      })
+    };
   }
-});
-
-app.listen(DEFAULT_PORT, () => {
-  console.log(`Server running on http://localhost:${DEFAULT_PORT}`);
-});
-
-function extractOutputText(data) {
-  if (typeof data?.output === "string" && data.output.trim()) {
-    return data.output.trim();
-  }
-
-  if (typeof data?.result === "string" && data.result.trim()) {
-    return data.result.trim();
-  }
-
-  if (typeof data?.output_text === "string" && data.output_text.trim()) {
-    return data.output_text.trim();
-  }
-
-  if (Array.isArray(data?.output)) {
-    const segments = [];
-
-    for (const item of data.output) {
-      const content = Array.isArray(item?.content) ? item.content : [];
-      for (const block of content) {
-        if (typeof block?.text === "string" && block.text.trim()) {
-          segments.push(block.text.trim());
-        }
-      }
-    }
-
-    if (segments.length) {
-      return segments.join("\n\n");
-    }
-  }
-
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content === "string" && content.trim()) {
-    return content.trim();
-  }
-
-  if (Array.isArray(content)) {
-    const text = content
-      .map((part) => (typeof part?.text === "string" ? part.text.trim() : ""))
-      .filter(Boolean)
-      .join("\n\n");
-
-    if (text) {
-      return text;
-    }
-  }
-
-  return "";
-}
-
-function extractApiError(data) {
-  if (typeof data?.error === "string" && data.error.trim()) {
-    return data.error.trim();
-  }
-
-  if (typeof data?.error?.message === "string" && data.error.message.trim()) {
-    return data.error.message.trim();
-  }
-
-  return "";
-}
+};
 
 function buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName }) {
   return `You are converting screenplay source material into structured screenplay blocks for an editor.
@@ -248,7 +154,6 @@ function parseConversionResponse(output) {
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
-
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   const candidate = jsonMatch ? jsonMatch[0] : cleaned;
   const parsed = JSON.parse(candidate);
@@ -326,4 +231,22 @@ function looksLikeDialogueText(text) {
     return false;
   }
   return !/^[A-Z0-9 .'\-()]+$/.test(text);
+}
+
+function extractOutputText(data) {
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content === "string" && content.trim()) {
+    return content.trim();
+  }
+  return "";
+}
+
+function extractApiError(data) {
+  if (typeof data?.error === "string" && data.error.trim()) {
+    return data.error.trim();
+  }
+  if (typeof data?.error?.message === "string" && data.error.message.trim()) {
+    return data.error.message.trim();
+  }
+  return "";
 }

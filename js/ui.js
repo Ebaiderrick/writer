@@ -817,7 +817,6 @@ export function showNewCreationFlow() {
           <span class="creation-option-icon">TEXT</span>
           <strong>Prose / Poetry</strong>
           <small>Coming soon. This path will open after the film workflow is fully polished.</small>
-          <span class="creation-option-badge">Soon</span>
         </button>
       </div>
     `;
@@ -830,7 +829,7 @@ export function showNewCreationFlow() {
 
 
     showModal({
-      title: "Create New",
+      title: "",
       message: container,
       showConfirm: false,
       showCancel: true,
@@ -840,6 +839,102 @@ export function showNewCreationFlow() {
   });
 }
 
+export async function showFilmProjectSetupFlow() {
+  const container = document.createElement("div");
+  container.className = "creation-flow creation-flow-detail";
+  let selectedAction = "start-new";
+
+  container.innerHTML = `
+    <div class="creation-flow-header">
+      <span class="creation-flow-step">New Film Script</span>
+      <h4>Name your script</h4>
+    </div>
+    <div class="creation-detail-stack">
+      <label class="creation-name-field">
+        <span class="creation-name-label">Script name</span>
+        <input class="creation-name-input" type="text" placeholder="Write script name">
+      </label>
+      <div class="creation-action-grid" role="radiogroup" aria-label="Creation mode">
+        <button class="creation-action-card is-selected" type="button" data-creation-action="start-new" aria-pressed="true">
+          <span class="creation-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+          <strong>Start new</strong>
+          <small>Open a blank film script and begin writing immediately.</small>
+        </button>
+        <button class="creation-action-card" type="button" data-creation-action="import" aria-pressed="false">
+          <span class="creation-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"></path><path d="M14 4v5h5"></path><path d="M12 11v6"></path><path d="M9 14h6"></path></svg></span>
+          <strong>Import</strong>
+          <small>Bring in an existing screenplay file with the current import flow.</small>
+        </button>
+        <button class="creation-action-card" type="button" data-creation-action="convert-import" aria-pressed="false">
+          <span class="creation-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"></path><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z"></path></svg></span>
+          <strong>Convert &amp; import</strong>
+          <small>Upload and transform docs or PDFs into screenplay blocks.</small>
+          <span class="creation-option-badge">Soon</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  const nameInput = container.querySelector(".creation-name-input");
+  const actionButtons = [...container.querySelectorAll("[data-creation-action]")];
+
+  const syncSelectionState = () => {
+    actionButtons.forEach((button) => {
+      const isSelected = button.dataset.creationAction === selectedAction;
+      button.classList.toggle("is-selected", isSelected);
+      button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    });
+  };
+
+  const syncConfirmState = () => {
+    if (!modalRefs.confirmBtn) return;
+    modalRefs.confirmBtn.disabled = !nameInput?.value.trim() || !selectedAction;
+  };
+
+  actionButtons.forEach((button) => {
+    if (button.disabled) return;
+    button.addEventListener("click", () => {
+      selectedAction = button.dataset.creationAction || "start-new";
+      syncSelectionState();
+      syncConfirmState();
+      if (!nameInput?.value.trim()) {
+        nameInput?.focus();
+        return;
+      }
+      modalRefs.confirmBtn?.click();
+    });
+  });
+
+  nameInput?.addEventListener("input", syncConfirmState);
+
+  const modalPromise = showModal({
+    title: "",
+    message: container,
+    confirmLabel: "OK",
+    cancelLabel: "Cancel",
+    showCancel: true,
+    showConfirm: true,
+    contentClass: "modal-content-create-new modal-content-film-setup"
+  });
+
+  setTimeout(() => {
+    nameInput?.focus();
+    syncSelectionState();
+    syncConfirmState();
+  }, 0);
+
+  const outcome = await modalPromise;
+  if (!outcome) return null;
+
+  const projectName = nameInput?.value.trim();
+  if (!projectName || !selectedAction) return null;
+
+  return {
+    workType: "film-script",
+    projectName,
+    action: selectedAction
+  };
+}
 export function renderHome() {
   try {
     const session = JSON.parse(localStorage.getItem('eyawriter_session') || 'null');

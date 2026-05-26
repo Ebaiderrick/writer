@@ -4360,6 +4360,172 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   justify-content: flex-end;
 }
 
+.modal-content-film-setup {
+  width: min(940px, calc(100vw - 24px));
+  background: var(--panel);
+  opacity: 1;
+}
+
+.modal-content-film-setup .modal-title {
+  display: none;
+}
+
+.modal-content-film-setup .modal-message {
+  margin: 0 0 12px;
+}
+
+.creation-flow-detail {
+  gap: 10px;
+}
+
+.creation-detail-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.creation-flow-detail .creation-flow-header {
+  gap: 4px;
+}
+
+.creation-flow-detail .creation-flow-header h4 {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+}
+
+.creation-flow-detail .creation-flow-header p {
+  max-width: 44ch;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.creation-name-field {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.creation-name-label {
+  font-size: var(--text-meta);
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+}
+
+.creation-name-input {
+  width: min(100%, 320px);
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 92%, var(--accent));
+  background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.creation-name-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 84%, transparent);
+}
+
+.creation-name-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+}
+
+.creation-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.creation-action-card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 98px;
+  padding: 12px 13px 11px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.creation-action-card:hover:not(:disabled),
+.creation-action-card.is-selected {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+}
+
+.creation-action-card.is-selected {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 36%),
+    var(--surface-strong);
+}
+
+.creation-action-card strong {
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+  color: var(--ink);
+}
+
+.creation-action-card small {
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  line-height: 1.28;
+  font-size: 0.75rem;
+}
+
+.creation-action-card.is-disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.creation-flow-detail .creation-option-icon {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
+  background: color-mix(in srgb, var(--surface-strong) 82%, transparent);
+  color: var(--accent-strong);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.creation-flow-detail .creation-option-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.creation-flow-detail .creation-option-badge {
+  top: 12px;
+  right: 12px;
+  font-size: 0.68rem;
+  padding: 3px 8px;
+}
+
+@media (max-width: 720px) {
+  .creation-action-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .shortcut-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

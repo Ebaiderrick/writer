@@ -64,6 +64,7 @@ export const refs = {
   get exportWordBtn() { return getCached("#exportWordBtn"); },
   get exportPdfBtn() { return getCached("#exportPdfBtn"); },
   get fileInput() { return getCached("#fileInput"); },
+  get convertImportInput() { return getCached("#convertImportInput"); },
   get helpBtn() { return getCached("#helpBtn"); },
   get helpDialog() { return getCached("#helpDialog"); },
   get leftPane() { return getCached("#leftPane"); },

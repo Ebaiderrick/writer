@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 export async function login(page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
 
   // Inject mock user and session
   await page.evaluate(() => {
@@ -24,7 +24,7 @@ export async function login(page) {
     }));
   });
 
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
 
   // Wait for the app to detect session and show homeView
   await expect(page.locator('#homeView')).toBeVisible({ timeout: 15000 });
