@@ -1,4 +1,9 @@
 import { parseTextToLines } from './utils.js';
+import {
+  persistConversionJobRecord,
+  patchConversionJobRecord,
+  attachConversionJobFile
+} from './conversionJobStore.js';
 
 const ALLOWED_TYPES = new Set([
   'scene',
@@ -13,6 +18,7 @@ const ALLOWED_TYPES = new Set([
 ]);
 
 const PDF_WORKER_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const CONVERSION_JOB_STORAGE_KEY = 'eyawriter.conversionJobs';
 
 export function getConvertImportEndpoint() {
   const configured = window.EYAWRITER_AI_API_URL || localStorage.getItem('eyawriter.aiApiUrl');
@@ -90,22 +96,87 @@ export async function convertScriptTextToLines(rawText, { fileName = '', onProgr
     throw new Error('No readable text was found in that file.');
   }
 
-  const candidates = buildConversionCandidates(normalizedText);
+  const warnings = [];
+  let usedFallback = false;
+  const job = createConversionJob({
+    fileName,
+    rawText: normalizedText
+  });
+
+  updateConversionJob(job.id, {
+    status: 'preparing',
+    stageLabel: 'Preparing document memory',
+    warnings
+  });
+  onProgress?.('Preparing backend memory for this script...');
+
+  const normalizationSource = buildNormalizationPayload(normalizedText);
+  const normalizationChunks = chunkScriptText(normalizationSource, 8000);
+  const normalizedChunks = [];
+
+  for (let index = 0; index < normalizationChunks.length; index += 1) {
+    const chunk = normalizationChunks[index];
+    const stageLabel = `Normalizing screenplay text (${index + 1}/${normalizationChunks.length})`;
+    onProgress?.(stageLabel);
+    updateConversionJob(job.id, {
+      status: 'normalizing',
+      stageLabel,
+      normalizationProgress: {
+        current: index + 1,
+        total: normalizationChunks.length
+      }
+    });
+    try {
+      const response = await requestConversionStage('normalize', chunk, {
+        fileName,
+        chunkIndex: index,
+        chunkCount: normalizationChunks.length,
+        jobId: job.id
+      });
+      if (!String(response.text || '').trim()) {
+        throw new Error('The AI did not return normalized screenplay text.');
+      }
+      normalizedChunks.push(normalizeExtractedText(response.text));
+      warnings.push(...(response.warnings || []));
+    } catch (error) {
+      usedFallback = true;
+      warnings.push(error.message || 'Normalization failed for part of the script, so the extracted text was kept for that section.');
+      normalizedChunks.push(heuristicNormalizeText(parseNormalizationChunk(chunk)));
+    }
+  }
+
+  const normalizedScreenplayText = normalizeExtractedText(normalizedChunks.join('\n\n')) || heuristicNormalizeText(normalizedText);
+  updateConversionJob(job.id, {
+    status: 'normalized',
+    stageLabel: 'Normalized screenplay text ready',
+    normalizedText: normalizedScreenplayText,
+    warnings
+  });
+
+  const candidates = buildConversionCandidates(normalizedScreenplayText);
   const candidatePayload = buildCandidatePayload(candidates);
   const chunks = chunkScriptText(candidatePayload, 7000);
   const convertedLines = [];
-  const warnings = [];
-  let usedFallback = false;
 
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index];
-    onProgress?.(`Converting your script${chunks.length > 1 ? ` (${index + 1}/${chunks.length})` : ''}...`);
+    const stageLabel = `Structuring screenplay blocks (${index + 1}/${chunks.length})...`;
+    onProgress?.(stageLabel);
+    updateConversionJob(job.id, {
+      status: 'structuring',
+      stageLabel,
+      structureProgress: {
+        current: index + 1,
+        total: chunks.length
+      }
+    });
 
     try {
-      const response = await requestConvertedChunk(chunk, {
+      const response = await requestConversionStage('structure', chunk, {
         fileName,
         chunkIndex: index,
-        chunkCount: chunks.length
+        chunkCount: chunks.length,
+        jobId: job.id
       });
       const safeLines = sanitizeConvertedLines(response.lines);
       if (!safeLines.length) {
@@ -120,20 +191,92 @@ export async function convertScriptTextToLines(rawText, { fileName = '', onProgr
     }
   }
 
+  updateConversionJob(job.id, {
+    status: usedFallback ? 'completed-with-fallback' : 'completed',
+    stageLabel: usedFallback ? 'Imported with fallback review needed' : 'Conversion complete',
+    structuredLines: convertedLines,
+    warnings
+  });
+
   return {
     lines: convertedLines.length ? convertedLines : fallbackCandidatesToLines(candidates),
     warnings,
-    usedFallback
+    usedFallback,
+    jobId: job.id
   };
 }
 
-async function requestConvertedChunk(text, metadata) {
+export function beginConversionUpload({ fileName = '', projectId = '' } = {}) {
+  const job = createConversionJob({
+    fileName,
+    rawText: ''
+  });
+  persistConversionJobRecord(job);
+  updateConversionJob(job.id, {
+    projectId,
+    status: 'uploading',
+    stageLabel: 'Uploading source file',
+    sourceFile: {
+      name: fileName || 'script'
+    }
+  });
+  return job.id;
+}
+
+export function attachSourceFileToConversionJob(jobId, file) {
+  if (!jobId || !file) return;
+  attachConversionJobFile(jobId, file);
+}
+
+export function markConversionExtractionStarted(jobId) {
+  updateConversionJob(jobId, {
+    status: 'extracting',
+    stageLabel: 'Extracting readable text'
+  });
+}
+
+export function attachRawTextToConversionJob(jobId, rawText) {
+  updateConversionJob(jobId, {
+    rawText: normalizeExtractedText(rawText),
+    extractedAt: new Date().toISOString()
+  });
+}
+
+export function markConversionImporting(jobId, lineCount = 0) {
+  updateConversionJob(jobId, {
+    status: 'importing',
+    stageLabel: 'Importing screenplay into project',
+    structuredLineCount: lineCount
+  });
+}
+
+export function finalizeConversionImport(jobId, { usedFallback = false, warnings = [], lineCount = 0 } = {}) {
+  updateConversionJob(jobId, {
+    status: usedFallback ? 'imported-with-fallback' : 'imported',
+    stageLabel: usedFallback ? 'Imported with fallback review needed' : 'Imported into project',
+    warnings,
+    structuredLineCount: lineCount,
+    completedAt: new Date().toISOString()
+  });
+}
+
+export function failConversionJob(jobId, message) {
+  updateConversionJob(jobId, {
+    status: 'failed',
+    stageLabel: 'Conversion failed',
+    warnings: message ? [String(message)] : [],
+    failedAt: new Date().toISOString()
+  });
+}
+
+async function requestConversionStage(stage, text, metadata) {
   const response = await fetch(getConvertImportEndpoint(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
+      stage,
       text,
       ...metadata
     })
@@ -146,6 +289,7 @@ async function requestConvertedChunk(text, metadata) {
 
   const lines = Array.isArray(data?.lines) ? data.lines : [];
   return {
+    text: typeof data?.text === 'string' ? data.text : '',
     lines,
     warnings: Array.isArray(data?.warnings) ? data.warnings : []
   };
@@ -279,6 +423,13 @@ function normalizeExtractedText(value) {
     .trim();
 }
 
+function heuristicNormalizeText(value) {
+  const text = normalizeExtractedText(value);
+  if (!text) return '';
+  const candidates = buildConversionCandidates(text);
+  return candidates.map((candidate) => candidateToNormalizedBlock(candidate)).filter(Boolean).join('\n\n');
+}
+
 function getLowercaseExtension(fileName) {
   const match = String(fileName || '').toLowerCase().match(/\.([^.]+)$/);
   return match?.[1] || '';
@@ -341,6 +492,20 @@ function buildAnnotatedConversionText(text) {
   }
 
   return annotated.join('\n');
+}
+
+function buildNormalizationPayload(text) {
+  return String(text || '')
+    .split('\n')
+    .map((rawLine, index) => {
+      const indent = rawLine.match(/^\s*/)?.[0]?.length || 0;
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        return `[source break ${index + 1}]`;
+      }
+      return `[source line ${index + 1} | indent=${indent}] ${trimmed}`;
+    })
+    .join('\n');
 }
 
 function buildConversionCandidates(text) {
@@ -490,6 +655,18 @@ function parseCandidateChunk(chunkText) {
     .filter(Boolean);
 }
 
+function parseNormalizationChunk(chunkText) {
+  return String(chunkText || '')
+    .split('\n')
+    .map((entry) => {
+      if (/^\[source break/i.test(entry.trim())) {
+        return '';
+      }
+      return entry.replace(/^\[source (?:line|break)[^\]]*\]\s*/i, '').trim();
+    })
+    .join('\n');
+}
+
 function makeCandidate(kind, sourceLines) {
   return {
     kind,
@@ -504,6 +681,14 @@ function joinWrappedLines(lines) {
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function candidateToNormalizedBlock(candidate) {
+  if (!candidate) return '';
+  if (candidate.kind === 'dialogue-block' && Array.isArray(candidate.parts)) {
+    return candidate.parts.map((part) => part.text).filter(Boolean).join('\n');
+  }
+  return String(candidate.text || '').trim();
 }
 
 function isSceneLike(text) {
@@ -533,4 +718,43 @@ function normalizeCandidateKind(kind) {
     return kind;
   }
   return 'action';
+}
+
+function createConversionJob({ fileName, rawText }) {
+  const job = {
+    id: `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    fileName: fileName || 'script',
+    createdAt: new Date().toISOString(),
+    status: 'queued',
+    stageLabel: 'Queued',
+    rawText,
+    normalizedText: '',
+    structuredLines: [],
+    warnings: []
+  };
+  updateStoredJobs((jobs) => [job, ...jobs].slice(0, 4));
+  return job;
+}
+
+function updateConversionJob(jobId, patch) {
+  if (!jobId) return;
+  let nextJob = null;
+  updateStoredJobs((jobs) => jobs.map((job) => {
+    if (job.id !== jobId) return job;
+    nextJob = { ...job, ...patch, updatedAt: new Date().toISOString() };
+    return nextJob;
+  }));
+  if (nextJob) {
+    patchConversionJobRecord(jobId, nextJob);
+  }
+}
+
+function updateStoredJobs(mutator) {
+  try {
+    const current = JSON.parse(localStorage.getItem(CONVERSION_JOB_STORAGE_KEY) || '[]');
+    const next = mutator(Array.isArray(current) ? current : []);
+    localStorage.setItem(CONVERSION_JOB_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore storage issues; conversion should still continue.
+  }
 }

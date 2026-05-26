@@ -4115,6 +4115,306 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   padding-right: 0.25rem;
 }
 
+.conversion-review-dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.conversion-review-dialog::backdrop {
+  background: rgba(16, 16, 16, 0.22);
+  backdrop-filter: blur(5px);
+}
+
+.conversion-review-sheet {
+  width: min(860px, calc(100vw - 32px));
+  max-height: min(86vh, 900px);
+  display: grid;
+  gap: 1rem;
+  overflow: auto;
+  padding: 24px;
+  border-radius: 22px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.conversion-review-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.conversion-review-head h3 {
+  margin: 0 0 0.35rem;
+}
+
+.conversion-review-head p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.conversion-review-head-actions {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.conversion-review-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.conversion-review-summary div {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 86%, var(--accent) 14%);
+}
+
+.conversion-review-summary span {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.conversion-review-summary strong {
+  font-size: 0.96rem;
+}
+
+.conversion-review-warnings {
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--danger, #d84d4d) 26%, var(--border) 74%);
+  background: color-mix(in srgb, var(--danger, #d84d4d) 8%, var(--panel) 92%);
+  white-space: pre-wrap;
+}
+
+.conversion-review-type-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.conversion-review-type-pill {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 88%, var(--accent) 12%);
+}
+
+.conversion-review-type-pill span {
+  font-size: 0.74rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.conversion-review-type-pill strong {
+  font-size: 0.95rem;
+}
+
+.conversion-review-block {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.conversion-review-block label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.conversion-review-block textarea {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 88%, black 12%);
+  color: var(--text);
+  padding: 0.95rem 1rem;
+  font: 0.92rem/1.5 "Courier New", monospace;
+}
+
+.conversion-review-structured {
+  max-height: 360px;
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 88%, black 12%);
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.conversion-review-structured-empty {
+  color: var(--muted);
+  margin: 0;
+}
+
+.conversion-review-line {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 0.85rem;
+  align-items: start;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 85%, transparent 15%);
+}
+
+.conversion-review-line:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.conversion-review-line-type {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.conversion-review-line-text {
+  white-space: pre-wrap;
+  font: 0.92rem/1.5 "Courier New", monospace;
+  color: var(--text);
+}
+
+.conversion-jobs-dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.conversion-jobs-dialog::backdrop {
+  background: rgba(16, 16, 16, 0.22);
+  backdrop-filter: blur(5px);
+}
+
+.conversion-jobs-sheet {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(82vh, 860px);
+  display: grid;
+  gap: 1rem;
+  overflow: auto;
+  padding: 24px;
+  border-radius: 22px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.conversion-jobs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.conversion-jobs-head h3 {
+  margin: 0 0 0.35rem;
+}
+
+.conversion-jobs-head p,
+.conversion-jobs-empty,
+.conversion-job-item-meta,
+.conversion-job-item-stage {
+  margin: 0;
+  color: var(--muted);
+}
+
+.conversion-jobs-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.conversion-job-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--accent) 12%);
+  color: var(--text);
+  padding: 1rem 1rem 0.95rem;
+  display: grid;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.conversion-job-item:hover,
+.conversion-job-item:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.conversion-job-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.conversion-job-item-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.conversion-job-item-status {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.32rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 75%, var(--accent) 25%);
+}
+
+.conversion-job-item-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.conversion-job-item-grid span {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+.conversion-job-item-grid strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 820px) {
+  .conversion-review-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .conversion-review-type-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .conversion-review-head {
+    flex-direction: column;
+  }
+
+  .conversion-review-line {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .conversion-job-item-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .recovery-item {
   display: flex;
   justify-content: space-between;

@@ -38,9 +38,19 @@ import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
   placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
-  formatLineText
+  formatLineText, escapeHtml
 } from './utils.js';
-import { extractScriptTextFromFile, convertScriptTextToLines } from './scriptConversion.js';
+import {
+  extractScriptTextFromFile,
+  convertScriptTextToLines,
+  beginConversionUpload,
+  attachSourceFileToConversionJob,
+  markConversionExtractionStarted,
+  attachRawTextToConversionJob,
+  markConversionImporting,
+  finalizeConversionImport,
+  failConversionJob
+} from './scriptConversion.js';
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
 import {
   applyWordCase, clearSpellingHighlights, ensureLanguageDictionary, getSpellingContextAtOffset,
@@ -59,6 +69,7 @@ import {
   showCollabProfile, noteRealtimeActivity, syncWorkspaceState,
   leaveWorkspace, deleteWorkspaceData
 } from './collaborate.js';
+import { getConversionJobRecord, listConversionJobRecords } from './conversionJobStore.js';
 
 let studioSidebarRefreshFrame = 0;
 let previewRefreshTimer = 0;
@@ -124,6 +135,67 @@ function openFileRecoveryDialog() {
 
 function closeFileRecoveryDialog() {
   document.getElementById("fileRecoveryDialog")?.close();
+}
+
+async function renderConversionJobsList() {
+  const dialog = document.getElementById("conversionJobsDialog");
+  const list = document.getElementById("conversionJobsList");
+  const empty = document.getElementById("conversionJobsEmpty");
+  if (!dialog || !list || !empty) return;
+
+  const jobs = await listConversionJobRecords();
+  empty.hidden = jobs.length > 0;
+  list.hidden = jobs.length === 0;
+
+  if (!jobs.length) {
+    list.innerHTML = "";
+    return;
+  }
+
+  list.innerHTML = jobs.map((job) => {
+    const updatedAt = job.updatedAt || job.createdAt;
+    const timestamp = updatedAt
+      ? new Date(updatedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+      : "Unknown";
+    const lineCount = Number(job.structuredLineCount || job.structuredLines?.length || 0);
+    return `
+      <button class="conversion-job-item" type="button" data-conversion-job-id="${job.id}">
+        <div class="conversion-job-item-top">
+          <div>
+            <h4 class="conversion-job-item-title">${escapeHtml(job.fileName || "Untitled upload")}</h4>
+            <p class="conversion-job-item-meta">Updated ${escapeHtml(timestamp)}</p>
+          </div>
+          <span class="conversion-job-item-status">${escapeHtml(String(job.status || "queued"))}</span>
+        </div>
+        <p class="conversion-job-item-stage">${escapeHtml(job.stageLabel || "No stage available")}</p>
+        <div class="conversion-job-item-grid">
+          <div>
+            <span>Project</span>
+            <strong>${escapeHtml(job.projectId || "Not linked")}</strong>
+          </div>
+          <div>
+            <span>Structured lines</span>
+            <strong>${lineCount}</strong>
+          </div>
+          <div>
+            <span>Warnings</span>
+            <strong>${Array.isArray(job.warnings) ? job.warnings.filter(Boolean).length : 0}</strong>
+          </div>
+        </div>
+      </button>
+    `;
+  }).join("");
+}
+
+async function openConversionJobsDialog() {
+  const dialog = document.getElementById("conversionJobsDialog");
+  if (!dialog) return;
+  await renderConversionJobsList();
+  dialog.showModal();
+}
+
+function closeConversionJobsDialog() {
+  document.getElementById("conversionJobsDialog")?.close();
 }
 
 function ensureSelectionToolbar() {
@@ -1567,6 +1639,21 @@ export function bindEvents() {
       closeFileRecoveryDialog();
     }
   });
+  document.getElementById("conversionJobsCloseBtn")?.addEventListener("click", closeConversionJobsDialog);
+  document.getElementById("conversionJobsDialog")?.addEventListener("click", (event) => {
+    if (event.target?.id === "conversionJobsDialog") {
+      closeConversionJobsDialog();
+    }
+  });
+  document.getElementById("conversionJobsList")?.addEventListener("click", async (event) => {
+    const item = event.target.closest("[data-conversion-job-id]");
+    if (!item) return;
+    const jobId = item.dataset.conversionJobId;
+    if (!jobId) return;
+    closeConversionJobsDialog();
+    const record = await getConversionJobRecord(jobId);
+    await openConversionReviewDialog(jobId, record?.projectId || "");
+  });
   document.getElementById("fileRecoveryList")?.addEventListener("click", async (event) => {
     const actionButton = event.target.closest("[data-recovery-action]");
     const item = event.target.closest("[data-recovery-id]");
@@ -2880,6 +2967,9 @@ function handleMenuAction(action) {
     case "open-file-recovery":
       openFileRecoveryDialog();
       break;
+    case "open-conversion-jobs":
+      openConversionJobsDialog();
+      break;
     case "save-project":
       persistProjects(true);
       break;
@@ -3883,19 +3973,39 @@ async function convertImportFile(event) {
 
   if (!file || !project) return;
 
-  const loadingToast = showToast("Preparing your script for conversion...", "loading", { duration: 0 });
+  await runConvertImportPipeline(file, project);
+}
+
+async function runConvertImportPipeline(file, project) {
+  if (!file || !project) return;
+
+  const jobId = beginConversionUpload({
+    fileName: file.name,
+    projectId: project.id
+  });
+  attachSourceFileToConversionJob(jobId, file);
+  const loadingToast = showToast("Uploading your script to the conversion workspace...", "loading", { duration: 0 });
 
   try {
+    updateToast(loadingToast, "Uploading your script to the conversion workspace...", "loading", { duration: 0 });
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    markConversionExtractionStarted(jobId);
+    updateToast(loadingToast, "Extracting readable text from your file...", "loading", { duration: 0 });
+
     const rawText = await extractScriptTextFromFile(file, {
       onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
     });
+    attachRawTextToConversionJob(jobId, rawText);
 
-    updateToast(loadingToast, "Converting your script into screenplay blocks...", "loading", { duration: 0 });
+    updateToast(loadingToast, "Normalizing the screenplay text before conversion...", "loading", { duration: 0 });
 
     const result = await convertScriptTextToLines(rawText, {
       fileName: file.name,
       onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
     });
+
+    markConversionImporting(result.jobId || jobId, result.lines.length);
+    updateToast(loadingToast, "Importing converted screenplay into your project...", "loading", { duration: 0 });
 
     const nextProject = sanitizeProject({
       ...project,
@@ -3904,6 +4014,11 @@ async function convertImportFile(event) {
     upsertProject(nextProject);
     openProject(nextProject.id, { silentLoadToast: true });
     persistProjects(true);
+    finalizeConversionImport(result.jobId || jobId, {
+      usedFallback: result.usedFallback,
+      warnings: result.warnings,
+      lineCount: result.lines.length
+    });
 
     if (result.usedFallback) {
       updateToast(loadingToast, "Imported with a plain-text fallback. Review the structure.", "error", { duration: 5200 });
@@ -3914,11 +4029,125 @@ async function convertImportFile(event) {
     if (result.warnings.length) {
       customAlert(result.warnings.join("\n\n"), "Conversion Notes");
     }
+    await openConversionReviewDialog(result.jobId || jobId, nextProject.id);
   } catch (error) {
     console.error("Convert & import failed", error);
+    failConversionJob(jobId, error.message || "Conversion failed.");
     updateToast(loadingToast, error.message || "Conversion failed.", "error", { duration: 5200 });
     customAlert(error.message || "We could not convert that file yet.", "Convert & Import");
   }
+}
+
+async function openConversionReviewDialog(jobId, projectId = "") {
+  const dialog = document.getElementById("conversionReviewDialog");
+  if (!dialog || !jobId) return;
+
+  const record = await getConversionJobRecord(jobId);
+  if (!record) return;
+
+  const title = document.getElementById("conversionReviewTitle");
+  const meta = document.getElementById("conversionReviewMeta");
+  const status = document.getElementById("conversionReviewStatus");
+  const stage = document.getElementById("conversionReviewStage");
+  const file = document.getElementById("conversionReviewFile");
+  const lineCount = document.getElementById("conversionReviewLineCount");
+  const warnings = document.getElementById("conversionReviewWarnings");
+  const typeGrid = document.getElementById("conversionReviewTypeGrid");
+  const raw = document.getElementById("conversionReviewRaw");
+  const normalized = document.getElementById("conversionReviewNormalized");
+  const structured = document.getElementById("conversionReviewStructured");
+  const closeBtn = document.getElementById("conversionReviewCloseBtn");
+  const retryBtn = document.getElementById("conversionReviewRetryBtn");
+
+  if (title) title.textContent = `Conversion Review${record.fileName ? ` - ${record.fileName}` : ""}`;
+  if (meta) meta.textContent = "Inspect the extracted text, normalized screenplay text, and the final import status.";
+  if (status) status.textContent = String(record.status || "unknown");
+  if (stage) stage.textContent = String(record.stageLabel || "Unknown stage");
+  if (file) file.textContent = record.sourceFile?.name || record.fileName || "Unknown";
+  if (lineCount) lineCount.textContent = String(record.structuredLineCount || record.structuredLines?.length || 0);
+  if (raw) raw.value = String(record.rawText || "");
+  if (normalized) normalized.value = String(record.normalizedText || "");
+  if (warnings) {
+    const warningText = Array.isArray(record.warnings) ? record.warnings.filter(Boolean).join("\n\n") : "";
+    warnings.hidden = !warningText;
+    warnings.textContent = warningText;
+  }
+  const structuredLines = Array.isArray(record.structuredLines) ? record.structuredLines : [];
+  if (typeGrid) {
+    const counts = structuredLines.reduce((accumulator, line) => {
+      const type = String(line?.type || "action");
+      accumulator[type] = (accumulator[type] || 0) + 1;
+      return accumulator;
+    }, {});
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    typeGrid.hidden = !entries.length;
+    typeGrid.innerHTML = entries.map(([type, count]) => `
+      <div class="conversion-review-type-pill">
+        <span>${escapeHtml(type)}</span>
+        <strong>${count}</strong>
+      </div>
+    `).join("");
+  }
+  if (structured) {
+    structured.innerHTML = structuredLines.length
+      ? structuredLines.slice(0, 160).map((line) => `
+        <div class="conversion-review-line">
+          <span class="conversion-review-line-type">${escapeHtml(String(line?.type || "action"))}</span>
+          <div class="conversion-review-line-text">${escapeHtml(String(line?.text || "")).replace(/\n/g, "<br>")}</div>
+        </div>
+      `).join("")
+      : '<p class="conversion-review-structured-empty">No structured screenplay lines are stored for this job yet.</p>';
+  }
+  if (retryBtn) {
+    retryBtn.disabled = !record.sourceFile?.blob;
+  }
+
+  await new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      closeBtn?.removeEventListener("click", onClose);
+      retryBtn?.removeEventListener("click", onRetry);
+      dialog.removeEventListener("cancel", onClose);
+      dialog.removeEventListener("close", onClose);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const onClose = () => {
+      if (dialog.open) dialog.close();
+      finish();
+    };
+    const onRetry = async () => {
+      const blob = record.sourceFile?.blob;
+      const nextProject = state.projects.find((entry) => entry.id === projectId) || getCurrentProject();
+      if (!blob || !nextProject) {
+        await customAlert("The original uploaded file is not available for retry.", "Conversion Review");
+        return;
+      }
+      const retryFile = blob instanceof File
+        ? blob
+        : new File([blob], record.sourceFile?.name || record.fileName || "retry-script", {
+          type: record.sourceFile?.type || "application/octet-stream",
+          lastModified: record.sourceFile?.lastModified || Date.now()
+        });
+      dialog.close();
+      cleanup();
+      settled = true;
+      resolve();
+      await runConvertImportPipeline(retryFile, nextProject);
+    };
+
+    closeBtn?.addEventListener("click", onClose);
+    retryBtn?.addEventListener("click", onRetry);
+    dialog.addEventListener("cancel", onClose, { once: true });
+    dialog.addEventListener("close", onClose, { once: true });
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+  });
 }
 
 function openNotepad() {

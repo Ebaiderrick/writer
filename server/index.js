@@ -72,13 +72,19 @@ app.post("/api/ai-assist", async (req, res) => {
 });
 
 app.post("/api/convert-script", async (req, res) => {
-  const { text, chunkIndex = 0, chunkCount = 1, fileName = "" } = req.body || {};
+  const { text, chunkIndex = 0, chunkCount = 1, fileName = "", stage = "structure" } = req.body || {};
 
   if (!String(text || "").trim()) {
     return res.status(400).json({ error: "Missing script text to convert." });
   }
 
   if (!process.env.OPENAI_API_KEY) {
+    if (stage === "normalize") {
+      return res.json({
+        text: simpleNormalizeText(text),
+        warnings: ["AI key not configured, so a plain normalization fallback was used."]
+      });
+    }
     return res.json({
       lines: simpleConvertTextToLines(text),
       warnings: ["AI key not configured, so a plain conversion fallback was used."]
@@ -86,7 +92,9 @@ app.post("/api/convert-script", async (req, res) => {
   }
 
   try {
-    const prompt = buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName });
+    const prompt = stage === "normalize"
+      ? buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName })
+      : buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName });
     const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
@@ -111,6 +119,15 @@ app.post("/api/convert-script", async (req, res) => {
     }
 
     const output = extractOutputText(data);
+
+    if (stage === "normalize") {
+      const parsed = parseNormalizationResponse(output);
+      if (!parsed.text.trim()) {
+        return res.status(502).json({ error: "The normalization model returned no screenplay text." });
+      }
+      return res.json(parsed);
+    }
+
     const parsed = parseConversionResponse(output);
     if (!parsed.lines.length) {
       return res.status(502).json({ error: "The conversion model returned no screenplay blocks." });
@@ -190,6 +207,44 @@ function extractApiError(data) {
   return "";
 }
 
+function buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName }) {
+  return `You are pass 1 of a screenplay conversion pipeline for EyaWriter.
+
+Your job is to turn extracted source text into clean screenplay-like plain text BEFORE block classification.
+
+STRICT RULES:
+1. Preserve every word and the original order.
+2. Never summarize, omit, or rewrite meaning.
+3. Merge only soft-wrapped source lines that clearly belong to the same sentence or speech.
+4. Keep real paragraph or block breaks. Do not create new lines unless the source likely intended a new paragraph/block.
+5. Keep scene headings, character cues, parentheticals, transitions, and action paragraphs visually distinct.
+6. Do not classify into JSON blocks yet.
+7. Return ONLY valid JSON.
+8. Do not include markdown fences or commentary.
+9. Remove source markers like [source line 12 | indent=8] from the output text.
+
+HOW TO NORMALIZE:
+- The input may contain broken PDF wraps.
+- If several consecutive source lines form one spoken line or one action paragraph, merge them into a single plain text line.
+- If a source break line appears between blocks, keep a blank line between those blocks in the normalized text.
+- Character cues should remain on their own line.
+- Parentheticals should remain on their own line.
+- Dialogue should remain on its own line under the related character cue.
+- Action should remain as paragraph lines, not as one word per line.
+
+Return this exact shape:
+{
+  "text": "INT. KITCHEN - DAY\\n\\nSARAH\\nI am here.\\n\\nThe kettle whistles.",
+  "warnings": []
+}
+
+SOURCE FILE: ${fileName || "script"}
+CHUNK: ${Number(chunkIndex) + 1} of ${Number(chunkCount)}
+
+SOURCE TEXT:
+${text}`;
+}
+
 function buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName }) {
   return `You are converting screenplay source material into structured screenplay blocks for an editor.
 
@@ -240,6 +295,24 @@ CHUNK: ${Number(chunkIndex) + 1} of ${Number(chunkCount)}
 
 SOURCE TEXT:
 ${text}`;
+}
+
+function parseNormalizationResponse(output) {
+  const cleaned = String(output || "")
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  const candidate = jsonMatch ? jsonMatch[0] : cleaned;
+  const parsed = JSON.parse(candidate);
+  const text = typeof parsed?.text === "string" ? parsed.text.trim() : "";
+  const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings.map((item) => String(item)) : [];
+  return {
+    text,
+    warnings
+  };
 }
 
 function parseConversionResponse(output) {
@@ -294,6 +367,16 @@ function simpleConvertTextToLines(text) {
     type: inferTypeFromText(line, rawLines[index - 1] || "", rawLines[index + 1] || ""),
     text: line
   }));
+}
+
+function simpleNormalizeText(text) {
+  return String(text || "")
+    .replace(/\[source break \d+\]/gi, "\n")
+    .replace(/\[source line \d+ \| indent=\d+\]\s*/gi, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function inferTypeFromText(line, prevLine, nextLine) {
