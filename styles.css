@@ -4661,9 +4661,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .modal-content-film-setup {
-  width: min(940px, calc(100vw - 24px));
+  width: min(860px, calc(100vw - 28px));
   background: var(--panel);
   opacity: 1;
+  padding: 22px 22px 18px;
 }
 
 .modal-content-film-setup .modal-title {
@@ -4671,28 +4672,28 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .modal-content-film-setup .modal-message {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
 }
 
 .creation-flow-detail {
-  gap: 10px;
+  gap: 12px;
 }
 
 .creation-detail-stack {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .creation-flow-detail .creation-flow-header {
-  gap: 4px;
+  gap: 6px;
 }
 
 .creation-flow-detail .creation-flow-header h4 {
   margin: 0;
-  font-size: 0.98rem;
-  font-weight: 600;
+  font-size: 1.06rem;
+  font-weight: 700;
   letter-spacing: -0.01em;
-  line-height: 1.12;
+  line-height: 1.16;
 }
 
 .creation-flow-detail .creation-flow-header p {
@@ -4715,16 +4716,16 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .creation-name-input {
-  width: min(100%, 320px);
-  min-height: 40px;
-  padding: 9px 12px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--line) 92%, var(--accent));
-  background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
+  width: min(100%, 430px);
+  min-height: 46px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent));
+  background: color-mix(in srgb, var(--surface-strong) 90%, transparent);
   color: var(--ink);
   font: inherit;
-  font-size: 0.95rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  font-size: 0.96rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .creation-name-input::placeholder {
@@ -4745,51 +4746,64 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .creation-action-card {
   position: relative;
   display: grid;
-  align-content: start;
-  gap: 7px;
-  min-height: 98px;
-  padding: 12px 13px 11px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: var(--surface-strong);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-areas:
+    "icon title"
+    "icon copy";
+  column-gap: 12px;
+  row-gap: 6px;
+  align-items: start;
+  min-height: 118px;
+  padding: 14px 14px 13px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--line) 90%, var(--accent) 10%);
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
   text-align: left;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
 .creation-action-card:hover:not(:disabled),
 .creation-action-card.is-selected {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
 }
 
 .creation-action-card.is-selected {
   background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 36%),
-    var(--surface-strong);
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 34%),
+    color-mix(in srgb, var(--surface-strong) 94%, transparent);
 }
 
 .creation-action-card strong {
-  font-size: 0.98rem;
-  font-weight: 600;
+  grid-area: title;
+  align-self: end;
+  margin: 2px 44px 0 0;
+  font-size: 1rem;
+  font-weight: 700;
   letter-spacing: -0.01em;
-  line-height: 1.12;
+  line-height: 1.14;
   color: var(--ink);
 }
 
 .creation-action-card small {
+  grid-area: copy;
+  margin: 0;
   color: color-mix(in srgb, var(--ink) 72%, var(--muted));
-  line-height: 1.28;
-  font-size: 0.75rem;
+  line-height: 1.38;
+  font-size: 0.79rem;
+  max-width: 22ch;
 }
 
 .creation-action-card.is-disabled {
-  opacity: 0.72;
+  opacity: 0.62;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .creation-flow-detail .creation-option-icon {
+  grid-area: icon;
   width: 36px;
   min-width: 36px;
   height: 36px;
@@ -4817,12 +4831,53 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   top: 12px;
   right: 12px;
   font-size: 0.68rem;
-  padding: 3px 8px;
+  padding: 4px 9px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--accent-strong);
+}
+
+.modal-content-film-setup .modal-actions {
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.modal-content-film-setup .modal-actions .ghost-button,
+.modal-content-film-setup .modal-actions .primary-button {
+  min-width: 72px;
+  border-radius: 12px;
+}
+
+.modal-content-film-setup .modal-actions .ghost-button {
+  background: color-mix(in srgb, var(--surface-strong) 84%, transparent);
+}
+
+@media (min-width: 721px) {
+  .creation-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .creation-action-card:last-child {
+    grid-column: span 2;
+  }
+
+  .creation-action-card.is-disabled {
+    min-height: 88px;
+  }
 }
 
 @media (max-width: 720px) {
   .creation-action-grid {
     grid-template-columns: 1fr;
+  }
+
+  .creation-action-card {
+    grid-template-columns: 38px minmax(0, 1fr);
+    min-height: 104px;
+  }
+
+  .creation-action-card strong {
+    margin-right: 40px;
   }
 }
 

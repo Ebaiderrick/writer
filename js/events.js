@@ -400,9 +400,7 @@ async function launchNewCreationFlow() {
   }
 
   if (setup.action === "convert-import") {
-    pendingConvertImportProjectId = project.id;
-    showToast("Choose a script to convert and import.", "success");
-    refs.convertImportInput?.click();
+    await customAlert("Convert & import is still being built and is not available to users yet.", "Coming Soon");
     return;
   }
 

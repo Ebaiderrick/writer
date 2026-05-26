@@ -1,4 +1,4 @@
-import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.js';
+﻿import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
@@ -392,7 +392,7 @@ export function renderWorkspaceView() {
       bucket,
       id: item.id,
       name: item.name || "Untitled",
-      label: `${project.title} · ${bucket.replace(/^./, (value) => value.toUpperCase())}`
+      label: `${project.title} Â· ${bucket.replace(/^./, (value) => value.toUpperCase())}`
     }))));
   const taskSummary = {
     todo: allTaskItems.filter((task) => task.status === "todo").length,
@@ -667,7 +667,7 @@ export function renderWorkspaceView() {
               <span>Story memory</span>
               <select class="comment-filter-select" data-workspace-task-memory>
                 <option value="">None</option>
-                ${storyMemoryLinks.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)} · ${escapeHtml(item.name)}</option>`).join("")}
+                ${storyMemoryLinks.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)} Â· ${escapeHtml(item.name)}</option>`).join("")}
               </select>
             </label>
             <label class="workspace-task-field workspace-task-field-wide">
@@ -781,7 +781,7 @@ export function renderWorkspaceView() {
       node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
       node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
       node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} � ${collaborationLabel}`;
+      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
       refs.workspaceProjectGrid.appendChild(node);
@@ -865,7 +865,7 @@ export async function showFilmProjectSetupFlow() {
           <strong>Import</strong>
           <small>Bring in an existing screenplay file with the current import flow.</small>
         </button>
-        <button class="creation-action-card" type="button" data-creation-action="convert-import" aria-pressed="false">
+        <button class="creation-action-card is-disabled" type="button" data-creation-action="convert-import" aria-pressed="false" disabled>
           <span class="creation-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"></path><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z"></path></svg></span>
           <strong>Convert &amp; import</strong>
           <small>Upload and transform docs or PDFs into screenplay blocks.</small>
@@ -1091,7 +1091,7 @@ export function renderHome() {
                   <div class="workspace-task-head">
                     <div>
                       <strong>${escapeHtml(task.title)}</strong>
-                      <span>${escapeHtml(task.assignedLabel || "Unassigned")} · ${escapeHtml(task.reference || "General workspace task")}</span>
+                      <span>${escapeHtml(task.assignedLabel || "Unassigned")} Â· ${escapeHtml(task.reference || "General workspace task")}</span>
                     </div>
                     <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
                       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
@@ -1167,7 +1167,7 @@ export function renderHome() {
       node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
       node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
       node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} � ${collaborationLabel}`;
+      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
       node.dataset.projectId = project.id;
       node.querySelector(".project-card-open").dataset.projectId = project.id;
       return node;
@@ -1205,7 +1205,7 @@ export function renderHome() {
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
     node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-    node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} � ${collaborationLabel}`;
+    node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
 
     // Note: Event listeners will be bound in events.js, but we need the IDs here
     node.dataset.projectId = project.id;
@@ -1256,7 +1256,7 @@ export function renderStudioProjectContext() {
     refs.studioProjectTitle.textContent = project.title || "Untitled Project";
   }
   if (refs.studioProjectMeta) {
-    refs.studioProjectMeta.textContent = `${workspaceLabel} · ${project.scriptId || "Draft"} · ${collaborationLabel} · Last edited by ${lastEdited}`;
+    refs.studioProjectMeta.textContent = `${workspaceLabel} Â· ${project.scriptId || "Draft"} Â· ${collaborationLabel} Â· Last edited by ${lastEdited}`;
   }
 }
 
@@ -1800,7 +1800,7 @@ const SM_TYPE_CONFIGS = {
   locations: {
     label: "Location",
     namePlaceholder: "e.g. The Warehouse, Maria's Kitchen",
-    directive: "Paint it fully — light quality, sounds, smells, temperature. What does this space reveal about the characters who inhabit it? What mood or memory does it carry through the story?"
+    directive: "Paint it fully â€” light quality, sounds, smells, temperature. What does this space reveal about the characters who inhabit it? What mood or memory does it carry through the story?"
   },
   scenes: {
     label: "Story Beat",
@@ -1839,9 +1839,9 @@ export async function showStoryMemoryBuilder(element = null, onNavigate = null) 
           </div>
         ` : ""}
         ${bucket === "characters" && !isEdit ? `
-          <p class="modal-copy">Characters have a dedicated profile builder with fields for age, sex, outfit, behaviour, and more — giving the AI a richer picture of who they are.</p>
+          <p class="modal-copy">Characters have a dedicated profile builder with fields for age, sex, outfit, behaviour, and more â€” giving the AI a richer picture of who they are.</p>
           <div class="char-form-actions">
-            <button class="ghost-button" type="button" data-sm-action="goto-character">Open Character Builder →</button>
+            <button class="ghost-button" type="button" data-sm-action="goto-character">Open Character Builder â†’</button>
           </div>
         ` : `
           <div class="field-grid">
@@ -1925,7 +1925,7 @@ export async function showStoryMemoryPopup() {
 
   const BUCKET_LABELS = { characters: "Characters", locations: "Locations", scenes: "Story Beats", themes: "Themes" };
   const DIRECTIVES = {
-    locations: "Paint it fully — light quality, sounds, smells, temperature. What does this space reveal about the characters who inhabit it?",
+    locations: "Paint it fully â€” light quality, sounds, smells, temperature. What does this space reveal about the characters who inhabit it?",
     scenes: "What changes in this moment? Name the tension, the dramatic question, and the emotional tone.",
     themes: "What is the central truth or question? How does it live in your characters' choices and the script's events?"
   };
@@ -1978,7 +1978,7 @@ export async function showStoryMemoryPopup() {
 
     container.innerHTML = `
       <div class="char-form">
-        <button class="ghost-button btn-sm" type="button" data-sm-action="back">← Back</button>
+        <button class="ghost-button btn-sm" type="button" data-sm-action="back">â† Back</button>
         <h4 class="char-form-title">Edit ${SM_TYPE_CONFIGS[bucket]?.label || bucket}</h4>
         <div class="field-grid">
           <label class="field field-wide">
@@ -2071,7 +2071,7 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
 
     container.innerHTML = `
       <div class="char-interface-head">
-        <button class="ghost-button btn-sm" type="button" data-char-action="back">← Back</button>
+        <button class="ghost-button btn-sm" type="button" data-char-action="back">â† Back</button>
         <h4 class="char-form-title">Scenes featuring ${escapeHtml(characterName)}</h4>
       </div>
       <div class="char-list">
@@ -2139,7 +2139,7 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
       ` : `<p class="collab-empty">No characters registered yet. Add one so Smart Proofread can write precise introductions.</p>`}
       ${unregistered.length ? `
         <div class="char-section">
-          <h4 class="char-section-label">In Script — Not Yet Registered</h4>
+          <h4 class="char-section-label">In Script â€” Not Yet Registered</h4>
           <div class="char-list">
             ${unregistered.map((char) => `
               <div class="char-card char-card-script">
@@ -2163,7 +2163,7 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
     const isEdit = Boolean(existing);
     container.innerHTML = `
       <div class="char-form">
-        <button class="ghost-button btn-sm" type="button" data-char-action="back">← Back</button>
+        <button class="ghost-button btn-sm" type="button" data-char-action="back">â† Back</button>
         <h4 class="char-form-title">${isEdit ? "Refine Character" : "New Character"}</h4>
         <div class="field-grid">
           <label class="field field-wide">
@@ -2677,7 +2677,7 @@ export function renderStoryMemory() {
         </div>
         <div class="story-memory-actions">
            <button class="ghost-button btn-sm edit-memory-btn" data-id="${e.id}">Edit</button>
-           <button class="ghost-button btn-sm delete-memory-btn" data-id="${e.id}">×</button>
+           <button class="ghost-button btn-sm delete-memory-btn" data-id="${e.id}">Ã—</button>
         </div>
       </div>
     </div>
@@ -3185,7 +3185,7 @@ export async function showWorkTracking() {
               <span class="collab-progress-key-swatch" style="background:${item.color};"></span>
               <span>${escapeHtml(item.label)}</span>
             </span>
-            <strong>${item.words.toLocaleString()} words • ${item.share}%</strong>
+            <strong>${item.words.toLocaleString()} words â€¢ ${item.share}%</strong>
           </div>
         `).join("") : '<div class="analytics-word-row"><span>Aggregate contribution</span><strong>Waiting for more data</strong></div>'}
       </div>
@@ -3276,7 +3276,7 @@ function buildCollaboratorProgressGraph(project, width, height, showLegend) {
 
     const pointsMarkup = entries.map((entry) => `
       <circle cx="${getX(entry.timestamp)}" cy="${getY(Number(entry.count || 0))}" r="3.5" fill="${color}">
-        <title>${escapeHtml(meta.label)} • ${Number(entry.count || 0).toLocaleString()} words • ${new Date(entry.timestamp).toLocaleString()}</title>
+        <title>${escapeHtml(meta.label)} â€¢ ${Number(entry.count || 0).toLocaleString()} words â€¢ ${new Date(entry.timestamp).toLocaleString()}</title>
       </circle>
     `).join("");
 
@@ -3365,8 +3365,8 @@ function buildCompletionMetrics(current, targets) {
       ...item,
       percent,
       value: item.target > 0
-        ? `${item.current}${item.key === "pages" ? "" : ""} / ${item.target} • ${percent}%`
-        : `${item.current} current • no target`
+        ? `${item.current}${item.key === "pages" ? "" : ""} / ${item.target} â€¢ ${percent}%`
+        : `${item.current} current â€¢ no target`
     };
   });
 
@@ -3422,7 +3422,7 @@ function buildProofreadReference(project, lineId) {
     ? normalizeLineText(project.lines[sceneIndex].text, "scene") || `Scene ${sceneNumber}`
     : "No scene heading";
 
-  return `Scene ${sceneNumber} • Line ${lineIndex + 1} • ${sceneHeading}`;
+  return `Scene ${sceneNumber} â€¢ Line ${lineIndex + 1} â€¢ ${sceneHeading}`;
 }
 
 function cleanEmptyLinesFromProject(project) {
@@ -3719,7 +3719,7 @@ export function showToast(message, type = "success", { duration = 2600, id = uid
             <strong class="app-toast-title"></strong>
             <span class="app-toast-message"></span>
           </div>
-          <button class="app-toast-close" type="button" aria-label="Dismiss notification">×</button>
+          <button class="app-toast-close" type="button" aria-label="Dismiss notification">Ã—</button>
         `;
         host.appendChild(toast);
         toast.querySelector(".app-toast-close")?.addEventListener("click", () => dismissToast(id));
@@ -3838,7 +3838,7 @@ export function showModal({
         const onCancel = () => {
             // The dialog's close event fires as an async task. If a new modal was
             // opened between the close() call and this handler firing, this is a
-            // stale event — clean up stale listeners but don't close the new modal.
+            // stale event â€” clean up stale listeners but don't close the new modal.
             if (myEpoch !== _modalEpoch) {
                 cleanup();
                 resolve(showInput ? null : false);
