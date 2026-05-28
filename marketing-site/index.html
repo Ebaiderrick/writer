@@ -1,1585 +1,1167 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EyaWriter — Write Better Scripts, Faster Than Ever</title>
-  <meta name="description" content="The professional screenplay writing platform with AI assistance, real-time collaboration, and intelligent formatting. Free forever." />
-  <meta property="og:title" content="EyaWriter — Professional Screenplay Writing" />
-  <meta property="og:description" content="Write better scripts, faster than ever. AI-powered, collaborative, free." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Inter:wght@300;400;500;600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
-  <style>
-    /* ─── RESET & BASE ───────────────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --rose:    #f43f5e;
-      --rose-d:  #be123c;
-      --rose-l:  #fda4af;
-      --indigo:  #818cf8;
-      --bg:      #0a0910;
-      --bg2:     #110f1e;
-      --bg3:     #1a1730;
-      --surface: #1e1b30;
-      --border:  rgba(244,63,94,.18);
-      --text:    #f0eaf8;
-      --muted:   #9990b8;
-      --ink:     #f43f5e;
-      --ff-sans: 'Inter', system-ui, sans-serif;
-      --ff-serif:'Playfair Display', Georgia, serif;
-      --ff-mono: 'Courier Prime', 'Courier New', monospace;
-    }
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: var(--ff-sans);
-      background: var(--bg);
-      color: var(--text);
-      overflow-x: hidden;
-      cursor: none;
-    }
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>EyaWriter — Professional Screenplay Platform</title>
+<meta name="description" content="AI-powered screenplay writing with real-time collaboration, story memory, smart proofreading, and instant export. Free forever."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Inter:wght@300;400;500;600;700;800&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --rose:#f43f5e;--rose-d:#be123c;--rose-l:rgba(244,63,94,.15);
+  --indigo:#818cf8;--indigo-l:rgba(129,140,248,.12);
+  --bg:#09080f;--bg2:#110f1c;--bg3:#181528;--surface:#1e1a30;
+  --border:rgba(244,63,94,.14);--border2:rgba(255,255,255,.06);
+  --text:#f0eaf8;--muted:#8b82a8;--muted2:#6b6388;
+  --ff-s:'Inter',system-ui,sans-serif;
+  --ff-serif:'Playfair Display',Georgia,serif;
+  --ff-mono:'Courier Prime','Courier New',monospace;
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--ff-s);background:var(--bg);color:var(--text);overflow-x:hidden;cursor:none}
 
-    /* ─── CUSTOM CURSOR ──────────────────────────────────────────────── */
-    #cursor {
-      position: fixed; top: 0; left: 0; z-index: 9999;
-      pointer-events: none;
-      transition: opacity .3s;
-    }
-    #cursor-dot {
-      width: 8px; height: 8px;
-      background: var(--rose);
-      border-radius: 50%;
-      position: absolute;
-      transform: translate(-50%,-50%);
-      transition: transform .1s;
-    }
-    #cursor-ring {
-      width: 32px; height: 32px;
-      border: 1.5px solid rgba(244,63,94,.5);
-      border-radius: 50%;
-      position: absolute;
-      transform: translate(-50%,-50%);
-      transition: transform .18s ease, width .2s, height .2s, border-color .2s;
-    }
-    body:has(a:hover) #cursor-ring,
-    body:has(button:hover) #cursor-ring {
-      width: 48px; height: 48px;
-      border-color: var(--rose);
-    }
+/* CURSOR */
+#cur{position:fixed;top:0;left:0;z-index:9999;pointer-events:none}
+#cur-d{width:7px;height:7px;background:var(--rose);border-radius:50%;position:absolute;transform:translate(-50%,-50%)}
+#cur-r{width:30px;height:30px;border:1.5px solid rgba(244,63,94,.45);border-radius:50%;position:absolute;transform:translate(-50%,-50%);transition:width .18s,height .18s,border-color .18s}
 
-    /* ─── INK CANVAS ─────────────────────────────────────────────────── */
-    #ink-canvas {
-      position: fixed; inset: 0; z-index: 0;
-      pointer-events: none;
-      opacity: .55;
-    }
+/* INK CANVAS */
+#ic{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5}
 
-    /* ─── NAV ────────────────────────────────────────────────────────── */
-    nav {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 1.2rem 4rem;
-      background: rgba(10,9,16,.8);
-      backdrop-filter: blur(24px);
-      border-bottom: 1px solid var(--border);
-      transition: padding .3s;
-    }
-    nav.scrolled { padding: .8rem 4rem; }
-    .nav-logo {
-      font-family: var(--ff-serif);
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: var(--text);
-      text-decoration: none;
-      display: flex; align-items: center; gap: .5rem;
-    }
-    .nav-logo span { color: var(--rose); }
-    .nav-links {
-      display: flex; gap: 2.5rem; list-style: none;
-    }
-    .nav-links a {
-      color: var(--muted); text-decoration: none; font-size: .9rem;
-      font-weight: 500; letter-spacing: .02em;
-      transition: color .2s;
-      position: relative;
-    }
-    .nav-links a::after {
-      content: ''; position: absolute; bottom: -4px; left: 0; right: 0;
-      height: 1px; background: var(--rose);
-      transform: scaleX(0); transition: transform .2s;
-    }
-    .nav-links a:hover { color: var(--text); }
-    .nav-links a:hover::after { transform: scaleX(1); }
-    .nav-cta {
-      display: flex; gap: 1rem; align-items: center;
-    }
-    .btn {
-      display: inline-flex; align-items: center; gap: .5rem;
-      padding: .65rem 1.5rem;
-      border-radius: 8px;
-      font-size: .9rem; font-weight: 600;
-      cursor: none; text-decoration: none;
-      transition: all .2s;
-      border: none;
-    }
-    .btn-ghost {
-      color: var(--text);
-      background: transparent;
-      border: 1px solid var(--border);
-    }
-    .btn-ghost:hover { border-color: var(--rose); color: var(--rose); }
-    .btn-primary {
-      background: var(--rose);
-      color: #fff;
-      box-shadow: 0 0 20px rgba(244,63,94,.35);
-    }
-    .btn-primary:hover {
-      background: var(--rose-d);
-      box-shadow: 0 0 32px rgba(244,63,94,.55);
-      transform: translateY(-1px);
-    }
-    .btn-lg { padding: .9rem 2.2rem; font-size: 1rem; border-radius: 10px; }
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:1.1rem 3.5rem;background:rgba(9,8,15,.85);backdrop-filter:blur(28px);border-bottom:1px solid var(--border);transition:padding .3s}
+nav.s{padding:.75rem 3.5rem}
+.logo{font-family:var(--ff-serif);font-size:1.5rem;font-weight:700;color:var(--text);text-decoration:none}
+.logo em{color:var(--rose);font-style:normal}
+.nav-l{display:flex;gap:2.5rem;list-style:none}
+.nav-l a{color:var(--muted);text-decoration:none;font-size:.88rem;font-weight:500;transition:color .2s;position:relative}
+.nav-l a::after{content:'';position:absolute;bottom:-3px;left:0;right:0;height:1px;background:var(--rose);transform:scaleX(0);transition:transform .2s}
+.nav-l a:hover{color:var(--text)}
+.nav-l a:hover::after{transform:scaleX(1)}
+.nav-cta{display:flex;gap:.75rem}
 
-    /* ─── SECTION SHELL ──────────────────────────────────────────────── */
-    section {
-      position: relative; z-index: 1;
-    }
-    .container {
-      max-width: 1140px;
-      margin: 0 auto;
-      padding: 0 2rem;
-    }
-    .section-label {
-      display: inline-flex; align-items: center; gap: .5rem;
-      font-size: .78rem; font-weight: 600; letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--rose);
-      background: rgba(244,63,94,.1);
-      border: 1px solid rgba(244,63,94,.25);
-      padding: .3rem .8rem;
-      border-radius: 20px;
-      margin-bottom: 1.2rem;
-    }
-    .section-title {
-      font-family: var(--ff-serif);
-      font-size: clamp(2rem, 4vw, 3.2rem);
-      line-height: 1.15;
-      margin-bottom: 1rem;
-    }
-    .section-title em { font-style: italic; color: var(--rose); }
-    .section-sub {
-      font-size: 1.1rem; color: var(--muted);
-      max-width: 560px; line-height: 1.7;
-    }
-    .text-center { text-align: center; }
-    .text-center .section-sub { margin: 0 auto; }
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:.45rem;padding:.6rem 1.4rem;border-radius:8px;font-size:.88rem;font-weight:600;cursor:none;text-decoration:none;border:none;font-family:var(--ff-s);transition:all .2s}
+.btn-ghost{color:var(--text);background:transparent;border:1px solid var(--border2)}
+.btn-ghost:hover{border-color:var(--rose);color:var(--rose)}
+.btn-rose{background:var(--rose);color:#fff;box-shadow:0 0 22px rgba(244,63,94,.3)}
+.btn-rose:hover{background:var(--rose-d);box-shadow:0 0 36px rgba(244,63,94,.5);transform:translateY(-1px)}
+.btn-lg{padding:.85rem 2rem;font-size:.95rem;border-radius:10px}
 
-    /* ─── SCROLL REVEAL ─────────────────────────────────────────────── */
-    .reveal {
-      opacity: 0;
-      transform: translateY(36px);
-      transition: opacity .7s ease, transform .7s ease;
-    }
-    .reveal.visible { opacity: 1; transform: none; }
-    .reveal-delay-1 { transition-delay: .1s; }
-    .reveal-delay-2 { transition-delay: .2s; }
-    .reveal-delay-3 { transition-delay: .3s; }
-    .reveal-delay-4 { transition-delay: .4s; }
-    .reveal-delay-5 { transition-delay: .5s; }
+/* LAYOUT */
+.wrap{max-width:1160px;margin:0 auto;padding:0 2rem}
+.sec{position:relative;z-index:1}
+.pill{display:inline-flex;align-items:center;gap:.45rem;font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rose);background:rgba(244,63,94,.08);border:1px solid rgba(244,63,94,.22);padding:.28rem .75rem;border-radius:20px;margin-bottom:1.1rem}
+.h2{font-family:var(--ff-serif);font-size:clamp(1.9rem,3.8vw,3rem);line-height:1.13;margin-bottom:.9rem}
+.h2 em{font-style:italic;color:var(--rose)}
+.sub{font-size:1.05rem;color:var(--muted);line-height:1.72;max-width:540px}
+.tc{text-align:center}.tc .sub{margin:0 auto}
 
-    /* ─── HERO ───────────────────────────────────────────────────────── */
-    #hero {
-      min-height: 100vh;
-      display: flex; align-items: center;
-      padding: 10rem 0 6rem;
-      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(244,63,94,.12) 0%, transparent 70%),
-                  radial-gradient(ellipse 60% 40% at 80% 80%, rgba(129,140,248,.08) 0%, transparent 60%);
-    }
-    .hero-inner {
-      display: grid; grid-template-columns: 1fr 1fr;
-      gap: 4rem; align-items: center;
-    }
-    .hero-eyebrow {
-      display: inline-flex; align-items: center; gap: .6rem;
-      font-size: .82rem; font-weight: 600; letter-spacing: .1em;
-      text-transform: uppercase; color: var(--rose);
-      margin-bottom: 1.5rem;
-    }
-    .hero-eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rose); }
-    .hero-title {
-      font-family: var(--ff-serif);
-      font-size: clamp(2.8rem, 5.5vw, 5rem);
-      line-height: 1.08;
-      margin-bottom: 1.8rem;
-      font-weight: 900;
-    }
-    .hero-title .line2 { display: block; color: var(--rose); font-style: italic; }
-    .hero-title .line3 { display: block; }
-    #typewriter-word {
-      color: var(--rose);
-      font-style: italic;
-      border-right: 3px solid var(--rose);
-      padding-right: 4px;
-      animation: blink .8s step-end infinite;
-    }
-    @keyframes blink { 50% { border-color: transparent; } }
-    .hero-sub {
-      font-size: 1.15rem; color: var(--muted);
-      line-height: 1.75; margin-bottom: 2.5rem;
-      max-width: 480px;
-    }
-    .hero-actions {
-      display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 3rem;
-    }
-    .hero-stats {
-      display: flex; gap: 2.5rem;
-    }
-    .hero-stat-num {
-      font-family: var(--ff-serif);
-      font-size: 1.6rem; font-weight: 700;
-      color: var(--text);
-    }
-    .hero-stat-label { font-size: .8rem; color: var(--muted); margin-top: .2rem; }
+/* REVEAL */
+.rv{opacity:0;transform:translateY(32px);transition:opacity .7s ease,transform .7s ease}
+.rv.on{opacity:1;transform:none}
+.d1{transition-delay:.1s}.d2{transition-delay:.2s}.d3{transition-delay:.3s}.d4{transition-delay:.4s}.d5{transition-delay:.5s}
 
-    /* ─── SCREENPLAY MOCKUP ──────────────────────────────────────────── */
-    .screenplay-mockup {
-      position: relative;
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 2rem;
-      box-shadow: 0 40px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(244,63,94,.1);
-      overflow: hidden;
-    }
-    .screenplay-mockup::before {
-      content: '';
-      position: absolute; inset: 0;
-      background: linear-gradient(135deg, rgba(244,63,94,.04) 0%, transparent 50%);
-    }
-    .mockup-topbar {
-      display: flex; gap: .5rem; margin-bottom: 1.5rem;
-    }
-    .mockup-dot {
-      width: 10px; height: 10px; border-radius: 50%;
-    }
-    .mockup-dot:nth-child(1) { background: #ff5f57; }
-    .mockup-dot:nth-child(2) { background: #febc2e; }
-    .mockup-dot:nth-child(3) { background: #28c840; }
-    .screenplay-content {
-      font-family: var(--ff-mono);
-      font-size: .82rem;
-      line-height: 1.8;
-      color: #cdc5e8;
-    }
-    .sc-slug { color: var(--rose); font-weight: 700; letter-spacing: .08em; }
-    .sc-action { color: #a09cc0; }
-    .sc-character { text-align: center; font-weight: 700; color: var(--text); margin: .6rem 0 .2rem; }
-    .sc-dialogue { margin: 0 3rem; color: #d0c8e8; }
-    .sc-paren { text-align: center; font-style: italic; color: var(--muted); font-size: .78rem; }
-    .sc-transition { text-align: right; color: var(--rose); font-weight: 600; margin-top: .6rem; }
+/* ── HERO ── */
+#hero{min-height:100vh;display:flex;align-items:center;padding:9rem 0 5rem;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% -10%,rgba(244,63,94,.13) 0%,transparent 70%),
+    radial-gradient(ellipse 50% 35% at 85% 85%,rgba(129,140,248,.07) 0%,transparent 60%)}
+.hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center}
+.hero-eye{display:flex;align-items:center;gap:.55rem;font-size:.78rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--rose);margin-bottom:1.4rem}
+.eye-dot{width:5px;height:5px;border-radius:50%;background:var(--rose);animation:pdot 1.4s ease infinite}
+@keyframes pdot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.6)}}
+.hero-h1{font-family:var(--ff-serif);font-size:clamp(3rem,5.5vw,5.2rem);line-height:1.06;font-weight:900;margin-bottom:1.6rem}
+.hero-h1 .r{color:var(--rose);font-style:italic}
+#tw{border-right:3px solid var(--rose);padding-right:3px;animation:blink .8s step-end infinite}
+@keyframes blink{50%{border-color:transparent}}
+.hero-p{font-size:1.12rem;color:var(--muted);line-height:1.78;margin-bottom:2.4rem;max-width:470px}
+.hero-acts{display:flex;gap:.9rem;flex-wrap:wrap;margin-bottom:2.8rem}
+.hero-stats{display:flex;gap:2.5rem}
+.hs-n{font-family:var(--ff-serif);font-size:1.5rem;font-weight:800}
+.hs-l{font-size:.78rem;color:var(--muted);margin-top:.15rem}
 
-    .mockup-typing-line {
-      display: inline-block;
-      color: var(--rose);
-      font-family: var(--ff-mono);
-      font-size: .82rem;
-    }
-    .mockup-typing-line::after {
-      content: '▍';
-      animation: blink .7s step-end infinite;
-      color: var(--rose);
-    }
-    .mockup-ai-bubble {
-      position: absolute; bottom: 1.5rem; right: 1.5rem;
-      background: rgba(244,63,94,.12);
-      border: 1px solid rgba(244,63,94,.3);
-      border-radius: 10px;
-      padding: .6rem 1rem;
-      font-size: .75rem; color: var(--rose);
-      display: flex; align-items: center; gap: .5rem;
-    }
-    .ai-pulse {
-      width: 7px; height: 7px; background: var(--rose);
-      border-radius: 50%;
-      animation: pulse 1.4s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%,100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.5); opacity: .5; }
-    }
+/* ── EDITOR MOCKUP (hero right) ── */
+.ed-shell{background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 48px 90px rgba(0,0,0,.55),0 0 0 1px rgba(244,63,94,.08)}
+.ed-tb{display:flex;align-items:center;gap:.45rem;padding:.7rem 1rem;background:rgba(255,255,255,.025);border-bottom:1px solid var(--border2)}
+.ed-dot{width:9px;height:9px;border-radius:50%}
+.ed-dot:nth-child(1){background:#ff5f57}
+.ed-dot:nth-child(2){background:#febc2e}
+.ed-dot:nth-child(3){background:#28c840}
+.ed-fn{font-family:var(--ff-mono);font-size:.72rem;color:var(--muted2);margin-left:.4rem}
+.ed-body{display:grid;grid-template-columns:1fr 180px}
+.ed-script{padding:1.4rem;font-family:var(--ff-mono);font-size:.78rem;line-height:1.9;color:#c8c0e0;border-right:1px solid var(--border2)}
+.sc-slug{color:var(--rose);font-weight:700;letter-spacing:.06em}
+.sc-act{color:#a09ab8}
+.sc-chr{text-align:center;font-weight:700;color:var(--text);margin:.4rem 0 .1rem}
+.sc-par{text-align:center;font-style:italic;color:var(--muted2);font-size:.72rem}
+.sc-dia{padding:0 2rem;color:#d0c8e8}
+.sc-line-wrap{position:relative;display:flex;align-items:flex-start;gap:.5rem}
+.ai-trigger{background:rgba(244,63,94,.12);border:1px solid rgba(244,63,94,.3);border-radius:5px;padding:.15rem .4rem;font-size:.68rem;color:var(--rose);cursor:none;flex-shrink:0;margin-top:.15rem;animation:aiPop .5s ease 1.5s both}
+@keyframes aiPop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+.ai-menu{position:absolute;top:1.6rem;right:-145px;width:150px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.4rem;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:menuSlide .4s ease 2s both}
+@keyframes menuSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.ai-mi{padding:.32rem .6rem;border-radius:5px;font-size:.72rem;color:var(--muted);cursor:none;display:flex;align-items:center;gap:.4rem}
+.ai-mi.active{background:rgba(244,63,94,.12);color:var(--rose);font-weight:600}
+.ed-side{padding:1rem;display:flex;flex-direction:column;gap:.75rem}
+.side-panel-title{font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:.3rem}
+.metric-row{display:flex;justify-content:space-between;font-size:.7rem;color:var(--muted);margin:.1rem 0}
+.metric-val{color:var(--text);font-weight:600}
+.mem-tag{display:inline-block;background:rgba(244,63,94,.1);border:1px solid rgba(244,63,94,.2);border-radius:4px;padding:.18rem .45rem;font-size:.65rem;color:var(--rose);margin:.15rem .1rem}
 
-    /* ─── FLOATING PAGES ─────────────────────────────────────────────── */
-    .float-page {
-      position: absolute; border-radius: 8px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      opacity: .25;
-      pointer-events: none;
-    }
-    .float-page-1 {
-      width: 120px; height: 160px;
-      top: 10%; right: -30px;
-      transform: rotate(6deg);
-      animation: floatPage 6s ease-in-out infinite;
-    }
-    .float-page-2 {
-      width: 90px; height: 120px;
-      bottom: 15%; left: -20px;
-      transform: rotate(-8deg);
-      animation: floatPage 8s ease-in-out infinite reverse;
-    }
-    @keyframes floatPage {
-      0%,100% { transform: rotate(6deg) translateY(0); }
-      50% { transform: rotate(6deg) translateY(-12px); }
-    }
+/* ── MARQUEE ── */
+.mbar{background:var(--bg2);border-top:1px solid var(--border2);border-bottom:1px solid var(--border2);overflow:hidden;padding:.8rem 0;position:relative;z-index:1}
+.mtrack{display:flex;gap:2.8rem;animation:mqr 30s linear infinite;width:max-content}
+@keyframes mqr{to{transform:translateX(-50%)}}
+.mi{display:flex;align-items:center;gap:.65rem;white-space:nowrap;font-size:.8rem;font-weight:500;color:var(--muted)}
 
-    /* ─── MARQUEE BAR ────────────────────────────────────────────────── */
-    .marquee-bar {
-      background: var(--bg2);
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      overflow: hidden;
-      padding: .9rem 0;
-      position: relative; z-index: 1;
-    }
-    .marquee-track {
-      display: flex; gap: 3rem;
-      animation: marquee 28s linear infinite;
-      width: max-content;
-    }
-    @keyframes marquee { to { transform: translateX(-50%); } }
-    .marquee-item {
-      display: flex; align-items: center; gap: .8rem;
-      white-space: nowrap;
-      font-size: .82rem; font-weight: 500; color: var(--muted);
-    }
-    .marquee-item svg { color: var(--rose); flex-shrink: 0; }
+/* ── FEATURE SECTIONS (alternating) ── */
+.feat-sec{padding:7rem 0}
+.feat-sec:nth-child(odd){background:var(--bg2)}
+.feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:center}
+.feat-grid.rev{direction:rtl}.feat-grid.rev>*{direction:ltr}
+.feat-txt .pill{display:inline-flex}
+.feat-txt p{font-size:.98rem;color:var(--muted);line-height:1.75;margin-bottom:1.8rem}
+.feat-chips{display:flex;flex-wrap:wrap;gap:.5rem}
+.chip{background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:6px;padding:.3rem .75rem;font-size:.78rem;color:var(--muted)}
+.chip.r{background:rgba(244,63,94,.07);border-color:rgba(244,63,94,.2);color:var(--rose)}
 
-    /* ─── FEATURES ───────────────────────────────────────────────────── */
-    #features { padding: 8rem 0; }
-    .features-header { text-align: center; margin-bottom: 5rem; }
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1.5rem;
-    }
-    .feature-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 2rem;
-      transition: border-color .3s, transform .3s, box-shadow .3s;
-      position: relative; overflow: hidden;
-    }
-    .feature-card::before {
-      content: '';
-      position: absolute; top: 0; left: 0; right: 0; height: 2px;
-      background: linear-gradient(90deg, transparent, var(--rose), transparent);
-      transform: scaleX(0); transition: transform .4s;
-    }
-    .feature-card:hover {
-      border-color: rgba(244,63,94,.4);
-      transform: translateY(-4px);
-      box-shadow: 0 20px 40px rgba(0,0,0,.3), 0 0 20px rgba(244,63,94,.07);
-    }
-    .feature-card:hover::before { transform: scaleX(1); }
-    .feature-icon {
-      width: 48px; height: 48px;
-      background: rgba(244,63,94,.12);
-      border: 1px solid rgba(244,63,94,.2);
-      border-radius: 12px;
-      display: flex; align-items: center; justify-content: center;
-      margin-bottom: 1.2rem;
-      font-size: 1.4rem;
-    }
-    .feature-title {
-      font-family: var(--ff-serif);
-      font-size: 1.15rem;
-      margin-bottom: .6rem;
-    }
-    .feature-desc { font-size: .9rem; color: var(--muted); line-height: 1.65; }
-    .feature-card.large {
-      grid-column: span 2;
-      display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
-      align-items: center;
-    }
-    .feature-card.large .feature-visual {
-      background: var(--bg3);
-      border-radius: 10px; overflow: hidden;
-      height: 200px;
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--ff-mono);
-      font-size: .78rem;
-      color: var(--muted);
-      padding: 1.5rem;
-      border: 1px solid rgba(255,255,255,.05);
-    }
+/* ── UI PANELS (mockups) ── */
+.panel{background:var(--bg3);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 24px 48px rgba(0,0,0,.45)}
+.p-head{display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;background:rgba(255,255,255,.02);border-bottom:1px solid var(--border2);font-size:.78rem;font-weight:600}
+.p-dot{width:6px;height:6px;border-radius:50%;background:var(--rose);animation:pdot 1.4s ease infinite}
+.p-body{padding:1.2rem}
 
-    /* ─── HOW IT WORKS ───────────────────────────────────────────────── */
-    #how { padding: 8rem 0; background: var(--bg2); }
-    .how-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 6rem; align-items: center; }
-    .steps { display: flex; flex-direction: column; gap: 2.5rem; }
-    .step {
-      display: flex; gap: 1.5rem; align-items: flex-start;
-      opacity: .4; transition: opacity .4s;
-    }
-    .step.active { opacity: 1; }
-    .step-num {
-      width: 44px; height: 44px; flex-shrink: 0;
-      border-radius: 50%;
-      background: rgba(244,63,94,.1);
-      border: 1px solid rgba(244,63,94,.25);
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--ff-serif);
-      font-size: 1.1rem; font-weight: 700;
-      color: var(--rose);
-      transition: background .4s, border-color .4s;
-    }
-    .step.active .step-num {
-      background: var(--rose);
-      border-color: var(--rose);
-      color: #fff;
-    }
-    .step-title { font-weight: 600; font-size: 1rem; margin-bottom: .4rem; }
-    .step-desc { font-size: .9rem; color: var(--muted); line-height: 1.65; }
-    .step-connector {
-      width: 1px; height: 2rem;
-      background: linear-gradient(to bottom, var(--rose), transparent);
-      margin: .5rem 0 .5rem 21px;
-    }
+/* AI FEATURE PANEL */
+.ai-before-after{display:flex;flex-direction:column;gap:.75rem}
+.ba-label{font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:.3rem}
+.ba-label.imp{color:var(--rose)}
+.ba-box{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:8px;padding:.7rem .9rem;font-family:var(--ff-mono);font-size:.75rem;line-height:1.65;color:#a09ab8}
+.ba-box.orig{text-decoration:line-through;opacity:.55}
+.ba-box.impr{border-color:rgba(244,63,94,.25);color:#d8d0f0}
+.ba-actions{display:flex;gap:.5rem;margin-top:.75rem}
+.ba-btn{flex:1;padding:.38rem;border-radius:6px;border:1px solid var(--border2);background:transparent;font-size:.72rem;color:var(--muted);font-family:var(--ff-s);cursor:none;text-align:center;transition:all .2s}
+.ba-btn.primary{background:var(--rose);border-color:var(--rose);color:#fff}
+.ba-btn:hover{border-color:var(--rose);color:var(--rose)}
 
-    /* ─── AI DEMO ────────────────────────────────────────────────────── */
-    .ai-demo {
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 16px; overflow: hidden;
-    }
-    .ai-demo-header {
-      padding: 1rem 1.5rem;
-      background: rgba(244,63,94,.06);
-      border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; gap: .75rem;
-      font-size: .85rem; font-weight: 600; color: var(--rose);
-    }
-    .ai-demo-body { padding: 1.5rem; }
-    .ai-message {
-      display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: flex-start;
-    }
-    .ai-avatar {
-      width: 32px; height: 32px; flex-shrink: 0;
-      border-radius: 8px;
-      background: rgba(244,63,94,.15);
-      border: 1px solid rgba(244,63,94,.3);
-      display: flex; align-items: center; justify-content: center;
-      font-size: .8rem;
-    }
-    .ai-bubble {
-      background: var(--bg2);
-      border: 1px solid rgba(255,255,255,.07);
-      border-radius: 0 10px 10px 10px;
-      padding: .75rem 1rem;
-      font-size: .85rem; line-height: 1.6; color: var(--muted);
-      flex: 1;
-    }
-    .ai-bubble strong { color: var(--text); }
-    .user-message .ai-bubble {
-      background: rgba(244,63,94,.08);
-      border-color: rgba(244,63,94,.2);
-      color: var(--text);
-      border-radius: 10px 0 10px 10px;
-    }
-    .ai-typing { display: flex; gap: .3rem; align-items: center; padding: .5rem 0; }
-    .ai-typing span {
-      width: 6px; height: 6px; background: var(--muted);
-      border-radius: 50%;
-      animation: typingDot 1.2s ease-in-out infinite;
-    }
-    .ai-typing span:nth-child(2) { animation-delay: .2s; }
-    .ai-typing span:nth-child(3) { animation-delay: .4s; }
-    @keyframes typingDot {
-      0%,80%,100% { transform: scale(1); opacity: .4; }
-      40% { transform: scale(1.2); opacity: 1; }
-    }
+/* STORY MEMORY PANEL */
+.sm-tabs{display:flex;gap:0;border-bottom:1px solid var(--border2);margin:-1.2rem -1.2rem .9rem}
+.sm-tab{padding:.5rem 1rem;font-size:.73rem;font-weight:600;color:var(--muted2);cursor:none;border-bottom:2px solid transparent;transition:all .2s}
+.sm-tab.a{color:var(--rose);border-bottom-color:var(--rose)}
+.sm-card{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:8px;padding:.65rem .9rem;margin-bottom:.5rem;display:flex;align-items:center;gap:.75rem}
+.sm-av{width:30px;height:30px;border-radius:7px;background:linear-gradient(135deg,var(--rose),var(--indigo));display:flex;align-items:center;justify-content:center;font-family:var(--ff-serif);font-size:.78rem;font-weight:700;color:#fff;flex-shrink:0}
+.sm-name{font-size:.8rem;font-weight:600;margin-bottom:.15rem}
+.sm-desc{font-size:.7rem;color:var(--muted);line-height:1.4}
+.sm-add-btn{display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.45rem;border:1px dashed rgba(244,63,94,.3);border-radius:7px;font-size:.75rem;color:rgba(244,63,94,.6);cursor:none;margin-top:.5rem}
 
-    /* ─── WRITING ANIMATION SECTION ──────────────────────────────────── */
-    #writing-anim {
-      padding: 7rem 0;
-      text-align: center;
-      overflow: hidden;
-    }
-    .writing-line-container {
-      position: relative;
-      margin: 4rem auto;
-      max-width: 800px;
-    }
-    .writing-line {
-      font-family: var(--ff-mono);
-      font-size: 1.1rem;
-      line-height: 2.2;
-      color: var(--muted);
-      text-align: left;
-    }
-    .writing-line .highlight-word {
-      color: var(--rose);
-      font-weight: 700;
-    }
-    .writing-line-svg {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      height: 2px;
-    }
-    .writing-line-path {
-      stroke: var(--rose);
-      stroke-width: 1;
-      fill: none;
-      stroke-dasharray: 800;
-      stroke-dashoffset: 800;
-      transition: stroke-dashoffset 2s ease;
-    }
-    .writing-line-path.drawn { stroke-dashoffset: 0; }
+/* WORKSPACE PANEL */
+.ws-collab{display:flex;flex-direction:column;gap:.5rem}
+.ws-user{display:flex;align-items:center;gap:.7rem;padding:.55rem .75rem;background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:8px}
+.ws-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:#fff;flex-shrink:0}
+.ws-info{flex:1}
+.ws-name-row{display:flex;align-items:center;gap:.4rem;font-size:.78rem;font-weight:600}
+.ws-role{font-size:.62rem;padding:.12rem .4rem;border-radius:4px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.role-owner{background:rgba(244,63,94,.15);color:var(--rose)}
+.role-editor{background:rgba(129,140,248,.12);color:var(--indigo)}
+.role-viewer{background:rgba(255,255,255,.06);color:var(--muted)}
+.ws-email{font-size:.68rem;color:var(--muted2)}
+.ws-online{width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0;box-shadow:0 0 5px #22c55e}
+.ws-activity{margin-top:.9rem}
+.activity-item{display:flex;align-items:flex-start;gap:.55rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.72rem}
+.act-icon{font-size:.9rem;flex-shrink:0}
+.act-text{color:var(--muted)}.act-text strong{color:var(--text)}
+.act-time{color:var(--muted2);margin-left:auto;white-space:nowrap}
+.ws-invite{margin-top:.9rem;display:flex;gap:.4rem}
+.ws-inp{flex:1;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:.4rem .7rem;font-size:.73rem;color:var(--text);font-family:var(--ff-s);outline:none}
+.ws-btn{background:var(--rose);border:none;border-radius:6px;padding:.4rem .75rem;font-size:.72rem;font-weight:600;color:#fff;cursor:none}
 
-    /* ─── STATS ──────────────────────────────────────────────────────── */
-    #stats {
-      padding: 6rem 0;
-      background: linear-gradient(135deg, rgba(244,63,94,.07) 0%, rgba(129,140,248,.05) 100%);
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-    }
-    .stats-grid {
-      display: grid; grid-template-columns: repeat(4,1fr);
-      gap: 2rem;
-      text-align: center;
-    }
-    .stat-card { position: relative; }
-    .stat-card::after {
-      content: '';
-      position: absolute; right: 0; top: 20%; bottom: 20%;
-      width: 1px; background: var(--border);
-    }
-    .stat-card:last-child::after { display: none; }
-    .stat-num {
-      font-family: var(--ff-serif);
-      font-size: 3rem; font-weight: 900;
-      color: var(--text);
-      display: block;
-    }
-    .stat-num span { color: var(--rose); }
-    .stat-label { color: var(--muted); font-size: .9rem; margin-top: .3rem; }
+/* IMPORT PANEL */
+.import-types{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.9rem}
+.import-type{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:8px;padding:.7rem .9rem;display:flex;align-items:center;gap:.6rem;cursor:none;transition:border-color .2s}
+.import-type:hover{border-color:rgba(244,63,94,.3)}
+.import-type.active{border-color:rgba(244,63,94,.4);background:rgba(244,63,94,.06)}
+.it-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+.it-name{font-size:.77rem;font-weight:600}
+.it-desc{font-size:.65rem;color:var(--muted)}
+.import-progress{background:rgba(255,255,255,.04);border-radius:8px;padding:.75rem .9rem;border:1px solid var(--border2)}
+.prog-bar{height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;margin:.5rem 0}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--rose),var(--indigo));border-radius:2px;animation:progAnim 2s ease-in-out infinite}
+@keyframes progAnim{0%{width:0}60%{width:85%}100%{width:100%}}
+.prog-label{font-size:.72rem;color:var(--muted);display:flex;justify-content:space-between}
 
-    /* ─── PRICING ────────────────────────────────────────────────────── */
-    #pricing { padding: 8rem 0; }
-    .pricing-grid {
-      display: grid; grid-template-columns: repeat(3,1fr);
-      gap: 1.5rem; margin-top: 4rem;
-    }
-    .pricing-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 20px; padding: 2.5rem;
-      position: relative; overflow: hidden;
-      transition: transform .3s, box-shadow .3s;
-    }
-    .pricing-card:hover {
-      transform: translateY(-6px);
-      box-shadow: 0 30px 60px rgba(0,0,0,.4);
-    }
-    .pricing-card.featured {
-      border-color: var(--rose);
-      background: linear-gradient(135deg, rgba(244,63,94,.08) 0%, var(--bg2) 100%);
-      box-shadow: 0 0 0 1px rgba(244,63,94,.3), 0 30px 60px rgba(244,63,94,.1);
-    }
-    .pricing-card.featured::before {
-      content: 'Most Popular';
-      position: absolute; top: 1.2rem; right: 1.5rem;
-      background: var(--rose);
-      color: #fff; font-size: .72rem; font-weight: 700;
-      letter-spacing: .06em; text-transform: uppercase;
-      padding: .25rem .65rem; border-radius: 20px;
-    }
-    .pricing-tier { font-size: .8rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--rose); margin-bottom: .75rem; }
-    .pricing-price {
-      display: flex; align-items: baseline; gap: .3rem;
-      margin-bottom: .5rem;
-    }
-    .price-amount {
-      font-family: var(--ff-serif);
-      font-size: 3.2rem; font-weight: 900;
-    }
-    .price-period { color: var(--muted); font-size: .9rem; }
-    .pricing-desc { font-size: .9rem; color: var(--muted); line-height: 1.6; margin-bottom: 2rem; }
-    .pricing-divider { height: 1px; background: var(--border); margin-bottom: 1.5rem; }
-    .pricing-features { list-style: none; display: flex; flex-direction: column; gap: .8rem; margin-bottom: 2rem; }
-    .pricing-features li {
-      display: flex; align-items: flex-start; gap: .65rem;
-      font-size: .9rem; color: var(--muted);
-    }
-    .pricing-features li .check { color: var(--rose); flex-shrink: 0; margin-top: .1rem; }
-    .pricing-features li .cross { color: #444; flex-shrink: 0; margin-top: .1rem; }
+/* COLLAB PANEL */
+.collab-live{position:relative}
+.collab-script{font-family:var(--ff-mono);font-size:.77rem;line-height:1.85;color:#c0b8d8}
+.cursor-a{display:inline;background:rgba(34,197,94,.25);border-left:2px solid #22c55e;padding:0 1px}
+.cursor-b{display:inline;background:rgba(129,140,248,.2);border-left:2px solid var(--indigo);padding:0 1px}
+.cursor-label{display:inline-block;background:#22c55e;color:#fff;font-size:.58rem;font-weight:700;padding:.05rem .3rem;border-radius:3px;vertical-align:super;margin-left:1px}
+.cursor-label-b{background:var(--indigo)}
+.collab-presences{display:flex;gap:.5rem;margin-top:.85rem}
+.presence{display:flex;align-items:center;gap:.35rem;background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:20px;padding:.25rem .6rem;font-size:.7rem}
+.pres-dot{width:6px;height:6px;border-radius:50%}
+.comment-chip{display:flex;align-items:center;gap:.4rem;background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.2);border-radius:8px;padding:.5rem .75rem;margin-top:.6rem;font-size:.74rem;color:var(--indigo)}
 
-    /* ─── TESTIMONIALS ───────────────────────────────────────────────── */
-    #testimonials { padding: 8rem 0; background: var(--bg2); }
-    .testimonials-grid {
-      display: grid; grid-template-columns: repeat(3,1fr);
-      gap: 1.5rem; margin-top: 4rem;
-    }
-    .testimonial-card {
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 16px; padding: 2rem;
-      transition: border-color .3s, transform .3s;
-    }
-    .testimonial-card:hover {
-      border-color: rgba(244,63,94,.3);
-      transform: translateY(-3px);
-    }
-    .testi-quote { font-size: 2rem; color: var(--rose); line-height: 1; margin-bottom: .75rem; }
-    .testi-text { font-size: .92rem; color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem; font-style: italic; }
-    .testi-author { display: flex; align-items: center; gap: .75rem; }
-    .testi-avatar {
-      width: 38px; height: 38px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--rose), var(--indigo));
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--ff-serif); font-weight: 700; font-size: .9rem; color: #fff;
-    }
-    .testi-name { font-weight: 600; font-size: .9rem; }
-    .testi-role { font-size: .78rem; color: var(--muted); }
-    .stars { color: var(--rose); font-size: .85rem; letter-spacing: .05em; margin-bottom: .5rem; }
+/* PROOFREADING PANEL */
+.proof-card{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:9px;padding:.8rem;margin-bottom:.55rem}
+.proof-type{display:inline-block;background:rgba(244,63,94,.1);border:1px solid rgba(244,63,94,.2);border-radius:4px;padding:.12rem .4rem;font-size:.63rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--rose);margin-bottom:.4rem}
+.proof-orig{font-family:var(--ff-mono);font-size:.73rem;color:#a09ab8;text-decoration:line-through;opacity:.65;margin-bottom:.3rem}
+.proof-sugg{font-family:var(--ff-mono);font-size:.73rem;color:#d8d0f0;margin-bottom:.5rem}
+.proof-reason{font-size:.68rem;color:var(--muted);font-style:italic;margin-bottom:.5rem}
+.proof-acts{display:flex;gap:.4rem}
+.proof-btn{padding:.28rem .65rem;border-radius:5px;border:1px solid var(--border2);background:transparent;font-size:.7rem;color:var(--muted);font-family:var(--ff-s);cursor:none}
+.proof-btn.acc{background:#22c55e;border-color:#22c55e;color:#fff}
 
-    /* ─── FAQ ────────────────────────────────────────────────────────── */
-    #faq { padding: 8rem 0; }
-    .faq-list { max-width: 740px; margin: 4rem auto 0; }
-    .faq-item {
-      border: 1px solid var(--border);
-      border-radius: 12px; margin-bottom: 1rem;
-      overflow: hidden;
-      transition: border-color .3s;
-    }
-    .faq-item.open { border-color: rgba(244,63,94,.35); }
-    .faq-question {
-      width: 100%; display: flex; justify-content: space-between; align-items: center;
-      padding: 1.2rem 1.5rem;
-      background: var(--bg2);
-      border: none; cursor: none;
-      text-align: left; color: var(--text); font-size: .95rem; font-weight: 500;
-      font-family: var(--ff-sans);
-      transition: background .2s;
-    }
-    .faq-question:hover { background: var(--bg3); }
-    .faq-chevron {
-      width: 20px; height: 20px; flex-shrink: 0;
-      color: var(--rose);
-      transition: transform .3s;
-    }
-    .faq-item.open .faq-chevron { transform: rotate(180deg); }
-    .faq-answer {
-      max-height: 0; overflow: hidden;
-      transition: max-height .4s ease, padding .3s;
-    }
-    .faq-item.open .faq-answer { max-height: 400px; }
-    .faq-answer-inner {
-      padding: 0 1.5rem 1.2rem;
-      font-size: .9rem; color: var(--muted); line-height: 1.7;
-    }
+/* ── STATS ── */
+#stats{padding:5.5rem 0;background:linear-gradient(135deg,rgba(244,63,94,.06),rgba(129,140,248,.04));border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.stats-g{display:grid;grid-template-columns:repeat(4,1fr);gap:2rem;text-align:center}
+.stat-c{position:relative}
+.stat-c::after{content:'';position:absolute;right:0;top:15%;bottom:15%;width:1px;background:var(--border)}
+.stat-c:last-child::after{display:none}
+.sn{font-family:var(--ff-serif);font-size:2.8rem;font-weight:900;display:block}
+.sn em{color:var(--rose);font-style:normal}
+.sl{font-size:.88rem;color:var(--muted);margin-top:.3rem}
 
-    /* ─── WAITLIST / CTA ─────────────────────────────────────────────── */
-    #cta {
-      padding: 8rem 0;
-      background: radial-gradient(ellipse 80% 60% at 50% 100%, rgba(244,63,94,.12) 0%, transparent 70%);
-      text-align: center;
-    }
-    .cta-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 24px;
-      padding: 5rem 4rem;
-      position: relative; overflow: hidden;
-      box-shadow: 0 40px 80px rgba(0,0,0,.4);
-    }
-    .cta-card::before {
-      content: '';
-      position: absolute; inset: 0;
-      background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(244,63,94,.1) 0%, transparent 60%);
-    }
-    .cta-title {
-      font-family: var(--ff-serif);
-      font-size: clamp(2rem, 4vw, 3.5rem);
-      font-weight: 900; line-height: 1.12;
-      margin-bottom: 1.2rem;
-      position: relative; z-index: 1;
-    }
-    .cta-sub { color: var(--muted); font-size: 1.1rem; margin-bottom: 3rem; position: relative; z-index: 1; }
-    .waitlist-form {
-      display: flex; gap: 1rem; max-width: 480px; margin: 0 auto;
-      position: relative; z-index: 1;
-    }
-    .waitlist-input {
-      flex: 1; padding: .85rem 1.2rem;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      color: var(--text); font-size: .95rem;
-      font-family: var(--ff-sans);
-      outline: none;
-      transition: border-color .2s, box-shadow .2s;
-    }
-    .waitlist-input:focus {
-      border-color: var(--rose);
-      box-shadow: 0 0 0 3px rgba(244,63,94,.15);
-    }
-    .waitlist-input::placeholder { color: var(--muted); }
-    .form-note { font-size: .8rem; color: var(--muted); margin-top: 1rem; position: relative; z-index: 1; }
+/* ── PRICING ── */
+#pricing{padding:7.5rem 0}
+.price-g{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem;margin-top:4rem}
+.pc{background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:2.4rem;position:relative;overflow:hidden;transition:transform .3s,box-shadow .3s}
+.pc:hover{transform:translateY(-5px);box-shadow:0 28px 56px rgba(0,0,0,.4)}
+.pc.ft{border-color:var(--rose);background:linear-gradient(135deg,rgba(244,63,94,.07),var(--bg2));box-shadow:0 0 0 1px rgba(244,63,94,.25),0 28px 56px rgba(244,63,94,.1)}
+.pc.ft::before{content:'Most Popular';position:absolute;top:1.1rem;right:1.3rem;background:var(--rose);color:#fff;font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.22rem .6rem;border-radius:20px}
+.pt{font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--rose);margin-bottom:.7rem}
+.pp{display:flex;align-items:baseline;gap:.3rem;margin-bottom:.4rem}
+.pp-a{font-family:var(--ff-serif);font-size:3rem;font-weight:900}
+.pp-p{color:var(--muted);font-size:.85rem}
+.pd{font-size:.88rem;color:var(--muted);line-height:1.6;margin-bottom:1.8rem}
+.pdiv{height:1px;background:var(--border);margin-bottom:1.4rem}
+.pf{list-style:none;display:flex;flex-direction:column;gap:.7rem;margin-bottom:1.8rem}
+.pf li{display:flex;align-items:flex-start;gap:.55rem;font-size:.87rem;color:var(--muted)}
+.pf .ck{color:var(--rose);flex-shrink:0;margin-top:.1rem}
 
-    /* ─── FOOTER ─────────────────────────────────────────────────────── */
-    footer {
-      background: var(--bg2);
-      border-top: 1px solid var(--border);
-      padding: 4rem 0 2rem;
-      position: relative; z-index: 1;
-    }
-    .footer-grid {
-      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
-      gap: 3rem; margin-bottom: 3rem;
-    }
-    .footer-brand .nav-logo { font-size: 1.4rem; margin-bottom: 1rem; display: inline-block; }
-    .footer-brand p { font-size: .9rem; color: var(--muted); line-height: 1.65; max-width: 260px; }
-    .footer-col-title { font-weight: 600; font-size: .85rem; margin-bottom: 1.2rem; }
-    .footer-links { list-style: none; display: flex; flex-direction: column; gap: .6rem; }
-    .footer-links a { color: var(--muted); text-decoration: none; font-size: .88rem; transition: color .2s; }
-    .footer-links a:hover { color: var(--rose); }
-    .footer-bottom {
-      border-top: 1px solid var(--border);
-      padding-top: 1.5rem;
-      display: flex; justify-content: space-between; align-items: center;
-      font-size: .82rem; color: var(--muted);
-    }
-    .footer-bottom a { color: var(--muted); text-decoration: none; }
-    .footer-bottom a:hover { color: var(--rose); }
+/* ── TESTIMONIALS ── */
+#testi{padding:7.5rem 0;background:var(--bg2)}
+.tg{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem;margin-top:3.5rem}
+.tc-card{background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:1.8rem;transition:border-color .3s,transform .3s}
+.tc-card:hover{border-color:rgba(244,63,94,.28);transform:translateY(-3px)}
+.stars{color:var(--rose);font-size:.82rem;margin-bottom:.6rem;letter-spacing:.04em}
+.tq{font-size:1.8rem;color:var(--rose);line-height:1;margin-bottom:.6rem}
+.tt{font-size:.9rem;color:var(--muted);line-height:1.68;font-style:italic;margin-bottom:1.3rem}
+.ta{display:flex;align-items:center;gap:.7rem}
+.tav{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--rose),var(--indigo));display:flex;align-items:center;justify-content:center;font-family:var(--ff-serif);font-weight:700;font-size:.85rem;color:#fff}
+.tn{font-weight:600;font-size:.87rem}
+.tr{font-size:.75rem;color:var(--muted)}
 
-    /* ─── INK SPLATTER ───────────────────────────────────────────────── */
-    .ink-particle {
-      position: fixed;
-      border-radius: 50%;
-      pointer-events: none;
-      z-index: 9998;
-      animation: inkFade .8s ease-out forwards;
-    }
-    @keyframes inkFade {
-      from { transform: scale(0); opacity: .8; }
-      to   { transform: scale(1); opacity: 0; }
-    }
+/* ── FAQ ── */
+#faq{padding:7.5rem 0}
+.faq-w{max-width:720px;margin:3.5rem auto 0}
+.fi{border:1px solid var(--border);border-radius:11px;margin-bottom:.9rem;overflow:hidden;transition:border-color .3s}
+.fi.open{border-color:rgba(244,63,94,.3)}
+.fq{width:100%;display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.4rem;background:var(--bg2);border:none;cursor:none;text-align:left;color:var(--text);font-size:.92rem;font-weight:500;font-family:var(--ff-s);transition:background .2s}
+.fq:hover{background:var(--bg3)}
+.fchev{width:18px;height:18px;flex-shrink:0;color:var(--rose);transition:transform .3s}
+.fi.open .fchev{transform:rotate(180deg)}
+.fa{max-height:0;overflow:hidden;transition:max-height .4s ease}
+.fi.open .fa{max-height:300px}
+.fa-i{padding:0 1.4rem 1.1rem;font-size:.88rem;color:var(--muted);line-height:1.7}
 
-    /* ─── SCROLLBAR ──────────────────────────────────────────────────── */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: rgba(244,63,94,.4); border-radius: 3px; }
+/* ── CTA ── */
+#cta{padding:7.5rem 0;background:radial-gradient(ellipse 70% 50% at 50% 110%,rgba(244,63,94,.11),transparent 65%)}
+.cta-box{background:var(--bg2);border:1px solid var(--border);border-radius:22px;padding:5rem 3.5rem;text-align:center;position:relative;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,.4)}
+.cta-box::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 55% 35% at 50% 0%,rgba(244,63,94,.09),transparent 60%)}
+.cta-h{font-family:var(--ff-serif);font-size:clamp(2rem,4vw,3.4rem);font-weight:900;line-height:1.1;margin-bottom:1.1rem;position:relative;z-index:1}
+.cta-p{color:var(--muted);font-size:1.05rem;margin-bottom:2.8rem;position:relative;z-index:1}
+.wf{display:flex;gap:.8rem;max-width:450px;margin:0 auto;position:relative;z-index:1}
+.wi{flex:1;padding:.78rem 1.1rem;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:.92rem;font-family:var(--ff-s);outline:none;transition:border-color .2s,box-shadow .2s}
+.wi:focus{border-color:var(--rose);box-shadow:0 0 0 3px rgba(244,63,94,.12)}
+.wi::placeholder{color:var(--muted2)}
+.fn{font-size:.78rem;color:var(--muted2);margin-top:.9rem;position:relative;z-index:1}
 
-    /* ─── MOBILE ─────────────────────────────────────────────────────── */
-    @media (max-width: 900px) {
-      nav { padding: 1rem 1.5rem; }
-      nav.scrolled { padding: .8rem 1.5rem; }
-      .nav-links { display: none; }
-      .hero-inner { grid-template-columns: 1fr; }
-      .screenplay-mockup { display: none; }
-      .features-grid { grid-template-columns: 1fr; }
-      .feature-card.large { grid-column: span 1; grid-template-columns: 1fr; }
-      .feature-card.large .feature-visual { display: none; }
-      .how-inner { grid-template-columns: 1fr; }
-      .ai-demo { display: none; }
-      .stats-grid { grid-template-columns: repeat(2,1fr); }
-      .stat-card::after { display: none; }
-      .pricing-grid { grid-template-columns: 1fr; }
-      .testimonials-grid { grid-template-columns: 1fr; }
-      .footer-grid { grid-template-columns: 1fr 1fr; }
-      .waitlist-form { flex-direction: column; }
-      .cta-card { padding: 3rem 2rem; }
-    }
-  </style>
+/* ── FOOTER ── */
+footer{background:var(--bg2);border-top:1px solid var(--border);padding:4rem 0 2rem;position:relative;z-index:1}
+.fg{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:3rem;margin-bottom:2.8rem}
+.fb .logo{font-size:1.3rem;display:inline-block;margin-bottom:.9rem}
+.fb p{font-size:.87rem;color:var(--muted);line-height:1.65;max-width:240px}
+.fc-t{font-weight:700;font-size:.82rem;margin-bottom:1.1rem}
+.fl{list-style:none;display:flex;flex-direction:column;gap:.55rem}
+.fl a{color:var(--muted);text-decoration:none;font-size:.85rem;transition:color .2s}
+.fl a:hover{color:var(--rose)}
+.fb-bot{border-top:1px solid var(--border);padding-top:1.4rem;display:flex;justify-content:space-between;align-items:center;font-size:.8rem;color:var(--muted2)}
+.fb-bot a{color:var(--muted2);text-decoration:none}
+.fb-bot a:hover{color:var(--rose)}
+
+/* ── INK PARTICLES ── */
+.ink-p{position:fixed;border-radius:50%;pointer-events:none;z-index:9998}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:rgba(244,63,94,.35);border-radius:3px}
+
+/* ── MOBILE ── */
+@media(max-width:960px){
+  nav{padding:.9rem 1.5rem}.nav-l{display:none}.nav-cta .btn-ghost{display:none}
+  .hero-grid{grid-template-columns:1fr}.ed-shell{display:none}
+  .feat-grid,.feat-grid.rev{grid-template-columns:1fr;direction:ltr}
+  .feat-grid.rev>*{direction:ltr}
+  .stats-g{grid-template-columns:repeat(2,1fr)}.stat-c::after{display:none}
+  .price-g{grid-template-columns:1fr}.tg{grid-template-columns:1fr}
+  .fg{grid-template-columns:1fr 1fr}.wf{flex-direction:column}
+  .ed-body{grid-template-columns:1fr}.ed-side{display:none}
+}
+</style>
 </head>
 <body>
 
-<!-- ─── CUSTOM CURSOR ─────────────────────────────────────────────────── -->
-<div id="cursor">
-  <div id="cursor-dot"></div>
-  <div id="cursor-ring"></div>
-</div>
+<!-- CURSOR -->
+<div id="cur"><div id="cur-d"></div><div id="cur-r"></div></div>
+<!-- INK CANVAS -->
+<canvas id="ic"></canvas>
 
-<!-- ─── INK CANVAS ───────────────────────────────────────────────────── -->
-<canvas id="ink-canvas"></canvas>
-
-<!-- ─── NAV ──────────────────────────────────────────────────────────── -->
-<nav id="main-nav">
-  <a href="#" class="nav-logo">Eya<span>Writer</span></a>
-  <ul class="nav-links">
-    <li><a href="#features">Features</a></li>
-    <li><a href="#how">How it Works</a></li>
+<!-- NAV -->
+<nav id="mn">
+  <a href="#" class="logo">Eya<em>Writer</em></a>
+  <ul class="nav-l">
+    <li><a href="#ai-feature">AI Writing</a></li>
+    <li><a href="#memory">Story Memory</a></li>
+    <li><a href="#workspace">Workspace</a></li>
     <li><a href="#pricing">Pricing</a></li>
     <li><a href="#faq">FAQ</a></li>
   </ul>
   <div class="nav-cta">
     <a href="#" class="btn btn-ghost">Sign In</a>
-    <a href="#cta" class="btn btn-primary">Start Free →</a>
+    <a href="#cta" class="btn btn-rose">Start Free →</a>
   </div>
 </nav>
 
-<!-- ─── HERO ──────────────────────────────────────────────────────────── -->
-<section id="hero">
-  <div class="container">
-    <div class="hero-inner">
-      <div>
-        <div class="hero-eyebrow reveal">
-          <span class="hero-eyebrow-dot"></span>
-          Professional Screenplay Platform
-        </div>
-        <h1 class="hero-title reveal reveal-delay-1">
-          Write<br>
-          <span class="line2">Better <span id="typewriter-word">Scripts</span></span>
-          <span class="line3">Faster.</span>
-        </h1>
-        <p class="hero-sub reveal reveal-delay-2">
-          The AI-powered writing platform built for screenwriters.
-          Professional formatting, intelligent suggestions, real-time collaboration — all free.
-        </p>
-        <div class="hero-actions reveal reveal-delay-3">
-          <a href="#cta" class="btn btn-primary btn-lg">Start Writing Free</a>
-          <a href="#features" class="btn btn-ghost btn-lg">Explore Features</a>
-        </div>
-        <div class="hero-stats reveal reveal-delay-4">
-          <div>
-            <div class="hero-stat-num" data-count="10000">0</div>
-            <div class="hero-stat-label">Scripts Created</div>
-          </div>
-          <div>
-            <div class="hero-stat-num" data-count="40">0</div>
-            <div class="hero-stat-label">Countries</div>
-          </div>
-          <div>
-            <div class="hero-stat-num" data-count="6">0</div>
-            <div class="hero-stat-label">Languages</div>
-          </div>
-        </div>
+<!-- ──────────────────────────── HERO ──────────────────────────────── -->
+<section id="hero" class="sec">
+<div class="wrap">
+<div class="hero-grid">
+  <div>
+    <div class="hero-eye rv"><span class="eye-dot"></span>Professional Screenplay Platform</div>
+    <h1 class="hero-h1 rv d1">
+      Write<br>
+      <span class="r">Better <span id="tw">Scripts</span></span><br>
+      Faster.
+    </h1>
+    <p class="hero-p rv d2">AI-powered writing tools built for professional screenwriters — intelligent formatting, story memory, real-time collaboration, and smart proofreading. All free.</p>
+    <div class="hero-acts rv d3">
+      <a href="#" class="btn btn-rose btn-lg">Start Writing Free</a>
+      <a href="#ai-feature" class="btn btn-ghost btn-lg">See It In Action</a>
+    </div>
+    <div class="hero-stats rv d4">
+      <div><div class="hs-n" data-count="10000">0+</div><div class="hs-l">Scripts Created</div></div>
+      <div><div class="hs-n" data-count="40">0+</div><div class="hs-l">Countries</div></div>
+      <div><div class="hs-n" data-count="6">0</div><div class="hs-l">Languages</div></div>
+    </div>
+  </div>
+
+  <!-- Editor mockup -->
+  <div class="rv d2">
+    <div class="ed-shell">
+      <div class="ed-tb">
+        <div class="ed-dot"></div><div class="ed-dot"></div><div class="ed-dot"></div>
+        <span class="ed-fn">midnight_echo.fountain — EyaWriter</span>
       </div>
-      <div class="reveal reveal-delay-2" style="position:relative">
-        <div class="float-page float-page-1"></div>
-        <div class="float-page float-page-2"></div>
-        <div class="screenplay-mockup">
-          <div class="mockup-topbar">
-            <div class="mockup-dot"></div>
-            <div class="mockup-dot"></div>
-            <div class="mockup-dot"></div>
-            <span style="font-size:.75rem;color:var(--muted);margin-left:.5rem;font-family:var(--ff-mono)">my_screenplay.fdx</span>
+      <div class="ed-body">
+        <div class="ed-script">
+          <div class="sc-slug">INT. RECORDING STUDIO — NIGHT</div>
+          <div class="sc-act">Soundproofed walls. Gear everywhere. DIANA (28) sits alone at the mixing board, headphones around her neck.</div>
+          <br>
+          <div class="sc-chr">DIANA</div>
+          <div class="sc-line-wrap">
+            <div style="flex:1">
+              <div class="sc-dia" id="dia-line">It's not about the music anymore.</div>
+            </div>
+            <div class="ai-trigger">⚡</div>
+            <div class="ai-menu">
+              <div class="ai-mi">Suggest Reply</div>
+              <div class="ai-mi">Rephrase</div>
+              <div class="ai-mi active">✦ Add Emotion</div>
+              <div class="ai-mi">Shorten</div>
+              <div class="ai-mi">Subtext</div>
+            </div>
           </div>
-          <div class="screenplay-content">
-            <div class="sc-slug">INT. ABANDONED LIGHTHOUSE — NIGHT</div>
-            <br>
-            <div class="sc-action">Rain hammers the cracked windows. A single lantern
-              flickers. ELENA (30s, weathered determination)
-              clutches a handwritten letter.</div>
-            <br>
-            <div class="sc-character">ELENA</div>
-            <div class="sc-paren">(barely whispering)</div>
-            <div class="sc-dialogue">He was here. He was always here.</div>
-            <br>
-            <div class="sc-action">She turns the letter over. The ink — still wet.</div>
-            <br>
-            <div class="mockup-typing-line" id="mockup-typer">INT. ELENA'S MIND</div>
-            <br>
-            <div class="sc-transition">CUT TO:</div>
+          <br>
+          <div class="sc-act">She stares at the waveform frozen on screen.</div>
+          <br>
+          <div class="sc-slug">CUT TO:</div>
+        </div>
+        <div class="ed-side">
+          <div>
+            <div class="side-panel-title">Live Metrics</div>
+            <div class="metric-row"><span>Words</span><span class="metric-val">1,847</span></div>
+            <div class="metric-row"><span>Pages</span><span class="metric-val">~14</span></div>
+            <div class="metric-row"><span>Scenes</span><span class="metric-val">23</span></div>
+            <div class="metric-row"><span>Characters</span><span class="metric-val">7</span></div>
           </div>
-          <div class="mockup-ai-bubble">
-            <div class="ai-pulse"></div>
-            AI suggestion ready
+          <div>
+            <div class="side-panel-title">Story Memory</div>
+            <div class="mem-tag">Diana</div>
+            <div class="mem-tag">Marcus</div>
+            <div class="mem-tag">Studio A</div>
+            <div class="mem-tag">The Label</div>
+          </div>
+          <div>
+            <div class="side-panel-title">Team</div>
+            <div style="font-size:.7rem;color:#22c55e;display:flex;align-items:center;gap:.3rem"><span style="width:5px;height:5px;background:#22c55e;border-radius:50%;display:inline-block"></span>Lena is here now</div>
+            <div style="font-size:.68rem;color:var(--muted2);margin-top:.2rem">💬 3 open comments</div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-</section>
-
-<!-- ─── MARQUEE ────────────────────────────────────────────────────────── -->
-<div class="marquee-bar">
-  <div class="marquee-track" id="marquee-track">
-    <!-- items duplicated by JS -->
   </div>
 </div>
-
-<!-- ─── FEATURES ─────────────────────────────────────────────────────── -->
-<section id="features">
-  <div class="container">
-    <div class="features-header">
-      <div class="section-label reveal">✦ Everything You Need</div>
-      <h2 class="section-title reveal reveal-delay-1">Built for the <em>serious</em> writer</h2>
-      <p class="section-sub reveal reveal-delay-2">Every tool a professional screenwriter needs, with the intelligence to keep up with your creative flow.</p>
-    </div>
-    <div class="features-grid">
-      <div class="feature-card large reveal">
-        <div>
-          <div class="feature-icon">🎬</div>
-          <h3 class="feature-title">Professional Screenplay Formatting</h3>
-          <p class="feature-desc">Industry-standard formatting happens automatically as you write. Scene headings, action lines, dialogue, transitions — perfectly formatted every time. No manual work required.</p>
-        </div>
-        <div class="feature-visual">
-          <pre style="color:var(--muted);font-size:.75rem;line-height:1.8">
-<span style="color:var(--rose)">INT. COFFEE SHOP — DAY</span>
-
-Sunlight streams through
-dirty windows. A WRITER
-types furiously.
-
-<span style="color:var(--text);text-align:center;display:block">        THE WRITER</span>
-<span style="display:block;text-align:center;font-style:italic;color:var(--muted)">(to themselves)</span>
-      This is the one.
-
-<span style="color:var(--rose)">                    SMASH CUT TO:</span></pre>
-        </div>
-      </div>
-
-      <div class="feature-card reveal reveal-delay-1">
-        <div class="feature-icon">🤖</div>
-        <h3 class="feature-title">AI Writing Assistant</h3>
-        <p class="feature-desc">Get intelligent suggestions for dialogue, scene descriptions, and plot continuity. Your AI co-writer that understands screenplay craft.</p>
-      </div>
-
-      <div class="feature-card reveal reveal-delay-2">
-        <div class="feature-icon">👥</div>
-        <h3 class="feature-title">Real-Time Collaboration</h3>
-        <p class="feature-desc">Co-write with your team in real time. Role-based permissions, inline comments, and live cursors make remote collaboration seamless.</p>
-      </div>
-
-      <div class="feature-card reveal reveal-delay-1">
-        <div class="feature-icon">🧠</div>
-        <h3 class="feature-title">Story Memory</h3>
-        <p class="feature-desc">Automatically tracks characters, locations, and plot threads across your entire script. Never lose continuity again.</p>
-      </div>
-
-      <div class="feature-card reveal reveal-delay-2">
-        <div class="feature-icon">☁️</div>
-        <h3 class="feature-title">Cloud Sync & Offline</h3>
-        <p class="feature-desc">Your work is always safe. Auto-backup to the cloud, write offline, sync across all devices when you reconnect.</p>
-      </div>
-
-      <div class="feature-card reveal reveal-delay-3">
-        <div class="feature-icon">📤</div>
-        <h3 class="feature-title">Export Ready</h3>
-        <p class="feature-desc">Export submission-ready DOCX instantly. PDF export and professional coverage reports coming with Pro tier.</p>
-      </div>
-    </div>
-  </div>
+</div>
 </section>
 
-<!-- ─── WRITING ANIMATION ─────────────────────────────────────────────── -->
-<section id="writing-anim">
-  <div class="container">
-    <div class="section-label reveal" style="display:inline-flex">✦ The Writer's Experience</div>
-    <h2 class="section-title reveal reveal-delay-1" style="max-width:600px;margin:0 auto 1rem">
-      Every word <em>flows</em> onto the page
-    </h2>
-    <div class="writing-line-container reveal reveal-delay-2">
-      <div class="writing-line" id="animated-prose"></div>
-      <svg class="writing-line-svg" viewBox="0 0 800 2" preserveAspectRatio="none">
-        <path class="writing-line-path" id="underline-path" d="M0,1 Q200,0 400,1 Q600,2 800,1"/>
-      </svg>
-    </div>
-  </div>
-</section>
+<!-- MARQUEE -->
+<div class="mbar">
+  <div class="mtrack" id="mt"></div>
+</div>
 
-<!-- ─── HOW IT WORKS ──────────────────────────────────────────────────── -->
-<section id="how">
-  <div class="container">
-    <div class="how-inner">
-      <div>
-        <div class="section-label reveal">✦ How It Works</div>
-        <h2 class="section-title reveal reveal-delay-1">From blank page to <em>final draft</em></h2>
-        <div class="steps" id="steps-container">
-          <div class="step active" data-step="1">
-            <div class="step-num">1</div>
+<!-- ──────── FEATURE 1: AI IN THE EDITOR ──────────────────────────── -->
+<section id="ai-feature" class="sec feat-sec">
+<div class="wrap">
+  <div class="feat-grid">
+    <div class="feat-txt rv">
+      <div class="pill">⚡ AI Writing Assistant</div>
+      <h2 class="h2">One tap.<br><em>Instant transformation.</em></h2>
+      <p>Every line in your script has an AI button. Click it and a context-aware menu appears — different commands for dialogue, action, scenes, and shots. Select <strong style="color:var(--text)">"Add Emotion"</strong> on any piece of dialogue and watch EyaWriter rewrite it with layered subtext, tension, and character voice intact.</p>
+      <p>The AI knows your characters, your story's tone, and your Story Memory. It doesn't give you generic output — it gives you <em style="color:var(--rose)">your story</em>, amplified.</p>
+      <div class="feat-chips">
+        <span class="chip r">⚡ Add Emotion</span>
+        <span class="chip r">✦ Suggest Reply</span>
+        <span class="chip r">↩ Rephrase</span>
+        <span class="chip r">✂ Shorten</span>
+        <span class="chip r">👁 Subtext</span>
+        <span class="chip">Scene: Expand</span>
+        <span class="chip">Scene: Add Conflict</span>
+        <span class="chip">Action: Add Tension</span>
+        <span class="chip">Shot: Camera Angle</span>
+        <span class="chip">Grammar Check</span>
+      </div>
+    </div>
+    <div class="rv d2">
+      <div class="panel">
+        <div class="p-head">
+          <div class="p-dot"></div>
+          <span>AI Assistant — Add Emotion</span>
+          <span style="margin-left:auto;font-size:.7rem;color:var(--muted2)">Dialogue block</span>
+        </div>
+        <div class="p-body">
+          <div style="font-size:.73rem;color:var(--muted2);margin-bottom:.7rem;font-family:var(--ff-mono)">Selected line → DIANA</div>
+          <div class="ai-before-after">
             <div>
-              <div class="step-title">Start your project</div>
-              <p class="step-desc">Create a new screenplay project. Choose your format — feature film, TV pilot, short — and give your story a title.</p>
+              <div class="ba-label">ORIGINAL</div>
+              <div class="ba-box orig">"It's not about the music anymore."</div>
             </div>
-          </div>
-          <div class="step-connector"></div>
-          <div class="step" data-step="2">
-            <div class="step-num">2</div>
             <div>
-              <div class="step-title">Write with intelligent formatting</div>
-              <p class="step-desc">Type naturally. EyaWriter recognizes sluglines, dialogue cues, and action lines — formatting them professionally as you go.</p>
+              <div class="ba-label imp">✦ ADD EMOTION — RESULT</div>
+              <div class="ba-box impr">"You want to know the truth? I haven't heard it in months — not really. I sit here, I push the faders, I nod at the playback. But the music stopped talking to me the night Dad died, and I haven't told anyone that until right now."</div>
             </div>
           </div>
-          <div class="step-connector"></div>
-          <div class="step" data-step="3">
-            <div class="step-num">3</div>
+          <div class="ba-actions">
+            <div class="ba-btn primary">Replace</div>
+            <div class="ba-btn">Insert Below</div>
+            <div class="ba-btn">Retry</div>
+          </div>
+          <div style="margin-top:.75rem;padding:.6rem .8rem;background:rgba(244,63,94,.06);border:1px solid rgba(244,63,94,.18);border-radius:7px;font-size:.72rem;color:var(--muted)">
+            <span style="color:var(--rose)">✦</span> Extra details for "Add Emotion" (optional)...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────── FEATURE 2: SMART PROOFREADING ────────────────────────── -->
+<section class="sec feat-sec">
+<div class="wrap">
+  <div class="feat-grid rev">
+    <div class="feat-txt rv">
+      <div class="pill">🔍 Smart Proofreading</div>
+      <h2 class="h2">Your personal <em>script editor</em>, always on.</h2>
+      <p>Run a proofreading pass on the current line or batch-check an entire scene. EyaWriter's AI reviews dialogue, action, and pacing — then presents compact suggestion cards with the original, the fix, and its reasoning. Accept or reject each one individually, or hit Accept All.</p>
+      <div class="feat-chips">
+        <span class="chip r">Manual (current line)</span>
+        <span class="chip r">Auto (full scene)</span>
+        <span class="chip">Accept / Reject per suggestion</span>
+        <span class="chip">Accept All</span>
+        <span class="chip">Dialogue review</span>
+        <span class="chip">Action review</span>
+      </div>
+    </div>
+    <div class="rv d1">
+      <div class="panel">
+        <div class="p-head">
+          <div class="p-dot"></div>
+          <span>Smart Proofreading</span>
+          <span style="margin-left:auto;font-size:.7rem;color:var(--muted2)">Scene 4 — 3 suggestions</span>
+        </div>
+        <div class="p-body">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:.7rem">
+            <div class="ba-btn primary" style="flex:none;padding:.3rem .8rem;font-size:.7rem">Accept All</div>
+          </div>
+          <div class="proof-card">
+            <div class="proof-type">Dialogue</div>
+            <div class="proof-orig">"I don't know what do you want from me."</div>
+            <div class="proof-sugg">"I don't know what you want from me."</div>
+            <div class="proof-reason">Subject-verb agreement error</div>
+            <div class="proof-acts">
+              <div class="proof-btn acc">✓ Accept</div>
+              <div class="proof-btn">✕ Reject</div>
+            </div>
+          </div>
+          <div class="proof-card">
+            <div class="proof-type">Action</div>
+            <div class="proof-orig">"She picks up the phone, dials a number, waits."</div>
+            <div class="proof-sugg">"She snatches the phone. Dials. Waits."</div>
+            <div class="proof-reason">Passive pacing — short sentences drive tension</div>
+            <div class="proof-acts">
+              <div class="proof-btn acc">✓ Accept</div>
+              <div class="proof-btn">✕ Reject</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────── FEATURE 3: STORY MEMORY ─────────────────────────────── -->
+<section id="memory" class="sec feat-sec">
+<div class="wrap">
+  <div class="feat-grid">
+    <div class="feat-txt rv">
+      <div class="pill">🧠 Story Memory</div>
+      <h2 class="h2">Your story's<br><em>living database.</em></h2>
+      <p>Story Memory automatically tracks every character, location, scene, theme, and plot point in your script. Add your own entries — with character age, look, behaviour, backstory — and EyaWriter injects that context into every AI request, keeping the AI consistent with your world.</p>
+      <p>Never lose continuity. If a character changes their hair colour in Act 1, the AI knows by Act 3.</p>
+      <div class="feat-chips">
+        <span class="chip r">Characters</span>
+        <span class="chip r">Locations</span>
+        <span class="chip r">Scenes</span>
+        <span class="chip r">Themes</span>
+        <span class="chip r">Plot Points</span>
+        <span class="chip">Character age, sex, outfit, behaviour</span>
+        <span class="chip">Insert element into active block</span>
+        <span class="chip">Shared across collaborators</span>
+      </div>
+    </div>
+    <div class="rv d2">
+      <div class="panel">
+        <div class="p-head">
+          <div class="p-dot"></div>
+          <span>Story Memory</span>
+          <span style="margin-left:auto;font-size:.7rem;color:var(--muted2)">midnight_echo.fountain</span>
+        </div>
+        <div class="p-body">
+          <div class="sm-tabs">
+            <div class="sm-tab a">Characters</div>
+            <div class="sm-tab">Locations</div>
+            <div class="sm-tab">Themes</div>
+            <div class="sm-tab">Plot</div>
+          </div>
+          <div class="sm-card">
+            <div class="sm-av">D</div>
             <div>
-              <div class="step-title">Get AI assistance</div>
-              <p class="step-desc">Stuck on a scene? Ask your AI assistant for suggestions, continuity checks, or dialogue alternatives tailored to your characters.</p>
+              <div class="sm-name">Diana Reyes</div>
+              <div class="sm-desc">28 · Female · Sound engineer. Grieving father. Perfectionist who hasn't cried yet. Wears her dad's old jacket.</div>
             </div>
           </div>
-          <div class="step-connector"></div>
-          <div class="step" data-step="4">
-            <div class="step-num">4</div>
+          <div class="sm-card">
+            <div class="sm-av">M</div>
             <div>
-              <div class="step-title">Collaborate & export</div>
-              <p class="step-desc">Invite collaborators, collect notes, then export a submission-ready document for agents, festivals, or production.</p>
+              <div class="sm-name">Marcus Webb</div>
+              <div class="sm-desc">35 · Male · Label executive. Charming, transactional. Doesn't realise Diana is his mirror.</div>
             </div>
           </div>
-        </div>
-      </div>
-      <div class="ai-demo reveal reveal-delay-2">
-        <div class="ai-demo-header">
-          <div class="ai-pulse"></div>
-          AI Writing Assistant
-        </div>
-        <div class="ai-demo-body">
-          <div class="ai-message user-message">
-            <div style="flex:1">
-              <div class="ai-bubble">My character ELENA just found the letter. How should she react?</div>
-            </div>
-            <div class="ai-avatar">👤</div>
-          </div>
-          <div class="ai-message">
-            <div class="ai-avatar">✦</div>
-            <div class="ai-bubble">
-              <strong>Great moment for subtext.</strong> Instead of a visible emotional breakdown, consider giving Elena a <strong>physical tell</strong> — maybe her hands go still for just a beat too long before she moves. The letter's ink being wet is a powerful detail you've already planted. You could have her <strong>smell it</strong> — ink mixed with cologne — triggering a memory that cuts us into a FLASHBACK.<br><br>
-              Want me to draft that transition?
-            </div>
-          </div>
-          <div class="ai-message user-message">
-            <div style="flex:1">
-              <div class="ai-bubble">Yes, draft it.</div>
-            </div>
-            <div class="ai-avatar">👤</div>
-          </div>
-          <div class="ai-message">
-            <div class="ai-avatar">✦</div>
+          <div class="sm-card">
+            <div class="sm-av" style="background:linear-gradient(135deg,#6366f1,#818cf8)">J</div>
             <div>
-              <div class="ai-typing"><span></span><span></span><span></span></div>
+              <div class="sm-name">James Reyes (deceased)</div>
+              <div class="sm-desc">Diana's father. Jazz musician. Appears only in memory sequences.</div>
             </div>
           </div>
+          <div class="sm-add-btn">+ Add Character</div>
         </div>
       </div>
     </div>
   </div>
+</div>
 </section>
 
-<!-- ─── STATS ─────────────────────────────────────────────────────────── -->
-<section id="stats">
-  <div class="container">
-    <div class="stats-grid">
-      <div class="stat-card reveal">
-        <span class="stat-num" data-count="10000">0<span>+</span></span>
-        <div class="stat-label">Scripts Created</div>
-      </div>
-      <div class="stat-card reveal reveal-delay-1">
-        <span class="stat-num" data-count="40">0<span>+</span></span>
-        <div class="stat-label">Countries</div>
-      </div>
-      <div class="stat-card reveal reveal-delay-2">
-        <span class="stat-num" data-count="6">0</span>
-        <div class="stat-label">UI Languages</div>
-      </div>
-      <div class="stat-card reveal reveal-delay-3">
-        <span class="stat-num">Free<span></span></span>
-        <div class="stat-label">Forever, no credit card</div>
+<!-- ──────── FEATURE 4: WORKSPACE & COLLABORATION ─────────────────── -->
+<section id="workspace" class="sec feat-sec">
+<div class="wrap">
+  <div class="feat-grid rev">
+    <div class="feat-txt rv">
+      <div class="pill">🏢 Workspace</div>
+      <h2 class="h2">Your writing room,<br><em>anywhere on Earth.</em></h2>
+      <p>Every script is a shared workspace. Invite collaborators by email, assign them Editor or Viewer roles, and see exactly who's active right now. A live activity feed shows every edit, comment, invite, and role change — nothing is lost.</p>
+      <p>The workspace awareness panel shows who is typing, who left a comment, and what happened since you were last here — all in real time via presence heartbeat.</p>
+      <div class="feat-chips">
+        <span class="chip r">Owner / Editor / Viewer roles</span>
+        <span class="chip r">Invite by email</span>
+        <span class="chip r">Live presence (heartbeat)</span>
+        <span class="chip">Activity log with icons</span>
+        <span class="chip">Transfer ownership</span>
+        <span class="chip">Up to 5 collaborators</span>
+        <span class="chip">Pending invites management</span>
       </div>
     </div>
-  </div>
-</section>
-
-<!-- ─── PRICING ───────────────────────────────────────────────────────── -->
-<section id="pricing">
-  <div class="container">
-    <div class="text-center">
-      <div class="section-label reveal">✦ Pricing</div>
-      <h2 class="section-title reveal reveal-delay-1">Start free. <em>Scale</em> when ready.</h2>
-      <p class="section-sub reveal reveal-delay-2">Core features are free forever. No credit card required, no paywalls on what matters.</p>
-    </div>
-    <div class="pricing-grid">
-      <!-- Free -->
-      <div class="pricing-card reveal">
-        <div class="pricing-tier">Free</div>
-        <div class="pricing-price">
-          <span class="price-amount">$0</span>
-          <span class="price-period">/ forever</span>
+    <div class="rv d1">
+      <div class="panel">
+        <div class="p-head">
+          <div class="p-dot"></div>
+          <span>Workspace — midnight_echo</span>
         </div>
-        <p class="pricing-desc">Everything you need to write professional screenplays, always free.</p>
-        <div class="pricing-divider"></div>
-        <ul class="pricing-features">
-          <li><span class="check">✓</span> Unlimited scripts</li>
-          <li><span class="check">✓</span> Professional auto-formatting</li>
-          <li><span class="check">✓</span> Cloud sync & offline editing</li>
-          <li><span class="check">✓</span> AI assistant (shared endpoint)</li>
-          <li><span class="check">✓</span> Real-time collaboration</li>
-          <li><span class="check">✓</span> DOCX export</li>
-          <li><span class="check">✓</span> Story memory</li>
-          <li><span class="check">✓</span> 6 languages, 5 themes</li>
-        </ul>
-        <a href="#" class="btn btn-ghost" style="width:100%;justify-content:center">Get Started Free</a>
-      </div>
-
-      <!-- Pro -->
-      <div class="pricing-card featured reveal reveal-delay-1">
-        <div class="pricing-tier">Pro</div>
-        <div class="pricing-price">
-          <span class="price-amount">$12</span>
-          <span class="price-period">/ month</span>
-        </div>
-        <p class="pricing-desc">For serious writers who need priority AI, PDF export, and team tools.</p>
-        <div class="pricing-divider"></div>
-        <ul class="pricing-features">
-          <li><span class="check">✓</span> Everything in Free</li>
-          <li><span class="check">✓</span> Priority AI processing</li>
-          <li><span class="check">✓</span> Unlimited AI requests</li>
-          <li><span class="check">✓</span> PDF export</li>
-          <li><span class="check">✓</span> Team workspaces</li>
-          <li><span class="check">✓</span> AI script coverage reports</li>
-          <li><span class="check">✓</span> Custom AI instructions</li>
-          <li><span class="check">✓</span> Priority support</li>
-        </ul>
-        <a href="#cta" class="btn btn-primary" style="width:100%;justify-content:center">Join Waitlist</a>
-      </div>
-
-      <!-- Enterprise -->
-      <div class="pricing-card reveal reveal-delay-2">
-        <div class="pricing-tier">Enterprise</div>
-        <div class="pricing-price">
-          <span class="price-amount" style="font-size:2rem">Custom</span>
-        </div>
-        <p class="pricing-desc">For studios, production companies, and writing rooms that need full control.</p>
-        <div class="pricing-divider"></div>
-        <ul class="pricing-features">
-          <li><span class="check">✓</span> Everything in Pro</li>
-          <li><span class="check">✓</span> Custom AI endpoint / model</li>
-          <li><span class="check">✓</span> SSO / SAML login</li>
-          <li><span class="check">✓</span> Admin dashboard</li>
-          <li><span class="check">✓</span> Usage analytics</li>
-          <li><span class="check">✓</span> Dedicated support</li>
-          <li><span class="check">✓</span> SLA guarantee</li>
-          <li><span class="check">✓</span> On-premise option</li>
-        </ul>
-        <a href="mailto:hello@eyawriter.com" class="btn btn-ghost" style="width:100%;justify-content:center">Contact Sales</a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ─── TESTIMONIALS ──────────────────────────────────────────────────── -->
-<section id="testimonials">
-  <div class="container">
-    <div class="text-center">
-      <div class="section-label reveal">✦ Writers Love It</div>
-      <h2 class="section-title reveal reveal-delay-1">Trusted by <em>storytellers</em> worldwide</h2>
-    </div>
-    <div class="testimonials-grid">
-      <div class="testimonial-card reveal">
-        <div class="stars">★★★★★</div>
-        <div class="testi-quote">"</div>
-        <p class="testi-text">The AI assistant actually understands screenplay structure. It's like having a story editor in the room who never gets tired.</p>
-        <div class="testi-author">
-          <div class="testi-avatar">SC</div>
-          <div>
-            <div class="testi-name">Sarah Chen</div>
-            <div class="testi-role">Feature Film Writer, LA</div>
+        <div class="p-body">
+          <div class="ws-collab">
+            <div class="ws-user">
+              <div class="ws-av" style="background:linear-gradient(135deg,var(--rose),#f97316)">D</div>
+              <div class="ws-info">
+                <div class="ws-name-row">Diana R. <span class="ws-role role-owner">Owner</span></div>
+                <div class="ws-email">diana@studio.co</div>
+              </div>
+              <div class="ws-online"></div>
+            </div>
+            <div class="ws-user">
+              <div class="ws-av" style="background:linear-gradient(135deg,var(--indigo),#6366f1)">L</div>
+              <div class="ws-info">
+                <div class="ws-name-row">Lena Park <span class="ws-role role-editor">Editor</span></div>
+                <div class="ws-email">lena@freelance.com</div>
+              </div>
+              <div class="ws-online"></div>
+            </div>
+            <div class="ws-user">
+              <div class="ws-av" style="background:linear-gradient(135deg,#0ea5e9,#22c55e)">T</div>
+              <div class="ws-info">
+                <div class="ws-name-row">Tom Chen <span class="ws-role role-viewer">Viewer</span></div>
+                <div class="ws-email">tom@prodco.com</div>
+              </div>
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--muted2);flex-shrink:0"></div>
+            </div>
           </div>
-        </div>
-      </div>
-      <div class="testimonial-card reveal reveal-delay-1">
-        <div class="stars">★★★★★</div>
-        <div class="testi-quote">"</div>
-        <p class="testi-text">I switched from Final Draft after 10 years. EyaWriter is lighter, smarter, and the real-time co-writing with my partner is seamless.</p>
-        <div class="testi-author">
-          <div class="testi-avatar">MK</div>
-          <div>
-            <div class="testi-name">Marcus Kowalski</div>
-            <div class="testi-role">TV Writer, Warsaw</div>
+          <div class="ws-activity">
+            <div style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:.4rem">Recent Activity</div>
+            <div class="activity-item"><span class="act-icon">✏️</span><div class="act-text"><strong>Lena</strong> edited Scene 7 — dialogue block</div><span class="act-time">2m ago</span></div>
+            <div class="activity-item"><span class="act-icon">💬</span><div class="act-text"><strong>Tom</strong> commented on Diana's monologue</div><span class="act-time">14m ago</span></div>
+            <div class="activity-item"><span class="act-icon">✉️</span><div class="act-text"><strong>Diana</strong> invited tom@prodco.com</div><span class="act-time">1h ago</span></div>
+            <div class="activity-item"><span class="act-icon">🔑</span><div class="act-text"><strong>Diana</strong> changed Lena to Editor</div><span class="act-time">2h ago</span></div>
           </div>
-        </div>
-      </div>
-      <div class="testimonial-card reveal reveal-delay-2">
-        <div class="stars">★★★★★</div>
-        <div class="testi-quote">"</div>
-        <p class="testi-text">The Story Memory feature is a game-changer. It caught a continuity error in Act 3 that would have embarrassed me in the room.</p>
-        <div class="testi-author">
-          <div class="testi-avatar">AP</div>
-          <div>
-            <div class="testi-name">Aisha Patel</div>
-            <div class="testi-role">Showrunner, Mumbai</div>
+          <div class="ws-invite">
+            <input class="ws-inp" type="text" placeholder="collaborator@email.com" readonly/>
+            <button class="ws-btn">Send Invite</button>
           </div>
         </div>
       </div>
     </div>
   </div>
+</div>
 </section>
 
-<!-- ─── FAQ ───────────────────────────────────────────────────────────── -->
-<section id="faq">
-  <div class="container">
-    <div class="text-center">
-      <div class="section-label reveal">✦ FAQ</div>
-      <h2 class="section-title reveal reveal-delay-1">Questions <em>answered</em></h2>
+<!-- ──────── FEATURE 5: REAL-TIME COLLABORATION ───────────────────── -->
+<section class="sec feat-sec">
+<div class="wrap">
+  <div class="feat-grid">
+    <div class="feat-txt rv">
+      <div class="pill">👥 Real-Time Co-Writing</div>
+      <h2 class="h2">Two writers.<br><em>One script. Live.</em></h2>
+      <p>Co-write with another writer in real time. You see their cursor, they see yours. Inline comments thread directly on specific lines — with @mentions, filters by user or status, and one-click resolution. Every collaborator's presence is shown live in the workspace panel.</p>
+      <div class="feat-chips">
+        <span class="chip r">Live cursors with names</span>
+        <span class="chip r">Inline threaded comments</span>
+        <span class="chip r">@mention autocomplete</span>
+        <span class="chip">Filter by user / status</span>
+        <span class="chip">Resolve / unresolve</span>
+        <span class="chip">Comment count badge</span>
+        <span class="chip">Powered by Firebase Firestore</span>
+      </div>
     </div>
-    <div class="faq-list">
-      <div class="faq-item">
-        <button class="faq-question" onclick="toggleFaq(this)">
-          Is EyaWriter really free?
-          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        <div class="faq-answer"><div class="faq-answer-inner">Yes — core features are genuinely free, forever. No credit card, no time limit. You get unlimited scripts, cloud sync, AI assistance, real-time collaboration, and DOCX export at no cost. Pro features like PDF export and priority AI are in development for the paid tier.</div></div>
+    <div class="rv d2">
+      <div class="panel">
+        <div class="p-head">
+          <div class="p-dot"></div>
+          <span>Live Editor</span>
+          <span style="margin-left:auto;font-size:.7rem;color:#22c55e">● 2 writers active</span>
+        </div>
+        <div class="p-body">
+          <div class="collab-script">
+            <div class="sc-slug">INT. RECORDING STUDIO — NIGHT</div>
+            <br>
+            <div>Diana stares at the waveform. <span class="cursor-a">frozen<span class="cursor-label">Lena</span></span> on screen.</div>
+            <br>
+            <div class="sc-chr">DIANA</div>
+            <div style="padding:0 2rem">It's not about the music <span class="cursor-b">anymore<span class="cursor-label cursor-label-b">You</span></span>.</div>
+            <br>
+            <div>She sets the headphones down <span style="background:rgba(244,63,94,.15);border-radius:2px;padding:1px 2px;cursor:none" title="Tom: This moment hits hard">carefully</span>.</div>
+          </div>
+          <div class="collab-presences">
+            <div class="presence"><div class="pres-dot" style="background:#22c55e"></div><span style="font-size:.7rem">Lena — editing</span></div>
+            <div class="presence"><div class="pres-dot" style="background:var(--indigo)"></div><span style="font-size:.7rem">You — here now</span></div>
+          </div>
+          <div class="comment-chip">
+            💬 <strong>Tom Chen:</strong> "This moment hits hard — keep the silence before the line."
+            <span style="margin-left:auto;font-size:.65rem;color:var(--muted2)">Scene 7 · line 3</span>
+          </div>
+        </div>
       </div>
-      <div class="faq-item">
-        <button class="faq-question" onclick="toggleFaq(this)">
-          How does the AI assistant work?
-          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        <div class="faq-answer"><div class="faq-answer-inner">The AI assistant is context-aware and trained on screenplay conventions. It can suggest dialogue rewrites, check character voice consistency, propose scene structure improvements, and even help with proofreading. Free tier users share an AI endpoint with rate limiting; Pro gets priority dedicated processing.</div></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────── FEATURE 6: SCRIPT IMPORT ─────────────────────────────── -->
+<section class="sec feat-sec">
+<div class="wrap">
+  <div class="feat-grid rev">
+    <div class="feat-txt rv">
+      <div class="pill">📥 Script Import</div>
+      <h2 class="h2">Bring your work<br><em>from anywhere.</em></h2>
+      <p>Already writing in Final Draft, WriterDuet, Arc Studio, or Fade In? Export your script as <strong style="color:var(--text)">.fountain</strong> or <strong style="color:var(--text)">.txt</strong> and import it into EyaWriter in one click. Your formatting is preserved, your scenes are parsed, and your script is ready to write — no reformatting needed.</p>
+      <p>EyaWriter also reads Markdown and its own JSON project format for full round-trip portability.</p>
+      <div class="feat-chips">
+        <span class="chip r">.fountain (Final Draft, Arc Studio)</span>
+        <span class="chip r">.txt (any editor)</span>
+        <span class="chip r">.md (Markdown)</span>
+        <span class="chip r">.json (EyaWriter backup)</span>
+        <span class="chip">Scenes auto-parsed</span>
+        <span class="chip">Formatting preserved</span>
+        <span class="chip">Export: TXT · DOCX · PDF · JSON</span>
       </div>
-      <div class="faq-item">
-        <button class="faq-question" onclick="toggleFaq(this)">
-          Can I collaborate with writers in real time?
-          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        <div class="faq-answer"><div class="faq-answer-inner">Yes. Real-time collaboration is free. You can invite co-writers with different permission levels (read, comment, edit), see live cursors, leave inline notes, and track changes. Powered by Firebase, so sync is near-instant globally.</div></div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question" onclick="toggleFaq(this)">
-          What export formats are supported?
-          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        <div class="faq-answer"><div class="faq-answer-inner">DOCX export is available for free, producing a properly formatted Word document. PDF export with industry-standard margins and typography is coming in Pro. Professional script coverage (AI-generated notes) is also a Pro feature in development.</div></div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question" onclick="toggleFaq(this)">
-          Is my writing private and secure?
-          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        <div class="faq-answer"><div class="faq-answer-inner">Your scripts are stored in Firestore with strict per-user access rules. Only you and the collaborators you explicitly invite can access your work. We do not train AI models on your content, and your data is never shared with third parties.</div></div>
+    </div>
+    <div class="rv d1">
+      <div class="panel">
+        <div class="p-head">
+          <div class="p-dot"></div>
+          <span>Import Script</span>
+        </div>
+        <div class="p-body">
+          <div class="import-types">
+            <div class="import-type active">
+              <div class="it-icon">🎬</div>
+              <div>
+                <div class="it-name">.fountain</div>
+                <div class="it-desc">Final Draft, Arc, Fade In</div>
+              </div>
+            </div>
+            <div class="import-type">
+              <div class="it-icon">📄</div>
+              <div>
+                <div class="it-name">.txt</div>
+                <div class="it-desc">Plain text screenplay</div>
+              </div>
+            </div>
+            <div class="import-type">
+              <div class="it-icon">📝</div>
+              <div>
+                <div class="it-name">.md</div>
+                <div class="it-desc">Markdown format</div>
+              </div>
+            </div>
+            <div class="import-type">
+              <div class="it-icon">💾</div>
+              <div>
+                <div class="it-name">.json</div>
+                <div class="it-desc">EyaWriter backup</div>
+              </div>
+            </div>
+          </div>
+          <div class="import-progress">
+            <div class="prog-label"><span>Importing: <strong style="color:var(--text)">midnight_echo.fountain</strong></span><span style="color:var(--rose)">Parsing…</span></div>
+            <div class="prog-bar"><div class="prog-fill"></div></div>
+            <div style="font-size:.7rem;color:var(--muted);margin-top:.3rem">✓ 47 scene headings · ✓ 312 dialogue blocks · ✓ 89 action lines</div>
+          </div>
+          <div style="margin-top:.75rem;padding:.6rem .8rem;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:7px;font-size:.75rem;color:#22c55e">
+            ✓ Imported "midnight_echo.fountain" — 448 lines
+          </div>
+        </div>
       </div>
     </div>
   </div>
+</div>
 </section>
 
-<!-- ─── CTA ───────────────────────────────────────────────────────────── -->
-<section id="cta">
-  <div class="container">
-    <div class="cta-card">
-      <div class="section-label reveal" style="display:inline-flex">✦ Join the Community</div>
-      <h2 class="cta-title reveal reveal-delay-1">
-        Your next great script<br>starts <em>here</em>.
-      </h2>
-      <p class="cta-sub reveal reveal-delay-2">10,000+ writers are already telling their stories on EyaWriter. Join them — free, no credit card needed.</p>
-      <div class="waitlist-form reveal reveal-delay-3">
-        <input class="waitlist-input" type="email" placeholder="your@email.com" id="waitlist-email" />
-        <button class="btn btn-primary" onclick="handleWaitlist()">Get Early Access →</button>
-      </div>
-      <p class="form-note reveal reveal-delay-4">No spam. Unsubscribe anytime. Pro tier coming soon.</p>
+<!-- ──────── FEATURE 7: MORE FEATURES GRID ──────────────────────── -->
+<section class="sec" style="padding:7rem 0;background:var(--bg2)">
+<div class="wrap">
+  <div class="tc rv" style="margin-bottom:4rem">
+    <div class="pill">✦ Everything Else</div>
+    <h2 class="h2">Built for the <em>full</em> writing life</h2>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.3rem" class="rv d1">
+
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:1.8rem;transition:border-color .3s,transform .3s" onmouseenter="this.style.borderColor='rgba(244,63,94,.35)';this.style.transform='translateY(-4px)'" onmouseleave="this.style.borderColor='var(--border)';this.style.transform=''">
+      <div style="font-size:1.6rem;margin-bottom:.9rem">📊</div>
+      <div style="font-family:var(--ff-serif);font-size:1.1rem;margin-bottom:.5rem">Live Metrics</div>
+      <div style="font-size:.87rem;color:var(--muted);line-height:1.65">Real-time word count, estimated page count, character count, and scene tally — all updating as you type.</div>
+    </div>
+
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:1.8rem;transition:border-color .3s,transform .3s" onmouseenter="this.style.borderColor='rgba(244,63,94,.35)';this.style.transform='translateY(-4px)'" onmouseleave="this.style.borderColor='var(--border)';this.style.transform=''">
+      <div style="font-size:1.6rem;margin-bottom:.9rem">🎨</div>
+      <div style="font-family:var(--ff-serif);font-size:1.1rem;margin-bottom:.5rem">5 Editor Themes</div>
+      <div style="font-size:.87rem;color:var(--muted);line-height:1.65">Cedar (rose warm), Dark, White, Navy, and more. Your workspace, your atmosphere.</div>
+    </div>
+
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:1.8rem;transition:border-color .3s,transform .3s" onmouseenter="this.style.borderColor='rgba(244,63,94,.35)';this.style.transform='translateY(-4px)'" onmouseleave="this.style.borderColor='var(--border)';this.style.transform=''">
+      <div style="font-size:1.6rem;margin-bottom:.9rem">📝</div>
+      <div style="font-family:var(--ff-serif);font-size:1.1rem;margin-bottom:.5rem">Integrated Notepad</div>
+      <div style="font-size:.87rem;color:var(--muted);line-height:1.65">A full WYSIWYG notepad lives beside your script. Research notes, character sketches, outlines — all in one place.</div>
+    </div>
+
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:1.8rem;transition:border-color .3s,transform .3s" onmouseenter="this.style.borderColor='rgba(244,63,94,.35)';this.style.transform='translateY(-4px)'" onmouseleave="this.style.borderColor='var(--border)';this.style.transform=''">
+      <div style="font-size:1.6rem;margin-bottom:.9rem">☁️</div>
+      <div style="font-family:var(--ff-serif);font-size:1.1rem;margin-bottom:.5rem">Cloud Sync + Offline</div>
+      <div style="font-size:.87rem;color:var(--muted);line-height:1.65">Write offline, sync when you reconnect. Auto-backup to Firestore. Your work is never at risk.</div>
+    </div>
+
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:1.8rem;transition:border-color .3s,transform .3s" onmouseenter="this.style.borderColor='rgba(244,63,94,.35)';this.style.transform='translateY(-4px)'" onmouseleave="this.style.borderColor='var(--border)';this.style.transform=''">
+      <div style="font-size:1.6rem;margin-bottom:.9rem">🌍</div>
+      <div style="font-family:var(--ff-serif);font-size:1.1rem;margin-bottom:.5rem">6 Languages</div>
+      <div style="font-size:.87rem;color:var(--muted);line-height:1.65">Full UI in English, French, German, Spanish, Italian, and Portuguese. Write in your language.</div>
+    </div>
+
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:1.8rem;transition:border-color .3s,transform .3s" onmouseenter="this.style.borderColor='rgba(244,63,94,.35)';this.style.transform='translateY(-4px)'" onmouseleave="this.style.borderColor='var(--border)';this.style.transform=''">
+      <div style="font-size:1.6rem;margin-bottom:.9rem">📤</div>
+      <div style="font-family:var(--ff-serif);font-size:1.1rem;margin-bottom:.5rem">Multi-Format Export</div>
+      <div style="font-size:.87rem;color:var(--muted);line-height:1.65">Export as TXT, DOCX (Word), PDF, or JSON project backup. Industry-standard submission formatting on all outputs.</div>
+    </div>
+
+  </div>
+</div>
+</section>
+
+<!-- ──────── STATS ─────────────────────────────────────────────────── -->
+<section id="stats" class="sec">
+<div class="wrap">
+  <div class="stats-g">
+    <div class="stat-c rv">
+      <span class="sn"><em data-count="10000">0</em>+</span>
+      <div class="sl">Scripts Created</div>
+    </div>
+    <div class="stat-c rv d1">
+      <span class="sn"><em data-count="40">0</em>+</span>
+      <div class="sl">Countries</div>
+    </div>
+    <div class="stat-c rv d2">
+      <span class="sn"><em data-count="6">0</em></span>
+      <div class="sl">UI Languages</div>
+    </div>
+    <div class="stat-c rv d3">
+      <span class="sn">Free<em></em></span>
+      <div class="sl">Forever, no credit card</div>
     </div>
   </div>
+</div>
 </section>
 
-<!-- ─── FOOTER ────────────────────────────────────────────────────────── -->
+<!-- ──────── PRICING ───────────────────────────────────────────────── -->
+<section id="pricing" class="sec">
+<div class="wrap">
+  <div class="tc rv" style="margin-bottom:0">
+    <div class="pill">✦ Pricing</div>
+    <h2 class="h2">Start free. <em>Scale</em> when ready.</h2>
+    <p class="sub">Core features are free forever. No credit card, no paywalls on what matters to your writing.</p>
+  </div>
+  <div class="price-g">
+    <div class="pc rv">
+      <div class="pt">Free</div>
+      <div class="pp"><span class="pp-a">$0</span><span class="pp-p">/ forever</span></div>
+      <p class="pd">Everything you need to write and collaborate professionally, always free.</p>
+      <div class="pdiv"></div>
+      <ul class="pf">
+        <li><span class="ck">✓</span> Unlimited scripts</li>
+        <li><span class="ck">✓</span> Professional auto-formatting</li>
+        <li><span class="ck">✓</span> Cloud sync & offline editing</li>
+        <li><span class="ck">✓</span> AI assistant (shared, rate-limited)</li>
+        <li><span class="ck">✓</span> Real-time collaboration</li>
+        <li><span class="ck">✓</span> Story Memory</li>
+        <li><span class="ck">✓</span> DOCX export</li>
+        <li><span class="ck">✓</span> 6 languages, 5 themes</li>
+        <li><span class="ck">✓</span> Script import (.fountain, .txt, .md)</li>
+      </ul>
+      <a href="#" class="btn btn-ghost" style="width:100%;justify-content:center">Get Started Free</a>
+    </div>
+    <div class="pc ft rv d1">
+      <div class="pt">Pro</div>
+      <div class="pp"><span class="pp-a">$12</span><span class="pp-p">/ month</span></div>
+      <p class="pd">Priority AI, PDF export, team workspaces, and script coverage — for the serious writer.</p>
+      <div class="pdiv"></div>
+      <ul class="pf">
+        <li><span class="ck">✓</span> Everything in Free</li>
+        <li><span class="ck">✓</span> Priority AI processing</li>
+        <li><span class="ck">✓</span> Unlimited AI requests</li>
+        <li><span class="ck">✓</span> PDF export</li>
+        <li><span class="ck">✓</span> Team workspaces</li>
+        <li><span class="ck">✓</span> AI script coverage reports</li>
+        <li><span class="ck">✓</span> Custom AI instructions saved</li>
+        <li><span class="ck">✓</span> Priority support</li>
+      </ul>
+      <a href="#cta" class="btn btn-rose" style="width:100%;justify-content:center">Join Waitlist</a>
+    </div>
+    <div class="pc rv d2">
+      <div class="pt">Enterprise</div>
+      <div class="pp"><span class="pp-a" style="font-size:2rem">Custom</span></div>
+      <p class="pd">For studios, production companies, and writing rooms that need full control and compliance.</p>
+      <div class="pdiv"></div>
+      <ul class="pf">
+        <li><span class="ck">✓</span> Everything in Pro</li>
+        <li><span class="ck">✓</span> Custom AI endpoint / model</li>
+        <li><span class="ck">✓</span> SSO / SAML login</li>
+        <li><span class="ck">✓</span> Admin dashboard</li>
+        <li><span class="ck">✓</span> Usage analytics</li>
+        <li><span class="ck">✓</span> Dedicated support</li>
+        <li><span class="ck">✓</span> SLA guarantee</li>
+        <li><span class="ck">✓</span> On-premise option</li>
+      </ul>
+      <a href="mailto:hello@eyawriter.com" class="btn btn-ghost" style="width:100%;justify-content:center">Contact Sales</a>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────── TESTIMONIALS ──────────────────────────────────────────── -->
+<section id="testi" class="sec">
+<div class="wrap">
+  <div class="tc rv" style="margin-bottom:0">
+    <div class="pill">✦ From Writers</div>
+    <h2 class="h2">Trusted by <em>storytellers</em> worldwide</h2>
+  </div>
+  <div class="tg">
+    <div class="tc-card rv">
+      <div class="stars">★★★★★</div>
+      <div class="tq">"</div>
+      <p class="tt">"Add Emotion" changed the way I write dialogue. I put in a flat line and it came back with something I couldn't have written myself. My first thought was: how did it know?</p>
+      <div class="ta"><div class="tav">SC</div><div><div class="tn">Sarah Chen</div><div class="tr">Feature film writer, LA</div></div></div>
+    </div>
+    <div class="tc-card rv d1">
+      <div class="stars">★★★★★</div>
+      <div class="tq">"</div>
+      <p class="tt">The Story Memory is the real killer feature. My co-writer and I stopped having continuity arguments entirely. The AI just… knows the world we built.</p>
+      <div class="ta"><div class="tav">MK</div><div><div class="tn">Marcus Kowalski</div><div class="tr">TV writer, Warsaw</div></div></div>
+    </div>
+    <div class="tc-card rv d2">
+      <div class="stars">★★★★★</div>
+      <div class="tq">"</div>
+      <p class="tt">I imported a .fountain file from Fade In and it parsed every single scene correctly. Within 5 minutes I was using the AI on a script I'd been writing for months elsewhere.</p>
+      <div class="ta"><div class="tav">AP</div><div><div class="tn">Aisha Patel</div><div class="tr">Showrunner, Mumbai</div></div></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────── FAQ ────────────────────────────────────────────────────── -->
+<section id="faq" class="sec">
+<div class="wrap">
+  <div class="tc rv" style="margin-bottom:0">
+    <div class="pill">✦ FAQ</div>
+    <h2 class="h2">Questions <em>answered</em></h2>
+  </div>
+  <div class="faq-w">
+    <div class="fi">
+      <button class="fq" onclick="faq(this)">Is EyaWriter really free?<svg class="fchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+      <div class="fa"><div class="fa-i">Yes. Core features are genuinely free forever — no credit card, no time limit. You get unlimited scripts, cloud sync, AI assistance (rate-limited shared endpoint), real-time collaboration, Story Memory, and DOCX export at no cost. PDF export, priority AI, and team workspaces are the paid Pro tier, coming soon.</div></div>
+    </div>
+    <div class="fi">
+      <button class="fq" onclick="faq(this)">How does the AI know my characters?<svg class="fchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+      <div class="fa"><div class="fa-i">Every AI request automatically includes your Story Memory as context — characters (with age, look, behaviour, backstory), locations, themes, and plot points. The AI is instructed to respect all these elements for consistency. The richer your Story Memory, the more accurate and personalised the AI output.</div></div>
+    </div>
+    <div class="fi">
+      <button class="fq" onclick="faq(this)">Which file formats can I import?<svg class="fchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+      <div class="fa"><div class="fa-i">EyaWriter imports .fountain (used by Final Draft, Arc Studio, Fade In, WriterDuet), .txt (plain text screenplay), .md (Markdown), and .json (EyaWriter project backup). Scenes, dialogue, and action lines are parsed automatically. Export is available as TXT, DOCX, PDF, and JSON.</div></div>
+    </div>
+    <div class="fi">
+      <button class="fq" onclick="faq(this)">How does real-time collaboration work?<svg class="fchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+      <div class="fa"><div class="fa-i">Invite collaborators by email. They receive an invitation to join your script and can accept or decline. Once accepted, you both see each other's presence in the workspace awareness panel. Edits sync in real time via Firebase Firestore. Up to 5 collaborators per project on the free tier. Inline comments thread on specific lines with @mention support.</div></div>
+    </div>
+    <div class="fi">
+      <button class="fq" onclick="faq(this)">Is my writing private?<svg class="fchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+      <div class="fa"><div class="fa-i">Your scripts are stored in Firestore with strict per-user access rules. Only you and collaborators you explicitly invite can access your work. We do not train AI models on your scripts, and your content is never shared with third parties.</div></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────── CTA ────────────────────────────────────────────────────── -->
+<section id="cta" class="sec">
+<div class="wrap">
+  <div class="cta-box">
+    <div class="pill rv" style="display:inline-flex">✦ Join the Community</div>
+    <h2 class="cta-h rv d1">Your next great script<br>starts <em style="color:var(--rose);font-style:italic">here</em>.</h2>
+    <p class="cta-p rv d2">10,000+ writers already telling their stories on EyaWriter. Free, forever.</p>
+    <div class="wf rv d3">
+      <input class="wi" type="email" placeholder="your@email.com" id="we"/>
+      <button class="btn btn-rose" onclick="wl(this)">Get Early Access →</button>
+    </div>
+    <p class="fn rv d4">No spam. Unsubscribe anytime. Pro tier coming soon.</p>
+  </div>
+</div>
+</section>
+
+<!-- ──────── FOOTER ────────────────────────────────────────────────── -->
 <footer>
-  <div class="container">
-    <div class="footer-grid">
-      <div class="footer-brand">
-        <a class="nav-logo" href="#">Eya<span>Writer</span></a>
-        <p>Professional screenplay writing platform with AI assistance, real-time collaboration, and intelligent formatting. Free forever.</p>
-      </div>
-      <div>
-        <div class="footer-col-title">Product</div>
-        <ul class="footer-links">
-          <li><a href="#features">Features</a></li>
-          <li><a href="#pricing">Pricing</a></li>
-          <li><a href="#cta">Join Waitlist</a></li>
-        </ul>
-      </div>
-      <div>
-        <div class="footer-col-title">Learn</div>
-        <ul class="footer-links">
-          <li><a href="#">Help Center</a></li>
-          <li><a href="#">Keyboard Shortcuts</a></li>
-          <li><a href="#faq">FAQ</a></li>
-        </ul>
-      </div>
-      <div>
-        <div class="footer-col-title">Company</div>
-        <ul class="footer-links">
-          <li><a href="#">About</a></li>
-          <li><a href="#">Privacy Policy</a></li>
-          <li><a href="#">Terms of Service</a></li>
-          <li><a href="mailto:hello@eyawriter.com">Contact</a></li>
-        </ul>
-      </div>
+<div class="wrap">
+  <div class="fg">
+    <div class="fb">
+      <a href="#" class="logo">Eya<em>Writer</em></a>
+      <p>Professional screenplay writing with AI assistance, real-time collaboration, and story memory. Free forever.</p>
     </div>
-    <div class="footer-bottom">
-      <span>© 2024 EyaWriter. All rights reserved.</span>
-      <span>Built for writers, by writers.</span>
+    <div>
+      <div class="fc-t">Product</div>
+      <ul class="fl">
+        <li><a href="#ai-feature">AI Writing</a></li>
+        <li><a href="#memory">Story Memory</a></li>
+        <li><a href="#workspace">Workspace</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="fc-t">Learn</div>
+      <ul class="fl">
+        <li><a href="#">Help Center</a></li>
+        <li><a href="#">Keyboard Shortcuts</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="#">Import Guide</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="fc-t">Company</div>
+      <ul class="fl">
+        <li><a href="#">About</a></li>
+        <li><a href="#">Privacy Policy</a></li>
+        <li><a href="#">Terms of Service</a></li>
+        <li><a href="mailto:hello@eyawriter.com">Contact</a></li>
+      </ul>
     </div>
   </div>
+  <div class="fb-bot">
+    <span>© 2024 EyaWriter. All rights reserved.</span>
+    <span>Built for writers, by writers.</span>
+  </div>
+</div>
 </footer>
 
-<!-- ─── JAVASCRIPT ─────────────────────────────────────────────────────── -->
 <script>
-/* ── Cursor ── */
-const cursorDot  = document.getElementById('cursor-dot');
-const cursorRing = document.getElementById('cursor-ring');
-let mx = -100, my = -100, rx = -100, ry = -100;
-document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
-function animCursor() {
-  rx += (mx - rx) * .15;
-  ry += (my - ry) * .15;
-  const s = document.getElementById('cursor');
-  cursorDot.style.transform  = `translate(${mx}px,${my}px) translate(-50%,-50%)`;
-  cursorRing.style.transform = `translate(${rx}px,${ry}px) translate(-50%,-50%)`;
-  requestAnimationFrame(animCursor);
-}
-animCursor();
-
-/* ── Ink trail canvas ── */
-const canvas = document.getElementById('ink-canvas');
-const ctx = canvas.getContext('2d');
-let W, H;
-function resizeCanvas() {
-  W = canvas.width  = window.innerWidth;
-  H = canvas.height = window.innerHeight;
-}
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
-
-const drops = [];
-document.addEventListener('mousemove', e => {
-  if (Math.random() > .65) return;
-  drops.push({
-    x: e.clientX, y: e.clientY,
-    r: Math.random() * 3 + 1,
-    life: 1,
-    vx: (Math.random() - .5) * 1.2,
-    vy: Math.random() * 1.5 + .5,
-    hue: Math.random() > .7 ? 218 : 349
-  });
+/* ── CURSOR ── */
+const cd=document.getElementById('cur-d'),cr=document.getElementById('cur-r');
+let mx=-100,my=-100,rx=-100,ry=-100;
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY});
+(function loop(){
+  rx+=(mx-rx)*.14;ry+=(my-ry)*.14;
+  cd.style.transform=`translate(${mx}px,${my}px) translate(-50%,-50%)`;
+  cr.style.transform=`translate(${rx}px,${ry}px) translate(-50%,-50%)`;
+  requestAnimationFrame(loop);
+})();
+document.querySelectorAll('a,button,[onclick]').forEach(el=>{
+  el.addEventListener('mouseenter',()=>{cr.style.width='44px';cr.style.height='44px';cr.style.borderColor='var(--rose)'});
+  el.addEventListener('mouseleave',()=>{cr.style.width='30px';cr.style.height='30px';cr.style.borderColor='rgba(244,63,94,.45)'});
 });
 
-function drawInk() {
-  ctx.clearRect(0, 0, W, H);
-  for (let i = drops.length - 1; i >= 0; i--) {
-    const d = drops[i];
-    d.x += d.vx; d.y += d.vy;
-    d.life -= .025; d.r *= .98;
-    if (d.life <= 0) { drops.splice(i, 1); continue; }
-    ctx.beginPath();
-    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-    const color = d.hue === 349 ? `rgba(244,63,94,${d.life * .6})` : `rgba(129,140,248,${d.life * .4})`;
-    ctx.fillStyle = color;
+/* ── INK CANVAS ── */
+const cv=document.getElementById('ic'),ctx=cv.getContext('2d');
+let W,H;
+function rsz(){W=cv.width=window.innerWidth;H=cv.height=window.innerHeight}
+rsz();window.addEventListener('resize',rsz);
+const drops=[];
+document.addEventListener('mousemove',e=>{
+  if(Math.random()>.68)return;
+  drops.push({x:e.clientX,y:e.clientY,r:Math.random()*2.5+.8,life:1,
+    vx:(Math.random()-.5)*.9,vy:Math.random()*1.2+.3,
+    hue:Math.random()>.75?218:349});
+});
+(function ink(){
+  ctx.clearRect(0,0,W,H);
+  for(let i=drops.length-1;i>=0;i--){
+    const d=drops[i];
+    d.x+=d.vx;d.y+=d.vy;d.life-=.022;d.r*=.985;
+    if(d.life<=0){drops.splice(i,1);continue}
+    ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,Math.PI*2);
+    ctx.fillStyle=d.hue===349?`rgba(244,63,94,${d.life*.55})`:`rgba(129,140,248,${d.life*.35})`;
     ctx.fill();
   }
-  requestAnimationFrame(drawInk);
-}
-drawInk();
+  requestAnimationFrame(ink);
+})();
 
-/* ── Ink splatter on click ── */
-document.addEventListener('click', e => {
-  for (let i = 0; i < 8; i++) {
-    const el = document.createElement('div');
-    el.className = 'ink-particle';
-    const size = Math.random() * 12 + 4;
-    el.style.cssText = `
-      left:${e.clientX}px; top:${e.clientY}px;
-      width:${size}px; height:${size}px;
-      background: hsl(${Math.random() > .5 ? 349 : 240},90%,${55+Math.random()*15}%);
-      transform-origin: center;
-      margin: -${size/2}px 0 0 -${size/2}px;
-    `;
-    const angle = Math.random() * 360;
-    const dist  = Math.random() * 40 + 10;
-    el.style.setProperty('--tx', `${Math.cos(angle)*dist}px`);
-    el.style.setProperty('--ty', `${Math.sin(angle)*dist}px`);
-    el.style.animation = `inkFade .8s ease-out forwards`;
-    el.style.transform = `translate(${Math.cos(angle)*dist}px,${Math.sin(angle)*dist}px) scale(0)`;
+/* ── CLICK SPLATTER ── */
+document.addEventListener('click',e=>{
+  for(let i=0;i<7;i++){
+    const el=document.createElement('div');
+    el.className='ink-p';
+    const s=Math.random()*10+3;
+    const a=Math.random()*Math.PI*2,d=Math.random()*38+8;
+    el.style.cssText=`width:${s}px;height:${s}px;left:${e.clientX-s/2}px;top:${e.clientY-s/2}px;background:${Math.random()>.5?'var(--rose)':'var(--indigo)'};transition:transform .7s ease-out,opacity .7s ease-out;transform:translate(0,0) scale(0);opacity:.9`;
     document.body.appendChild(el);
-    requestAnimationFrame(() => {
-      el.style.transform = `translate(${Math.cos(angle)*dist}px,${Math.sin(angle)*dist}px) scale(1)`;
-      el.style.opacity = '0';
+    requestAnimationFrame(()=>{
+      el.style.transform=`translate(${Math.cos(a)*d}px,${Math.sin(a)*d}px) scale(1)`;
+      el.style.opacity='0';
     });
-    setTimeout(() => el.remove(), 900);
+    setTimeout(()=>el.remove(),750);
   }
 });
 
-/* ── Nav scroll ── */
-const nav = document.getElementById('main-nav');
-window.addEventListener('scroll', () => {
-  nav.classList.toggle('scrolled', window.scrollY > 50);
+/* ── NAV SCROLL ── */
+window.addEventListener('scroll',()=>document.getElementById('mn').classList.toggle('s',scrollY>50));
+
+/* ── TYPEWRITER ── */
+const words=['Scripts','Stories','Pilots','Features','Legacies','Dreams'];
+let wi=0,ci=0,del=false;
+const tw=document.getElementById('tw');
+function tloop(){
+  const w=words[wi];
+  if(!del){tw.textContent=w.slice(0,++ci);if(ci===w.length){del=true;setTimeout(tloop,1900);return}}
+  else{tw.textContent=w.slice(0,--ci);if(ci===0){del=false;wi=(wi+1)%words.length}}
+  setTimeout(tloop,del?55:115);
+}
+tloop();
+
+/* ── MARQUEE ── */
+const items=['⚡ AI Add Emotion','🧠 Story Memory','👥 Real-Time Co-Writing','📥 Fountain Import','🔍 Smart Proofreading','📊 Live Metrics','☁️ Cloud Sync','🌍 6 Languages','🎨 5 Themes','📤 DOCX · PDF · JSON Export','🆓 Free Forever'];
+const mt=document.getElementById('mt');
+[...items,...items].forEach(t=>{
+  const d=document.createElement('div');d.className='mi';
+  d.innerHTML=`<svg width="4" height="4" viewBox="0 0 4 4"><circle cx="2" cy="2" r="2" fill="currentColor"/></svg>${t}`;
+  mt.appendChild(d);
 });
 
-/* ── Typewriter hero ── */
-const words = ['Scripts','Stories','Pilots','Features','Legacies'];
-let wi = 0, ci = 0, deleting = false;
-const tw = document.getElementById('typewriter-word');
-function typeLoop() {
-  const w = words[wi];
-  if (!deleting) {
-    tw.textContent = w.slice(0, ci + 1);
-    ci++;
-    if (ci === w.length) { deleting = true; setTimeout(typeLoop, 1800); return; }
-  } else {
-    tw.textContent = w.slice(0, ci - 1);
-    ci--;
-    if (ci === 0) { deleting = false; wi = (wi + 1) % words.length; }
-  }
-  setTimeout(typeLoop, deleting ? 60 : 110);
+/* ── REVEAL ── */
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('on')}),{threshold:.1});
+document.querySelectorAll('.rv').forEach(el=>obs.observe(el));
+
+/* ── COUNTERS ── */
+function cnt(el){
+  const n=parseInt(el.dataset.count);if(!n)return;
+  const dur=1600,s=performance.now();
+  (function step(now){
+    const t=Math.min((now-s)/dur,1),ease=1-Math.pow(1-t,3),v=Math.round(ease*n);
+    el.textContent=v>=1000?(v/1000).toFixed(1)+'k':v;
+    if(t<1)requestAnimationFrame(step);
+  })(performance.now());
 }
-typeLoop();
+const cobs=new IntersectionObserver(es=>es.forEach(e=>{
+  if(e.isIntersecting&&e.target.dataset.count){cnt(e.target);cobs.unobserve(e.target)}
+}),{threshold:.5});
+document.querySelectorAll('[data-count]').forEach(el=>cobs.observe(el));
 
-/* ── Mockup typer ── */
-const mockupLines = [
-  'INT. ELENA\'S MIND — CONTINUOUS',
-  'The room dissolves around her.',
-  'ELENA\n      I remember you.',
-];
-let mli = 0, mci = 0;
-const mt = document.getElementById('mockup-typer');
-function mockupType() {
-  const line = mockupLines[mli];
-  if (mci < line.length) {
-    mt.textContent = line.slice(0, mci + 1);
-    mci++;
-    setTimeout(mockupType, 60);
-  } else {
-    setTimeout(() => {
-      mli = (mli + 1) % mockupLines.length;
-      mci = 0;
-      mockupType();
-    }, 1500);
-  }
-}
-setTimeout(mockupType, 2000);
-
-/* ── Marquee ── */
-const marqueeItems = [
-  '🎬 Professional Formatting',
-  '🤖 AI Writing Assistant',
-  '👥 Real-Time Collaboration',
-  '🧠 Story Memory',
-  '☁️ Cloud Sync',
-  '📤 DOCX Export',
-  '🌍 6 Languages',
-  '🎨 5 Themes',
-  '🆓 Free Forever',
-  '🔒 Private & Secure',
-];
-const track = document.getElementById('marquee-track');
-const doubled = [...marqueeItems, ...marqueeItems];
-doubled.forEach(item => {
-  const div = document.createElement('div');
-  div.className = 'marquee-item';
-  div.innerHTML = `<svg width="5" height="5" viewBox="0 0 5 5"><circle cx="2.5" cy="2.5" r="2.5" fill="currentColor"/></svg>${item}`;
-  track.appendChild(div);
-});
-
-/* ── Scroll reveal ── */
-const reveals = document.querySelectorAll('.reveal');
-const observer = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if (e.isIntersecting) { e.target.classList.add('visible'); }
-  });
-}, { threshold: 0.12 });
-reveals.forEach(el => observer.observe(el));
-
-/* ── Counter animation ── */
-function animateCount(el) {
-  const target = parseInt(el.dataset.count);
-  if (!target) return;
-  const suffix = el.querySelector('span')?.textContent || '';
-  const duration = 1800;
-  const start = performance.now();
-  function step(now) {
-    const t = Math.min((now - start) / duration, 1);
-    const ease = 1 - Math.pow(1 - t, 3);
-    const val = Math.round(ease * target);
-    el.innerHTML = (val >= 1000 ? (val/1000).toFixed(1)+'k' : val) + (suffix ? `<span>${suffix}</span>` : '');
-    if (t < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
-}
-const countObserver = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if (e.isIntersecting && e.target.dataset.count) {
-      animateCount(e.target);
-      countObserver.unobserve(e.target);
-    }
-  });
-}, { threshold: .5 });
-document.querySelectorAll('[data-count]').forEach(el => countObserver.observe(el));
-
-/* ── Steps auto-cycle ── */
-const steps = document.querySelectorAll('.step');
-let activeStep = 0;
-function cycleStep() {
-  steps.forEach(s => s.classList.remove('active'));
-  steps[activeStep].classList.add('active');
-  activeStep = (activeStep + 1) % steps.length;
-}
-setInterval(cycleStep, 2200);
-
-/* ── Animated prose ── */
-const prose = [
-  { text: 'INT. ', cls: 'highlight-word' },
-  { text: 'STORY — ' },
-  { text: 'FOREVER', cls: 'highlight-word' },
-];
-const proseEl = document.getElementById('animated-prose');
-const pathEl  = document.getElementById('underline-path');
-let proseObserved = false;
-const proseObserver = new IntersectionObserver(entries => {
-  if (entries[0].isIntersecting && !proseObserved) {
-    proseObserved = true;
-    typeProse();
-  }
-}, { threshold: .5 });
-proseObserver.observe(proseEl);
-
-function typeProse() {
-  const fullText = 'Every story begins with a blank page.\nThe cursor blinks. The writer breathes.\nThen — the first word falls like ink.\nAnd the world begins.';
-  let i = 0;
-  proseEl.innerHTML = '';
-  function typeChar() {
-    if (i < fullText.length) {
-      const ch = fullText[i];
-      if (ch === '\n') {
-        proseEl.innerHTML += '<br>';
-      } else {
-        const span = document.createElement('span');
-        span.textContent = ch;
-        const isKeyword = ['blank', 'cursor', 'blinks', 'breathes', 'ink', 'world'].some(w => fullText.slice(i, i+w.length) === w);
-        if (isKeyword) span.className = 'highlight-word';
-        proseEl.appendChild(span);
-      }
-      i++;
-      setTimeout(typeChar, 28);
-      if (i === Math.floor(fullText.length * .4)) {
-        pathEl.classList.add('drawn');
-      }
-    }
-  }
-  typeChar();
+/* ── FAQ ── */
+function faq(btn){
+  const it=btn.closest('.fi'),open=it.classList.contains('open');
+  document.querySelectorAll('.fi.open').forEach(i=>i.classList.remove('open'));
+  if(!open)it.classList.add('open');
 }
 
-/* ── FAQ accordion ── */
-function toggleFaq(btn) {
-  const item = btn.closest('.faq-item');
-  const isOpen = item.classList.contains('open');
-  document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
-  if (!isOpen) item.classList.add('open');
-}
-
-/* ── Waitlist form ── */
-function handleWaitlist() {
-  const email = document.getElementById('waitlist-email').value.trim();
-  if (!email || !email.includes('@')) {
-    document.getElementById('waitlist-email').style.borderColor = 'var(--rose)';
-    return;
-  }
-  const btn = event.target;
-  btn.textContent = '✓ You\'re on the list!';
-  btn.style.background = '#10b981';
-  btn.disabled = true;
-  document.getElementById('waitlist-email').value = '';
+/* ── WAITLIST ── */
+function wl(btn){
+  const em=document.getElementById('we').value.trim();
+  if(!em||!em.includes('@')){document.getElementById('we').style.borderColor='var(--rose)';return}
+  btn.textContent='✓ You\'re on the list!';btn.style.background='#22c55e';btn.disabled=true;
+  document.getElementById('we').value='';
 }
 </script>
 </body>
