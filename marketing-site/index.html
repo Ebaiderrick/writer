@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EyaWriter — Write Better Scripts, Faster Than Ever</title>
+  <meta name="description" content="The professional screenplay writing platform with AI assistance, real-time collaboration, and intelligent formatting. Free forever." />
+  <meta property="og:title" content="EyaWriter — Professional Screenplay Writing" />
+  <meta property="og:description" content="Write better scripts, faster than ever. AI-powered, collaborative, free." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Inter:wght@300;400;500;600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── RESET & BASE ───────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --rose:    #f43f5e;
+      --rose-d:  #be123c;
+      --rose-l:  #fda4af;
+      --indigo:  #818cf8;
+      --bg:      #0a0910;
+      --bg2:     #110f1e;
+      --bg3:     #1a1730;
+      --surface: #1e1b30;
+      --border:  rgba(244,63,94,.18);
+      --text:    #f0eaf8;
+      --muted:   #9990b8;
+      --ink:     #f43f5e;
+      --ff-sans: 'Inter', system-ui, sans-serif;
+      --ff-serif:'Playfair Display', Georgia, serif;
+      --ff-mono: 'Courier Prime', 'Courier New', monospace;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--ff-sans);
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      cursor: none;
+    }
+
+    /* ─── CUSTOM CURSOR ──────────────────────────────────────────────── */
+    #cursor {
+      position: fixed; top: 0; left: 0; z-index: 9999;
+      pointer-events: none;
+      transition: opacity .3s;
+    }
+    #cursor-dot {
+      width: 8px; height: 8px;
+      background: var(--rose);
+      border-radius: 50%;
+      position: absolute;
+      transform: translate(-50%,-50%);
+      transition: transform .1s;
+    }
+    #cursor-ring {
+      width: 32px; height: 32px;
+      border: 1.5px solid rgba(244,63,94,.5);
+      border-radius: 50%;
+      position: absolute;
+      transform: translate(-50%,-50%);
+      transition: transform .18s ease, width .2s, height .2s, border-color .2s;
+    }
+    body:has(a:hover) #cursor-ring,
+    body:has(button:hover) #cursor-ring {
+      width: 48px; height: 48px;
+      border-color: var(--rose);
+    }
+
+    /* ─── INK CANVAS ─────────────────────────────────────────────────── */
+    #ink-canvas {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none;
+      opacity: .55;
+    }
+
+    /* ─── NAV ────────────────────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.2rem 4rem;
+      background: rgba(10,9,16,.8);
+      backdrop-filter: blur(24px);
+      border-bottom: 1px solid var(--border);
+      transition: padding .3s;
+    }
+    nav.scrolled { padding: .8rem 4rem; }
+    .nav-logo {
+      font-family: var(--ff-serif);
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .nav-logo span { color: var(--rose); }
+    .nav-links {
+      display: flex; gap: 2.5rem; list-style: none;
+    }
+    .nav-links a {
+      color: var(--muted); text-decoration: none; font-size: .9rem;
+      font-weight: 500; letter-spacing: .02em;
+      transition: color .2s;
+      position: relative;
+    }
+    .nav-links a::after {
+      content: ''; position: absolute; bottom: -4px; left: 0; right: 0;
+      height: 1px; background: var(--rose);
+      transform: scaleX(0); transition: transform .2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a:hover::after { transform: scaleX(1); }
+    .nav-cta {
+      display: flex; gap: 1rem; align-items: center;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .65rem 1.5rem;
+      border-radius: 8px;
+      font-size: .9rem; font-weight: 600;
+      cursor: none; text-decoration: none;
+      transition: all .2s;
+      border: none;
+    }
+    .btn-ghost {
+      color: var(--text);
+      background: transparent;
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--rose); color: var(--rose); }
+    .btn-primary {
+      background: var(--rose);
+      color: #fff;
+      box-shadow: 0 0 20px rgba(244,63,94,.35);
+    }
+    .btn-primary:hover {
+      background: var(--rose-d);
+      box-shadow: 0 0 32px rgba(244,63,94,.55);
+      transform: translateY(-1px);
+    }
+    .btn-lg { padding: .9rem 2.2rem; font-size: 1rem; border-radius: 10px; }
+
+    /* ─── SECTION SHELL ──────────────────────────────────────────────── */
+    section {
+      position: relative; z-index: 1;
+    }
+    .container {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+    .section-label {
+      display: inline-flex; align-items: center; gap: .5rem;
+      font-size: .78rem; font-weight: 600; letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--rose);
+      background: rgba(244,63,94,.1);
+      border: 1px solid rgba(244,63,94,.25);
+      padding: .3rem .8rem;
+      border-radius: 20px;
+      margin-bottom: 1.2rem;
+    }
+    .section-title {
+      font-family: var(--ff-serif);
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      line-height: 1.15;
+      margin-bottom: 1rem;
+    }
+    .section-title em { font-style: italic; color: var(--rose); }
+    .section-sub {
+      font-size: 1.1rem; color: var(--muted);
+      max-width: 560px; line-height: 1.7;
+    }
+    .text-center { text-align: center; }
+    .text-center .section-sub { margin: 0 auto; }
+
+    /* ─── SCROLL REVEAL ─────────────────────────────────────────────── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(36px);
+      transition: opacity .7s ease, transform .7s ease;
+    }
+    .reveal.visible { opacity: 1; transform: none; }
+    .reveal-delay-1 { transition-delay: .1s; }
+    .reveal-delay-2 { transition-delay: .2s; }
+    .reveal-delay-3 { transition-delay: .3s; }
+    .reveal-delay-4 { transition-delay: .4s; }
+    .reveal-delay-5 { transition-delay: .5s; }
+
+    /* ─── HERO ───────────────────────────────────────────────────────── */
+    #hero {
+      min-height: 100vh;
+      display: flex; align-items: center;
+      padding: 10rem 0 6rem;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(244,63,94,.12) 0%, transparent 70%),
+                  radial-gradient(ellipse 60% 40% at 80% 80%, rgba(129,140,248,.08) 0%, transparent 60%);
+    }
+    .hero-inner {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 4rem; align-items: center;
+    }
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: .6rem;
+      font-size: .82rem; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--rose);
+      margin-bottom: 1.5rem;
+    }
+    .hero-eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rose); }
+    .hero-title {
+      font-family: var(--ff-serif);
+      font-size: clamp(2.8rem, 5.5vw, 5rem);
+      line-height: 1.08;
+      margin-bottom: 1.8rem;
+      font-weight: 900;
+    }
+    .hero-title .line2 { display: block; color: var(--rose); font-style: italic; }
+    .hero-title .line3 { display: block; }
+    #typewriter-word {
+      color: var(--rose);
+      font-style: italic;
+      border-right: 3px solid var(--rose);
+      padding-right: 4px;
+      animation: blink .8s step-end infinite;
+    }
+    @keyframes blink { 50% { border-color: transparent; } }
+    .hero-sub {
+      font-size: 1.15rem; color: var(--muted);
+      line-height: 1.75; margin-bottom: 2.5rem;
+      max-width: 480px;
+    }
+    .hero-actions {
+      display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 3rem;
+    }
+    .hero-stats {
+      display: flex; gap: 2.5rem;
+    }
+    .hero-stat-num {
+      font-family: var(--ff-serif);
+      font-size: 1.6rem; font-weight: 700;
+      color: var(--text);
+    }
+    .hero-stat-label { font-size: .8rem; color: var(--muted); margin-top: .2rem; }
+
+    /* ─── SCREENPLAY MOCKUP ──────────────────────────────────────────── */
+    .screenplay-mockup {
+      position: relative;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 40px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(244,63,94,.1);
+      overflow: hidden;
+    }
+    .screenplay-mockup::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(244,63,94,.04) 0%, transparent 50%);
+    }
+    .mockup-topbar {
+      display: flex; gap: .5rem; margin-bottom: 1.5rem;
+    }
+    .mockup-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+    }
+    .mockup-dot:nth-child(1) { background: #ff5f57; }
+    .mockup-dot:nth-child(2) { background: #febc2e; }
+    .mockup-dot:nth-child(3) { background: #28c840; }
+    .screenplay-content {
+      font-family: var(--ff-mono);
+      font-size: .82rem;
+      line-height: 1.8;
+      color: #cdc5e8;
+    }
+    .sc-slug { color: var(--rose); font-weight: 700; letter-spacing: .08em; }
+    .sc-action { color: #a09cc0; }
+    .sc-character { text-align: center; font-weight: 700; color: var(--text); margin: .6rem 0 .2rem; }
+    .sc-dialogue { margin: 0 3rem; color: #d0c8e8; }
+    .sc-paren { text-align: center; font-style: italic; color: var(--muted); font-size: .78rem; }
+    .sc-transition { text-align: right; color: var(--rose); font-weight: 600; margin-top: .6rem; }
+
+    .mockup-typing-line {
+      display: inline-block;
+      color: var(--rose);
+      font-family: var(--ff-mono);
+      font-size: .82rem;
+    }
+    .mockup-typing-line::after {
+      content: '▍';
+      animation: blink .7s step-end infinite;
+      color: var(--rose);
+    }
+    .mockup-ai-bubble {
+      position: absolute; bottom: 1.5rem; right: 1.5rem;
+      background: rgba(244,63,94,.12);
+      border: 1px solid rgba(244,63,94,.3);
+      border-radius: 10px;
+      padding: .6rem 1rem;
+      font-size: .75rem; color: var(--rose);
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .ai-pulse {
+      width: 7px; height: 7px; background: var(--rose);
+      border-radius: 50%;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.5); opacity: .5; }
+    }
+
+    /* ─── FLOATING PAGES ─────────────────────────────────────────────── */
+    .float-page {
+      position: absolute; border-radius: 8px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      opacity: .25;
+      pointer-events: none;
+    }
+    .float-page-1 {
+      width: 120px; height: 160px;
+      top: 10%; right: -30px;
+      transform: rotate(6deg);
+      animation: floatPage 6s ease-in-out infinite;
+    }
+    .float-page-2 {
+      width: 90px; height: 120px;
+      bottom: 15%; left: -20px;
+      transform: rotate(-8deg);
+      animation: floatPage 8s ease-in-out infinite reverse;
+    }
+    @keyframes floatPage {
+      0%,100% { transform: rotate(6deg) translateY(0); }
+      50% { transform: rotate(6deg) translateY(-12px); }
+    }
+
+    /* ─── MARQUEE BAR ────────────────────────────────────────────────── */
+    .marquee-bar {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+      padding: .9rem 0;
+      position: relative; z-index: 1;
+    }
+    .marquee-track {
+      display: flex; gap: 3rem;
+      animation: marquee 28s linear infinite;
+      width: max-content;
+    }
+    @keyframes marquee { to { transform: translateX(-50%); } }
+    .marquee-item {
+      display: flex; align-items: center; gap: .8rem;
+      white-space: nowrap;
+      font-size: .82rem; font-weight: 500; color: var(--muted);
+    }
+    .marquee-item svg { color: var(--rose); flex-shrink: 0; }
+
+    /* ─── FEATURES ───────────────────────────────────────────────────── */
+    #features { padding: 8rem 0; }
+    .features-header { text-align: center; margin-bottom: 5rem; }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+    .feature-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      transition: border-color .3s, transform .3s, box-shadow .3s;
+      position: relative; overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--rose), transparent);
+      transform: scaleX(0); transition: transform .4s;
+    }
+    .feature-card:hover {
+      border-color: rgba(244,63,94,.4);
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(0,0,0,.3), 0 0 20px rgba(244,63,94,.07);
+    }
+    .feature-card:hover::before { transform: scaleX(1); }
+    .feature-icon {
+      width: 48px; height: 48px;
+      background: rgba(244,63,94,.12);
+      border: 1px solid rgba(244,63,94,.2);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 1.2rem;
+      font-size: 1.4rem;
+    }
+    .feature-title {
+      font-family: var(--ff-serif);
+      font-size: 1.15rem;
+      margin-bottom: .6rem;
+    }
+    .feature-desc { font-size: .9rem; color: var(--muted); line-height: 1.65; }
+    .feature-card.large {
+      grid-column: span 2;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
+      align-items: center;
+    }
+    .feature-card.large .feature-visual {
+      background: var(--bg3);
+      border-radius: 10px; overflow: hidden;
+      height: 200px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--ff-mono);
+      font-size: .78rem;
+      color: var(--muted);
+      padding: 1.5rem;
+      border: 1px solid rgba(255,255,255,.05);
+    }
+
+    /* ─── HOW IT WORKS ───────────────────────────────────────────────── */
+    #how { padding: 8rem 0; background: var(--bg2); }
+    .how-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 6rem; align-items: center; }
+    .steps { display: flex; flex-direction: column; gap: 2.5rem; }
+    .step {
+      display: flex; gap: 1.5rem; align-items: flex-start;
+      opacity: .4; transition: opacity .4s;
+    }
+    .step.active { opacity: 1; }
+    .step-num {
+      width: 44px; height: 44px; flex-shrink: 0;
+      border-radius: 50%;
+      background: rgba(244,63,94,.1);
+      border: 1px solid rgba(244,63,94,.25);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--ff-serif);
+      font-size: 1.1rem; font-weight: 700;
+      color: var(--rose);
+      transition: background .4s, border-color .4s;
+    }
+    .step.active .step-num {
+      background: var(--rose);
+      border-color: var(--rose);
+      color: #fff;
+    }
+    .step-title { font-weight: 600; font-size: 1rem; margin-bottom: .4rem; }
+    .step-desc { font-size: .9rem; color: var(--muted); line-height: 1.65; }
+    .step-connector {
+      width: 1px; height: 2rem;
+      background: linear-gradient(to bottom, var(--rose), transparent);
+      margin: .5rem 0 .5rem 21px;
+    }
+
+    /* ─── AI DEMO ────────────────────────────────────────────────────── */
+    .ai-demo {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+    }
+    .ai-demo-header {
+      padding: 1rem 1.5rem;
+      background: rgba(244,63,94,.06);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: .75rem;
+      font-size: .85rem; font-weight: 600; color: var(--rose);
+    }
+    .ai-demo-body { padding: 1.5rem; }
+    .ai-message {
+      display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: flex-start;
+    }
+    .ai-avatar {
+      width: 32px; height: 32px; flex-shrink: 0;
+      border-radius: 8px;
+      background: rgba(244,63,94,.15);
+      border: 1px solid rgba(244,63,94,.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .8rem;
+    }
+    .ai-bubble {
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 0 10px 10px 10px;
+      padding: .75rem 1rem;
+      font-size: .85rem; line-height: 1.6; color: var(--muted);
+      flex: 1;
+    }
+    .ai-bubble strong { color: var(--text); }
+    .user-message .ai-bubble {
+      background: rgba(244,63,94,.08);
+      border-color: rgba(244,63,94,.2);
+      color: var(--text);
+      border-radius: 10px 0 10px 10px;
+    }
+    .ai-typing { display: flex; gap: .3rem; align-items: center; padding: .5rem 0; }
+    .ai-typing span {
+      width: 6px; height: 6px; background: var(--muted);
+      border-radius: 50%;
+      animation: typingDot 1.2s ease-in-out infinite;
+    }
+    .ai-typing span:nth-child(2) { animation-delay: .2s; }
+    .ai-typing span:nth-child(3) { animation-delay: .4s; }
+    @keyframes typingDot {
+      0%,80%,100% { transform: scale(1); opacity: .4; }
+      40% { transform: scale(1.2); opacity: 1; }
+    }
+
+    /* ─── WRITING ANIMATION SECTION ──────────────────────────────────── */
+    #writing-anim {
+      padding: 7rem 0;
+      text-align: center;
+      overflow: hidden;
+    }
+    .writing-line-container {
+      position: relative;
+      margin: 4rem auto;
+      max-width: 800px;
+    }
+    .writing-line {
+      font-family: var(--ff-mono);
+      font-size: 1.1rem;
+      line-height: 2.2;
+      color: var(--muted);
+      text-align: left;
+    }
+    .writing-line .highlight-word {
+      color: var(--rose);
+      font-weight: 700;
+    }
+    .writing-line-svg {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 2px;
+    }
+    .writing-line-path {
+      stroke: var(--rose);
+      stroke-width: 1;
+      fill: none;
+      stroke-dasharray: 800;
+      stroke-dashoffset: 800;
+      transition: stroke-dashoffset 2s ease;
+    }
+    .writing-line-path.drawn { stroke-dashoffset: 0; }
+
+    /* ─── STATS ──────────────────────────────────────────────────────── */
+    #stats {
+      padding: 6rem 0;
+      background: linear-gradient(135deg, rgba(244,63,94,.07) 0%, rgba(129,140,248,.05) 100%);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(4,1fr);
+      gap: 2rem;
+      text-align: center;
+    }
+    .stat-card { position: relative; }
+    .stat-card::after {
+      content: '';
+      position: absolute; right: 0; top: 20%; bottom: 20%;
+      width: 1px; background: var(--border);
+    }
+    .stat-card:last-child::after { display: none; }
+    .stat-num {
+      font-family: var(--ff-serif);
+      font-size: 3rem; font-weight: 900;
+      color: var(--text);
+      display: block;
+    }
+    .stat-num span { color: var(--rose); }
+    .stat-label { color: var(--muted); font-size: .9rem; margin-top: .3rem; }
+
+    /* ─── PRICING ────────────────────────────────────────────────────── */
+    #pricing { padding: 8rem 0; }
+    .pricing-grid {
+      display: grid; grid-template-columns: repeat(3,1fr);
+      gap: 1.5rem; margin-top: 4rem;
+    }
+    .pricing-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 20px; padding: 2.5rem;
+      position: relative; overflow: hidden;
+      transition: transform .3s, box-shadow .3s;
+    }
+    .pricing-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 30px 60px rgba(0,0,0,.4);
+    }
+    .pricing-card.featured {
+      border-color: var(--rose);
+      background: linear-gradient(135deg, rgba(244,63,94,.08) 0%, var(--bg2) 100%);
+      box-shadow: 0 0 0 1px rgba(244,63,94,.3), 0 30px 60px rgba(244,63,94,.1);
+    }
+    .pricing-card.featured::before {
+      content: 'Most Popular';
+      position: absolute; top: 1.2rem; right: 1.5rem;
+      background: var(--rose);
+      color: #fff; font-size: .72rem; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase;
+      padding: .25rem .65rem; border-radius: 20px;
+    }
+    .pricing-tier { font-size: .8rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--rose); margin-bottom: .75rem; }
+    .pricing-price {
+      display: flex; align-items: baseline; gap: .3rem;
+      margin-bottom: .5rem;
+    }
+    .price-amount {
+      font-family: var(--ff-serif);
+      font-size: 3.2rem; font-weight: 900;
+    }
+    .price-period { color: var(--muted); font-size: .9rem; }
+    .pricing-desc { font-size: .9rem; color: var(--muted); line-height: 1.6; margin-bottom: 2rem; }
+    .pricing-divider { height: 1px; background: var(--border); margin-bottom: 1.5rem; }
+    .pricing-features { list-style: none; display: flex; flex-direction: column; gap: .8rem; margin-bottom: 2rem; }
+    .pricing-features li {
+      display: flex; align-items: flex-start; gap: .65rem;
+      font-size: .9rem; color: var(--muted);
+    }
+    .pricing-features li .check { color: var(--rose); flex-shrink: 0; margin-top: .1rem; }
+    .pricing-features li .cross { color: #444; flex-shrink: 0; margin-top: .1rem; }
+
+    /* ─── TESTIMONIALS ───────────────────────────────────────────────── */
+    #testimonials { padding: 8rem 0; background: var(--bg2); }
+    .testimonials-grid {
+      display: grid; grid-template-columns: repeat(3,1fr);
+      gap: 1.5rem; margin-top: 4rem;
+    }
+    .testimonial-card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 16px; padding: 2rem;
+      transition: border-color .3s, transform .3s;
+    }
+    .testimonial-card:hover {
+      border-color: rgba(244,63,94,.3);
+      transform: translateY(-3px);
+    }
+    .testi-quote { font-size: 2rem; color: var(--rose); line-height: 1; margin-bottom: .75rem; }
+    .testi-text { font-size: .92rem; color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem; font-style: italic; }
+    .testi-author { display: flex; align-items: center; gap: .75rem; }
+    .testi-avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--rose), var(--indigo));
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--ff-serif); font-weight: 700; font-size: .9rem; color: #fff;
+    }
+    .testi-name { font-weight: 600; font-size: .9rem; }
+    .testi-role { font-size: .78rem; color: var(--muted); }
+    .stars { color: var(--rose); font-size: .85rem; letter-spacing: .05em; margin-bottom: .5rem; }
+
+    /* ─── FAQ ────────────────────────────────────────────────────────── */
+    #faq { padding: 8rem 0; }
+    .faq-list { max-width: 740px; margin: 4rem auto 0; }
+    .faq-item {
+      border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 1rem;
+      overflow: hidden;
+      transition: border-color .3s;
+    }
+    .faq-item.open { border-color: rgba(244,63,94,.35); }
+    .faq-question {
+      width: 100%; display: flex; justify-content: space-between; align-items: center;
+      padding: 1.2rem 1.5rem;
+      background: var(--bg2);
+      border: none; cursor: none;
+      text-align: left; color: var(--text); font-size: .95rem; font-weight: 500;
+      font-family: var(--ff-sans);
+      transition: background .2s;
+    }
+    .faq-question:hover { background: var(--bg3); }
+    .faq-chevron {
+      width: 20px; height: 20px; flex-shrink: 0;
+      color: var(--rose);
+      transition: transform .3s;
+    }
+    .faq-item.open .faq-chevron { transform: rotate(180deg); }
+    .faq-answer {
+      max-height: 0; overflow: hidden;
+      transition: max-height .4s ease, padding .3s;
+    }
+    .faq-item.open .faq-answer { max-height: 400px; }
+    .faq-answer-inner {
+      padding: 0 1.5rem 1.2rem;
+      font-size: .9rem; color: var(--muted); line-height: 1.7;
+    }
+
+    /* ─── WAITLIST / CTA ─────────────────────────────────────────────── */
+    #cta {
+      padding: 8rem 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 100%, rgba(244,63,94,.12) 0%, transparent 70%);
+      text-align: center;
+    }
+    .cta-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 5rem 4rem;
+      position: relative; overflow: hidden;
+      box-shadow: 0 40px 80px rgba(0,0,0,.4);
+    }
+    .cta-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(244,63,94,.1) 0%, transparent 60%);
+    }
+    .cta-title {
+      font-family: var(--ff-serif);
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      font-weight: 900; line-height: 1.12;
+      margin-bottom: 1.2rem;
+      position: relative; z-index: 1;
+    }
+    .cta-sub { color: var(--muted); font-size: 1.1rem; margin-bottom: 3rem; position: relative; z-index: 1; }
+    .waitlist-form {
+      display: flex; gap: 1rem; max-width: 480px; margin: 0 auto;
+      position: relative; z-index: 1;
+    }
+    .waitlist-input {
+      flex: 1; padding: .85rem 1.2rem;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text); font-size: .95rem;
+      font-family: var(--ff-sans);
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .waitlist-input:focus {
+      border-color: var(--rose);
+      box-shadow: 0 0 0 3px rgba(244,63,94,.15);
+    }
+    .waitlist-input::placeholder { color: var(--muted); }
+    .form-note { font-size: .8rem; color: var(--muted); margin-top: 1rem; position: relative; z-index: 1; }
+
+    /* ─── FOOTER ─────────────────────────────────────────────────────── */
+    footer {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      padding: 4rem 0 2rem;
+      position: relative; z-index: 1;
+    }
+    .footer-grid {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 3rem; margin-bottom: 3rem;
+    }
+    .footer-brand .nav-logo { font-size: 1.4rem; margin-bottom: 1rem; display: inline-block; }
+    .footer-brand p { font-size: .9rem; color: var(--muted); line-height: 1.65; max-width: 260px; }
+    .footer-col-title { font-weight: 600; font-size: .85rem; margin-bottom: 1.2rem; }
+    .footer-links { list-style: none; display: flex; flex-direction: column; gap: .6rem; }
+    .footer-links a { color: var(--muted); text-decoration: none; font-size: .88rem; transition: color .2s; }
+    .footer-links a:hover { color: var(--rose); }
+    .footer-bottom {
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: .82rem; color: var(--muted);
+    }
+    .footer-bottom a { color: var(--muted); text-decoration: none; }
+    .footer-bottom a:hover { color: var(--rose); }
+
+    /* ─── INK SPLATTER ───────────────────────────────────────────────── */
+    .ink-particle {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9998;
+      animation: inkFade .8s ease-out forwards;
+    }
+    @keyframes inkFade {
+      from { transform: scale(0); opacity: .8; }
+      to   { transform: scale(1); opacity: 0; }
+    }
+
+    /* ─── SCROLLBAR ──────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: rgba(244,63,94,.4); border-radius: 3px; }
+
+    /* ─── MOBILE ─────────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      nav { padding: 1rem 1.5rem; }
+      nav.scrolled { padding: .8rem 1.5rem; }
+      .nav-links { display: none; }
+      .hero-inner { grid-template-columns: 1fr; }
+      .screenplay-mockup { display: none; }
+      .features-grid { grid-template-columns: 1fr; }
+      .feature-card.large { grid-column: span 1; grid-template-columns: 1fr; }
+      .feature-card.large .feature-visual { display: none; }
+      .how-inner { grid-template-columns: 1fr; }
+      .ai-demo { display: none; }
+      .stats-grid { grid-template-columns: repeat(2,1fr); }
+      .stat-card::after { display: none; }
+      .pricing-grid { grid-template-columns: 1fr; }
+      .testimonials-grid { grid-template-columns: 1fr; }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+      .waitlist-form { flex-direction: column; }
+      .cta-card { padding: 3rem 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── CUSTOM CURSOR ─────────────────────────────────────────────────── -->
+<div id="cursor">
+  <div id="cursor-dot"></div>
+  <div id="cursor-ring"></div>
+</div>
+
+<!-- ─── INK CANVAS ───────────────────────────────────────────────────── -->
+<canvas id="ink-canvas"></canvas>
+
+<!-- ─── NAV ──────────────────────────────────────────────────────────── -->
+<nav id="main-nav">
+  <a href="#" class="nav-logo">Eya<span>Writer</span></a>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#how">How it Works</a></li>
+    <li><a href="#pricing">Pricing</a></li>
+    <li><a href="#faq">FAQ</a></li>
+  </ul>
+  <div class="nav-cta">
+    <a href="#" class="btn btn-ghost">Sign In</a>
+    <a href="#cta" class="btn btn-primary">Start Free →</a>
+  </div>
+</nav>
+
+<!-- ─── HERO ──────────────────────────────────────────────────────────── -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-eyebrow reveal">
+          <span class="hero-eyebrow-dot"></span>
+          Professional Screenplay Platform
+        </div>
+        <h1 class="hero-title reveal reveal-delay-1">
+          Write<br>
+          <span class="line2">Better <span id="typewriter-word">Scripts</span></span>
+          <span class="line3">Faster.</span>
+        </h1>
+        <p class="hero-sub reveal reveal-delay-2">
+          The AI-powered writing platform built for screenwriters.
+          Professional formatting, intelligent suggestions, real-time collaboration — all free.
+        </p>
+        <div class="hero-actions reveal reveal-delay-3">
+          <a href="#cta" class="btn btn-primary btn-lg">Start Writing Free</a>
+          <a href="#features" class="btn btn-ghost btn-lg">Explore Features</a>
+        </div>
+        <div class="hero-stats reveal reveal-delay-4">
+          <div>
+            <div class="hero-stat-num" data-count="10000">0</div>
+            <div class="hero-stat-label">Scripts Created</div>
+          </div>
+          <div>
+            <div class="hero-stat-num" data-count="40">0</div>
+            <div class="hero-stat-label">Countries</div>
+          </div>
+          <div>
+            <div class="hero-stat-num" data-count="6">0</div>
+            <div class="hero-stat-label">Languages</div>
+          </div>
+        </div>
+      </div>
+      <div class="reveal reveal-delay-2" style="position:relative">
+        <div class="float-page float-page-1"></div>
+        <div class="float-page float-page-2"></div>
+        <div class="screenplay-mockup">
+          <div class="mockup-topbar">
+            <div class="mockup-dot"></div>
+            <div class="mockup-dot"></div>
+            <div class="mockup-dot"></div>
+            <span style="font-size:.75rem;color:var(--muted);margin-left:.5rem;font-family:var(--ff-mono)">my_screenplay.fdx</span>
+          </div>
+          <div class="screenplay-content">
+            <div class="sc-slug">INT. ABANDONED LIGHTHOUSE — NIGHT</div>
+            <br>
+            <div class="sc-action">Rain hammers the cracked windows. A single lantern
+              flickers. ELENA (30s, weathered determination)
+              clutches a handwritten letter.</div>
+            <br>
+            <div class="sc-character">ELENA</div>
+            <div class="sc-paren">(barely whispering)</div>
+            <div class="sc-dialogue">He was here. He was always here.</div>
+            <br>
+            <div class="sc-action">She turns the letter over. The ink — still wet.</div>
+            <br>
+            <div class="mockup-typing-line" id="mockup-typer">INT. ELENA'S MIND</div>
+            <br>
+            <div class="sc-transition">CUT TO:</div>
+          </div>
+          <div class="mockup-ai-bubble">
+            <div class="ai-pulse"></div>
+            AI suggestion ready
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── MARQUEE ────────────────────────────────────────────────────────── -->
+<div class="marquee-bar">
+  <div class="marquee-track" id="marquee-track">
+    <!-- items duplicated by JS -->
+  </div>
+</div>
+
+<!-- ─── FEATURES ─────────────────────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <div class="features-header">
+      <div class="section-label reveal">✦ Everything You Need</div>
+      <h2 class="section-title reveal reveal-delay-1">Built for the <em>serious</em> writer</h2>
+      <p class="section-sub reveal reveal-delay-2">Every tool a professional screenwriter needs, with the intelligence to keep up with your creative flow.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card large reveal">
+        <div>
+          <div class="feature-icon">🎬</div>
+          <h3 class="feature-title">Professional Screenplay Formatting</h3>
+          <p class="feature-desc">Industry-standard formatting happens automatically as you write. Scene headings, action lines, dialogue, transitions — perfectly formatted every time. No manual work required.</p>
+        </div>
+        <div class="feature-visual">
+          <pre style="color:var(--muted);font-size:.75rem;line-height:1.8">
+<span style="color:var(--rose)">INT. COFFEE SHOP — DAY</span>
+
+Sunlight streams through
+dirty windows. A WRITER
+types furiously.
+
+<span style="color:var(--text);text-align:center;display:block">        THE WRITER</span>
+<span style="display:block;text-align:center;font-style:italic;color:var(--muted)">(to themselves)</span>
+      This is the one.
+
+<span style="color:var(--rose)">                    SMASH CUT TO:</span></pre>
+        </div>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">🤖</div>
+        <h3 class="feature-title">AI Writing Assistant</h3>
+        <p class="feature-desc">Get intelligent suggestions for dialogue, scene descriptions, and plot continuity. Your AI co-writer that understands screenplay craft.</p>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">👥</div>
+        <h3 class="feature-title">Real-Time Collaboration</h3>
+        <p class="feature-desc">Co-write with your team in real time. Role-based permissions, inline comments, and live cursors make remote collaboration seamless.</p>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">🧠</div>
+        <h3 class="feature-title">Story Memory</h3>
+        <p class="feature-desc">Automatically tracks characters, locations, and plot threads across your entire script. Never lose continuity again.</p>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">☁️</div>
+        <h3 class="feature-title">Cloud Sync & Offline</h3>
+        <p class="feature-desc">Your work is always safe. Auto-backup to the cloud, write offline, sync across all devices when you reconnect.</p>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-3">
+        <div class="feature-icon">📤</div>
+        <h3 class="feature-title">Export Ready</h3>
+        <p class="feature-desc">Export submission-ready DOCX instantly. PDF export and professional coverage reports coming with Pro tier.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── WRITING ANIMATION ─────────────────────────────────────────────── -->
+<section id="writing-anim">
+  <div class="container">
+    <div class="section-label reveal" style="display:inline-flex">✦ The Writer's Experience</div>
+    <h2 class="section-title reveal reveal-delay-1" style="max-width:600px;margin:0 auto 1rem">
+      Every word <em>flows</em> onto the page
+    </h2>
+    <div class="writing-line-container reveal reveal-delay-2">
+      <div class="writing-line" id="animated-prose"></div>
+      <svg class="writing-line-svg" viewBox="0 0 800 2" preserveAspectRatio="none">
+        <path class="writing-line-path" id="underline-path" d="M0,1 Q200,0 400,1 Q600,2 800,1"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ─── HOW IT WORKS ──────────────────────────────────────────────────── -->
+<section id="how">
+  <div class="container">
+    <div class="how-inner">
+      <div>
+        <div class="section-label reveal">✦ How It Works</div>
+        <h2 class="section-title reveal reveal-delay-1">From blank page to <em>final draft</em></h2>
+        <div class="steps" id="steps-container">
+          <div class="step active" data-step="1">
+            <div class="step-num">1</div>
+            <div>
+              <div class="step-title">Start your project</div>
+              <p class="step-desc">Create a new screenplay project. Choose your format — feature film, TV pilot, short — and give your story a title.</p>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step" data-step="2">
+            <div class="step-num">2</div>
+            <div>
+              <div class="step-title">Write with intelligent formatting</div>
+              <p class="step-desc">Type naturally. EyaWriter recognizes sluglines, dialogue cues, and action lines — formatting them professionally as you go.</p>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step" data-step="3">
+            <div class="step-num">3</div>
+            <div>
+              <div class="step-title">Get AI assistance</div>
+              <p class="step-desc">Stuck on a scene? Ask your AI assistant for suggestions, continuity checks, or dialogue alternatives tailored to your characters.</p>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step" data-step="4">
+            <div class="step-num">4</div>
+            <div>
+              <div class="step-title">Collaborate & export</div>
+              <p class="step-desc">Invite collaborators, collect notes, then export a submission-ready document for agents, festivals, or production.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ai-demo reveal reveal-delay-2">
+        <div class="ai-demo-header">
+          <div class="ai-pulse"></div>
+          AI Writing Assistant
+        </div>
+        <div class="ai-demo-body">
+          <div class="ai-message user-message">
+            <div style="flex:1">
+              <div class="ai-bubble">My character ELENA just found the letter. How should she react?</div>
+            </div>
+            <div class="ai-avatar">👤</div>
+          </div>
+          <div class="ai-message">
+            <div class="ai-avatar">✦</div>
+            <div class="ai-bubble">
+              <strong>Great moment for subtext.</strong> Instead of a visible emotional breakdown, consider giving Elena a <strong>physical tell</strong> — maybe her hands go still for just a beat too long before she moves. The letter's ink being wet is a powerful detail you've already planted. You could have her <strong>smell it</strong> — ink mixed with cologne — triggering a memory that cuts us into a FLASHBACK.<br><br>
+              Want me to draft that transition?
+            </div>
+          </div>
+          <div class="ai-message user-message">
+            <div style="flex:1">
+              <div class="ai-bubble">Yes, draft it.</div>
+            </div>
+            <div class="ai-avatar">👤</div>
+          </div>
+          <div class="ai-message">
+            <div class="ai-avatar">✦</div>
+            <div>
+              <div class="ai-typing"><span></span><span></span><span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── STATS ─────────────────────────────────────────────────────────── -->
+<section id="stats">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-card reveal">
+        <span class="stat-num" data-count="10000">0<span>+</span></span>
+        <div class="stat-label">Scripts Created</div>
+      </div>
+      <div class="stat-card reveal reveal-delay-1">
+        <span class="stat-num" data-count="40">0<span>+</span></span>
+        <div class="stat-label">Countries</div>
+      </div>
+      <div class="stat-card reveal reveal-delay-2">
+        <span class="stat-num" data-count="6">0</span>
+        <div class="stat-label">UI Languages</div>
+      </div>
+      <div class="stat-card reveal reveal-delay-3">
+        <span class="stat-num">Free<span></span></span>
+        <div class="stat-label">Forever, no credit card</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PRICING ───────────────────────────────────────────────────────── -->
+<section id="pricing">
+  <div class="container">
+    <div class="text-center">
+      <div class="section-label reveal">✦ Pricing</div>
+      <h2 class="section-title reveal reveal-delay-1">Start free. <em>Scale</em> when ready.</h2>
+      <p class="section-sub reveal reveal-delay-2">Core features are free forever. No credit card required, no paywalls on what matters.</p>
+    </div>
+    <div class="pricing-grid">
+      <!-- Free -->
+      <div class="pricing-card reveal">
+        <div class="pricing-tier">Free</div>
+        <div class="pricing-price">
+          <span class="price-amount">$0</span>
+          <span class="price-period">/ forever</span>
+        </div>
+        <p class="pricing-desc">Everything you need to write professional screenplays, always free.</p>
+        <div class="pricing-divider"></div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> Unlimited scripts</li>
+          <li><span class="check">✓</span> Professional auto-formatting</li>
+          <li><span class="check">✓</span> Cloud sync & offline editing</li>
+          <li><span class="check">✓</span> AI assistant (shared endpoint)</li>
+          <li><span class="check">✓</span> Real-time collaboration</li>
+          <li><span class="check">✓</span> DOCX export</li>
+          <li><span class="check">✓</span> Story memory</li>
+          <li><span class="check">✓</span> 6 languages, 5 themes</li>
+        </ul>
+        <a href="#" class="btn btn-ghost" style="width:100%;justify-content:center">Get Started Free</a>
+      </div>
+
+      <!-- Pro -->
+      <div class="pricing-card featured reveal reveal-delay-1">
+        <div class="pricing-tier">Pro</div>
+        <div class="pricing-price">
+          <span class="price-amount">$12</span>
+          <span class="price-period">/ month</span>
+        </div>
+        <p class="pricing-desc">For serious writers who need priority AI, PDF export, and team tools.</p>
+        <div class="pricing-divider"></div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> Everything in Free</li>
+          <li><span class="check">✓</span> Priority AI processing</li>
+          <li><span class="check">✓</span> Unlimited AI requests</li>
+          <li><span class="check">✓</span> PDF export</li>
+          <li><span class="check">✓</span> Team workspaces</li>
+          <li><span class="check">✓</span> AI script coverage reports</li>
+          <li><span class="check">✓</span> Custom AI instructions</li>
+          <li><span class="check">✓</span> Priority support</li>
+        </ul>
+        <a href="#cta" class="btn btn-primary" style="width:100%;justify-content:center">Join Waitlist</a>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="pricing-card reveal reveal-delay-2">
+        <div class="pricing-tier">Enterprise</div>
+        <div class="pricing-price">
+          <span class="price-amount" style="font-size:2rem">Custom</span>
+        </div>
+        <p class="pricing-desc">For studios, production companies, and writing rooms that need full control.</p>
+        <div class="pricing-divider"></div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> Everything in Pro</li>
+          <li><span class="check">✓</span> Custom AI endpoint / model</li>
+          <li><span class="check">✓</span> SSO / SAML login</li>
+          <li><span class="check">✓</span> Admin dashboard</li>
+          <li><span class="check">✓</span> Usage analytics</li>
+          <li><span class="check">✓</span> Dedicated support</li>
+          <li><span class="check">✓</span> SLA guarantee</li>
+          <li><span class="check">✓</span> On-premise option</li>
+        </ul>
+        <a href="mailto:hello@eyawriter.com" class="btn btn-ghost" style="width:100%;justify-content:center">Contact Sales</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── TESTIMONIALS ──────────────────────────────────────────────────── -->
+<section id="testimonials">
+  <div class="container">
+    <div class="text-center">
+      <div class="section-label reveal">✦ Writers Love It</div>
+      <h2 class="section-title reveal reveal-delay-1">Trusted by <em>storytellers</em> worldwide</h2>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testimonial-card reveal">
+        <div class="stars">★★★★★</div>
+        <div class="testi-quote">"</div>
+        <p class="testi-text">The AI assistant actually understands screenplay structure. It's like having a story editor in the room who never gets tired.</p>
+        <div class="testi-author">
+          <div class="testi-avatar">SC</div>
+          <div>
+            <div class="testi-name">Sarah Chen</div>
+            <div class="testi-role">Feature Film Writer, LA</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card reveal reveal-delay-1">
+        <div class="stars">★★★★★</div>
+        <div class="testi-quote">"</div>
+        <p class="testi-text">I switched from Final Draft after 10 years. EyaWriter is lighter, smarter, and the real-time co-writing with my partner is seamless.</p>
+        <div class="testi-author">
+          <div class="testi-avatar">MK</div>
+          <div>
+            <div class="testi-name">Marcus Kowalski</div>
+            <div class="testi-role">TV Writer, Warsaw</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card reveal reveal-delay-2">
+        <div class="stars">★★★★★</div>
+        <div class="testi-quote">"</div>
+        <p class="testi-text">The Story Memory feature is a game-changer. It caught a continuity error in Act 3 that would have embarrassed me in the room.</p>
+        <div class="testi-author">
+          <div class="testi-avatar">AP</div>
+          <div>
+            <div class="testi-name">Aisha Patel</div>
+            <div class="testi-role">Showrunner, Mumbai</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FAQ ───────────────────────────────────────────────────────────── -->
+<section id="faq">
+  <div class="container">
+    <div class="text-center">
+      <div class="section-label reveal">✦ FAQ</div>
+      <h2 class="section-title reveal reveal-delay-1">Questions <em>answered</em></h2>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Is EyaWriter really free?
+          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">Yes — core features are genuinely free, forever. No credit card, no time limit. You get unlimited scripts, cloud sync, AI assistance, real-time collaboration, and DOCX export at no cost. Pro features like PDF export and priority AI are in development for the paid tier.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          How does the AI assistant work?
+          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">The AI assistant is context-aware and trained on screenplay conventions. It can suggest dialogue rewrites, check character voice consistency, propose scene structure improvements, and even help with proofreading. Free tier users share an AI endpoint with rate limiting; Pro gets priority dedicated processing.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Can I collaborate with writers in real time?
+          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">Yes. Real-time collaboration is free. You can invite co-writers with different permission levels (read, comment, edit), see live cursors, leave inline notes, and track changes. Powered by Firebase, so sync is near-instant globally.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          What export formats are supported?
+          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">DOCX export is available for free, producing a properly formatted Word document. PDF export with industry-standard margins and typography is coming in Pro. Professional script coverage (AI-generated notes) is also a Pro feature in development.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Is my writing private and secure?
+          <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">Your scripts are stored in Firestore with strict per-user access rules. Only you and the collaborators you explicitly invite can access your work. We do not train AI models on your content, and your data is never shared with third parties.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── CTA ───────────────────────────────────────────────────────────── -->
+<section id="cta">
+  <div class="container">
+    <div class="cta-card">
+      <div class="section-label reveal" style="display:inline-flex">✦ Join the Community</div>
+      <h2 class="cta-title reveal reveal-delay-1">
+        Your next great script<br>starts <em>here</em>.
+      </h2>
+      <p class="cta-sub reveal reveal-delay-2">10,000+ writers are already telling their stories on EyaWriter. Join them — free, no credit card needed.</p>
+      <div class="waitlist-form reveal reveal-delay-3">
+        <input class="waitlist-input" type="email" placeholder="your@email.com" id="waitlist-email" />
+        <button class="btn btn-primary" onclick="handleWaitlist()">Get Early Access →</button>
+      </div>
+      <p class="form-note reveal reveal-delay-4">No spam. Unsubscribe anytime. Pro tier coming soon.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FOOTER ────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="nav-logo" href="#">Eya<span>Writer</span></a>
+        <p>Professional screenplay writing platform with AI assistance, real-time collaboration, and intelligent formatting. Free forever.</p>
+      </div>
+      <div>
+        <div class="footer-col-title">Product</div>
+        <ul class="footer-links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#cta">Join Waitlist</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Learn</div>
+        <ul class="footer-links">
+          <li><a href="#">Help Center</a></li>
+          <li><a href="#">Keyboard Shortcuts</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Company</div>
+        <ul class="footer-links">
+          <li><a href="#">About</a></li>
+          <li><a href="#">Privacy Policy</a></li>
+          <li><a href="#">Terms of Service</a></li>
+          <li><a href="mailto:hello@eyawriter.com">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2024 EyaWriter. All rights reserved.</span>
+      <span>Built for writers, by writers.</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ─── JAVASCRIPT ─────────────────────────────────────────────────────── -->
+<script>
+/* ── Cursor ── */
+const cursorDot  = document.getElementById('cursor-dot');
+const cursorRing = document.getElementById('cursor-ring');
+let mx = -100, my = -100, rx = -100, ry = -100;
+document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+function animCursor() {
+  rx += (mx - rx) * .15;
+  ry += (my - ry) * .15;
+  const s = document.getElementById('cursor');
+  cursorDot.style.transform  = `translate(${mx}px,${my}px) translate(-50%,-50%)`;
+  cursorRing.style.transform = `translate(${rx}px,${ry}px) translate(-50%,-50%)`;
+  requestAnimationFrame(animCursor);
+}
+animCursor();
+
+/* ── Ink trail canvas ── */
+const canvas = document.getElementById('ink-canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resizeCanvas() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+const drops = [];
+document.addEventListener('mousemove', e => {
+  if (Math.random() > .65) return;
+  drops.push({
+    x: e.clientX, y: e.clientY,
+    r: Math.random() * 3 + 1,
+    life: 1,
+    vx: (Math.random() - .5) * 1.2,
+    vy: Math.random() * 1.5 + .5,
+    hue: Math.random() > .7 ? 218 : 349
+  });
+});
+
+function drawInk() {
+  ctx.clearRect(0, 0, W, H);
+  for (let i = drops.length - 1; i >= 0; i--) {
+    const d = drops[i];
+    d.x += d.vx; d.y += d.vy;
+    d.life -= .025; d.r *= .98;
+    if (d.life <= 0) { drops.splice(i, 1); continue; }
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+    const color = d.hue === 349 ? `rgba(244,63,94,${d.life * .6})` : `rgba(129,140,248,${d.life * .4})`;
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+  requestAnimationFrame(drawInk);
+}
+drawInk();
+
+/* ── Ink splatter on click ── */
+document.addEventListener('click', e => {
+  for (let i = 0; i < 8; i++) {
+    const el = document.createElement('div');
+    el.className = 'ink-particle';
+    const size = Math.random() * 12 + 4;
+    el.style.cssText = `
+      left:${e.clientX}px; top:${e.clientY}px;
+      width:${size}px; height:${size}px;
+      background: hsl(${Math.random() > .5 ? 349 : 240},90%,${55+Math.random()*15}%);
+      transform-origin: center;
+      margin: -${size/2}px 0 0 -${size/2}px;
+    `;
+    const angle = Math.random() * 360;
+    const dist  = Math.random() * 40 + 10;
+    el.style.setProperty('--tx', `${Math.cos(angle)*dist}px`);
+    el.style.setProperty('--ty', `${Math.sin(angle)*dist}px`);
+    el.style.animation = `inkFade .8s ease-out forwards`;
+    el.style.transform = `translate(${Math.cos(angle)*dist}px,${Math.sin(angle)*dist}px) scale(0)`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => {
+      el.style.transform = `translate(${Math.cos(angle)*dist}px,${Math.sin(angle)*dist}px) scale(1)`;
+      el.style.opacity = '0';
+    });
+    setTimeout(() => el.remove(), 900);
+  }
+});
+
+/* ── Nav scroll ── */
+const nav = document.getElementById('main-nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 50);
+});
+
+/* ── Typewriter hero ── */
+const words = ['Scripts','Stories','Pilots','Features','Legacies'];
+let wi = 0, ci = 0, deleting = false;
+const tw = document.getElementById('typewriter-word');
+function typeLoop() {
+  const w = words[wi];
+  if (!deleting) {
+    tw.textContent = w.slice(0, ci + 1);
+    ci++;
+    if (ci === w.length) { deleting = true; setTimeout(typeLoop, 1800); return; }
+  } else {
+    tw.textContent = w.slice(0, ci - 1);
+    ci--;
+    if (ci === 0) { deleting = false; wi = (wi + 1) % words.length; }
+  }
+  setTimeout(typeLoop, deleting ? 60 : 110);
+}
+typeLoop();
+
+/* ── Mockup typer ── */
+const mockupLines = [
+  'INT. ELENA\'S MIND — CONTINUOUS',
+  'The room dissolves around her.',
+  'ELENA\n      I remember you.',
+];
+let mli = 0, mci = 0;
+const mt = document.getElementById('mockup-typer');
+function mockupType() {
+  const line = mockupLines[mli];
+  if (mci < line.length) {
+    mt.textContent = line.slice(0, mci + 1);
+    mci++;
+    setTimeout(mockupType, 60);
+  } else {
+    setTimeout(() => {
+      mli = (mli + 1) % mockupLines.length;
+      mci = 0;
+      mockupType();
+    }, 1500);
+  }
+}
+setTimeout(mockupType, 2000);
+
+/* ── Marquee ── */
+const marqueeItems = [
+  '🎬 Professional Formatting',
+  '🤖 AI Writing Assistant',
+  '👥 Real-Time Collaboration',
+  '🧠 Story Memory',
+  '☁️ Cloud Sync',
+  '📤 DOCX Export',
+  '🌍 6 Languages',
+  '🎨 5 Themes',
+  '🆓 Free Forever',
+  '🔒 Private & Secure',
+];
+const track = document.getElementById('marquee-track');
+const doubled = [...marqueeItems, ...marqueeItems];
+doubled.forEach(item => {
+  const div = document.createElement('div');
+  div.className = 'marquee-item';
+  div.innerHTML = `<svg width="5" height="5" viewBox="0 0 5 5"><circle cx="2.5" cy="2.5" r="2.5" fill="currentColor"/></svg>${item}`;
+  track.appendChild(div);
+});
+
+/* ── Scroll reveal ── */
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('visible'); }
+  });
+}, { threshold: 0.12 });
+reveals.forEach(el => observer.observe(el));
+
+/* ── Counter animation ── */
+function animateCount(el) {
+  const target = parseInt(el.dataset.count);
+  if (!target) return;
+  const suffix = el.querySelector('span')?.textContent || '';
+  const duration = 1800;
+  const start = performance.now();
+  function step(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - t, 3);
+    const val = Math.round(ease * target);
+    el.innerHTML = (val >= 1000 ? (val/1000).toFixed(1)+'k' : val) + (suffix ? `<span>${suffix}</span>` : '');
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+const countObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting && e.target.dataset.count) {
+      animateCount(e.target);
+      countObserver.unobserve(e.target);
+    }
+  });
+}, { threshold: .5 });
+document.querySelectorAll('[data-count]').forEach(el => countObserver.observe(el));
+
+/* ── Steps auto-cycle ── */
+const steps = document.querySelectorAll('.step');
+let activeStep = 0;
+function cycleStep() {
+  steps.forEach(s => s.classList.remove('active'));
+  steps[activeStep].classList.add('active');
+  activeStep = (activeStep + 1) % steps.length;
+}
+setInterval(cycleStep, 2200);
+
+/* ── Animated prose ── */
+const prose = [
+  { text: 'INT. ', cls: 'highlight-word' },
+  { text: 'STORY — ' },
+  { text: 'FOREVER', cls: 'highlight-word' },
+];
+const proseEl = document.getElementById('animated-prose');
+const pathEl  = document.getElementById('underline-path');
+let proseObserved = false;
+const proseObserver = new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting && !proseObserved) {
+    proseObserved = true;
+    typeProse();
+  }
+}, { threshold: .5 });
+proseObserver.observe(proseEl);
+
+function typeProse() {
+  const fullText = 'Every story begins with a blank page.\nThe cursor blinks. The writer breathes.\nThen — the first word falls like ink.\nAnd the world begins.';
+  let i = 0;
+  proseEl.innerHTML = '';
+  function typeChar() {
+    if (i < fullText.length) {
+      const ch = fullText[i];
+      if (ch === '\n') {
+        proseEl.innerHTML += '<br>';
+      } else {
+        const span = document.createElement('span');
+        span.textContent = ch;
+        const isKeyword = ['blank', 'cursor', 'blinks', 'breathes', 'ink', 'world'].some(w => fullText.slice(i, i+w.length) === w);
+        if (isKeyword) span.className = 'highlight-word';
+        proseEl.appendChild(span);
+      }
+      i++;
+      setTimeout(typeChar, 28);
+      if (i === Math.floor(fullText.length * .4)) {
+        pathEl.classList.add('drawn');
+      }
+    }
+  }
+  typeChar();
+}
+
+/* ── FAQ accordion ── */
+function toggleFaq(btn) {
+  const item = btn.closest('.faq-item');
+  const isOpen = item.classList.contains('open');
+  document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+  if (!isOpen) item.classList.add('open');
+}
+
+/* ── Waitlist form ── */
+function handleWaitlist() {
+  const email = document.getElementById('waitlist-email').value.trim();
+  if (!email || !email.includes('@')) {
+    document.getElementById('waitlist-email').style.borderColor = 'var(--rose)';
+    return;
+  }
+  const btn = event.target;
+  btn.textContent = '✓ You\'re on the list!';
+  btn.style.background = '#10b981';
+  btn.disabled = true;
+  document.getElementById('waitlist-email').value = '';
+}
+</script>
+</body>
+</html>
