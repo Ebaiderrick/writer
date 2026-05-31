@@ -2,7 +2,8 @@ import { parseTextToLines } from './utils.js';
 import {
   persistConversionJobRecord,
   patchConversionJobRecord,
-  attachConversionJobFile
+  attachConversionJobFile,
+  getConversionJobRecord
 } from './conversionJobStore.js';
 
 const ALLOWED_TYPES = new Set([
@@ -38,7 +39,7 @@ export function getConvertImportEndpoint() {
     return 'http://localhost:3001/api/convert-script';
   }
 
-  if (/^(localhost|127\\.0\\.0\\.1)$/i.test(window.location.hostname) && window.location.port !== '3001') {
+  if (/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname) && window.location.port !== '3001') {
     return `${window.location.protocol}//${window.location.hostname}:3001/api/convert-script`;
   }
 
@@ -90,7 +91,12 @@ export async function extractScriptTextFromFile(file, { onProgress } = {}) {
   throw new Error('This file type is not supported for Convert & import yet.');
 }
 
-export async function convertScriptTextToLines(rawText, { fileName = '', onProgress } = {}) {
+export async function convertScriptTextToLines(rawText, {
+  fileName = '',
+  onProgress,
+  jobId = '',
+  projectId = ''
+} = {}) {
   const normalizedText = normalizeExtractedText(rawText);
   if (!normalizedText.trim()) {
     throw new Error('No readable text was found in that file.');
@@ -98,12 +104,27 @@ export async function convertScriptTextToLines(rawText, { fileName = '', onProgr
 
   const warnings = [];
   let usedFallback = false;
-  const job = createConversionJob({
-    fileName,
-    rawText: normalizedText
-  });
+  const job = jobId
+    ? {
+      id: jobId,
+      fileName: fileName || 'script',
+      projectId,
+      rawText: normalizedText
+    }
+    : createConversionJob({
+      fileName,
+      rawText: normalizedText,
+      projectId
+    });
 
-  updateConversionJob(job.id, {
+  if (!jobId) {
+    await persistConversionJobRecord(job);
+  }
+
+  await updateConversionJob(job.id, {
+    fileName: fileName || job.fileName || 'script',
+    projectId,
+    rawText: normalizedText,
     status: 'preparing',
     stageLabel: 'Preparing document memory',
     warnings
@@ -118,7 +139,7 @@ export async function convertScriptTextToLines(rawText, { fileName = '', onProgr
     const chunk = normalizationChunks[index];
     const stageLabel = `Normalizing screenplay text (${index + 1}/${normalizationChunks.length})`;
     onProgress?.(stageLabel);
-    updateConversionJob(job.id, {
+    await updateConversionJob(job.id, {
       status: 'normalizing',
       stageLabel,
       normalizationProgress: {
@@ -146,7 +167,7 @@ export async function convertScriptTextToLines(rawText, { fileName = '', onProgr
   }
 
   const normalizedScreenplayText = normalizeExtractedText(normalizedChunks.join('\n\n')) || heuristicNormalizeText(normalizedText);
-  updateConversionJob(job.id, {
+  await updateConversionJob(job.id, {
     status: 'normalized',
     stageLabel: 'Normalized screenplay text ready',
     normalizedText: normalizedScreenplayText,
@@ -162,7 +183,7 @@ export async function convertScriptTextToLines(rawText, { fileName = '', onProgr
     const chunk = chunks[index];
     const stageLabel = `Structuring screenplay blocks (${index + 1}/${chunks.length})...`;
     onProgress?.(stageLabel);
-    updateConversionJob(job.id, {
+    await updateConversionJob(job.id, {
       status: 'structuring',
       stageLabel,
       structureProgress: {
@@ -191,28 +212,32 @@ export async function convertScriptTextToLines(rawText, { fileName = '', onProgr
     }
   }
 
-  updateConversionJob(job.id, {
+  await updateConversionJob(job.id, {
     status: usedFallback ? 'completed-with-fallback' : 'completed',
     stageLabel: usedFallback ? 'Imported with fallback review needed' : 'Conversion complete',
     structuredLines: convertedLines,
+    structuredLineCount: convertedLines.length,
     warnings
   });
 
+  const uniqueWarnings = [...new Set(warnings.filter(Boolean))];
+
   return {
     lines: convertedLines.length ? convertedLines : fallbackCandidatesToLines(candidates),
-    warnings,
+    warnings: uniqueWarnings,
     usedFallback,
     jobId: job.id
   };
 }
 
-export function beginConversionUpload({ fileName = '', projectId = '' } = {}) {
+export async function beginConversionUpload({ fileName = '', projectId = '' } = {}) {
   const job = createConversionJob({
     fileName,
-    rawText: ''
+    rawText: '',
+    projectId
   });
-  persistConversionJobRecord(job);
-  updateConversionJob(job.id, {
+  await persistConversionJobRecord(job);
+  await updateConversionJob(job.id, {
     projectId,
     status: 'uploading',
     stageLabel: 'Uploading source file',
@@ -225,25 +250,25 @@ export function beginConversionUpload({ fileName = '', projectId = '' } = {}) {
 
 export function attachSourceFileToConversionJob(jobId, file) {
   if (!jobId || !file) return;
-  attachConversionJobFile(jobId, file);
+  return attachConversionJobFile(jobId, file);
 }
 
 export function markConversionExtractionStarted(jobId) {
-  updateConversionJob(jobId, {
+  return updateConversionJob(jobId, {
     status: 'extracting',
     stageLabel: 'Extracting readable text'
   });
 }
 
 export function attachRawTextToConversionJob(jobId, rawText) {
-  updateConversionJob(jobId, {
+  return updateConversionJob(jobId, {
     rawText: normalizeExtractedText(rawText),
     extractedAt: new Date().toISOString()
   });
 }
 
 export function markConversionImporting(jobId, lineCount = 0) {
-  updateConversionJob(jobId, {
+  return updateConversionJob(jobId, {
     status: 'importing',
     stageLabel: 'Importing screenplay into project',
     structuredLineCount: lineCount
@@ -251,7 +276,7 @@ export function markConversionImporting(jobId, lineCount = 0) {
 }
 
 export function finalizeConversionImport(jobId, { usedFallback = false, warnings = [], lineCount = 0 } = {}) {
-  updateConversionJob(jobId, {
+  return updateConversionJob(jobId, {
     status: usedFallback ? 'imported-with-fallback' : 'imported',
     stageLabel: usedFallback ? 'Imported with fallback review needed' : 'Imported into project',
     warnings,
@@ -261,7 +286,7 @@ export function finalizeConversionImport(jobId, { usedFallback = false, warnings
 }
 
 export function failConversionJob(jobId, message) {
-  updateConversionJob(jobId, {
+  return updateConversionJob(jobId, {
     status: 'failed',
     stageLabel: 'Conversion failed',
     warnings: message ? [String(message)] : [],
@@ -270,6 +295,8 @@ export function failConversionJob(jobId, message) {
 }
 
 async function requestConversionStage(stage, text, metadata) {
+  const jobRecord = metadata?.jobId ? await getConversionJobRecord(metadata.jobId) : null;
+  const operatorGuidance = String(jobRecord?.operatorGuidance || '').trim();
   const response = await fetch(getConvertImportEndpoint(), {
     method: 'POST',
     headers: {
@@ -278,6 +305,7 @@ async function requestConversionStage(stage, text, metadata) {
     body: JSON.stringify({
       stage,
       text,
+      operatorGuidance,
       ...metadata
     })
   });
@@ -374,7 +402,7 @@ function chunkScriptText(text, maxChars) {
       continue;
     }
 
-    const slices = paragraph.match(new RegExp(`.{1,${Math.max(1000, maxChars - 200)}}`, 'g')) || [paragraph];
+    const slices = paragraph.match(new RegExp(`[\\s\\S]{1,${Math.max(1000, maxChars - 200)}}`, 'g')) || [paragraph];
     chunks.push(...slices);
     current = '';
   }
@@ -720,10 +748,11 @@ function normalizeCandidateKind(kind) {
   return 'action';
 }
 
-function createConversionJob({ fileName, rawText }) {
+function createConversionJob({ fileName, rawText, projectId = '' }) {
   const job = {
     id: `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     fileName: fileName || 'script',
+    projectId,
     createdAt: new Date().toISOString(),
     status: 'queued',
     stageLabel: 'Queued',
@@ -737,16 +766,47 @@ function createConversionJob({ fileName, rawText }) {
 }
 
 function updateConversionJob(jobId, patch) {
-  if (!jobId) return;
+  if (!jobId) return Promise.resolve(null);
   let nextJob = null;
-  updateStoredJobs((jobs) => jobs.map((job) => {
-    if (job.id !== jobId) return job;
-    nextJob = { ...job, ...patch, updatedAt: new Date().toISOString() };
-    return nextJob;
-  }));
-  if (nextJob) {
-    patchConversionJobRecord(jobId, nextJob);
+  updateStoredJobs((jobs) => {
+    let found = false;
+    const updatedAt = new Date().toISOString();
+    const nextJobs = jobs.map((job) => {
+      if (job.id !== jobId) return job;
+      found = true;
+      nextJob = { ...job, ...patch, updatedAt };
+      return nextJob;
+    });
+    if (!found) {
+      nextJob = { id: jobId, ...patch, updatedAt };
+      return [nextJob, ...nextJobs].slice(0, 8);
+    }
+    return nextJobs;
+  });
+  const payload = nextJob || { id: jobId, ...patch };
+  try {
+    window.dispatchEvent(new CustomEvent('eyawriter:conversion-job-updated', {
+      detail: {
+        jobId,
+        record: payload
+      }
+    }));
+  } catch {
+    // Ignore event dispatch issues and keep the conversion pipeline moving.
   }
+  return patchConversionJobRecord(jobId, payload);
+}
+
+export async function waitForConversionJobRecord(jobId, { timeoutMs = 4000, requireStructuredData = false } = {}) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const record = await getConversionJobRecord(jobId);
+    if (record && (!requireStructuredData || Array.isArray(record.structuredLines) && record.structuredLines.length)) {
+      return record;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+  }
+  return getConversionJobRecord(jobId);
 }
 
 function updateStoredJobs(mutator) {

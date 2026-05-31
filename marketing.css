@@ -151,6 +151,7 @@ img { max-width: 100%; display: block; }
 .nav-links a.is-active { color: var(--text); }
 
 .nav-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.nav-actions .is-session-hidden { display: none !important; }
 
 .btn-ghost {
   background: none;

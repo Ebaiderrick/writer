@@ -49,7 +49,8 @@ import {
   attachRawTextToConversionJob,
   markConversionImporting,
   finalizeConversionImport,
-  failConversionJob
+  failConversionJob,
+  waitForConversionJobRecord
 } from './scriptConversion.js';
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
 import {
@@ -69,7 +70,7 @@ import {
   showCollabProfile, noteRealtimeActivity, syncWorkspaceState,
   leaveWorkspace, deleteWorkspaceData
 } from './collaborate.js';
-import { getConversionJobRecord, listConversionJobRecords } from './conversionJobStore.js';
+import { getConversionJobRecord, listConversionJobRecords, patchConversionJobRecord } from './conversionJobStore.js';
 
 let studioSidebarRefreshFrame = 0;
 let previewRefreshTimer = 0;
@@ -77,6 +78,8 @@ let focusModeTimer = 0;
 let hasShownReadOnlyNotice = false;
 let workspaceClockTimer = 0;
 let pendingConvertImportProjectId = "";
+let activeConversionLiveJobId = "";
+let activeConversionLiveProjectId = "";
 const aiTaskTimers = new Map();
 const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
 const PROJECT_CARD_CLICK_SUPPRESSION_MS = 750;
@@ -159,16 +162,16 @@ async function renderConversionJobsList() {
         : "Unknown";
       const lineCount = Number(job.structuredLineCount || job.structuredLines?.length || 0);
       const warningCount = Array.isArray(job.warnings) ? job.warnings.filter(Boolean).length : 0;
+      const statusLabel = escapeHtml(String(job.status || "queued"));
       return `
         <button class="conversion-job-item" type="button" data-conversion-job-id="${job.id}" data-conversion-job-status="${escapeHtml(String(job.status || "queued"))}">
-          <span class="conversion-job-item-rail" aria-hidden="true"></span>
           <div class="conversion-job-item-main">
             <div class="conversion-job-item-top">
               <div>
                 <h4 class="conversion-job-item-title">${escapeHtml(job.fileName || "Untitled upload")}</h4>
                 <p class="conversion-job-item-meta">Updated ${escapeHtml(timestamp)}</p>
               </div>
-              <span class="conversion-job-item-status">${escapeHtml(String(job.status || "queued"))}</span>
+              <span class="conversion-job-item-status">${statusLabel}</span>
             </div>
             <p class="conversion-job-item-stage">${escapeHtml(job.stageLabel || "No stage available")}</p>
             <div class="conversion-job-item-grid">
@@ -200,6 +203,107 @@ async function openConversionJobsDialog() {
 
 function closeConversionJobsDialog() {
   document.getElementById("conversionJobsDialog")?.close();
+}
+
+const CONVERSION_LIVE_STEPS = [
+  { key: "uploading", label: "Upload" },
+  { key: "extracting", label: "Extract" },
+  { key: "normalizing", label: "Normalize" },
+  { key: "structuring", label: "Structure" },
+  { key: "importing", label: "Import" }
+];
+
+function getConversionLiveStepState(record, stepKey) {
+  const status = String(record?.status || "").toLowerCase();
+  if (status === "failed") return "error";
+  const order = CONVERSION_LIVE_STEPS.map((step) => step.key);
+  const activeIndex = Math.max(order.indexOf(status), order.indexOf(status.replace(/^completed.*|^imported.*$/i, "importing")));
+  const stepIndex = order.indexOf(stepKey);
+  if (status === "completed" || status === "completed-with-fallback" || status === "imported" || status === "imported-with-fallback") {
+    return "done";
+  }
+  if (activeIndex > stepIndex) return "done";
+  if (activeIndex === stepIndex) return "active";
+  if (status === "queued" && stepKey === "uploading") return "active";
+  return "idle";
+}
+
+function renderConversionStructuredPreview(container, record, emptyMessage) {
+  const structuredLines = Array.isArray(record?.structuredLines) ? record.structuredLines : [];
+  if (!container) return;
+  container.innerHTML = structuredLines.length
+    ? structuredLines.slice(0, 120).map((line) => `
+      <div class="conversion-review-line">
+        <span class="conversion-review-line-type">${escapeHtml(String(line?.type || "action"))}</span>
+        <div class="conversion-review-line-text">${escapeHtml(String(line?.text || "")).replace(/\n/g, "<br>")}</div>
+      </div>
+    `).join("")
+    : `<p class="conversion-live-structured-empty">${escapeHtml(emptyMessage)}</p>`;
+}
+
+async function refreshActiveConversionLiveDialog(jobId, recordOverride = null) {
+  const dialog = document.getElementById("conversionLiveDialog");
+  if (!dialog || !jobId || activeConversionLiveJobId !== jobId) return;
+
+  const record = recordOverride || await getConversionJobRecord(jobId);
+  if (!record) return;
+  if (record.projectId) {
+    activeConversionLiveProjectId = record.projectId;
+  }
+
+  document.getElementById("conversionLiveTitle").textContent = record.fileName ? `Watching "${record.fileName}"` : "Current Conversion Job";
+  document.getElementById("conversionLiveStatus").textContent = String(record.status || "queued");
+  document.getElementById("conversionLiveStage").textContent = String(record.stageLabel || "Queued");
+  document.getElementById("conversionLiveFile").textContent = record.sourceFile?.name || record.fileName || "Unknown";
+  document.getElementById("conversionLiveWarningsCount").textContent = String(Array.isArray(record.warnings) ? record.warnings.filter(Boolean).length : 0);
+  document.getElementById("conversionLiveRaw").value = String(record.rawText || "");
+  document.getElementById("conversionLiveNormalized").value = String(record.normalizedText || "");
+  const guidanceInput = document.getElementById("conversionLiveGuidance");
+  if (guidanceInput && document.activeElement !== guidanceInput) {
+    guidanceInput.value = String(record.operatorGuidance || "");
+  }
+  const warningsBox = document.getElementById("conversionLiveWarnings");
+  if (warningsBox) {
+    const warningText = Array.isArray(record.warnings) ? record.warnings.filter(Boolean).join("\n\n") : "";
+    warningsBox.hidden = !warningText;
+    warningsBox.textContent = warningText;
+  }
+  const timeline = document.getElementById("conversionLiveTimeline");
+  if (timeline) {
+    timeline.innerHTML = CONVERSION_LIVE_STEPS.map((step) => `
+      <div class="conversion-live-step" data-step-state="${getConversionLiveStepState(record, step.key)}">
+        <span>${escapeHtml(step.key)}</span>
+        <strong>${escapeHtml(step.label)}</strong>
+      </div>
+    `).join("");
+  }
+  renderConversionStructuredPreview(
+    document.getElementById("conversionLiveStructured"),
+    record,
+    "Structured screenplay blocks will appear here as soon as the current job reaches that stage."
+  );
+
+  const openReviewBtn = document.getElementById("conversionLiveOpenReviewBtn");
+  if (openReviewBtn) {
+    openReviewBtn.disabled = !["failed", "completed", "completed-with-fallback", "imported", "imported-with-fallback"].includes(String(record.status || "").toLowerCase());
+  }
+}
+
+async function openConversionLiveDialog(jobId, projectId = "", recordOverride = null) {
+  const dialog = document.getElementById("conversionLiveDialog");
+  if (!dialog || !jobId) return;
+  activeConversionLiveJobId = jobId;
+  activeConversionLiveProjectId = projectId || "";
+  await refreshActiveConversionLiveDialog(jobId, recordOverride);
+  if (!dialog.open) {
+    dialog.showModal();
+  }
+}
+
+function closeConversionLiveDialog() {
+  activeConversionLiveJobId = "";
+  activeConversionLiveProjectId = "";
+  document.getElementById("conversionLiveDialog")?.close();
 }
 
 function ensureSelectionToolbar() {
@@ -395,16 +499,20 @@ async function launchNewCreationFlow() {
       tasks: workspaceRoot.workspace?.tasks || []
     }
   });
+
+  if (setup.action === "convert-import") {
+    pendingConvertImportProjectId = project.id;
+    persistProjects(true, { syncInputs: false });
+    showToast("Choose a screenplay file to convert into this project.", "success");
+    refs.convertImportInput?.click();
+    return;
+  }
+
   openProject(project.id, { silentLoadToast: true });
 
   if (setup.action === "import") {
     showToast("Choose a file to import into this script.", "success");
     refs.fileInput?.click();
-    return;
-  }
-
-  if (setup.action === "convert-import") {
-    await customAlert("Convert & import is still being built and is not available to users yet.", "Coming Soon");
     return;
   }
 
@@ -1631,9 +1739,13 @@ export function bindEvents() {
     }
   });
 
-  document.querySelectorAll("[data-menu-action]").forEach((button) => {
-    button.addEventListener("click", () => handleMenuAction(button.dataset.menuAction));
-  });
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-menu-action]");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    handleMenuAction(button.dataset.menuAction);
+  }, true);
 
   document.getElementById("fileRecoveryCloseBtn")?.addEventListener("click", closeFileRecoveryDialog);
   document.getElementById("fileRecoveryDialog")?.addEventListener("click", (event) => {
@@ -1655,6 +1767,40 @@ export function bindEvents() {
     closeConversionJobsDialog();
     const record = await getConversionJobRecord(jobId);
     await openConversionReviewDialog(jobId, record?.projectId || "");
+  });
+  document.getElementById("conversionLiveCloseBtn")?.addEventListener("click", closeConversionLiveDialog);
+  document.getElementById("conversionLiveDialog")?.addEventListener("click", (event) => {
+    if (event.target?.id === "conversionLiveDialog") {
+      closeConversionLiveDialog();
+    }
+  });
+  document.getElementById("conversionLiveSaveGuidanceBtn")?.addEventListener("click", async () => {
+    if (!activeConversionLiveJobId) return;
+    const input = document.getElementById("conversionLiveGuidance");
+    const status = document.getElementById("conversionLiveGuidanceStatus");
+    const guidance = String(input?.value || "").trim();
+    await patchConversionJobRecord(activeConversionLiveJobId, {
+      operatorGuidance: guidance,
+      updatedAt: new Date().toISOString()
+    });
+    if (status) {
+      status.textContent = guidance
+        ? "Guidance saved. The next retry will send it into the AI conversion pass."
+        : "Guidance cleared for this job.";
+    }
+  });
+  document.getElementById("conversionLiveOpenReviewBtn")?.addEventListener("click", async () => {
+    if (!activeConversionLiveJobId) return;
+    const jobId = activeConversionLiveJobId;
+    const projectId = activeConversionLiveProjectId;
+    closeConversionLiveDialog();
+    await openConversionReviewDialog(jobId, projectId);
+  });
+  window.addEventListener("eyawriter:conversion-job-updated", async (event) => {
+    const jobId = event?.detail?.jobId;
+    const record = event?.detail?.record || null;
+    if (!jobId || jobId !== activeConversionLiveJobId) return;
+    await refreshActiveConversionLiveDialog(jobId, record);
   });
   document.getElementById("fileRecoveryList")?.addEventListener("click", async (event) => {
     const actionButton = event.target.closest("[data-recovery-action]");
@@ -3981,32 +4127,35 @@ async function convertImportFile(event) {
 async function runConvertImportPipeline(file, project) {
   if (!file || !project) return;
 
-  const jobId = beginConversionUpload({
+  const jobId = await beginConversionUpload({
     fileName: file.name,
     projectId: project.id
   });
-  attachSourceFileToConversionJob(jobId, file);
+  await attachSourceFileToConversionJob(jobId, file);
+  await openConversionLiveDialog(jobId, project.id);
   const loadingToast = showToast("Uploading your script to the conversion workspace...", "loading", { duration: 0 });
 
   try {
     updateToast(loadingToast, "Uploading your script to the conversion workspace...", "loading", { duration: 0 });
     await new Promise((resolve) => window.setTimeout(resolve, 250));
-    markConversionExtractionStarted(jobId);
+    await markConversionExtractionStarted(jobId);
     updateToast(loadingToast, "Extracting readable text from your file...", "loading", { duration: 0 });
 
     const rawText = await extractScriptTextFromFile(file, {
       onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
     });
-    attachRawTextToConversionJob(jobId, rawText);
+    await attachRawTextToConversionJob(jobId, rawText);
 
     updateToast(loadingToast, "Normalizing the screenplay text before conversion...", "loading", { duration: 0 });
 
     const result = await convertScriptTextToLines(rawText, {
       fileName: file.name,
+      jobId,
+      projectId: project.id,
       onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
     });
 
-    markConversionImporting(result.jobId || jobId, result.lines.length);
+    await markConversionImporting(result.jobId || jobId, result.lines.length);
     updateToast(loadingToast, "Importing converted screenplay into your project...", "loading", { duration: 0 });
 
     const nextProject = sanitizeProject({
@@ -4016,7 +4165,7 @@ async function runConvertImportPipeline(file, project) {
     upsertProject(nextProject);
     openProject(nextProject.id, { silentLoadToast: true });
     persistProjects(true);
-    finalizeConversionImport(result.jobId || jobId, {
+    await finalizeConversionImport(result.jobId || jobId, {
       usedFallback: result.usedFallback,
       warnings: result.warnings,
       lineCount: result.lines.length
@@ -4029,22 +4178,95 @@ async function runConvertImportPipeline(file, project) {
     }
 
     if (result.warnings.length) {
-      customAlert(result.warnings.join("\n\n"), "Conversion Notes");
+      showToast("Conversion finished with notes. Review them in Conversion Review.", "error", { duration: 5200 });
     }
-    await openConversionReviewDialog(result.jobId || jobId, nextProject.id);
+    const persistedRecord = await waitForConversionJobRecord(result.jobId || jobId, { requireStructuredData: true });
+    const reviewRecord = {
+      ...(persistedRecord || {}),
+      id: result.jobId || jobId,
+      fileName: file.name,
+      projectId: nextProject.id,
+      status: result.usedFallback ? 'imported-with-fallback' : 'imported',
+      stageLabel: result.usedFallback ? 'Imported with fallback review needed' : 'Imported into project',
+      rawText,
+      normalizedText: persistedRecord?.normalizedText || '',
+      structuredLines: result.lines,
+      structuredLineCount: result.lines.length,
+      warnings: result.warnings || [],
+      sourceFile: persistedRecord?.sourceFile || { name: file.name, type: file.type || '', size: Number(file.size) || 0 }
+    };
+    closeConversionLiveDialog();
+    await openConversionReviewDialog(result.jobId || jobId, nextProject.id, reviewRecord);
   } catch (error) {
     console.error("Convert & import failed", error);
-    failConversionJob(jobId, error.message || "Conversion failed.");
+    await failConversionJob(jobId, error.message || "Conversion failed.");
     updateToast(loadingToast, error.message || "Conversion failed.", "error", { duration: 5200 });
-    customAlert(error.message || "We could not convert that file yet.", "Convert & Import");
+    const failedRecord = await waitForConversionJobRecord(jobId, { timeoutMs: 2000 });
+    const reviewRecord = {
+      ...(failedRecord || {}),
+      id: jobId,
+      fileName: file.name,
+      projectId: project.id,
+      status: 'failed',
+      stageLabel: failedRecord?.stageLabel || 'Conversion failed',
+      warnings: failedRecord?.warnings?.length ? failedRecord.warnings : [error.message || "Conversion failed."],
+      sourceFile: failedRecord?.sourceFile || { name: file.name, type: file.type || '', size: Number(file.size) || 0 }
+    };
+    showToast("Conversion Review has the failure details and retry option.", "error", { duration: 5200 });
+    closeConversionLiveDialog();
+    await openConversionReviewDialog(jobId, project.id, reviewRecord);
   }
 }
 
-async function openConversionReviewDialog(jobId, projectId = "") {
+function getConversionReviewEmptyMessage(record) {
+  const status = String(record?.status || '').toLowerCase();
+  if (status === 'failed') {
+    return 'Conversion stopped before screenplay blocks were created. Review the warning details above, then retry from this job when you are ready.';
+  }
+  if (status === 'queued' || status === 'uploading' || status === 'extracting' || status === 'preparing' || status === 'normalizing' || status === 'structuring' || status === 'importing') {
+    return 'This conversion job is still in progress. Keep this review open or reopen it from Conversion Jobs to watch the next stage appear.';
+  }
+  if (status === 'completed-with-fallback' || status === 'imported-with-fallback') {
+    return 'This job finished with a fallback path, so no fully structured screenplay preview was stored. Review the warnings and retry if you want a cleaner AI pass.';
+  }
+  return 'No structured screenplay lines are stored for this job yet. Retry the conversion if you want the app to rebuild the screenplay preview.';
+}
+
+function getConversionReviewState(record) {
+  const status = String(record?.status || '').toLowerCase();
+  if (status === 'failed') {
+    return {
+      tone: 'error',
+      title: 'This conversion stopped before the screenplay was built.',
+      body: 'Read the warning details, inspect the extracted text, and retry when you are ready. If the source file is a scan or badly wrapped export, a cleaner PDF or DOCX will usually help.'
+    };
+  }
+  if (status === 'queued' || status === 'uploading' || status === 'extracting' || status === 'preparing' || status === 'normalizing' || status === 'structuring' || status === 'importing') {
+    return {
+      tone: 'loading',
+      title: 'This conversion is still moving through the pipeline.',
+      body: 'Keep this review open if you want to watch the current stage, or reopen it later from Conversion Jobs. The extracted text and screenplay preview will fill in as the job advances.'
+    };
+  }
+  if (status === 'completed-with-fallback' || status === 'imported-with-fallback') {
+    return {
+      tone: 'warning',
+      title: 'The script imported with a fallback path.',
+      body: 'You can keep working from this result, but the warnings suggest the AI pass did not complete cleanly. Retry the conversion if you want a stronger structured pass.'
+    };
+  }
+  return {
+    tone: 'success',
+    title: 'This conversion workspace is ready to review.',
+    body: 'Use the extracted text, normalized pass, and structured preview together to confirm the screenplay before you keep writing.'
+  };
+}
+
+async function openConversionReviewDialog(jobId, projectId = "", recordOverride = null) {
   const dialog = document.getElementById("conversionReviewDialog");
   if (!dialog || !jobId) return;
 
-  const record = await getConversionJobRecord(jobId);
+  const record = recordOverride || await getConversionJobRecord(jobId);
   if (!record) return;
 
   const title = document.getElementById("conversionReviewTitle");
@@ -4058,6 +4280,9 @@ async function openConversionReviewDialog(jobId, projectId = "") {
   const raw = document.getElementById("conversionReviewRaw");
   const normalized = document.getElementById("conversionReviewNormalized");
   const structured = document.getElementById("conversionReviewStructured");
+  const stateCard = document.getElementById("conversionReviewStateCard");
+  const stateTitle = document.getElementById("conversionReviewStateTitle");
+  const stateBody = document.getElementById("conversionReviewStateBody");
   const closeBtn = document.getElementById("conversionReviewCloseBtn");
   const retryBtn = document.getElementById("conversionReviewRetryBtn");
 
@@ -4073,6 +4298,16 @@ async function openConversionReviewDialog(jobId, projectId = "") {
     const warningText = Array.isArray(record.warnings) ? record.warnings.filter(Boolean).join("\n\n") : "";
     warnings.hidden = !warningText;
     warnings.textContent = warningText;
+  }
+  const reviewState = getConversionReviewState(record);
+  if (stateCard) {
+    stateCard.dataset.stateTone = reviewState.tone;
+  }
+  if (stateTitle) {
+    stateTitle.textContent = reviewState.title;
+  }
+  if (stateBody) {
+    stateBody.textContent = reviewState.body;
   }
   const structuredLines = Array.isArray(record.structuredLines) ? record.structuredLines : [];
   if (typeGrid) {
@@ -4098,9 +4333,10 @@ async function openConversionReviewDialog(jobId, projectId = "") {
           <div class="conversion-review-line-text">${escapeHtml(String(line?.text || "")).replace(/\n/g, "<br>")}</div>
         </div>
       `).join("")
-      : '<p class="conversion-review-structured-empty">No structured screenplay lines are stored for this job yet.</p>';
+      : `<p class="conversion-review-structured-empty">${escapeHtml(getConversionReviewEmptyMessage(record))}</p>`;
   }
   if (retryBtn) {
+    retryBtn.textContent = "Retry conversion";
     retryBtn.disabled = !record.sourceFile?.blob;
   }
 

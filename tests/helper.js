@@ -1,7 +1,23 @@
 import { test, expect } from '@playwright/test';
 
+async function gotoWithRetry(page, url) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
+    }
+  }
+  throw lastError;
+}
+
 export async function login(page) {
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await gotoWithRetry(page, 'http://127.0.0.1:4173/');
 
   // Inject mock user and session
   await page.evaluate(() => {
@@ -24,7 +40,7 @@ export async function login(page) {
     }));
   });
 
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await gotoWithRetry(page, 'http://127.0.0.1:4173/');
 
   // Wait for the app to detect session and show homeView
   await expect(page.locator('#homeView')).toBeVisible({ timeout: 15000 });

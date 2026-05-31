@@ -72,7 +72,7 @@ app.post("/api/ai-assist", async (req, res) => {
 });
 
 app.post("/api/convert-script", async (req, res) => {
-  const { text, chunkIndex = 0, chunkCount = 1, fileName = "", stage = "structure" } = req.body || {};
+  const { text, chunkIndex = 0, chunkCount = 1, fileName = "", stage = "structure", operatorGuidance = "" } = req.body || {};
 
   if (!String(text || "").trim()) {
     return res.status(400).json({ error: "Missing script text to convert." });
@@ -93,8 +93,8 @@ app.post("/api/convert-script", async (req, res) => {
 
   try {
     const prompt = stage === "normalize"
-      ? buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName })
-      : buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName });
+      ? buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance })
+      : buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance });
     const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
@@ -207,7 +207,7 @@ function extractApiError(data) {
   return "";
 }
 
-function buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName }) {
+function buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance = "" }) {
   return `You are pass 1 of a screenplay conversion pipeline for EyaWriter.
 
 Your job is to turn extracted source text into clean screenplay-like plain text BEFORE block classification.
@@ -240,12 +240,13 @@ Return this exact shape:
 
 SOURCE FILE: ${fileName || "script"}
 CHUNK: ${Number(chunkIndex) + 1} of ${Number(chunkCount)}
+${operatorGuidance ? `\nEDITOR GUIDANCE:\n${operatorGuidance}\nUse this guidance only to clarify structure. Do not invent or remove content.` : ""}
 
 SOURCE TEXT:
 ${text}`;
 }
 
-function buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName }) {
+function buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance = "" }) {
   return `You are converting screenplay source material into structured screenplay blocks for an editor.
 
 STRICT RULES:
@@ -292,6 +293,7 @@ Return this exact shape:
 
 SOURCE FILE: ${fileName || "script"}
 CHUNK: ${Number(chunkIndex) + 1} of ${Number(chunkCount)}
+${operatorGuidance ? `\nEDITOR GUIDANCE:\n${operatorGuidance}\nUse this guidance only to classify or group content more accurately. Do not invent or remove content.` : ""}
 
 SOURCE TEXT:
 ${text}`;

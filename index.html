@@ -746,12 +746,14 @@
           </nav>
 
           <div id="studioFileMenu" class="nav-menu nav-menu-wide" hidden>
+            <button class="nav-menu-button" type="button" data-menu-action="open-conversion-jobs">Conversion Jobs</button>
             <details class="menu-group" open>
               <summary class="menu-group-summary">Project</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="new-project">New Project</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-file-recovery">File Recovery</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-conversion-jobs">Conversion Jobs</button>
                 <button class="nav-menu-button" type="button" data-menu-action="import-file">Import</button>
                 <details id="studioRecentProjectsToggle" class="recent-projects-group menu-group-inline" open>
                   <summary class="recent-projects-summary">
@@ -887,7 +889,7 @@
             </details>
             <div class="nav-menu-section">
               <label class="menu-row toggle-row">
-                <span>Bg Annim</span>
+                <span>Background Animation</span>
                 <input id="bgAnimationToggle" type="checkbox">
               </label>
               <button class="nav-menu-button" type="button" data-view-toggle="pageNumbers">Page numbering</button>
@@ -1705,7 +1707,10 @@
         </div>
         <button id="fileRecoveryCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
       </div>
-      <p id="fileRecoveryEmpty" class="file-recovery-empty">No deleted files are available for recovery.</p>
+      <div id="fileRecoveryEmpty" class="file-recovery-empty">
+        <strong>Nothing to recover right now.</strong>
+        <p>Deleted scripts will stay here until they are permanently removed, so you can restore them when needed.</p>
+      </div>
       <div id="fileRecoveryList" class="file-recovery-list" hidden></div>
     </div>
   </dialog>
@@ -1714,6 +1719,7 @@
       <div class="conversion-review-sheet">
         <div class="conversion-review-head">
           <div>
+            <span class="conversion-sheet-step">Conversion Review</span>
             <h3 id="conversionReviewTitle">Conversion Review</h3>
             <p id="conversionReviewMeta">Inspect how the uploaded script moved through extraction and conversion.</p>
           </div>
@@ -1728,11 +1734,17 @@
           <div><span>Source file</span><strong id="conversionReviewFile">-</strong></div>
           <div><span>Structured lines</span><strong id="conversionReviewLineCount">0</strong></div>
         </div>
+        <section id="conversionReviewStateCard" class="conversion-review-state-card">
+          <div class="conversion-review-state-copy">
+            <strong id="conversionReviewStateTitle">Conversion workspace ready</strong>
+            <p id="conversionReviewStateBody">This review keeps the extracted text, the cleaned screenplay pass, and the final structured preview together so you always have a clear next step.</p>
+          </div>
+        </section>
         <div class="conversion-review-body">
           <section class="conversion-review-panel conversion-review-panel-source">
             <div class="conversion-review-panel-head">
               <div>
-                <span class="conversion-review-eyebrow">Source</span>
+                <span class="conversion-sheet-label">Source</span>
                 <h4>Document Preparation</h4>
                 <p>Check the extracted text and the cleaned screenplay pass before the final block structure is applied.</p>
               </div>
@@ -1750,7 +1762,7 @@
           <section class="conversion-review-panel conversion-review-panel-structure">
             <div class="conversion-review-panel-head">
               <div>
-                <span class="conversion-review-eyebrow">Output</span>
+                <span class="conversion-sheet-label">Output</span>
                 <h4>Structured Screenplay</h4>
                 <p>Review how the converter mapped the screenplay into EyaWriter block types before you continue editing.</p>
               </div>
@@ -1765,17 +1777,84 @@
       </div>
     </dialog>
 
+  <dialog id="conversionLiveDialog" class="conversion-live-dialog">
+      <div class="conversion-live-sheet">
+        <div class="conversion-live-head">
+          <div>
+            <span class="conversion-sheet-step">Live Conversion</span>
+            <h3 id="conversionLiveTitle">Current Conversion Job</h3>
+            <p id="conversionLiveMeta">Watch the uploaded file move through extraction, normalization, structuring, and import.</p>
+          </div>
+          <div class="conversion-live-head-actions">
+            <button id="conversionLiveOpenReviewBtn" class="ghost-button btn-sm" type="button" disabled>Open Review</button>
+            <button id="conversionLiveCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+          </div>
+        </div>
+        <div class="conversion-live-summary">
+          <div><span>Status</span><strong id="conversionLiveStatus">Queued</strong></div>
+          <div><span>Stage</span><strong id="conversionLiveStage">Queued</strong></div>
+          <div><span>Source file</span><strong id="conversionLiveFile">-</strong></div>
+          <div><span>Warnings</span><strong id="conversionLiveWarningsCount">0</strong></div>
+        </div>
+        <div id="conversionLiveTimeline" class="conversion-live-timeline"></div>
+        <div class="conversion-live-body">
+          <section class="conversion-live-panel">
+            <div class="conversion-live-panel-head">
+              <div>
+                <span class="conversion-sheet-label">Live Feed</span>
+                <h4>Pipeline Output</h4>
+                <p>Each stage fills in here as the current job advances.</p>
+              </div>
+            </div>
+            <div class="conversion-live-block">
+              <label for="conversionLiveRaw">Extracted text</label>
+              <textarea id="conversionLiveRaw" readonly spellcheck="false"></textarea>
+            </div>
+            <div class="conversion-live-block">
+              <label for="conversionLiveNormalized">Normalized screenplay text</label>
+              <textarea id="conversionLiveNormalized" readonly spellcheck="false"></textarea>
+            </div>
+            <div class="conversion-live-block">
+              <label>Structured preview</label>
+              <div id="conversionLiveStructured" class="conversion-live-structured"></div>
+            </div>
+          </section>
+          <section class="conversion-live-panel conversion-live-panel-assist">
+            <div class="conversion-live-panel-head">
+              <div>
+                <span class="conversion-sheet-label">Assist AI</span>
+                <h4>Operator Guidance</h4>
+                <p>Leave short notes about scene headings, dialogue wraps, or formatting problems before retrying.</p>
+              </div>
+            </div>
+            <div class="conversion-live-block conversion-live-guidance-block">
+              <label for="conversionLiveGuidance">Guidance for the next pass</label>
+              <textarea id="conversionLiveGuidance" spellcheck="true" placeholder="Example: treat centered uppercase names as character cues, keep wrapped speech as one dialogue block, and preserve scene headings on their own line."></textarea>
+              <div class="conversion-live-guidance-actions">
+                <button id="conversionLiveSaveGuidanceBtn" class="ghost-button btn-sm" type="button">Save Guidance</button>
+                <p id="conversionLiveGuidanceStatus" class="conversion-live-guidance-status">Guidance is saved to this job and reused on retry.</p>
+              </div>
+            </div>
+            <div id="conversionLiveWarnings" class="conversion-review-warnings" hidden></div>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
   <dialog id="conversionJobsDialog" class="conversion-jobs-dialog">
       <div class="conversion-jobs-sheet">
         <div class="conversion-jobs-head">
           <div>
-            <span class="conversion-review-eyebrow">History</span>
+            <span class="conversion-sheet-step">Conversion Jobs</span>
             <h3>Conversion Jobs</h3>
             <p>Review recent upload, normalization, and import jobs.</p>
           </div>
           <button id="conversionJobsCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
         </div>
-      <p id="conversionJobsEmpty" class="conversion-jobs-empty">No conversion jobs yet.</p>
+      <div id="conversionJobsEmpty" class="conversion-jobs-empty">
+        <strong>No conversion jobs yet.</strong>
+        <p>Run Convert &amp; import to keep a saved trail of upload progress, warnings, structured output, and retry options.</p>
+      </div>
       <div id="conversionJobsList" class="conversion-jobs-list" hidden></div>
     </div>
   </dialog>

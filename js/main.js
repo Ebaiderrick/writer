@@ -11,7 +11,35 @@ import { restoreLocalSaveFile, startLocalSaveTimer } from './localSave.js';
 import { Admin } from './admin.js';
 import { Settings } from './settings.js';
 
+function restoreBootPathOverride() {
+  const key = 'eyawriter.bootPath';
+  const override = sessionStorage.getItem(key);
+  if (!override) return;
+  sessionStorage.removeItem(key);
+  const path = String(override || '').trim();
+  if (!path) return;
+  if (/\/index\.html$/i.test(window.location.pathname)) {
+    window.history.replaceState({}, '', path);
+  }
+}
+
+function normalizeStaticUiCopy() {
+  document.querySelectorAll('[data-left-pane-section-toggle="workspace"], [data-left-pane-section-toggle="insert-story-element"]').forEach((button) => {
+    button.textContent = '▾';
+  });
+  const bgLabel = document.querySelector('#bgAnimationToggle')?.closest('label')?.querySelector('span');
+  if (bgLabel) {
+    bgLabel.textContent = 'Background Animation';
+  }
+  const notepadClose = document.getElementById('closeNotepad');
+  if (notepadClose) {
+    notepadClose.textContent = '×';
+  }
+}
+
 function boot() {
+  restoreBootPathOverride();
+  normalizeStaticUiCopy();
   loadProjects();
   bindEvents();
 

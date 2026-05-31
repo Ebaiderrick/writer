@@ -54,12 +54,25 @@ function runTransaction(mode, handler) {
       const tx = db.transaction(STORE_NAME, mode);
       const store = tx.objectStore(STORE_NAME);
       const request = handler(store);
-      if (!request) {
-        resolve(null);
-        return;
+      let requestResult = null;
+      let requestError = null;
+      if (request) {
+        request.addEventListener('success', () => {
+          requestResult = request.result ?? null;
+        });
+        request.addEventListener('error', () => {
+          requestError = request.error;
+        });
       }
-      request.onsuccess = () => resolve(request.result ?? null);
-      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => {
+        if (requestError) {
+          reject(requestError);
+          return;
+        }
+        resolve(requestResult);
+      };
+      tx.onerror = () => reject(tx.error || requestError || new Error('IndexedDB transaction failed.'));
+      tx.onabort = () => reject(tx.error || requestError || new Error('IndexedDB transaction aborted.'));
     }).catch(() => null);
   });
 }

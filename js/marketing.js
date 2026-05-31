@@ -35,6 +35,7 @@ function syncMarketingNavForSession() {
 
     if (signInBtn) {
       signInBtn.hidden = true;
+      signInBtn.classList.add('is-session-hidden');
       signInBtn.setAttribute('aria-hidden', 'true');
       signInBtn.tabIndex = -1;
     }

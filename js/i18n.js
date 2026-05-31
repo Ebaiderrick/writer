@@ -104,7 +104,7 @@ const TRANSLATIONS = {
     "tool.image": "Image",
 
     "option.autoNumber": "Auto number",
-    "option.bgAnnim": "Bg Annim",
+    "option.bgAnnim": "Background Animation",
     "option.typewriterFocus": "Typewriter focus",
     "option.aiAssistance": "AI Assistance",
     "option.spellingCheck": "Spelling check",
@@ -339,7 +339,7 @@ const TRANSLATIONS = {
     "tool.image": "Image",
 
     "option.autoNumber": "Numérotation auto",
-    "option.bgAnnim": "Bg Annim",
+    "option.bgAnnim": "Background Animation",
     "option.typewriterFocus": "Focus machine à écrire",
     "option.aiAssistance": "Assistance IA",
     "option.spellingCheck": "Vérification orthographique",
@@ -574,7 +574,7 @@ const TRANSLATIONS = {
     "tool.image": "Bild",
 
     "option.autoNumber": "Automatische Nummerierung",
-    "option.bgAnnim": "Bg Annim",
+    "option.bgAnnim": "Background Animation",
     "option.typewriterFocus": "Schreibmaschinenfokus",
     "option.aiAssistance": "KI-Unterstützung",
     "option.spellingCheck": "Rechtschreibprüfung",

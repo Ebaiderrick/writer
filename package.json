@@ -3,6 +3,9 @@
   "type": "module",
   "version": "1.0.0",
   "description": "Screenplay editor with AI assistance",
+  "scripts": {
+    "test:regression": "playwright test tests/inspect-auth-session-trust.spec.js tests/inspect-conversion-job-state.spec.js tests/inspect-safety-rails.spec.js tests/inspect-user-journeys.spec.js --config playwright.local4173.config.js --workers=1"
+  },
   "devDependencies": {
     "@playwright/test": "^1.59.1"
   }

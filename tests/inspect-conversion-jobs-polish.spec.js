@@ -12,7 +12,6 @@ test('conversion jobs renders as a polished history view', async ({ page }) => {
     list.hidden = false;
     list.innerHTML = `
       <button class="conversion-job-item" type="button" data-conversion-job-id="job-complete" data-conversion-job-status="completed">
-        <span class="conversion-job-item-rail" aria-hidden="true"></span>
         <div class="conversion-job-item-main">
           <div class="conversion-job-item-top">
             <div>
@@ -30,7 +29,6 @@ test('conversion jobs renders as a polished history view', async ({ page }) => {
         </div>
       </button>
       <button class="conversion-job-item" type="button" data-conversion-job-id="job-processing" data-conversion-job-status="processing">
-        <span class="conversion-job-item-rail" aria-hidden="true"></span>
         <div class="conversion-job-item-main">
           <div class="conversion-job-item-top">
             <div>
@@ -48,7 +46,6 @@ test('conversion jobs renders as a polished history view', async ({ page }) => {
         </div>
       </button>
       <button class="conversion-job-item" type="button" data-conversion-job-id="job-failed" data-conversion-job-status="failed">
-        <span class="conversion-job-item-rail" aria-hidden="true"></span>
         <div class="conversion-job-item-main">
           <div class="conversion-job-item-top">
             <div>
