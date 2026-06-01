@@ -15,7 +15,26 @@ async function loginToHome(page) {
 test('live conversion workspace shows progress, accepts edits, and reopens from format menu', async ({ page }) => {
   await page.route('**/api/convert-script', async (route) => {
     const payload = route.request().postDataJSON();
-    await new Promise((resolve) => setTimeout(resolve, 450));
+    const stageDelay = payload.stage === 'structure' ? 1800 : 350;
+    await new Promise((resolve) => setTimeout(resolve, stageDelay));
+    if (payload.stage === 'cover') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          coverPage: {
+            title: 'LIVE CONVERSION SCRIPT',
+            author: 'Ayo Writer',
+            contact: 'ayo@example.com',
+            company: 'Open Frame Pictures',
+            details: 'Draft one',
+            logline: 'A converted screenplay test.'
+          },
+          warnings: []
+        })
+      });
+      return;
+    }
     if (payload.stage === 'normalize') {
       await route.fulfill({
         status: 200,
@@ -57,7 +76,7 @@ test('live conversion workspace shows progress, accepts edits, and reopens from 
   await page.setInputFiles('#convertImportInput', {
     name: 'live-conversion.txt',
     mimeType: 'text/plain',
-    buffer: Buffer.from('INT. KITCHEN - DAY\nMARA\nThe wrapped dialogue should stay together.')
+    buffer: Buffer.from('LIVE CONVERSION SCRIPT\nby Ayo Writer\nayo@example.com\nOpen Frame Pictures\n\nINT. KITCHEN - DAY\nMARA\nThe wrapped dialogue should stay together.')
   });
 
   await expect(page.locator('#conversionLiveDialog[open]')).toBeVisible({ timeout: 15000 });
@@ -65,6 +84,9 @@ test('live conversion workspace shows progress, accepts edits, and reopens from 
   await expect(page.locator('.conversion-live-warning-card')).toContainText(/Recheck this data/i);
   await page.locator('#conversionLiveRaw').fill('LIVE CONVERSION SCRIPT\nby Ayo Writer\n\nINT. KITCHEN - DAY\nMARA\nThe wrapped dialogue should stay together.');
   await page.locator('#conversionLiveNormalized').fill('INT. KITCHEN - DAY\n\nMARA\nThe wrapped dialogue should stay together.');
+  await expect(page.locator('#conversionLiveCoverTitle')).toHaveValue('LIVE CONVERSION SCRIPT');
+  await expect(page.locator('#conversionLiveCoverAuthor')).toHaveValue('Ayo Writer');
+  await page.locator('#conversionLiveCoverDetails').fill('Draft one');
   await page.locator('#conversionLiveSaveTextBtn').click();
   await expect(page.locator('#conversionLiveTextStatus')).toContainText(/Text edits saved/i);
   await page.locator('#conversionLiveGuidance').fill('Keep wrapped dialogue in a single block and preserve uppercase names as character cues.');

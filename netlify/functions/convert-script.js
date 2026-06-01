@@ -21,7 +21,7 @@ export const handler = async (event) => {
     };
   }
 
-  const { text, chunkIndex = 0, chunkCount = 1, fileName = "", stage = "structure", operatorGuidance = "" } = body || {};
+  const { text, chunkIndex = 0, chunkCount = 1, fileName = "", stage = "structure", operatorGuidance = "", continuity = null } = body || {};
   if (!String(text || "").trim()) {
     return {
       statusCode: 400,
@@ -31,6 +31,16 @@ export const handler = async (event) => {
   }
 
   if (!process.env.OPENAI_API_KEY) {
+    if (stage === "cover") {
+      return {
+        statusCode: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          coverPage: simpleDetectCoverPage(text),
+          warnings: ["AI key not configured, so a plain cover-page fallback was used."]
+        })
+      };
+    }
     if (stage === "normalize") {
       return {
         statusCode: 200,
@@ -52,9 +62,11 @@ export const handler = async (event) => {
   }
 
   try {
-    const prompt = stage === "normalize"
-      ? buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance })
-      : buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance });
+    const prompt = stage === "cover"
+      ? buildCoverPagePrompt({ text, fileName, operatorGuidance })
+      : stage === "normalize"
+        ? buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance, continuity })
+        : buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance, continuity });
     const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
@@ -83,6 +95,14 @@ export const handler = async (event) => {
     }
 
     const output = extractOutputText(data);
+
+    if (stage === "cover") {
+      return {
+        statusCode: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parseCoverPageResponse(output))
+      };
+    }
 
     if (stage === "normalize") {
       const parsed = parseNormalizationResponse(output);
@@ -125,7 +145,7 @@ export const handler = async (event) => {
   }
 };
 
-function buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance = "" }) {
+function buildScriptNormalizationPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance = "", continuity = null }) {
   return `You are pass 1 of a screenplay conversion pipeline for EyaWriter.
 
 Your job is to turn extracted source text into clean screenplay-like plain text BEFORE block classification.
@@ -169,13 +189,58 @@ Return this exact shape:
 
 SOURCE FILE: ${fileName || "script"}
 CHUNK: ${Number(chunkIndex) + 1} of ${Number(chunkCount)}
+${buildContinuityContext(continuity)}
 ${operatorGuidance ? `\nEDITOR GUIDANCE:\n${operatorGuidance}\nUse this guidance only to clarify structure. Do not invent or remove content.` : ""}
 
 SOURCE TEXT:
 ${text}`;
 }
 
-function buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance = "" }) {
+function buildCoverPagePrompt({ text, fileName, operatorGuidance = "" }) {
+  return `You are extracting only screenplay cover-page metadata for EyaWriter.
+
+STRICT RULES:
+1. Look only for cover/title-page information.
+2. Do not invent screenplay body text.
+3. Return ONLY valid JSON.
+4. Do not include markdown fences or commentary.
+5. If a field is unknown, return an empty string.
+
+Return this exact shape:
+{
+  "coverPage": {
+    "title": "",
+    "author": "",
+    "contact": "",
+    "company": "",
+    "details": "",
+    "logline": ""
+  },
+  "warnings": []
+}
+
+SOURCE FILE: ${fileName || "script"}
+${operatorGuidance ? `\nEDITOR GUIDANCE:\n${operatorGuidance}\nUse this only to clarify cover-page interpretation. Do not invent data.` : ""}
+
+TITLE PAGE TEXT:
+${text}`;
+}
+
+function buildContinuityContext(continuity) {
+  const lastScene = String(continuity?.lastScene || "").trim();
+  const recentSpeakers = Array.isArray(continuity?.recentSpeakers)
+    ? continuity.recentSpeakers.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 4)
+    : [];
+  if (!lastScene && !recentSpeakers.length) {
+    return "";
+  }
+  return `\nCONTINUITY MEMORY:
+- Last confirmed scene: ${lastScene || "Unknown"}
+- Recent speakers: ${recentSpeakers.length ? recentSpeakers.join(", ") : "None"}
+Use this only to keep chunk boundaries coherent. Do not invent content or force a speaker if the source does not support it.`;
+}
+
+function buildScriptConversionPrompt({ text, chunkIndex, chunkCount, fileName, operatorGuidance = "", continuity = null }) {
   return `You are converting screenplay source material into structured screenplay blocks for an editor.
 
 STRICT RULES:
@@ -222,6 +287,7 @@ Return this exact shape:
 
 SOURCE FILE: ${fileName || "script"}
 CHUNK: ${Number(chunkIndex) + 1} of ${Number(chunkCount)}
+${buildContinuityContext(continuity)}
 ${operatorGuidance ? `\nEDITOR GUIDANCE:\n${operatorGuidance}\nUse this guidance only to classify or group content more accurately. Do not invent or remove content.` : ""}
 
 SOURCE TEXT:
@@ -241,6 +307,20 @@ function parseNormalizationResponse(output) {
   const coverPage = normalizeCoverPage(parsed?.coverPage);
   const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings.map((item) => String(item)) : [];
   return { text, coverPage, warnings };
+}
+
+function parseCoverPageResponse(output) {
+  const cleaned = String(output || "")
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  const candidate = jsonMatch ? jsonMatch[0] : cleaned;
+  const parsed = JSON.parse(candidate);
+  const coverPage = normalizeCoverPage(parsed?.coverPage);
+  const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings.map((item) => String(item)) : [];
+  return { coverPage, warnings };
 }
 
 function normalizeCoverPage(coverPage) {
@@ -272,7 +352,7 @@ function parseConversionResponse(output) {
 
 function normalizeConvertedLines(lines) {
   const allowed = new Set(["scene", "action", "character", "dialogue", "parenthetical", "transition", "shot", "note", "image"]);
-  return (lines || []).reduce((accumulator, line) => {
+  const normalized = (lines || []).reduce((accumulator, line) => {
     const text = String(line?.text || "").replace(/\r/g, "").trim();
     let type = String(line?.type || "action").trim().toLowerCase();
     if (!text) return accumulator;
@@ -294,6 +374,43 @@ function normalizeConvertedLines(lines) {
     });
     return accumulator;
   }, []);
+  return repairConvertedLines(normalized);
+}
+
+function repairConvertedLines(lines) {
+  const repaired = [];
+  for (const entry of lines || []) {
+    const current = {
+      type: String(entry?.type || "action").trim().toLowerCase(),
+      text: String(entry?.text || "").trim()
+    };
+    if (!current.text) continue;
+    const previous = repaired[repaired.length - 1] || null;
+
+    if (current.type === "parenthetical" && !(previous?.type === "character" || previous?.type === "dialogue")) {
+      if (previous?.type === "action") {
+        previous.text = `${previous.text} ${current.text}`.replace(/\s+/g, " ").trim();
+        continue;
+      }
+      current.type = "action";
+    }
+    if (current.type === "dialogue" && !(previous?.type === "character" || previous?.type === "parenthetical" || previous?.type === "dialogue")) {
+      current.type = "action";
+    }
+    if (current.type === "scene" && previous?.type === "scene" && previous.text === current.text) {
+      continue;
+    }
+    if (current.type === "action" && previous?.type === "action" && shouldMergeActionBlocks(previous.text, current.text)) {
+      previous.text = `${previous.text} ${current.text}`.replace(/\s+/g, " ").trim();
+      continue;
+    }
+    if (current.type === "dialogue" && previous?.type === "dialogue") {
+      previous.text = `${previous.text} ${current.text}`.replace(/\s+/g, " ").trim();
+      continue;
+    }
+    repaired.push(current);
+  }
+  return repaired;
 }
 
 function simpleConvertTextToLines(text) {
@@ -340,6 +457,25 @@ function looksLikeCharacter(line, prevLine, nextLine) {
   return isUppercase && (followedByDialogue || separated);
 }
 
+function simpleDetectCoverPage(text) {
+  const lines = String(text || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 24);
+  if (!lines.length) return null;
+  const byIndex = lines.findIndex((line) => /^by$/i.test(line) || /^written by$/i.test(line));
+  const title = lines[0] || "";
+  const author = byIndex >= 0 ? (lines[byIndex + 1] || "") : "";
+  const metaLines = byIndex >= 0 ? lines.slice(byIndex + 2) : lines.slice(1);
+  const contact = metaLines.find((line) => /@|\+?\d[\d\s().-]{6,}/.test(line)) || "";
+  const company = metaLines.find((line) => /productions?|pictures?|studios?|films?/i.test(line)) || "";
+  const logline = metaLines.find((line) => line.length > 45) || "";
+  const details = metaLines.filter((line) => line && line !== contact && line !== company && line !== logline).join(" | ");
+  return normalizeCoverPage({ title, author, contact, company, details, logline });
+}
+
 function looksLikeDialogueText(text) {
   if (!text) return false;
   if (/^(INT\.|EXT\.|CUT TO:|DISSOLVE TO:|SMASH CUT TO:|FADE OUT\.|CLOSE ON|WIDE SHOT|INSERT|POV)/i.test(text)) {
@@ -349,6 +485,19 @@ function looksLikeDialogueText(text) {
     return false;
   }
   return !/^[A-Z0-9 .'\-()]+$/.test(text);
+}
+
+function shouldMergeActionBlocks(previousText, currentText) {
+  if (!previousText || !currentText) return false;
+  if (/^(INT\.|EXT\.|CUT TO:|DISSOLVE TO:|SMASH CUT TO:|FADE OUT\.|CLOSE ON|WIDE SHOT|INSERT|POV)/i.test(currentText)) {
+    return false;
+  }
+  if (/^\(.*\)$/.test(currentText) || looksLikeCharacter(currentText, "", "")) {
+    return false;
+  }
+  if (/^[a-z("'“]/.test(currentText)) return true;
+  if (currentText.length <= 42 && !/[.!?:"”')\]]$/.test(previousText)) return true;
+  return false;
 }
 
 function extractOutputText(data) {

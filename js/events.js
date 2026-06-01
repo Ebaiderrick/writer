@@ -43,6 +43,7 @@ import {
 import {
   extractScriptTextFromFile,
   convertScriptTextToLines,
+  buildLocalStructuredPreview,
   beginConversionUpload,
   attachSourceFileToConversionJob,
   markConversionExtractionStarted,
@@ -228,6 +229,7 @@ function getCurrentProjectConversionRecord() {
 const CONVERSION_LIVE_STEPS = [
   { key: "uploading", label: "Upload" },
   { key: "extracting", label: "Extract" },
+  { key: "cover", label: "Cover" },
   { key: "normalizing", label: "Normalize" },
   { key: "structuring", label: "Structure" },
   { key: "importing", label: "Import" }
@@ -284,6 +286,20 @@ async function refreshActiveConversionLiveDialog(jobId, recordOverride = null) {
   if (normalizedInput && document.activeElement !== normalizedInput) {
     normalizedInput.value = String(record.normalizedText || "");
   }
+  const coverPage = record.coverPageCandidate || {};
+  const coverInputs = {
+    title: document.getElementById("conversionLiveCoverTitle"),
+    author: document.getElementById("conversionLiveCoverAuthor"),
+    contact: document.getElementById("conversionLiveCoverContact"),
+    company: document.getElementById("conversionLiveCoverCompany"),
+    details: document.getElementById("conversionLiveCoverDetails"),
+    logline: document.getElementById("conversionLiveCoverLogline")
+  };
+  Object.entries(coverInputs).forEach(([key, input]) => {
+    if (input && document.activeElement !== input) {
+      input.value = String(coverPage?.[key] || "");
+    }
+  });
   const guidanceInput = document.getElementById("conversionLiveGuidance");
   if (guidanceInput && document.activeElement !== guidanceInput) {
     guidanceInput.value = String(record.operatorGuidance || "");
@@ -1838,9 +1854,18 @@ export function bindEvents() {
     const rawInput = document.getElementById("conversionLiveRaw");
     const normalizedInput = document.getElementById("conversionLiveNormalized");
     const status = document.getElementById("conversionLiveTextStatus");
+    const coverPageCandidate = {
+      title: String(document.getElementById("conversionLiveCoverTitle")?.value || "").trim(),
+      author: String(document.getElementById("conversionLiveCoverAuthor")?.value || "").trim(),
+      contact: String(document.getElementById("conversionLiveCoverContact")?.value || "").trim(),
+      company: String(document.getElementById("conversionLiveCoverCompany")?.value || "").trim(),
+      details: String(document.getElementById("conversionLiveCoverDetails")?.value || "").trim(),
+      logline: String(document.getElementById("conversionLiveCoverLogline")?.value || "").trim()
+    };
     const patch = {
       rawText: String(rawInput?.value || ""),
-      normalizedText: String(normalizedInput?.value || "")
+      normalizedText: String(normalizedInput?.value || ""),
+      coverPageCandidate: Object.values(coverPageCandidate).some(Boolean) ? coverPageCandidate : null
     };
     if (patch.rawText.trim()) {
       patch.rawTextEditedAt = new Date().toISOString();
@@ -1848,13 +1873,23 @@ export function bindEvents() {
     if (patch.normalizedText.trim()) {
       patch.normalizedTextEditedAt = new Date().toISOString();
     }
+    const previewSource = patch.normalizedText.trim() || patch.rawText.trim();
+    patch.structuredLines = buildLocalStructuredPreview(previewSource);
+    patch.structuredLineCount = patch.structuredLines.length;
+    if (!patch.stageLabel || /queued|normalizing|structuring/i.test(String(patch.stageLabel))) {
+      patch.stageLabel = patch.structuredLines.length
+        ? "Preview refreshed from your edits"
+        : "Text edits saved";
+    }
     await patchConversionJobRecord(activeConversionLiveJobId, patch);
     await refreshActiveConversionLiveDialog(activeConversionLiveJobId, {
       ...(await getConversionJobRecord(activeConversionLiveJobId)),
       ...patch
     });
     if (status) {
-      status.textContent = "Text edits saved. Retry this conversion to reuse the text you corrected here.";
+      status.textContent = patch.structuredLines.length
+        ? "Text edits saved. The structured preview updated immediately from your corrected text."
+        : "Text edits saved. Add more text or retry this conversion to rebuild the preview.";
     }
   });
   document.getElementById("conversionLiveOpenReviewBtn")?.addEventListener("click", async () => {

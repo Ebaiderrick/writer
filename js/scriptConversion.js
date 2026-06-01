@@ -19,6 +19,7 @@ const ALLOWED_TYPES = new Set([
 ]);
 
 const PDF_WORKER_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const OCR_MIN_TEXT_CHARS_PER_PAGE = 140;
 const CONVERSION_JOB_STORAGE_KEY = 'eyawriter.conversionJobs';
 
 export function getConvertImportEndpoint() {
@@ -81,7 +82,23 @@ export async function extractScriptTextFromFile(file, { onProgress } = {}) {
       const content = await page.getTextContent();
       pages.push(extractPdfPageText(content.items || []));
     }
-    return normalizeExtractedText(pages.join('\n\n'));
+    const extracted = normalizeExtractedText(pages.join('\n\n'));
+    const readability = assessPdfTextExtraction(pages);
+    if (readability.needsOcr) {
+      if (!window.Tesseract?.recognize) {
+        throw new Error('This PDF looks scanned or image-based. OCR is not available in this browser, so please try a text-searchable PDF or DOCX.');
+      }
+      onProgress?.('Readable PDF text was too weak. Running OCR on the scanned pages...');
+      const ocrText = await ocrPdfWithTesseract(pdf, {
+        onProgress: (message) => onProgress?.(message)
+      });
+      const normalizedOcr = normalizeExtractedText(ocrText);
+      if (!normalizedOcr.trim()) {
+        throw new Error('OCR could not recover enough readable text from this PDF. Try a cleaner scan or a DOCX export.');
+      }
+      return normalizedOcr;
+    }
+    return extracted;
   }
 
   if (extension === 'doc') {
@@ -99,8 +116,8 @@ export async function convertScriptTextToLines(rawText, {
   preparedNormalizedText = '',
   preparedCoverPage = null
 } = {}) {
-  const normalizedText = normalizeExtractedText(rawText);
-  if (!normalizedText.trim()) {
+  const extractedText = normalizeExtractedText(rawText);
+  if (!extractedText.trim()) {
     throw new Error('No readable text was found in that file.');
   }
 
@@ -111,11 +128,11 @@ export async function convertScriptTextToLines(rawText, {
       id: jobId,
       fileName: fileName || 'script',
       projectId,
-      rawText: normalizedText
+      rawText: extractedText
     }
     : createConversionJob({
       fileName,
-      rawText: normalizedText,
+      rawText: extractedText,
       projectId
     });
 
@@ -126,20 +143,53 @@ export async function convertScriptTextToLines(rawText, {
   await updateConversionJob(job.id, {
     fileName: fileName || job.fileName || 'script',
     projectId,
-    rawText: normalizedText,
+    rawText: extractedText,
     status: 'preparing',
     stageLabel: 'Preparing document memory',
     warnings
   });
   onProgress?.('Preparing backend memory for this script...');
 
-  let coverPage = normalizeCoverPageCandidate(preparedCoverPage);
+  const separatedCover = separateCoverPageFromScript(extractedText);
+  const screenplayBodyText = preparePreStructureText(separatedCover.bodyText || extractedText);
+  let coverPage = normalizeCoverPageCandidate(preparedCoverPage) || normalizeCoverPageCandidate(separatedCover.coverPage);
   let normalizedScreenplayText = normalizeExtractedText(preparedNormalizedText);
 
+  await updateConversionJob(job.id, {
+    status: 'cover',
+    stageLabel: 'Separating cover page',
+    coverPageCandidate: coverPage,
+    coverPageSourceText: separatedCover.coverText || ''
+  });
+  onProgress?.('Separating cover page from screenplay body...');
+
+  if (!normalizeCoverPageCandidate(preparedCoverPage) && separatedCover.coverText) {
+    try {
+      const coverResponse = await requestConversionStage('cover', separatedCover.coverText, {
+        fileName,
+        chunkIndex: 0,
+        chunkCount: 1,
+        jobId: job.id
+      });
+      coverPage = normalizeCoverPageCandidate(coverResponse.coverPage) || coverPage;
+      warnings.push(...(coverResponse.warnings || []));
+      await updateConversionJob(job.id, {
+        coverPageCandidate: coverPage,
+        warnings
+      });
+    } catch (error) {
+      warnings.push(error.message || 'Cover page extraction failed, so the title page fields need a manual review.');
+    }
+  }
+
   if (!normalizedScreenplayText) {
-    const normalizationSource = buildNormalizationPayload(normalizedText);
+    const normalizationSource = buildNormalizationPayload(screenplayBodyText);
     const normalizationChunks = chunkScriptText(normalizationSource, 8000);
     const normalizedChunks = [];
+    let normalizationMemory = {
+      lastScene: '',
+      recentSpeakers: []
+    };
 
     for (let index = 0; index < normalizationChunks.length; index += 1) {
       const chunk = normalizationChunks[index];
@@ -158,12 +208,14 @@ export async function convertScriptTextToLines(rawText, {
           fileName,
           chunkIndex: index,
           chunkCount: normalizationChunks.length,
+          continuity: normalizationMemory,
           jobId: job.id
         });
         if (!String(response.text || '').trim()) {
           throw new Error('The AI did not return normalized screenplay text.');
         }
         normalizedChunks.push(normalizeExtractedText(response.text));
+        normalizationMemory = updateChunkContinuityMemory(normalizationMemory, response.text);
         if (!coverPage) {
           coverPage = normalizeCoverPageCandidate(response.coverPage);
         }
@@ -175,19 +227,21 @@ export async function convertScriptTextToLines(rawText, {
       }
     }
 
-    normalizedScreenplayText = normalizeExtractedText(normalizedChunks.join('\n\n')) || heuristicNormalizeText(normalizedText);
+    normalizedScreenplayText = normalizeExtractedText(normalizedChunks.join('\n\n')) || heuristicNormalizeText(screenplayBodyText);
   } else {
     onProgress?.('Using your saved normalized screenplay text...');
   }
 
   if (!coverPage) {
-    coverPage = detectCoverPageCandidate(normalizedText);
+    coverPage = detectCoverPageCandidate(extractedText);
   }
   await updateConversionJob(job.id, {
     status: 'normalized',
     stageLabel: 'Normalized screenplay text ready',
+    rawText: screenplayBodyText,
     normalizedText: normalizedScreenplayText,
     coverPageCandidate: coverPage,
+    coverPageSourceText: separatedCover.coverText || '',
     warnings
   });
 
@@ -195,6 +249,10 @@ export async function convertScriptTextToLines(rawText, {
   const candidatePayload = buildCandidatePayload(candidates);
   const chunks = chunkScriptText(candidatePayload, 7000);
   const convertedLines = [];
+  let structureMemory = {
+    lastScene: '',
+    recentSpeakers: []
+  };
 
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index];
@@ -214,6 +272,7 @@ export async function convertScriptTextToLines(rawText, {
         fileName,
         chunkIndex: index,
         chunkCount: chunks.length,
+        continuity: structureMemory,
         jobId: job.id
       });
       const safeLines = sanitizeConvertedLines(response.lines);
@@ -221,6 +280,7 @@ export async function convertScriptTextToLines(rawText, {
         throw new Error('The AI did not return any screenplay blocks.');
       }
       convertedLines.push(...safeLines);
+      structureMemory = updateChunkContinuityMemoryFromLines(structureMemory, safeLines);
       warnings.push(...(response.warnings || []));
     } catch (error) {
       usedFallback = true;
@@ -279,8 +339,12 @@ export function markConversionExtractionStarted(jobId) {
 }
 
 export function attachRawTextToConversionJob(jobId, rawText) {
+  const extracted = normalizeExtractedText(rawText);
+  const separated = separateCoverPageFromScript(extracted);
   return updateConversionJob(jobId, {
-    rawText: normalizeExtractedText(rawText),
+    rawText: preparePreStructureText(separated.bodyText || extracted),
+    coverPageCandidate: separated.coverPage || null,
+    coverPageSourceText: separated.coverText || '',
     extractedAt: new Date().toISOString()
   });
 }
@@ -355,6 +419,42 @@ function normalizeCoverPageCandidate(coverPage) {
   return Object.values(normalized).some(Boolean) ? normalized : null;
 }
 
+export function separateCoverPageFromScript(text) {
+  const lines = String(text || '')
+    .replace(/\r/g, '')
+    .split('\n');
+
+  const trimmedLines = lines.map((line) => line.trim());
+  const firstSceneIndex = trimmedLines.findIndex((line) => /^(INT\.|EXT\.|EST\.|INT\/EXT\.|INT\.\/EXT\.)/i.test(line));
+  if (firstSceneIndex <= 1) {
+    return {
+      coverText: '',
+      bodyText: normalizeExtractedText(text),
+      coverPage: null
+    };
+  }
+
+  const coverLines = lines.slice(0, firstSceneIndex);
+  const bodyLines = lines.slice(firstSceneIndex);
+  const coverText = normalizeExtractedText(coverLines.join('\n'));
+  const bodyText = normalizeExtractedText(bodyLines.join('\n'));
+  const coverPage = detectCoverPageCandidate(coverText);
+
+  if (!coverPage && coverText.split('\n').filter(Boolean).length < 3) {
+    return {
+      coverText: '',
+      bodyText: normalizeExtractedText(text),
+      coverPage: null
+    };
+  }
+
+  return {
+    coverText,
+    bodyText: bodyText || normalizeExtractedText(text),
+    coverPage
+  };
+}
+
 function detectCoverPageCandidate(text) {
   const lines = String(text || '')
     .replace(/\r/g, '')
@@ -378,7 +478,7 @@ function detectCoverPageCandidate(text) {
 }
 
 function sanitizeConvertedLines(lines) {
-  return (lines || []).reduce((accumulator, line) => {
+  const normalized = (lines || []).reduce((accumulator, line) => {
     const text = String(line?.text || '').replace(/\r/g, '').trim();
     let type = String(line?.type || 'action').trim().toLowerCase();
     if (!text) {
@@ -404,6 +504,16 @@ function sanitizeConvertedLines(lines) {
     });
     return accumulator;
   }, []);
+
+  return repairConvertedLines(normalized);
+}
+
+export function buildLocalStructuredPreview(text) {
+  const prepared = preparePreStructureText(String(text || ''));
+  if (!prepared) return [];
+  const candidates = buildConversionCandidates(prepared);
+  if (!candidates.length) return [];
+  return sanitizeConvertedLines(fallbackCandidatesToLines(candidates));
 }
 
 function fallbackCandidatesToLines(candidates) {
@@ -495,6 +605,95 @@ function extractPdfPageText(items) {
   return lines.filter(Boolean).join('\n');
 }
 
+export function assessPdfTextExtraction(pageSegments) {
+  const pages = Array.isArray(pageSegments) ? pageSegments.map((page) => normalizeExtractedText(page)) : [];
+  const nonEmptyPages = pages.filter(Boolean);
+  const totalChars = nonEmptyPages.reduce((sum, page) => sum + page.replace(/\s+/g, '').length, 0);
+  const avgCharsPerPage = nonEmptyPages.length ? totalChars / nonEmptyPages.length : 0;
+  const pagesWithVeryLowText = nonEmptyPages.filter((page) => page.replace(/\s+/g, '').length < 80).length;
+  const needsOcr = nonEmptyPages.length > 0 && (
+    avgCharsPerPage < OCR_MIN_TEXT_CHARS_PER_PAGE
+    || pagesWithVeryLowText >= Math.ceil(nonEmptyPages.length * 0.6)
+  );
+  return {
+    totalPages: pages.length,
+    nonEmptyPages: nonEmptyPages.length,
+    avgCharsPerPage,
+    pagesWithVeryLowText,
+    needsOcr
+  };
+}
+
+async function ocrPdfWithTesseract(pdf, { onProgress } = {}) {
+  const collected = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    await page.render({ canvasContext: context, viewport }).promise;
+
+    onProgress?.(`Running OCR on PDF page ${pageNumber} of ${pdf.numPages}...`);
+    const result = await window.Tesseract.recognize(canvas, 'eng', {
+      logger: (message) => {
+        if (message?.status === 'recognizing text' && Number.isFinite(message.progress)) {
+          onProgress?.(`Running OCR on PDF page ${pageNumber} of ${pdf.numPages}... ${Math.round(message.progress * 100)}%`);
+        }
+      }
+    });
+    collected.push(normalizeExtractedText(result?.data?.text || ''));
+  }
+  return collected.filter(Boolean).join('\n\n');
+}
+
+function updateChunkContinuityMemory(previousMemory, normalizedText) {
+  const next = {
+    lastScene: String(previousMemory?.lastScene || ''),
+    recentSpeakers: Array.isArray(previousMemory?.recentSpeakers) ? [...previousMemory.recentSpeakers] : []
+  };
+  const lines = String(normalizedText || '').split('\n').map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (isSceneLike(line)) {
+      next.lastScene = line;
+      continue;
+    }
+    if (isCharacterCueLike(line)) {
+      pushRecentSpeaker(next, line);
+    }
+  }
+  return next;
+}
+
+function updateChunkContinuityMemoryFromLines(previousMemory, lines) {
+  const next = {
+    lastScene: String(previousMemory?.lastScene || ''),
+    recentSpeakers: Array.isArray(previousMemory?.recentSpeakers) ? [...previousMemory.recentSpeakers] : []
+  };
+  for (const line of lines || []) {
+    const type = String(line?.type || '').trim().toLowerCase();
+    const text = String(line?.text || '').trim();
+    if (!text) continue;
+    if (type === 'scene') {
+      next.lastScene = text;
+      continue;
+    }
+    if (type === 'character') {
+      pushRecentSpeaker(next, text);
+    }
+  }
+  return next;
+}
+
+function pushRecentSpeaker(memory, speaker) {
+  const normalized = String(speaker || '').trim();
+  if (!normalized) return;
+  const recent = Array.isArray(memory.recentSpeakers) ? memory.recentSpeakers.filter((entry) => entry !== normalized) : [];
+  recent.unshift(normalized);
+  memory.recentSpeakers = recent.slice(0, 4);
+}
+
 function normalizeExtractedText(value) {
   return String(value || '')
     .replace(/\r\n/g, '\n')
@@ -503,6 +702,22 @@ function normalizeExtractedText(value) {
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+export function preparePreStructureText(value, { pageSegments = [] } = {}) {
+  const normalized = normalizeExtractedText(value);
+  if (!normalized) return '';
+
+  const cleanedPageSegments = Array.isArray(pageSegments) && pageSegments.length
+    ? stripRepeatedPageHeadersAndFooters(pageSegments)
+    : [];
+
+  const sourceText = cleanedPageSegments.length
+    ? cleanedPageSegments.join('\n\n')
+    : normalized;
+
+  const merged = mergeSoftWrappedScreenplayLines(sourceText.split('\n'));
+  return normalizeExtractedText(merged.join('\n'));
 }
 
 function heuristicNormalizeText(value) {
@@ -526,6 +741,203 @@ function looksLikeDialogueText(text) {
     return false;
   }
   return !/^[A-Z0-9 .'\-()]+$/.test(text);
+}
+
+function repairConvertedLines(lines) {
+  const repaired = [];
+
+  for (const entry of lines || []) {
+    const current = {
+      type: String(entry?.type || 'action').trim().toLowerCase(),
+      text: String(entry?.text || '').trim()
+    };
+    if (!current.text) continue;
+
+    const previous = repaired[repaired.length - 1] || null;
+
+    if (current.type === 'parenthetical' && !(previous?.type === 'character' || previous?.type === 'dialogue')) {
+      if (previous?.type === 'action') {
+        previous.text = `${previous.text} ${current.text}`.replace(/\s+/g, ' ').trim();
+        continue;
+      }
+      current.type = 'action';
+    }
+
+    if (current.type === 'dialogue' && !(previous?.type === 'character' || previous?.type === 'parenthetical' || previous?.type === 'dialogue')) {
+      current.type = 'action';
+    }
+
+    if (current.type === 'scene' && previous?.type === 'scene' && previous.text === current.text) {
+      continue;
+    }
+
+    if (current.type === 'action' && previous?.type === 'action' && shouldMergeActionBlocks(previous.text, current.text)) {
+      previous.text = `${previous.text} ${current.text}`.replace(/\s+/g, ' ').trim();
+      continue;
+    }
+
+    if (current.type === 'dialogue' && previous?.type === 'dialogue') {
+      previous.text = `${previous.text} ${current.text}`.replace(/\s+/g, ' ').trim();
+      continue;
+    }
+
+    repaired.push(current);
+  }
+
+  return repaired;
+}
+
+function shouldMergeActionBlocks(previousText, currentText) {
+  if (!previousText || !currentText) return false;
+  if (isSceneLike(currentText) || isTransitionLike(currentText) || isShotLike(currentText) || isCharacterCueLike(currentText) || isParentheticalLike(currentText)) {
+    return false;
+  }
+  if (/^[a-z("'“]/.test(currentText)) return true;
+  if (currentText.length <= 42 && !/[.!?:"”')\]]$/.test(previousText)) return true;
+  return false;
+}
+
+function stripRepeatedPageHeadersAndFooters(pageSegments) {
+  const normalizedSegments = pageSegments
+    .map((segment) => normalizeExtractedText(segment))
+    .filter(Boolean);
+
+  if (normalizedSegments.length < 2) {
+    return normalizedSegments;
+  }
+
+  const counts = new Map();
+  const candidatesByPage = normalizedSegments.map((segment) => {
+    const lines = segment.split('\n').map((line) => line.trim()).filter(Boolean);
+    const candidates = [
+      ...lines.slice(0, 3),
+      ...lines.slice(-3)
+    ]
+      .map((line) => normalizeRepetitionCandidate(line))
+      .filter(Boolean);
+    new Set(candidates).forEach((candidate) => {
+      counts.set(candidate, (counts.get(candidate) || 0) + 1);
+    });
+    return lines;
+  });
+
+  const repeated = new Set(
+    Array.from(counts.entries())
+      .filter(([, count]) => count >= 2)
+      .map(([candidate]) => candidate)
+  );
+
+  return candidatesByPage.map((lines) => lines
+    .filter((line) => {
+      const candidate = normalizeRepetitionCandidate(line);
+      if (!candidate) return true;
+      if (isLikelyPageNumber(line)) return false;
+      return !repeated.has(candidate);
+    })
+    .join('\n'))
+    .filter(Boolean);
+}
+
+function mergeSoftWrappedScreenplayLines(lines) {
+  const merged = [];
+
+  for (const rawLine of lines || []) {
+    const original = String(rawLine || '').replace(/\r/g, '');
+    const trimmed = original.trim();
+    if (!trimmed) {
+      if (merged[merged.length - 1]?.text) {
+        merged.push({ text: '', role: 'break' });
+      }
+      continue;
+    }
+
+    if (isLikelyPageNumber(trimmed) || isLikelyContinuationMarker(trimmed)) {
+      continue;
+    }
+
+    const indent = original.match(/^\s*/)?.[0]?.length || 0;
+    const role = classifyScreenplayPhysicalLine(trimmed, indent, merged[merged.length - 1]?.role || '');
+    const previous = merged[merged.length - 1];
+
+    if (previous?.text && previous.role === role) {
+      if (role === 'dialogue' && shouldJoinDialogueLine(previous.text, trimmed)) {
+        previous.text = `${previous.text} ${trimmed}`.replace(/\s+/g, ' ').trim();
+        continue;
+      }
+
+      if (role === 'action' && shouldJoinActionLine(previous.text, trimmed, previous.indent ?? 0, indent)) {
+        previous.text = `${previous.text} ${trimmed}`.replace(/\s+/g, ' ').trim();
+        continue;
+      }
+    }
+
+    merged.push({ text: trimmed, role, indent });
+  }
+
+  return merged.map((entry) => entry.text);
+}
+
+function normalizeRepetitionCandidate(line) {
+  const normalized = String(line || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[–—]/g, '-')
+    .trim();
+  if (!normalized) return '';
+  if (normalized.length > 72) return '';
+  if (isSceneLike(normalized) || isTransitionLike(normalized) || isShotLike(normalized)) {
+    return '';
+  }
+  return normalized.toLowerCase();
+}
+
+function isLikelyPageNumber(text) {
+  return /^(page\s+)?\d{1,3}([./-]\d{1,3})?$/i.test(String(text || '').trim());
+}
+
+function isLikelyContinuationMarker(text) {
+  return /^\(?(continued|cont'?d)\)?$/i.test(String(text || '').trim());
+}
+
+function classifyScreenplayPhysicalLine(text, indent, previousRole) {
+  if (isSceneLike(text)) return 'scene';
+  if (isTransitionLike(text)) return 'transition';
+  if (isShotLike(text)) return 'shot';
+  if (isParentheticalLike(text)) return 'parenthetical';
+  if (isCharacterCueLike(text)) return 'character';
+
+  if (previousRole === 'character' || previousRole === 'parenthetical' || previousRole === 'dialogue') {
+    if (indent >= 4 || looksLikeDialogueText(text)) {
+      return 'dialogue';
+    }
+  }
+
+  if (indent >= 8 && looksLikeDialogueText(text)) {
+    return 'dialogue';
+  }
+
+  return 'action';
+}
+
+function shouldJoinDialogueLine(previousText, currentText) {
+  if (!previousText || !currentText) return false;
+  if (isCharacterCueLike(currentText) || isSceneLike(currentText) || isTransitionLike(currentText) || isShotLike(currentText)) {
+    return false;
+  }
+  if (/^[a-z"'(]/.test(currentText)) return true;
+  if (!/[.!?:"”')\]]$/.test(previousText)) return true;
+  return currentText.length <= 56;
+}
+
+function shouldJoinActionLine(previousText, currentText, previousIndent, currentIndent) {
+  if (!previousText || !currentText) return false;
+  if (isCharacterCueLike(currentText) || isSceneLike(currentText) || isTransitionLike(currentText) || isShotLike(currentText) || isParentheticalLike(currentText)) {
+    return false;
+  }
+  const indentDelta = Math.abs((previousIndent || 0) - (currentIndent || 0));
+  if (indentDelta > 3) return false;
+  if (/^[a-z("'“]/.test(currentText)) return true;
+  if (!/[.!?:"”')\]]$/.test(previousText)) return true;
+  return false;
 }
 
 function finalizePdfLine(parts) {

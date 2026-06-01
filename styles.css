@@ -1983,9 +1983,7 @@ html[data-theme="rose"] .mesh-background {
   justify-content: space-between;
   padding: 8px 14px;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface-strong) 85%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--surface-strong);
   overflow: visible;
 }
 
@@ -2105,9 +2103,7 @@ html[data-theme="rose"] .mesh-background {
   z-index: 19;
   padding: 4px 12px 6px;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface-strong) 75%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--surface-strong);
 }
 
 .tool-strip-row {
@@ -2473,7 +2469,8 @@ body.focus-mode-active .resize-handle {
   align-items: flex-start;
   gap: 12px;
   padding: 10px 8px 12px;
-  background: linear-gradient(180deg, var(--surface-muted) 0%, color-mix(in srgb, var(--surface-muted) 96%, transparent) 100%);
+  background: var(--surface-muted);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
 }
 
 .editor-column-header {
@@ -4106,6 +4103,12 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding-bottom: 0.35rem;
+  background: var(--panel);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
 }
 
 .file-recovery-head h3 {
@@ -4182,6 +4185,12 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   justify-content: space-between;
   align-items: flex-start;
   gap: 0.85rem;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  padding-bottom: 0.35rem;
+  background: var(--panel);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
 }
 
 .conversion-review-head h3 {
@@ -4218,7 +4227,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   padding: 0.54rem 0.72rem 0.5rem;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent) 14%);
-  background: color-mix(in srgb, var(--surface-strong) 88%, transparent);
+  background: var(--surface-strong);
 }
 
 .conversion-review-summary span {
@@ -4294,7 +4303,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   padding: 0.95rem;
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
-  background: color-mix(in srgb, var(--surface-strong) 90%, transparent);
+  background: var(--surface-strong);
 }
 
 .conversion-review-panel-head {
@@ -4488,6 +4497,15 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   gap: 0.85rem;
 }
 
+.conversion-live-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  padding-bottom: 0.35rem;
+  background: var(--panel);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+}
+
 .conversion-live-head h3 {
   margin: 0 0 0.2rem;
   font-size: 1.06rem;
@@ -4530,7 +4548,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   padding: 0.54rem 0.72rem 0.5rem;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent) 14%);
-  background: color-mix(in srgb, var(--surface-strong) 88%, transparent);
+  background: var(--surface-strong);
 }
 
 .conversion-live-summary span {
@@ -4549,8 +4567,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .conversion-live-timeline {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.6rem;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.45rem;
 }
 
 .conversion-live-warning-card {
@@ -4577,23 +4595,24 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .conversion-live-step {
   display: grid;
   gap: 0.18rem;
-  min-height: 64px;
-  padding: 0.62rem 0.72rem;
+  min-height: 48px;
+  padding: 0.42rem 0.56rem;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
-  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  background: var(--surface-strong);
 }
 
 .conversion-live-step span {
-  font-size: 0.66rem;
+  font-size: 0.61rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .conversion-live-step strong {
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   color: var(--ink);
+  line-height: 1.08;
 }
 
 .conversion-live-step[data-step-state="active"] {
@@ -4615,16 +4634,18 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
   gap: 0.85rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .conversion-live-panel {
   display: grid;
+  align-content: start;
   gap: 0.75rem;
   padding: 0.95rem;
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
-  background: color-mix(in srgb, var(--surface-strong) 90%, transparent);
+  background: var(--surface-strong);
+  height: 100%;
 }
 
 .conversion-live-panel-head h4 {
@@ -4663,6 +4684,23 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   font: 0.84rem/1.5 "Courier New", monospace;
 }
 
+.conversion-live-cover-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.conversion-live-cover-grid input {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
+  background: color-mix(in srgb, var(--surface-strong) 88%, black 12%);
+  color: var(--ink);
+  padding: 0.7rem 0.85rem;
+  font: inherit;
+}
+
 .conversion-live-guidance-block textarea {
   min-height: 220px;
   font-family: inherit;
@@ -4677,7 +4715,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .conversion-live-structured {
-  min-height: 260px;
+  min-height: 320px;
   max-height: 340px;
   overflow: auto;
   border-radius: 14px;
@@ -4724,6 +4762,12 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   justify-content: space-between;
   align-items: flex-start;
   gap: 0.85rem;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding-bottom: 0.35rem;
+  background: var(--panel);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
 }
 
 .conversion-jobs-head h3 {
@@ -4756,7 +4800,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   text-align: left;
   border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
   border-radius: 18px;
-  background: color-mix(in srgb, var(--surface-strong) 90%, transparent);
+  background: var(--surface-strong);
   color: var(--ink);
   padding: 0.8rem 0.84rem 0.76rem;
   display: grid;
@@ -6050,8 +6094,7 @@ kbd {
   top: 0;
   z-index: 3;
   padding: 8px 0 10px;
-  background: color-mix(in srgb, var(--panel) 94%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--panel);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
 }
 
@@ -7364,9 +7407,8 @@ html[data-theme="white"] .user-trigger {
   gap: 16px;
   padding: 0 24px;
   min-height: var(--topbar-height, 64px);
-  background: color-mix(in srgb, var(--panel) 92%, white 8%);
+  background: var(--panel);
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(12px);
   animation: none !important;
 }
 
@@ -7421,6 +7463,7 @@ html[data-theme="white"] .user-trigger {
   padding: 28px;
   scroll-behavior: auto;
   animation: none !important;
+  position: relative;
 }
 
 .settings-section {
@@ -7441,6 +7484,11 @@ html[data-theme="white"] .user-trigger {
   margin: 0;
   font-size: 1.16rem;
   letter-spacing: -0.01em;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 0 0 0.45rem;
+  background: var(--bg-gradient);
 }
 
 .settings-group {
@@ -8058,10 +8106,12 @@ html[data-theme="white"] .user-trigger {
   display: flex;
   align-items: center;
   gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 12;
   padding: 14px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
-  backdrop-filter: blur(12px);
 }
 
 .admin-topbar-title {
@@ -8096,7 +8146,7 @@ html[data-theme="white"] .user-trigger {
   width: 170px;
   flex-shrink: 0;
   border-right: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  background: var(--panel);
   overflow-y: auto;
 }
 
@@ -8147,6 +8197,11 @@ html[data-theme="white"] .user-trigger {
   font-weight: 600;
   margin: 0 0 16px;
   color: var(--ink);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 0 0 0.45rem;
+  background: var(--bg-gradient);
 }
 
 .admin-section-inner h3 {
