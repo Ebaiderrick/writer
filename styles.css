@@ -2454,7 +2454,7 @@ body.focus-mode-active .resize-handle {
 
 .left-pane,
 .right-pane {
-  padding: 14px 10px 18px;
+  padding: 0 10px 18px;
   background: var(--surface-muted);
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
@@ -2474,13 +2474,13 @@ body.focus-mode-active .resize-handle {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  padding: 10px 8px 12px;
+  padding: 14px 8px 12px;
   background: var(--surface-muted);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
 }
 
 .editor-column-header {
-  padding: 12px 18px 8px;
+  padding: 14px 18px 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
 }
 
@@ -4097,7 +4097,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   flex-direction: column;
   gap: 0.9rem;
   overflow: hidden;
-  padding: var(--workspace-sheet-pad);
+  padding: 0 var(--workspace-sheet-pad) var(--workspace-sheet-pad);
   border-radius: var(--workspace-sheet-radius);
   background: var(--panel);
   color: var(--text);
@@ -4112,8 +4112,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   position: sticky;
   top: 0;
   z-index: 5;
-  padding-bottom: 0.45rem;
-  background: var(--panel);
+  padding: var(--workspace-sheet-pad) 0 0.45rem;
+  background: var(--surface-strong);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
   box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
 }
@@ -4205,7 +4205,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: grid;
   gap: 0.95rem;
   overflow: auto;
-  padding: var(--workspace-sheet-pad);
+  padding: 0 var(--workspace-sheet-pad) var(--workspace-sheet-pad);
   border-radius: var(--workspace-sheet-radius);
   background: var(--panel);
   color: var(--ink);
@@ -4221,8 +4221,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   position: sticky;
   top: 0;
   z-index: 6;
-  padding-bottom: 0.45rem;
-  background: var(--panel);
+  padding: var(--workspace-sheet-pad) 0 0.45rem;
+  background: var(--surface-strong);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
   box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
 }
@@ -4541,7 +4541,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: grid;
   gap: 0.95rem;
   overflow: auto;
-  padding: var(--workspace-sheet-pad);
+  padding: 0 var(--workspace-sheet-pad) var(--workspace-sheet-pad);
   border-radius: var(--workspace-sheet-radius);
   background: var(--panel);
   color: var(--ink);
@@ -4557,14 +4557,25 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   gap: 0.85rem;
 }
 
-.conversion-live-head {
+.conversion-live-top {
   position: sticky;
   top: 0;
   z-index: 6;
-  padding-bottom: 0.45rem;
-  background: var(--panel);
+  display: grid;
+  gap: 0.8rem;
+  padding: var(--workspace-sheet-pad) 0 0.6rem;
+  background: var(--surface-strong);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
   box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+.conversion-live-head {
+  position: relative;
+  z-index: 1;
+  padding-bottom: 0;
+  background: var(--surface-strong);
+  border-bottom: none;
+  box-shadow: none;
 }
 
 .conversion-live-head h3 {
@@ -4709,6 +4720,16 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   height: 100%;
 }
 
+.conversion-live-panel-head {
+  position: relative;
+  top: auto;
+  z-index: 1;
+  padding: 0 0 0.45rem;
+  background: var(--surface-strong);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  box-shadow: none;
+}
+
 .conversion-live-panel-head h4 {
   margin: 0 0 0.18rem;
   font-size: 0.98rem;
@@ -4817,7 +4838,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: grid;
   gap: 0.9rem;
   overflow: auto;
-  padding: var(--workspace-sheet-pad);
+  padding: 0 var(--workspace-sheet-pad) var(--workspace-sheet-pad);
   border-radius: var(--workspace-sheet-radius);
   background: var(--panel);
   color: var(--ink);
@@ -4833,8 +4854,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   position: sticky;
   top: 0;
   z-index: 5;
-  padding-bottom: 0.45rem;
-  background: var(--panel);
+  padding: var(--workspace-sheet-pad) 0 0.45rem;
+  background: var(--surface-strong);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
   box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
 }

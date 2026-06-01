@@ -1800,29 +1800,31 @@
 
   <dialog id="conversionLiveDialog" class="conversion-live-dialog">
       <div class="conversion-live-sheet">
-        <div class="conversion-live-head">
-          <div>
-            <span class="conversion-sheet-step">Live Conversion</span>
-            <h3 id="conversionLiveTitle">Current Conversion Job</h3>
-            <p id="conversionLiveMeta">Watch the uploaded file move through extraction, normalization, structuring, and import.</p>
+        <div class="conversion-live-top">
+          <div class="conversion-live-head">
+            <div>
+              <span class="conversion-sheet-step">Live Conversion</span>
+              <h3 id="conversionLiveTitle">Current Conversion Job</h3>
+              <p id="conversionLiveMeta">Watch the uploaded file move through extraction, normalization, structuring, and import.</p>
+            </div>
+            <div class="conversion-live-head-actions">
+              <button id="conversionLiveApplyBtn" class="ghost-button btn-sm" type="button">Apply Preview</button>
+              <button id="conversionLiveOpenReviewBtn" class="ghost-button btn-sm" type="button" disabled>Open Review</button>
+              <button id="conversionLiveCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+            </div>
           </div>
-          <div class="conversion-live-head-actions">
-            <button id="conversionLiveApplyBtn" class="ghost-button btn-sm" type="button">Apply Preview</button>
-            <button id="conversionLiveOpenReviewBtn" class="ghost-button btn-sm" type="button" disabled>Open Review</button>
-            <button id="conversionLiveCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+          <div class="conversion-live-summary">
+            <div><span>Status</span><strong id="conversionLiveStatus">Queued</strong></div>
+            <div><span>Stage</span><strong id="conversionLiveStage">Queued</strong></div>
+            <div><span>Source file</span><strong id="conversionLiveFile">-</strong></div>
+            <div><span>Warnings</span><strong id="conversionLiveWarningsCount">0</strong></div>
           </div>
+          <div id="conversionLiveTimeline" class="conversion-live-timeline"></div>
+          <section class="conversion-live-warning-card">
+            <strong>Recheck this data before you trust it.</strong>
+            <p>The extracted and normalized text may still miss exact screenplay intent, page-spacing meaning, or cover-page details. Review and adjust it before the next pass.</p>
+          </section>
         </div>
-        <div class="conversion-live-summary">
-          <div><span>Status</span><strong id="conversionLiveStatus">Queued</strong></div>
-          <div><span>Stage</span><strong id="conversionLiveStage">Queued</strong></div>
-          <div><span>Source file</span><strong id="conversionLiveFile">-</strong></div>
-          <div><span>Warnings</span><strong id="conversionLiveWarningsCount">0</strong></div>
-        </div>
-        <div id="conversionLiveTimeline" class="conversion-live-timeline"></div>
-        <section class="conversion-live-warning-card">
-          <strong>Recheck this data before you trust it.</strong>
-          <p>The extracted and normalized text may still miss exact screenplay intent, page-spacing meaning, or cover-page details. Review and adjust it before the next pass.</p>
-        </section>
         <div class="conversion-live-body">
           <section class="conversion-live-panel">
             <div class="conversion-live-panel-head">
