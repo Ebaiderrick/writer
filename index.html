@@ -740,14 +740,13 @@
             <button class="nav-link" type="button" data-menu-trigger="studioFormatMenu">Format</button>
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
             <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tool</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tools</button>
             <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate</button>
             <button class="nav-link" type="button" data-menu-trigger="studioHelpMenu">Help</button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
 
-          <div id="studioFileMenu" class="nav-menu nav-menu-wide" hidden>
-            <button class="nav-menu-button" type="button" data-menu-action="open-conversion-jobs">Conversion Jobs</button>
+          <div id="studioFileMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
             <details class="menu-group" open>
               <summary class="menu-group-summary">Project</summary>
               <div class="menu-group-body">
@@ -755,7 +754,6 @@
                 <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-file-recovery">File Recovery</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-conversion-jobs">Conversion Jobs</button>
-                <button class="nav-menu-button" type="button" data-menu-action="import-file">Import</button>
                 <details id="studioRecentProjectsToggle" class="recent-projects-group menu-group-inline" open>
                   <summary class="recent-projects-summary">
                     <span class="recent-projects-label">Recent Projects</span>
@@ -765,7 +763,7 @@
               </div>
             </details>
               <details class="menu-group">
-                <summary class="menu-group-summary">Manage</summary>
+                <summary class="menu-group-summary">Save</summary>
                 <div class="menu-group-body">
                   <button class="nav-menu-button" type="button" data-menu-action="save-project">Save Project</button>
                   <button class="nav-menu-button" type="button" data-menu-action="save-home">Save &amp; Home</button>
@@ -793,16 +791,16 @@
                 </div>
               </details>
               <details class="menu-group">
-                <summary class="menu-group-summary">Export</summary>
-                <div class="menu-group-body">
-                  <button class="nav-menu-button" type="button" data-menu-action="export-txt">Export as TXT</button>
-                  <button class="nav-menu-button" type="button" data-menu-action="export-word">Export as Word</button>
-                  <button class="nav-menu-button" type="button" data-menu-action="export-pdf">Export as PDF</button>
-                  <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
-                </div>
-              </details>
+              <summary class="menu-group-summary">Import &amp; Export</summary>
+              <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="export-txt">Export as TXT</button>
+                <button class="nav-menu-button" type="button" data-menu-action="export-word">Export as Word</button>
+                <button class="nav-menu-button" type="button" data-menu-action="export-pdf">Export as PDF</button>
+                <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
+              </div>
+            </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Output</summary>
+              <summary class="menu-group-summary">Preview &amp; Print</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="preview-new-tab">Preview in New Tab</button>
                 <button class="nav-menu-button" type="button" data-menu-action="print-project">Print</button>
@@ -811,7 +809,7 @@
             </details>
           </div>
 
-          <div id="studioEditMenu" class="nav-menu nav-menu-wide" hidden>
+          <div id="studioEditMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
             <details class="menu-group" open>
               <summary class="menu-group-summary">History</summary>
               <div class="menu-group-body">
@@ -821,7 +819,7 @@
               </div>
             </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Capitalization</summary>
+              <summary class="menu-group-summary">Transform Text</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="text-caps-sentence">Sentence Case</button>
                 <button class="nav-menu-button" type="button" data-menu-action="text-caps-each">Title Case</button>
@@ -831,7 +829,7 @@
               </div>
             </details>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Text</summary>
+              <summary class="menu-group-summary">Clipboard</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="text-copy">Copy</button>
                 <button class="nav-menu-button" type="button" data-menu-action="text-cut">Cut</button>
@@ -848,7 +846,7 @@
               </div>
             </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Search</summary>
+              <summary class="menu-group-summary">Find &amp; Filter</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="find">Find</button>
                 <button class="nav-menu-button" type="button" data-menu-action="filter">Filter</button>
@@ -857,9 +855,9 @@
             </details>
           </div>
 
-          <div id="studioFormatMenu" class="nav-menu" hidden>
+          <div id="studioFormatMenu" class="nav-menu nav-menu-flyout" hidden>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Line Function</summary>
+              <summary class="menu-group-summary">Line Type</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-format-type="scene">Scene</button>
                 <button class="nav-menu-button" type="button" data-format-type="action">Action</button>
@@ -874,17 +872,11 @@
                 <button class="nav-menu-button" type="button" data-format-type="image">Image</button>
               </div>
             </details>
-            <details class="menu-group" open>
-              <summary class="menu-group-summary">Conversion</summary>
-              <div class="menu-group-body">
-                <button id="openConversionInterfaceMenuBtn" class="nav-menu-button" type="button" data-menu-action="open-conversion-interface">Conversion Interface</button>
-              </div>
-            </details>
           </div>
 
-          <div id="studioViewMenu" class="nav-menu nav-menu-wide" hidden>
+          <div id="studioViewMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Theme</summary>
+              <summary class="menu-group-summary">Appearance</summary>
               <div class="menu-group-body">
                 <div class="theme-options">
                   <button class="theme-option" type="button" data-theme-value="cedar">Cedar</button>
@@ -915,17 +907,18 @@
             </details>
           </div>
 
-          <div id="studioToolsMenu" class="nav-menu nav-menu-wide" hidden>
+          <div id="studioToolsMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Tools</summary>
+              <summary class="menu-group-summary">Utilities</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Workspace</button>
+                <button id="openConversionInterfaceMenuBtn" class="nav-menu-button" type="button" data-menu-action="open-conversion-interface">Conversion Interface</button>
               </div>
             </details>
 
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Writing</summary>
+              <summary class="menu-group-summary">Writing Tools</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-scenes">Scenes</button>
@@ -934,7 +927,7 @@
             </details>
 
             <details class="menu-group" open>
-              <summary class="menu-group-summary">AI</summary>
+              <summary class="menu-group-summary">AI Tools</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-story-memory">Story Memory</button>
@@ -944,7 +937,7 @@
             </details>
 
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Revision &amp; Insight</summary>
+              <summary class="menu-group-summary">Insights</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
                 <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
@@ -954,10 +947,10 @@
             </details>
           </div>
 
-          <div id="studioCollabMenu" class="nav-menu nav-menu-wide" hidden>
-            <div class="nav-menu-label">Workspace</div>
+          <div id="studioCollabMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
+            <div class="nav-menu-label">Collaborate</div>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Invite Collaborator</summary>
+              <summary class="menu-group-summary">Invite</summary>
               <div class="menu-group-body">
                 <div class="collab-invite-row">
                   <input id="collabInviteEmail" type="email" class="collab-input" placeholder="collaborator@email.com">
@@ -967,7 +960,7 @@
               </div>
             </details>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Collaborators <span id="collabCount"></span></summary>
+              <summary class="menu-group-summary">People <span id="collabCount"></span></summary>
               <div class="menu-group-body">
                 <div id="studioCollaboratorList" class="collaborator-list">
                   <p class="collab-empty">No collaborators yet.</p>
@@ -975,7 +968,7 @@
               </div>
             </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Collab Requests <span class="collab-badge" hidden></span></summary>
+              <summary class="menu-group-summary">Requests <span class="collab-badge" hidden></span></summary>
               <div class="menu-group-body">
                 <div id="studioCollabRequests" class="collab-requests-list">
                   <p class="collab-empty">No pending requests.</p>
@@ -1004,7 +997,7 @@
             </details>
           </div>
 
-          <div id="studioSettingsMenu" class="nav-menu" hidden>
+          <div id="studioSettingsMenu" class="nav-menu nav-menu-flyout" hidden>
             <details class="menu-group" open>
               <summary class="menu-group-summary">Editor</summary>
               <div class="menu-group-body">
@@ -1681,25 +1674,31 @@
         <button class="ghost-button btn-sm" type="submit">Close</button>
       </div>
       <div class="shortcut-grid">
-        <p><kbd>Ctrl/Cmd + S</kbd><span>Save project</span></p>
-        <p><kbd>Ctrl/Cmd + Z</kbd><span>Undo</span></p>
-        <p><kbd>Ctrl/Cmd + Y</kbd><span>Redo</span></p>
-        <p><kbd>Ctrl/Cmd + D</kbd><span>Duplicate Block</span></p>
-        <p><kbd>Alt + E</kbd><span>Scene</span></p>
-        <p><kbd>Alt + A</kbd><span>Action</span></p>
-        <p><kbd>Alt + C</kbd><span>Character</span></p>
-        <p><kbd>Alt + D</kbd><span>Dialogue</span></p>
-        <p><kbd>Alt + T</kbd><span>Transition</span></p>
-        <p><kbd>Alt + P</kbd><span>Parenthetical</span></p>
-        <p><kbd>Alt + S</kbd><span>Shot</span></p>
-        <p><kbd>Alt + X</kbd><span>Text</span></p>
-        <p><kbd>Alt + N</kbd><span>Note</span></p>
-        <p><kbd>Alt + U</kbd><span>Dual</span></p>
-        <p><kbd>Alt + I</kbd><span>Image</span></p>
-        <p><kbd>Alt + G</kbd><span>AI Grammar Check</span></p>
+        <p><kbd>Ctrl / Cmd + S</kbd><span>Save project</span></p>
+        <p><kbd>Alt / Option + H</kbd><span>Save &amp; Home</span></p>
+        <p><kbd>Ctrl / Cmd + Z</kbd><span>Undo</span></p>
+        <p><kbd>Ctrl / Cmd + Y</kbd><span>Redo</span></p>
+        <p><kbd>Ctrl / Cmd + D</kbd><span>Duplicate Block</span></p>
+        <p><kbd>Alt / Option + F</kbd><span>Find in script</span></p>
+        <p><kbd>Alt / Option + J</kbd><span>Conversion Jobs</span></p>
+        <p><kbd>Alt / Option + R</kbd><span>File Recovery</span></p>
+        <p><kbd>Alt / Option + V</kbd><span>Conversion Interface</span></p>
+        <p><kbd>F1</kbd><span>Open shortcuts</span></p>
+        <p><kbd>Alt / Option + E</kbd><span>Scene</span></p>
+        <p><kbd>Alt / Option + A</kbd><span>Action</span></p>
+        <p><kbd>Alt / Option + C</kbd><span>Character</span></p>
+        <p><kbd>Alt / Option + D</kbd><span>Dialogue</span></p>
+        <p><kbd>Alt / Option + T</kbd><span>Transition</span></p>
+        <p><kbd>Alt / Option + P</kbd><span>Parenthetical</span></p>
+        <p><kbd>Alt / Option + S</kbd><span>Shot</span></p>
+        <p><kbd>Alt / Option + X</kbd><span>Text</span></p>
+        <p><kbd>Alt / Option + N</kbd><span>Note</span></p>
+        <p><kbd>Alt / Option + U</kbd><span>Dual</span></p>
+        <p><kbd>Alt / Option + I</kbd><span>Image</span></p>
+        <p><kbd>Alt / Option + G</kbd><span>AI Grammar Check</span></p>
         <p><kbd>Tab</kbd><span>Cycle block type</span></p>
-        <p><kbd>▲ / ▼</kbd><span>Previous / Next Block</span></p>
-        <p><kbd>Ctrl + ▲ / ▼</kbd><span>Previous / Next Scene</span></p>
+        <p><kbd>Up / Down</kbd><span>Previous / Next Block</span></p>
+        <p><kbd>Ctrl / Cmd + Up / Down</kbd><span>Previous / Next Scene</span></p>
         <p><kbd>1-9</kbd><span>Choose suggestion</span></p>
       </div>
     </form>
@@ -2078,4 +2077,5 @@
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
+
 

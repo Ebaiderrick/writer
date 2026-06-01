@@ -181,6 +181,7 @@ test('journey: convert and import reaches jobs and review', async ({ page }) => 
     const menu = document.getElementById('studioFileMenu');
     if (menu) menu.hidden = false;
   });
+  await page.locator('#studioFileMenu .menu-group-summary').filter({ hasText: 'Project' }).first().hover();
   await page.locator('#studioFileMenu [data-menu-action="open-conversion-jobs"]').first().click();
   await expect(page.locator('#conversionJobsDialog[open]')).toBeVisible();
   await page.screenshot({ path: path.join(ARTIFACTS_DIR, 'journey-conversion-jobs.png') });

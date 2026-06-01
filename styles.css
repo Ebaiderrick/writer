@@ -440,6 +440,73 @@ html[data-theme="rose"] .mesh-background {
   padding: 0 6px 6px;
 }
 
+.nav-menu-flyout {
+  overflow: visible;
+}
+
+.nav-menu-flyout .menu-group {
+  position: relative;
+  margin-top: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.nav-menu-flyout .menu-group + .menu-group {
+  margin-top: 6px;
+}
+
+.nav-menu-flyout .menu-group-summary {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: color-mix(in srgb, var(--ink) 90%, var(--muted));
+  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.nav-menu-flyout .menu-group-summary::after {
+  content: "\25B6";
+  transform: none;
+  font-size: 0.72rem;
+}
+
+.nav-menu-flyout .menu-group[open] > .menu-group-summary,
+.nav-menu-flyout .menu-group-summary:hover,
+.nav-menu-flyout .menu-group-summary:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: var(--accent-strong);
+  transform: translateX(1px);
+}
+
+.nav-menu-flyout .menu-group-body {
+  position: absolute;
+  top: -6px;
+  left: calc(100% + 4px);
+  z-index: 40;
+  min-width: 228px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent) 14%);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+}
+
+.nav-menu-flyout .menu-group-body .nav-menu-button,
+.nav-menu-flyout .menu-group-body .theme-option {
+  min-height: 32px;
+}
+
+.nav-menu-flyout .menu-flyout-subsection,
+.nav-menu-flyout .recent-project-list {
+  display: grid;
+  gap: 8px;
+}
+
+.nav-menu-flyout .local-save-controls {
+  margin-top: 6px;
+}
+
 .menu-group-inline {
   display: grid;
   gap: 8px;
@@ -5086,6 +5153,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
     max-height: min(540px, calc(100vh - 96px));
     padding: 18px;
     border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent) 14%);
+    background: var(--surface-strong);
+    color: var(--ink);
+    box-shadow: var(--shadow);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     overflow: hidden;

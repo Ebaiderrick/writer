@@ -1856,11 +1856,22 @@ export function bindEvents() {
         closeMenus();
       }
     });
+    menu.addEventListener("mouseenter", (e) => {
+      if (window.innerWidth <= 900 || !menu.classList.contains("nav-menu-flyout")) return;
+      const summary = e.target.closest(".menu-group-summary");
+      const details = summary?.closest("details.menu-group");
+      if (!details) return;
+      menu.querySelectorAll("details.menu-group[open]").forEach((group) => {
+        if (group !== details) group.removeAttribute("open");
+      });
+      details.setAttribute("open", "");
+    }, true);
     // Accordion behavior for menu groups
     menu.addEventListener("click", (e) => {
       const summary = e.target.closest(".menu-group-summary");
       if (summary) {
-        const details = summary.parentElement;
+        const details = summary.closest("details.menu-group");
+        if (!details) return;
         if (!details.open) {
           menu.querySelectorAll(".menu-group[open]").forEach((group) => {
             if (group !== details) group.removeAttribute("open");
@@ -4013,10 +4024,26 @@ function handleGlobalKeydown(event) {
   const key = event.key.toLowerCase();
   const code = event.code;
 
+  if (event.key === "F1") {
+    event.preventDefault();
+    refs.helpDialog?.showModal();
+    return;
+  }
+
   // Ctrl/Cmd + S to Save
   if ((event.ctrlKey || event.metaKey) && key === "s") {
     event.preventDefault();
+    if (event.shiftKey) {
+      saveAndGoHome();
+      return;
+    }
     persistProjects(true);
+    return;
+  }
+
+  if ((event.ctrlKey || event.metaKey) && key === "f") {
+    event.preventDefault();
+    findInScript();
     return;
   }
 
@@ -4079,6 +4106,36 @@ function handleGlobalKeydown(event) {
     if (blockType) {
       event.preventDefault();
       handleToolSelection(blockType);
+    }
+
+    if (charCode === 'h' || key === 'h') {
+      event.preventDefault();
+      saveAndGoHome();
+      return;
+    }
+
+    if (charCode === 'f' || key === 'f') {
+      event.preventDefault();
+      findInScript();
+      return;
+    }
+
+    if (charCode === 'j' || key === 'j') {
+      event.preventDefault();
+      openConversionJobsDialog();
+      return;
+    }
+
+    if (charCode === 'r' || key === 'r') {
+      event.preventDefault();
+      openFileRecoveryDialog();
+      return;
+    }
+
+    if (charCode === 'v' || key === 'v') {
+      event.preventDefault();
+      openCurrentProjectConversionInterface();
+      return;
     }
 
     // Alt + G for AI Grammar
