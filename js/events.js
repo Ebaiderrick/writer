@@ -201,8 +201,28 @@ async function openConversionJobsDialog() {
   dialog.showModal();
 }
 
+async function openCurrentProjectConversionInterface() {
+  const project = getCurrentProject();
+  if (!project?.conversionJobId) {
+    await customAlert("This script does not have a saved conversion workspace yet.", "Conversion Interface");
+    return;
+  }
+  const record = await getConversionJobRecord(project.conversionJobId);
+  if (!record) {
+    await customAlert("The saved conversion workspace for this script is not available on this device right now.", "Conversion Interface");
+    return;
+  }
+  await openConversionLiveDialog(project.conversionJobId, project.id, record);
+}
+
 function closeConversionJobsDialog() {
   document.getElementById("conversionJobsDialog")?.close();
+}
+
+function getCurrentProjectConversionRecord() {
+  const project = getCurrentProject();
+  if (!project?.conversionJobId) return Promise.resolve(null);
+  return getConversionJobRecord(project.conversionJobId);
 }
 
 const CONVERSION_LIVE_STEPS = [
@@ -256,8 +276,14 @@ async function refreshActiveConversionLiveDialog(jobId, recordOverride = null) {
   document.getElementById("conversionLiveStage").textContent = String(record.stageLabel || "Queued");
   document.getElementById("conversionLiveFile").textContent = record.sourceFile?.name || record.fileName || "Unknown";
   document.getElementById("conversionLiveWarningsCount").textContent = String(Array.isArray(record.warnings) ? record.warnings.filter(Boolean).length : 0);
-  document.getElementById("conversionLiveRaw").value = String(record.rawText || "");
-  document.getElementById("conversionLiveNormalized").value = String(record.normalizedText || "");
+  const rawInput = document.getElementById("conversionLiveRaw");
+  const normalizedInput = document.getElementById("conversionLiveNormalized");
+  if (rawInput && document.activeElement !== rawInput) {
+    rawInput.value = String(record.rawText || "");
+  }
+  if (normalizedInput && document.activeElement !== normalizedInput) {
+    normalizedInput.value = String(record.normalizedText || "");
+  }
   const guidanceInput = document.getElementById("conversionLiveGuidance");
   if (guidanceInput && document.activeElement !== guidanceInput) {
     guidanceInput.value = String(record.operatorGuidance || "");
@@ -304,6 +330,24 @@ function closeConversionLiveDialog() {
   activeConversionLiveJobId = "";
   activeConversionLiveProjectId = "";
   document.getElementById("conversionLiveDialog")?.close();
+}
+
+function applyCoverPageCandidateToProject(project, coverPage) {
+  if (!project || !coverPage) return;
+  const normalized = {
+    title: String(coverPage.title || "").trim(),
+    author: String(coverPage.author || "").trim(),
+    contact: String(coverPage.contact || "").trim(),
+    company: String(coverPage.company || "").trim(),
+    details: String(coverPage.details || "").trim(),
+    logline: String(coverPage.logline || "").trim()
+  };
+  if (normalized.title) project.title = normalized.title;
+  if (normalized.author) project.author = normalized.author;
+  if (normalized.contact) project.contact = normalized.contact;
+  if (normalized.company) project.company = normalized.company;
+  if (normalized.details) project.details = normalized.details;
+  if (normalized.logline) project.logline = normalized.logline;
 }
 
 function ensureSelectionToolbar() {
@@ -1789,6 +1833,30 @@ export function bindEvents() {
         : "Guidance cleared for this job.";
     }
   });
+  document.getElementById("conversionLiveSaveTextBtn")?.addEventListener("click", async () => {
+    if (!activeConversionLiveJobId) return;
+    const rawInput = document.getElementById("conversionLiveRaw");
+    const normalizedInput = document.getElementById("conversionLiveNormalized");
+    const status = document.getElementById("conversionLiveTextStatus");
+    const patch = {
+      rawText: String(rawInput?.value || ""),
+      normalizedText: String(normalizedInput?.value || "")
+    };
+    if (patch.rawText.trim()) {
+      patch.rawTextEditedAt = new Date().toISOString();
+    }
+    if (patch.normalizedText.trim()) {
+      patch.normalizedTextEditedAt = new Date().toISOString();
+    }
+    await patchConversionJobRecord(activeConversionLiveJobId, patch);
+    await refreshActiveConversionLiveDialog(activeConversionLiveJobId, {
+      ...(await getConversionJobRecord(activeConversionLiveJobId)),
+      ...patch
+    });
+    if (status) {
+      status.textContent = "Text edits saved. Retry this conversion to reuse the text you corrected here.";
+    }
+  });
   document.getElementById("conversionLiveOpenReviewBtn")?.addEventListener("click", async () => {
     if (!activeConversionLiveJobId) return;
     const jobId = activeConversionLiveJobId;
@@ -3118,6 +3186,9 @@ function handleMenuAction(action) {
     case "open-conversion-jobs":
       openConversionJobsDialog();
       break;
+    case "open-conversion-interface":
+      openCurrentProjectConversionInterface();
+      break;
     case "save-project":
       persistProjects(true);
       break;
@@ -4124,10 +4195,11 @@ async function convertImportFile(event) {
   await runConvertImportPipeline(file, project);
 }
 
-async function runConvertImportPipeline(file, project) {
+async function runConvertImportPipeline(file, project, options = {}) {
   if (!file || !project) return;
 
-  const jobId = await beginConversionUpload({
+  const seedRecord = options.seedRecord || null;
+  const jobId = options.existingJobId || await beginConversionUpload({
     fileName: file.name,
     projectId: project.id
   });
@@ -4138,13 +4210,23 @@ async function runConvertImportPipeline(file, project) {
   try {
     updateToast(loadingToast, "Uploading your script to the conversion workspace...", "loading", { duration: 0 });
     await new Promise((resolve) => window.setTimeout(resolve, 250));
-    await markConversionExtractionStarted(jobId);
-    updateToast(loadingToast, "Extracting readable text from your file...", "loading", { duration: 0 });
+    const savedRawText = String(seedRecord?.rawText || "");
+    const savedNormalizedText = String(seedRecord?.normalizedText || "");
+    const hasEditedRawText = Boolean(seedRecord?.rawTextEditedAt && savedRawText.trim());
+    const hasEditedNormalizedText = Boolean(seedRecord?.normalizedTextEditedAt && savedNormalizedText.trim());
 
-    const rawText = await extractScriptTextFromFile(file, {
-      onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
-    });
-    await attachRawTextToConversionJob(jobId, rawText);
+    let rawText = savedRawText;
+    if (hasEditedRawText) {
+      updateToast(loadingToast, "Using your saved extracted text edits...", "loading", { duration: 0 });
+      await attachRawTextToConversionJob(jobId, rawText);
+    } else {
+      await markConversionExtractionStarted(jobId);
+      updateToast(loadingToast, "Extracting readable text from your file...", "loading", { duration: 0 });
+      rawText = await extractScriptTextFromFile(file, {
+        onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
+      });
+      await attachRawTextToConversionJob(jobId, rawText);
+    }
 
     updateToast(loadingToast, "Normalizing the screenplay text before conversion...", "loading", { duration: 0 });
 
@@ -4152,6 +4234,8 @@ async function runConvertImportPipeline(file, project) {
       fileName: file.name,
       jobId,
       projectId: project.id,
+      preparedNormalizedText: hasEditedNormalizedText ? savedNormalizedText : "",
+      preparedCoverPage: seedRecord?.coverPageCandidate || null,
       onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
     });
 
@@ -4160,8 +4244,11 @@ async function runConvertImportPipeline(file, project) {
 
     const nextProject = sanitizeProject({
       ...project,
-      lines: result.lines
+      lines: result.lines,
+      conversionJobId: result.jobId || jobId,
+      conversionSourceFileName: file.name
     });
+    applyCoverPageCandidateToProject(nextProject, result.coverPage);
     upsertProject(nextProject);
     openProject(nextProject.id, { silentLoadToast: true });
     persistProjects(true);
@@ -4190,6 +4277,7 @@ async function runConvertImportPipeline(file, project) {
       stageLabel: result.usedFallback ? 'Imported with fallback review needed' : 'Imported into project',
       rawText,
       normalizedText: persistedRecord?.normalizedText || '',
+      coverPageCandidate: result.coverPage || persistedRecord?.coverPageCandidate || null,
       structuredLines: result.lines,
       structuredLineCount: result.lines.length,
       warnings: result.warnings || [],
@@ -4375,7 +4463,11 @@ async function openConversionReviewDialog(jobId, projectId = "", recordOverride 
       cleanup();
       settled = true;
       resolve();
-      await runConvertImportPipeline(retryFile, nextProject);
+      const latestRecord = await getConversionJobRecord(jobId) || record;
+      await runConvertImportPipeline(retryFile, nextProject, {
+        existingJobId: jobId,
+        seedRecord: latestRecord
+      });
     };
 
     closeBtn?.addEventListener("click", onClose);

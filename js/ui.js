@@ -1420,6 +1420,9 @@ export function syncInputsFromProject(project) {
   refs.companyInput.value = project.company;
   refs.detailsInput.value = project.details;
   refs.loglineInput.value = project.logline;
+  document.querySelectorAll("[data-menu-action='open-conversion-interface']").forEach((button) => {
+    button.disabled = !project?.conversionJobId;
+  });
 }
 
 function getLeftPaneBlockMeta(key) {
@@ -1618,6 +1621,7 @@ export function moveLeftPaneBlock(key, direction) {
 }
 
 export function updateMenuStateButtons() {
+  const currentProject = getCurrentProject();
   document.querySelectorAll("[data-view-toggle]").forEach((button) => {
     button.classList.toggle("is-active", Boolean(state.viewOptions[button.dataset.viewToggle]));
   });
@@ -1640,6 +1644,10 @@ export function updateMenuStateButtons() {
 
   document.querySelectorAll("[data-menu-action='filter']").forEach((button) => {
     button.classList.toggle("is-active", Boolean(state.filterQuery));
+  });
+
+  document.querySelectorAll("[data-menu-action='open-conversion-interface']").forEach((button) => {
+    button.disabled = !currentProject?.conversionJobId;
   });
 }
 

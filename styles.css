@@ -4513,6 +4513,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .conversion-live-summary {
@@ -4550,6 +4551,27 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.6rem;
+}
+
+.conversion-live-warning-card {
+  display: grid;
+  gap: 0.24rem;
+  padding: 0.78rem 0.9rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, #f59e0b 24%, var(--border));
+  background: color-mix(in srgb, #f59e0b 7%, var(--panel) 93%);
+}
+
+.conversion-live-warning-card strong {
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.conversion-live-warning-card p {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.42;
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
 }
 
 .conversion-live-step {
@@ -4648,6 +4670,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .conversion-live-guidance-status {
   font-size: 0.79rem;
+}
+
+.conversion-live-edit-actions {
+  margin-top: -0.1rem;
 }
 
 .conversion-live-structured {

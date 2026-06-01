@@ -95,7 +95,9 @@ export async function convertScriptTextToLines(rawText, {
   fileName = '',
   onProgress,
   jobId = '',
-  projectId = ''
+  projectId = '',
+  preparedNormalizedText = '',
+  preparedCoverPage = null
 } = {}) {
   const normalizedText = normalizeExtractedText(rawText);
   if (!normalizedText.trim()) {
@@ -131,46 +133,61 @@ export async function convertScriptTextToLines(rawText, {
   });
   onProgress?.('Preparing backend memory for this script...');
 
-  const normalizationSource = buildNormalizationPayload(normalizedText);
-  const normalizationChunks = chunkScriptText(normalizationSource, 8000);
-  const normalizedChunks = [];
+  let coverPage = normalizeCoverPageCandidate(preparedCoverPage);
+  let normalizedScreenplayText = normalizeExtractedText(preparedNormalizedText);
 
-  for (let index = 0; index < normalizationChunks.length; index += 1) {
-    const chunk = normalizationChunks[index];
-    const stageLabel = `Normalizing screenplay text (${index + 1}/${normalizationChunks.length})`;
-    onProgress?.(stageLabel);
-    await updateConversionJob(job.id, {
-      status: 'normalizing',
-      stageLabel,
-      normalizationProgress: {
-        current: index + 1,
-        total: normalizationChunks.length
-      }
-    });
-    try {
-      const response = await requestConversionStage('normalize', chunk, {
-        fileName,
-        chunkIndex: index,
-        chunkCount: normalizationChunks.length,
-        jobId: job.id
+  if (!normalizedScreenplayText) {
+    const normalizationSource = buildNormalizationPayload(normalizedText);
+    const normalizationChunks = chunkScriptText(normalizationSource, 8000);
+    const normalizedChunks = [];
+
+    for (let index = 0; index < normalizationChunks.length; index += 1) {
+      const chunk = normalizationChunks[index];
+      const stageLabel = `Normalizing screenplay text (${index + 1}/${normalizationChunks.length})`;
+      onProgress?.(stageLabel);
+      await updateConversionJob(job.id, {
+        status: 'normalizing',
+        stageLabel,
+        normalizationProgress: {
+          current: index + 1,
+          total: normalizationChunks.length
+        }
       });
-      if (!String(response.text || '').trim()) {
-        throw new Error('The AI did not return normalized screenplay text.');
+      try {
+        const response = await requestConversionStage('normalize', chunk, {
+          fileName,
+          chunkIndex: index,
+          chunkCount: normalizationChunks.length,
+          jobId: job.id
+        });
+        if (!String(response.text || '').trim()) {
+          throw new Error('The AI did not return normalized screenplay text.');
+        }
+        normalizedChunks.push(normalizeExtractedText(response.text));
+        if (!coverPage) {
+          coverPage = normalizeCoverPageCandidate(response.coverPage);
+        }
+        warnings.push(...(response.warnings || []));
+      } catch (error) {
+        usedFallback = true;
+        warnings.push(error.message || 'Normalization failed for part of the script, so the extracted text was kept for that section.');
+        normalizedChunks.push(heuristicNormalizeText(parseNormalizationChunk(chunk)));
       }
-      normalizedChunks.push(normalizeExtractedText(response.text));
-      warnings.push(...(response.warnings || []));
-    } catch (error) {
-      usedFallback = true;
-      warnings.push(error.message || 'Normalization failed for part of the script, so the extracted text was kept for that section.');
-      normalizedChunks.push(heuristicNormalizeText(parseNormalizationChunk(chunk)));
     }
+
+    normalizedScreenplayText = normalizeExtractedText(normalizedChunks.join('\n\n')) || heuristicNormalizeText(normalizedText);
+  } else {
+    onProgress?.('Using your saved normalized screenplay text...');
   }
 
-  const normalizedScreenplayText = normalizeExtractedText(normalizedChunks.join('\n\n')) || heuristicNormalizeText(normalizedText);
+  if (!coverPage) {
+    coverPage = detectCoverPageCandidate(normalizedText);
+  }
   await updateConversionJob(job.id, {
     status: 'normalized',
     stageLabel: 'Normalized screenplay text ready',
     normalizedText: normalizedScreenplayText,
+    coverPageCandidate: coverPage,
     warnings
   });
 
@@ -226,6 +243,7 @@ export async function convertScriptTextToLines(rawText, {
     lines: convertedLines.length ? convertedLines : fallbackCandidatesToLines(candidates),
     warnings: uniqueWarnings,
     usedFallback,
+    coverPage,
     jobId: job.id
   };
 }
@@ -319,8 +337,44 @@ async function requestConversionStage(stage, text, metadata) {
   return {
     text: typeof data?.text === 'string' ? data.text : '',
     lines,
+    coverPage: normalizeCoverPageCandidate(data?.coverPage),
     warnings: Array.isArray(data?.warnings) ? data.warnings : []
   };
+}
+
+function normalizeCoverPageCandidate(coverPage) {
+  if (!coverPage || typeof coverPage !== 'object') return null;
+  const normalized = {
+    title: String(coverPage.title || '').trim(),
+    author: String(coverPage.author || '').trim(),
+    contact: String(coverPage.contact || '').trim(),
+    company: String(coverPage.company || '').trim(),
+    details: String(coverPage.details || '').trim(),
+    logline: String(coverPage.logline || '').trim()
+  };
+  return Object.values(normalized).some(Boolean) ? normalized : null;
+}
+
+function detectCoverPageCandidate(text) {
+  const lines = String(text || '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 24);
+  if (!lines.length) return null;
+  const sceneIndex = lines.findIndex((line) => /^(INT\.|EXT\.|EST\.|INT\/EXT\.|INT\.\/EXT\.)/i.test(line));
+  const coverLines = sceneIndex >= 0 ? lines.slice(0, sceneIndex) : lines;
+  if (coverLines.length < 3) return null;
+  const byIndex = coverLines.findIndex((line) => /^by$/i.test(line) || /^written by$/i.test(line));
+  const title = coverLines[0] || '';
+  const author = byIndex >= 0 ? (coverLines[byIndex + 1] || '') : '';
+  const metaLines = byIndex >= 0 ? coverLines.slice(byIndex + 2) : coverLines.slice(1);
+  const contact = metaLines.find((line) => /@|\+?\d[\d\s().-]{6,}/.test(line)) || '';
+  const company = metaLines.find((line) => /productions?|pictures?|studios?|films?/i.test(line)) || '';
+  const logline = metaLines.find((line) => line.length > 45) || '';
+  const details = metaLines.filter((line) => line && line !== contact && line !== company && line !== logline).join(' | ');
+  return normalizeCoverPageCandidate({ title, author, contact, company, details, logline });
 }
 
 function sanitizeConvertedLines(lines) {

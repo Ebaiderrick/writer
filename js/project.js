@@ -184,7 +184,8 @@ async function syncCurrentProjectToFirestore() {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
       'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
-      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace', 'version'];
+      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace', 'version',
+      'conversionJobId', 'conversionSourceFileName'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
       );
@@ -421,6 +422,8 @@ export function sanitizeProject(project) {
     collapsedSceneIds: Array.isArray(project.collapsedSceneIds) ? [...new Set(project.collapsedSceneIds)] : [],
     wordCountHistory: Array.isArray(project.wordCountHistory) ? project.wordCountHistory : [],
     version: Number.isFinite(Number(project.version)) ? Number(project.version) : 0,
+    conversionJobId: typeof project.conversionJobId === "string" ? project.conversionJobId : "",
+    conversionSourceFileName: typeof project.conversionSourceFileName === "string" ? project.conversionSourceFileName : "",
     lines: Array.isArray(project.lines) && project.lines.length
       ? project.lines.map((line) => {
           const type = TYPE_LABELS[line.type] ? line.type : "action";

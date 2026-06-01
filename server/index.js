@@ -222,6 +222,7 @@ STRICT RULES:
 7. Return ONLY valid JSON.
 8. Do not include markdown fences or commentary.
 9. Remove source markers like [source line 12 | indent=8] from the output text.
+10. If a screenplay cover page appears before the first real scene, extract its metadata separately and leave it out of the normalized screenplay body.
 
 HOW TO NORMALIZE:
 - The input may contain broken PDF wraps.
@@ -231,10 +232,20 @@ HOW TO NORMALIZE:
 - Parentheticals should remain on their own line.
 - Dialogue should remain on its own line under the related character cue.
 - Action should remain as paragraph lines, not as one word per line.
+- If a cover page is present, detect title, author, contact, company, details, and logline as best you can.
+- If no cover page is present, return empty strings for the coverPage fields.
 
 Return this exact shape:
 {
   "text": "INT. KITCHEN - DAY\\n\\nSARAH\\nI am here.\\n\\nThe kettle whistles.",
+  "coverPage": {
+    "title": "",
+    "author": "",
+    "contact": "",
+    "company": "",
+    "details": "",
+    "logline": ""
+  },
   "warnings": []
 }
 
@@ -310,11 +321,26 @@ function parseNormalizationResponse(output) {
   const candidate = jsonMatch ? jsonMatch[0] : cleaned;
   const parsed = JSON.parse(candidate);
   const text = typeof parsed?.text === "string" ? parsed.text.trim() : "";
+  const coverPage = normalizeCoverPage(parsed?.coverPage);
   const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings.map((item) => String(item)) : [];
   return {
     text,
+    coverPage,
     warnings
   };
+}
+
+function normalizeCoverPage(coverPage) {
+  if (!coverPage || typeof coverPage !== "object") return null;
+  const normalized = {
+    title: String(coverPage.title || "").trim(),
+    author: String(coverPage.author || "").trim(),
+    contact: String(coverPage.contact || "").trim(),
+    company: String(coverPage.company || "").trim(),
+    details: String(coverPage.details || "").trim(),
+    logline: String(coverPage.logline || "").trim()
+  };
+  return Object.values(normalized).some(Boolean) ? normalized : null;
 }
 
 function parseConversionResponse(output) {

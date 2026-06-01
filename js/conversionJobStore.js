@@ -239,11 +239,13 @@ function buildCloudJobPayload(job) {
     updatedAt: job.updatedAt || new Date().toISOString(),
     persistedAt: new Date().toISOString(),
     warnings: Array.isArray(job.warnings) ? job.warnings.slice(0, 20) : [],
+    operatorGuidance: String(job.operatorGuidance || '').slice(0, 12000),
     structuredLineCount: Number(job.structuredLineCount || structuredLines.length || 0),
     rawText: rawText.slice(0, CLOUD_TEXT_LIMIT),
     rawTextTruncated: rawText.length > CLOUD_TEXT_LIMIT,
     normalizedText: normalizedText.slice(0, CLOUD_TEXT_LIMIT),
     normalizedTextTruncated: normalizedText.length > CLOUD_TEXT_LIMIT,
+    coverPageCandidate: job.coverPageCandidate || null,
     structuredLines: structuredLines.slice(0, 200).map((line) => ({
       type: String(line?.type || 'action'),
       text: String(line?.text || '').slice(0, 4000)

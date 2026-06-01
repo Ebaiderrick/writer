@@ -873,6 +873,12 @@
                 <button class="nav-menu-button" type="button" data-format-type="image">Image</button>
               </div>
             </details>
+            <details class="menu-group" open>
+              <summary class="menu-group-summary">Conversion</summary>
+              <div class="menu-group-body">
+                <button id="openConversionInterfaceMenuBtn" class="nav-menu-button" type="button" data-menu-action="open-conversion-interface">Conversion Interface</button>
+              </div>
+            </details>
           </div>
 
           <div id="studioViewMenu" class="nav-menu nav-menu-wide" hidden>
@@ -1797,6 +1803,10 @@
           <div><span>Warnings</span><strong id="conversionLiveWarningsCount">0</strong></div>
         </div>
         <div id="conversionLiveTimeline" class="conversion-live-timeline"></div>
+        <section class="conversion-live-warning-card">
+          <strong>Recheck this data before you trust it.</strong>
+          <p>The extracted and normalized text may still miss exact screenplay intent, page-spacing meaning, or cover-page details. Review and adjust it before the next pass.</p>
+        </section>
         <div class="conversion-live-body">
           <section class="conversion-live-panel">
             <div class="conversion-live-panel-head">
@@ -1808,11 +1818,15 @@
             </div>
             <div class="conversion-live-block">
               <label for="conversionLiveRaw">Extracted text</label>
-              <textarea id="conversionLiveRaw" readonly spellcheck="false"></textarea>
+              <textarea id="conversionLiveRaw" spellcheck="false"></textarea>
             </div>
             <div class="conversion-live-block">
               <label for="conversionLiveNormalized">Normalized screenplay text</label>
-              <textarea id="conversionLiveNormalized" readonly spellcheck="false"></textarea>
+              <textarea id="conversionLiveNormalized" spellcheck="false"></textarea>
+            </div>
+            <div class="conversion-live-guidance-actions conversion-live-edit-actions">
+              <button id="conversionLiveSaveTextBtn" class="ghost-button btn-sm" type="button">Save Text Edits</button>
+              <p id="conversionLiveTextStatus" class="conversion-live-guidance-status">Saved edits will be reused when you retry this conversion.</p>
             </div>
             <div class="conversion-live-block">
               <label>Structured preview</label>
