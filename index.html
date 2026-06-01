@@ -1714,6 +1714,12 @@
         </div>
         <button id="fileRecoveryCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
       </div>
+      <section id="fileRecoveryStateCard" class="file-recovery-state-card">
+        <div class="file-recovery-state-copy">
+          <strong id="fileRecoveryStateTitle">Recovery keeps your recent deletions close.</strong>
+          <p id="fileRecoveryStateBody">Restore returns a script to your library. Delete removes it from recovery permanently, so recheck the title before you confirm.</p>
+        </div>
+      </section>
       <div id="fileRecoveryEmpty" class="file-recovery-empty">
         <strong>Nothing to recover right now.</strong>
         <p>Deleted scripts will stay here until they are permanently removed, so you can restore them when needed.</p>
@@ -1731,6 +1737,7 @@
             <p id="conversionReviewMeta">Inspect how the uploaded script moved through extraction and conversion.</p>
           </div>
           <div class="conversion-review-head-actions">
+            <button id="conversionReviewApplyBtn" class="ghost-button btn-sm" type="button">Apply to Script</button>
             <button id="conversionReviewRetryBtn" class="ghost-button btn-sm" type="button">Retry</button>
             <button id="conversionReviewCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
           </div>
@@ -1745,6 +1752,13 @@
           <div class="conversion-review-state-copy">
             <strong id="conversionReviewStateTitle">Conversion workspace ready</strong>
             <p id="conversionReviewStateBody">This review keeps the extracted text, the cleaned screenplay pass, and the final structured preview together so you always have a clear next step.</p>
+          </div>
+        </section>
+        <section class="conversion-review-version-row">
+          <label for="conversionReviewVersionSelect">Saved passes</label>
+          <div class="conversion-review-version-actions">
+            <select id="conversionReviewVersionSelect" class="settings-select"></select>
+            <button id="conversionReviewRestoreBtn" class="ghost-button btn-sm" type="button">Restore pass</button>
           </div>
         </section>
         <div class="conversion-review-body">
@@ -1793,6 +1807,7 @@
             <p id="conversionLiveMeta">Watch the uploaded file move through extraction, normalization, structuring, and import.</p>
           </div>
           <div class="conversion-live-head-actions">
+            <button id="conversionLiveApplyBtn" class="ghost-button btn-sm" type="button">Apply Preview</button>
             <button id="conversionLiveOpenReviewBtn" class="ghost-button btn-sm" type="button" disabled>Open Review</button>
             <button id="conversionLiveCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
           </div>
@@ -1821,10 +1836,11 @@
               <label for="conversionLiveRaw">Extracted text</label>
               <textarea id="conversionLiveRaw" spellcheck="false"></textarea>
             </div>
-            <div class="conversion-live-block">
-              <label for="conversionLiveNormalized">Normalized screenplay text</label>
-              <textarea id="conversionLiveNormalized" spellcheck="false"></textarea>
-            </div>
+              <div class="conversion-live-block">
+                <label for="conversionLiveNormalized">Normalized screenplay text</label>
+                <p class="conversion-live-field-hint">Editable. Refine line breaks, dialogue wraps, and spacing here before the next retry or preview apply.</p>
+                <textarea id="conversionLiveNormalized" spellcheck="false"></textarea>
+              </div>
             <div class="conversion-live-guidance-actions conversion-live-edit-actions">
               <button id="conversionLiveSaveTextBtn" class="ghost-button btn-sm" type="button">Save Text Edits</button>
               <p id="conversionLiveTextStatus" class="conversion-live-guidance-status">Saved edits will be reused when you retry this conversion.</p>

@@ -21,6 +21,12 @@
   --font-size-body: 0.95rem;
   --font-size-title: 1.1rem;
   --button-height: 36px;
+  --compact-button-height: 30px;
+  --field-radius: 12px;
+  --field-pad-y: 10px;
+  --field-pad-x: 13px;
+  --workspace-sheet-radius: 20px;
+  --workspace-sheet-pad: 20px;
 
   /* Compatibility / Editor specific */
   --soft: #f0f9ff;
@@ -1907,7 +1913,7 @@ html[data-theme="rose"] .mesh-background {
   border: none;
   background: var(--control-bg);
   color: var(--ink);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: none;
 }
 
@@ -1959,10 +1965,10 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .btn-sm {
-  min-height: 28px !important;
-  padding: 4px 10px !important;
+  min-height: var(--compact-button-height) !important;
+  padding: 4px 11px !important;
   font-size: 0.8rem !important;
-  border-radius: 8px !important;
+  border-radius: 10px !important;
 }
 
 .danger-button {
@@ -4091,8 +4097,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   flex-direction: column;
   gap: 0.9rem;
   overflow: hidden;
-  padding: 22px 22px 20px;
-  border-radius: 22px;
+  padding: var(--workspace-sheet-pad);
+  border-radius: var(--workspace-sheet-radius);
   background: var(--panel);
   color: var(--text);
   box-shadow: var(--shadow);
@@ -4106,9 +4112,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   position: sticky;
   top: 0;
   z-index: 5;
-  padding-bottom: 0.35rem;
+  padding-bottom: 0.45rem;
   background: var(--panel);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+  box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
 }
 
 .file-recovery-head h3 {
@@ -4147,6 +4154,32 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   line-height: 1.44;
 }
 
+.file-recovery-state-card {
+  display: grid;
+  gap: 0.32rem;
+  padding: 0.92rem 1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+}
+
+.file-recovery-state-copy {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.file-recovery-state-copy strong {
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.file-recovery-state-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.44;
+}
+
 .file-recovery-list {
   display: flex;
   flex-direction: column;
@@ -4172,8 +4205,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: grid;
   gap: 0.95rem;
   overflow: auto;
-  padding: 22px 22px 20px;
-  border-radius: 22px;
+  padding: var(--workspace-sheet-pad);
+  border-radius: var(--workspace-sheet-radius);
   background: var(--panel);
   color: var(--ink);
   box-shadow: var(--shadow);
@@ -4188,9 +4221,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   position: sticky;
   top: 0;
   z-index: 6;
-  padding-bottom: 0.35rem;
+  padding-bottom: 0.45rem;
   background: var(--panel);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+  box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
 }
 
 .conversion-review-head h3 {
@@ -4211,6 +4245,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .conversion-review-head-actions {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .conversion-review-summary {
@@ -4288,6 +4324,30 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   font-size: 0.84rem;
   line-height: 1.45;
   color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+}
+
+.conversion-review-version-row {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.72rem 0.9rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent) 14%);
+  background: var(--surface-strong);
+}
+
+.conversion-review-version-row label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.conversion-review-version-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
 }
 
 .conversion-review-body {
@@ -4409,11 +4469,11 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   width: 100%;
   min-height: 210px;
   resize: vertical;
-  border-radius: 14px;
+  border-radius: var(--field-radius);
   border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
   background: color-mix(in srgb, var(--surface-strong) 88%, black 12%);
   color: var(--ink);
-  padding: 0.85rem 0.95rem;
+  padding: var(--field-pad-y) var(--field-pad-x);
   font: 0.86rem/1.5 "Courier New", monospace;
 }
 
@@ -4481,8 +4541,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: grid;
   gap: 0.95rem;
   overflow: auto;
-  padding: 22px 22px 20px;
-  border-radius: 22px;
+  padding: var(--workspace-sheet-pad);
+  border-radius: var(--workspace-sheet-radius);
   background: var(--panel);
   color: var(--ink);
   box-shadow: var(--shadow);
@@ -4501,9 +4561,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   position: sticky;
   top: 0;
   z-index: 6;
-  padding-bottom: 0.35rem;
+  padding-bottom: 0.45rem;
   background: var(--panel);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+  box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
 }
 
 .conversion-live-head h3 {
@@ -4672,15 +4733,22 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   letter-spacing: 0.02em;
 }
 
+.conversion-live-field-hint {
+  margin: -0.1rem 0 0.1rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 .conversion-live-block textarea {
   width: 100%;
   min-height: 168px;
   resize: vertical;
-  border-radius: 14px;
+  border-radius: var(--field-radius);
   border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
   background: color-mix(in srgb, var(--surface-strong) 88%, black 12%);
   color: var(--ink);
-  padding: 0.85rem 0.95rem;
+  padding: var(--field-pad-y) var(--field-pad-x);
   font: 0.84rem/1.5 "Courier New", monospace;
 }
 
@@ -4749,8 +4817,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: grid;
   gap: 0.9rem;
   overflow: auto;
-  padding: 22px 22px 20px;
-  border-radius: 22px;
+  padding: var(--workspace-sheet-pad);
+  border-radius: var(--workspace-sheet-radius);
   background: var(--panel);
   color: var(--ink);
   box-shadow: var(--shadow);
@@ -4765,9 +4833,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   position: sticky;
   top: 0;
   z-index: 5;
-  padding-bottom: 0.35rem;
+  padding-bottom: 0.45rem;
   background: var(--panel);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+  box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
 }
 
 .conversion-jobs-head h3 {
@@ -7487,8 +7556,10 @@ html[data-theme="white"] .user-trigger {
   position: sticky;
   top: 0;
   z-index: 4;
-  padding: 0 0 0.45rem;
-  background: var(--bg-gradient);
+  padding: 0 0 0.55rem;
+  background: var(--panel);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
 }
 
 .settings-group {
@@ -7549,11 +7620,12 @@ html[data-theme="white"] .user-trigger {
   border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
   background: color-mix(in srgb, var(--panel) 97%, white 3%);
   color: var(--ink);
-  border-radius: 12px;
-  padding: 10px 13px;
+  border-radius: var(--field-radius);
+  padding: var(--field-pad-y) var(--field-pad-x);
   font: inherit;
   width: 100%;
   min-width: 0;
+  min-height: 40px;
 }
 
 .settings-hint {

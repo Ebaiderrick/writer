@@ -44,6 +44,7 @@ import {
   extractScriptTextFromFile,
   convertScriptTextToLines,
   buildLocalStructuredPreview,
+  appendConversionJobVersion,
   beginConversionUpload,
   attachSourceFileToConversionJob,
   markConversionExtractionStarted,
@@ -81,6 +82,7 @@ let workspaceClockTimer = 0;
 let pendingConvertImportProjectId = "";
 let activeConversionLiveJobId = "";
 let activeConversionLiveProjectId = "";
+const conversionWorkspaceOverrides = new Map();
 const aiTaskTimers = new Map();
 const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
 const PROJECT_CARD_CLICK_SUPPRESSION_MS = 750;
@@ -96,11 +98,23 @@ function renderRecoveryList() {
   const dialog = document.getElementById("fileRecoveryDialog");
   const list = document.getElementById("fileRecoveryList");
   const empty = document.getElementById("fileRecoveryEmpty");
+  const stateTitle = document.getElementById("fileRecoveryStateTitle");
+  const stateBody = document.getElementById("fileRecoveryStateBody");
   if (!dialog || !list || !empty) return;
 
   const deletedProjects = getDeletedProjects();
   empty.hidden = deletedProjects.length > 0;
   list.hidden = deletedProjects.length === 0;
+
+  if (stateTitle && stateBody) {
+    if (deletedProjects.length) {
+      stateTitle.textContent = `${deletedProjects.length} recoverable file${deletedProjects.length === 1 ? "" : "s"} ready.`;
+      stateBody.textContent = "Restore sends a script back to Home immediately. Delete removes it from recovery forever, so use it only when you are sure.";
+    } else {
+      stateTitle.textContent = "Recovery keeps your recent deletions close.";
+      stateBody.textContent = "Restore returns a script to your library. Delete removes it from recovery permanently, so recheck the title before you confirm.";
+    }
+  }
 
   if (!deletedProjects.length) {
     list.innerHTML = "";
@@ -263,11 +277,20 @@ function renderConversionStructuredPreview(container, record, emptyMessage) {
     : `<p class="conversion-live-structured-empty">${escapeHtml(emptyMessage)}</p>`;
 }
 
+function getConversionWorkspaceOverride(jobId) {
+  if (!jobId) return null;
+  return conversionWorkspaceOverrides.get(jobId) || null;
+}
+
 async function refreshActiveConversionLiveDialog(jobId, recordOverride = null) {
   const dialog = document.getElementById("conversionLiveDialog");
   if (!dialog || !jobId || activeConversionLiveJobId !== jobId) return;
 
-  const record = recordOverride || await getConversionJobRecord(jobId);
+  const baseRecord = recordOverride || await getConversionJobRecord(jobId);
+  const record = {
+    ...(baseRecord || {}),
+    ...(getConversionWorkspaceOverride(jobId) || {})
+  };
   if (!record) return;
   if (record.projectId) {
     activeConversionLiveProjectId = record.projectId;
@@ -346,6 +369,99 @@ function closeConversionLiveDialog() {
   activeConversionLiveJobId = "";
   activeConversionLiveProjectId = "";
   document.getElementById("conversionLiveDialog")?.close();
+}
+
+function captureActiveConversionWorkspacePatch(jobId) {
+  if (!jobId || activeConversionLiveJobId !== jobId) return null;
+  const rawText = String(document.getElementById("conversionLiveRaw")?.value || "");
+  const normalizedText = String(document.getElementById("conversionLiveNormalized")?.value || "");
+  const coverPageCandidate = {
+    title: String(document.getElementById("conversionLiveCoverTitle")?.value || "").trim(),
+    author: String(document.getElementById("conversionLiveCoverAuthor")?.value || "").trim(),
+    contact: String(document.getElementById("conversionLiveCoverContact")?.value || "").trim(),
+    company: String(document.getElementById("conversionLiveCoverCompany")?.value || "").trim(),
+    details: String(document.getElementById("conversionLiveCoverDetails")?.value || "").trim(),
+    logline: String(document.getElementById("conversionLiveCoverLogline")?.value || "").trim()
+  };
+  const previewSource = normalizedText.trim() || rawText.trim();
+  const structuredLines = buildLocalStructuredPreview(previewSource);
+  const patch = {
+    rawText,
+    normalizedText,
+    structuredLines,
+    structuredLineCount: structuredLines.length
+  };
+  if (rawText.trim()) {
+    patch.rawTextEditedAt = new Date().toISOString();
+  }
+  if (normalizedText.trim()) {
+    patch.normalizedTextEditedAt = new Date().toISOString();
+  }
+  if (Object.values(coverPageCandidate).some(Boolean)) {
+    patch.coverPageCandidate = coverPageCandidate;
+  }
+  return patch;
+}
+
+function buildConversionVersionOptions(record) {
+  const versions = Array.isArray(record?.versions) ? record.versions.slice() : [];
+  versions.sort((left, right) => new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime());
+  return [
+    {
+      id: "current",
+      label: "Current workspace",
+      data: record
+    },
+    ...versions.map((version, index) => {
+      const stamp = version?.createdAt
+        ? new Date(version.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+        : `Saved pass ${versions.length - index}`;
+      const count = Number(version?.structuredLineCount || version?.structuredLines?.length || 0);
+      const label = `${version?.label || `Saved pass ${versions.length - index}`} · ${count} lines · ${stamp}`;
+      return {
+        id: String(version?.id || `version_${index}`),
+        label,
+        data: {
+          ...record,
+          ...version,
+          structuredLines: Array.isArray(version?.structuredLines) ? version.structuredLines : [],
+          structuredLineCount: count
+        }
+      };
+    })
+  ];
+}
+
+function resolveSelectedConversionVersion(record, versionId) {
+  const options = buildConversionVersionOptions(record);
+  return options.find((entry) => entry.id === versionId) || options[0] || { id: "current", label: "Current workspace", data: record };
+}
+
+async function applyConversionRecordToProject(record, projectId = "", successMessage = "Reviewed screenplay applied to this script.") {
+  const targetProject = state.projects.find((entry) => entry.id === projectId)
+    || state.projects.find((entry) => entry.conversionJobId === record?.id)
+    || getCurrentProject();
+  const structuredLines = Array.isArray(record?.structuredLines) ? record.structuredLines : [];
+  if (!targetProject) {
+    await customAlert("The target script for this conversion is not available right now.", "Conversion Review");
+    return false;
+  }
+  if (!structuredLines.length) {
+    await customAlert("There is no structured screenplay preview to apply yet.", "Conversion Review");
+    return false;
+  }
+  const nextProject = sanitizeProject({
+    ...targetProject,
+    lines: structuredLines,
+    conversionJobId: record.id || targetProject.conversionJobId || "",
+    conversionSourceFileName: record?.sourceFile?.name || record?.fileName || targetProject.conversionSourceFileName || ""
+  });
+  applyCoverPageCandidateToProject(nextProject, record?.coverPageCandidate || null);
+  upsertProject(nextProject);
+  openProject(nextProject.id, { silentLoadToast: true });
+  persistProjects(true);
+  showToast(successMessage, "success", { duration: 3200 });
+  return true;
 }
 
 function applyCoverPageCandidateToProject(project, coverPage) {
@@ -1881,6 +1997,7 @@ export function bindEvents() {
         ? "Preview refreshed from your edits"
         : "Text edits saved";
     }
+    conversionWorkspaceOverrides.set(activeConversionLiveJobId, patch);
     await patchConversionJobRecord(activeConversionLiveJobId, patch);
     await refreshActiveConversionLiveDialog(activeConversionLiveJobId, {
       ...(await getConversionJobRecord(activeConversionLiveJobId)),
@@ -1891,6 +2008,12 @@ export function bindEvents() {
         ? "Text edits saved. The structured preview updated immediately from your corrected text."
         : "Text edits saved. Add more text or retry this conversion to rebuild the preview.";
     }
+  });
+  document.getElementById("conversionLiveApplyBtn")?.addEventListener("click", async () => {
+    if (!activeConversionLiveJobId) return;
+    const record = await getConversionJobRecord(activeConversionLiveJobId);
+    if (!record) return;
+    await applyConversionRecordToProject(record, activeConversionLiveProjectId, "Reviewed preview applied to this script.");
   });
   document.getElementById("conversionLiveOpenReviewBtn")?.addEventListener("click", async () => {
     if (!activeConversionLiveJobId) return;
@@ -4274,24 +4397,39 @@ async function runConvertImportPipeline(file, project, options = {}) {
       onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
     });
 
-    await markConversionImporting(result.jobId || jobId, result.lines.length);
+  const liveWorkspacePatch = captureActiveConversionWorkspacePatch(result.jobId || jobId);
+  const finalLines = Array.isArray(liveWorkspacePatch?.structuredLines) && liveWorkspacePatch.structuredLines.length
+    ? liveWorkspacePatch.structuredLines
+    : result.lines;
+  const finalCoverPage = liveWorkspacePatch?.coverPageCandidate || result.coverPage;
+  if (liveWorkspacePatch) {
+    conversionWorkspaceOverrides.set(result.jobId || jobId, liveWorkspacePatch);
+  }
+
+    await markConversionImporting(result.jobId || jobId, finalLines.length);
     updateToast(loadingToast, "Importing converted screenplay into your project...", "loading", { duration: 0 });
 
     const nextProject = sanitizeProject({
       ...project,
-      lines: result.lines,
+      lines: finalLines,
       conversionJobId: result.jobId || jobId,
       conversionSourceFileName: file.name
     });
-    applyCoverPageCandidateToProject(nextProject, result.coverPage);
+    applyCoverPageCandidateToProject(nextProject, finalCoverPage);
     upsertProject(nextProject);
     openProject(nextProject.id, { silentLoadToast: true });
     persistProjects(true);
     await finalizeConversionImport(result.jobId || jobId, {
       usedFallback: result.usedFallback,
       warnings: result.warnings,
-      lineCount: result.lines.length
+      lineCount: finalLines.length
     });
+    if (liveWorkspacePatch) {
+      await patchConversionJobRecord(result.jobId || jobId, {
+        ...liveWorkspacePatch,
+        coverPageCandidate: finalCoverPage
+      });
+    }
 
     if (result.usedFallback) {
       updateToast(loadingToast, "Imported with a plain-text fallback. Review the structure.", "error", { duration: 5200 });
@@ -4303,7 +4441,7 @@ async function runConvertImportPipeline(file, project, options = {}) {
       showToast("Conversion finished with notes. Review them in Conversion Review.", "error", { duration: 5200 });
     }
     const persistedRecord = await waitForConversionJobRecord(result.jobId || jobId, { requireStructuredData: true });
-    const reviewRecord = {
+    const versionedRecord = await appendConversionJobVersion(result.jobId || jobId, {
       ...(persistedRecord || {}),
       id: result.jobId || jobId,
       fileName: file.name,
@@ -4311,10 +4449,28 @@ async function runConvertImportPipeline(file, project, options = {}) {
       status: result.usedFallback ? 'imported-with-fallback' : 'imported',
       stageLabel: result.usedFallback ? 'Imported with fallback review needed' : 'Imported into project',
       rawText,
-      normalizedText: persistedRecord?.normalizedText || '',
-      coverPageCandidate: result.coverPage || persistedRecord?.coverPageCandidate || null,
-      structuredLines: result.lines,
-      structuredLineCount: result.lines.length,
+      normalizedText: liveWorkspacePatch?.normalizedText || persistedRecord?.normalizedText || '',
+      coverPageCandidate: finalCoverPage || persistedRecord?.coverPageCandidate || null,
+      structuredLines: finalLines,
+      structuredLineCount: finalLines.length,
+      warnings: result.warnings || [],
+      sourceFile: persistedRecord?.sourceFile || { name: file.name, type: file.type || '', size: Number(file.size) || 0 }
+    }, {
+      label: result.usedFallback ? 'Fallback import pass' : 'Imported screenplay pass',
+      reason: 'Automatic conversion result'
+    });
+    const reviewRecord = {
+      ...(versionedRecord || persistedRecord || {}),
+      id: result.jobId || jobId,
+      fileName: file.name,
+      projectId: nextProject.id,
+      status: result.usedFallback ? 'imported-with-fallback' : 'imported',
+      stageLabel: result.usedFallback ? 'Imported with fallback review needed' : 'Imported into project',
+      rawText,
+      normalizedText: liveWorkspacePatch?.normalizedText || persistedRecord?.normalizedText || '',
+      coverPageCandidate: finalCoverPage || persistedRecord?.coverPageCandidate || null,
+      structuredLines: finalLines,
+      structuredLineCount: finalLines.length,
       warnings: result.warnings || [],
       sourceFile: persistedRecord?.sourceFile || { name: file.name, type: file.type || '', size: Number(file.size) || 0 }
     };
@@ -4325,8 +4481,21 @@ async function runConvertImportPipeline(file, project, options = {}) {
     await failConversionJob(jobId, error.message || "Conversion failed.");
     updateToast(loadingToast, error.message || "Conversion failed.", "error", { duration: 5200 });
     const failedRecord = await waitForConversionJobRecord(jobId, { timeoutMs: 2000 });
-    const reviewRecord = {
+    const versionedFailure = await appendConversionJobVersion(jobId, {
       ...(failedRecord || {}),
+      id: jobId,
+      fileName: file.name,
+      projectId: project.id,
+      status: 'failed',
+      stageLabel: failedRecord?.stageLabel || 'Conversion failed',
+      warnings: failedRecord?.warnings?.length ? failedRecord.warnings : [error.message || "Conversion failed."],
+      sourceFile: failedRecord?.sourceFile || { name: file.name, type: file.type || '', size: Number(file.size) || 0 }
+    }, {
+      label: 'Failed conversion pass',
+      reason: error.message || 'Conversion failed'
+    });
+    const reviewRecord = {
+      ...(versionedFailure || failedRecord || {}),
       id: jobId,
       fileName: file.name,
       projectId: project.id,
@@ -4389,7 +4558,10 @@ async function openConversionReviewDialog(jobId, projectId = "", recordOverride 
   const dialog = document.getElementById("conversionReviewDialog");
   if (!dialog || !jobId) return;
 
-  const record = recordOverride || await getConversionJobRecord(jobId);
+  const record = {
+    ...((recordOverride || await getConversionJobRecord(jobId)) || {}),
+    ...(getConversionWorkspaceOverride(jobId) || {})
+  };
   if (!record) return;
 
   const title = document.getElementById("conversionReviewTitle");
@@ -4408,66 +4580,88 @@ async function openConversionReviewDialog(jobId, projectId = "", recordOverride 
   const stateBody = document.getElementById("conversionReviewStateBody");
   const closeBtn = document.getElementById("conversionReviewCloseBtn");
   const retryBtn = document.getElementById("conversionReviewRetryBtn");
+  const applyBtn = document.getElementById("conversionReviewApplyBtn");
+  const restoreBtn = document.getElementById("conversionReviewRestoreBtn");
+  const versionSelect = document.getElementById("conversionReviewVersionSelect");
+  let baseRecord = record;
+  let selectedVersionId = "current";
 
-  if (title) title.textContent = record.fileName ? `Review "${record.fileName}"` : "Review Converted Script";
-  if (meta) meta.textContent = "Follow the script from extracted source text through normalization and into the final EyaWriter screenplay structure.";
-  if (status) status.textContent = String(record.status || "unknown");
-  if (stage) stage.textContent = String(record.stageLabel || "Unknown stage");
-  if (file) file.textContent = record.sourceFile?.name || record.fileName || "Unknown";
-  if (lineCount) lineCount.textContent = String(record.structuredLineCount || record.structuredLines?.length || 0);
-  if (raw) raw.value = String(record.rawText || "");
-  if (normalized) normalized.value = String(record.normalizedText || "");
-  if (warnings) {
-    const warningText = Array.isArray(record.warnings) ? record.warnings.filter(Boolean).join("\n\n") : "";
-    warnings.hidden = !warningText;
-    warnings.textContent = warningText;
-  }
-  const reviewState = getConversionReviewState(record);
-  if (stateCard) {
-    stateCard.dataset.stateTone = reviewState.tone;
-  }
-  if (stateTitle) {
-    stateTitle.textContent = reviewState.title;
-  }
-  if (stateBody) {
-    stateBody.textContent = reviewState.body;
-  }
-  const structuredLines = Array.isArray(record.structuredLines) ? record.structuredLines : [];
-  if (typeGrid) {
-    const counts = structuredLines.reduce((accumulator, line) => {
-      const type = String(line?.type || "action");
-      accumulator[type] = (accumulator[type] || 0) + 1;
-      return accumulator;
-    }, {});
-    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
-    typeGrid.hidden = !entries.length;
-    typeGrid.innerHTML = entries.map(([type, count]) => `
-      <div class="conversion-review-type-pill">
-        <span>${escapeHtml(type)}</span>
-        <strong>${count}</strong>
-      </div>
-    `).join("");
-  }
-  if (structured) {
-    structured.innerHTML = structuredLines.length
-      ? structuredLines.slice(0, 160).map((line) => `
-        <div class="conversion-review-line">
-          <span class="conversion-review-line-type">${escapeHtml(String(line?.type || "action"))}</span>
-          <div class="conversion-review-line-text">${escapeHtml(String(line?.text || "")).replace(/\n/g, "<br>")}</div>
+  const renderReviewState = (viewRecord) => {
+    if (title) title.textContent = viewRecord.fileName ? `Review "${viewRecord.fileName}"` : "Review Converted Script";
+    if (meta) meta.textContent = "Follow the script from extracted source text through normalization and into the final EyaWriter screenplay structure.";
+    if (status) status.textContent = String(viewRecord.status || "unknown");
+    if (stage) stage.textContent = String(viewRecord.stageLabel || "Unknown stage");
+    if (file) file.textContent = viewRecord.sourceFile?.name || viewRecord.fileName || "Unknown";
+    if (lineCount) lineCount.textContent = String(viewRecord.structuredLineCount || viewRecord.structuredLines?.length || 0);
+    if (raw) raw.value = String(viewRecord.rawText || "");
+    if (normalized) normalized.value = String(viewRecord.normalizedText || "");
+    if (warnings) {
+      const warningText = Array.isArray(viewRecord.warnings) ? viewRecord.warnings.filter(Boolean).join("\n\n") : "";
+      warnings.hidden = !warningText;
+      warnings.textContent = warningText;
+    }
+    const reviewState = getConversionReviewState(viewRecord);
+    if (stateCard) stateCard.dataset.stateTone = reviewState.tone;
+    if (stateTitle) stateTitle.textContent = reviewState.title;
+    if (stateBody) stateBody.textContent = reviewState.body;
+    const structuredLines = Array.isArray(viewRecord.structuredLines) ? viewRecord.structuredLines : [];
+    if (typeGrid) {
+      const counts = structuredLines.reduce((accumulator, line) => {
+        const type = String(line?.type || "action");
+        accumulator[type] = (accumulator[type] || 0) + 1;
+        return accumulator;
+      }, {});
+      const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      typeGrid.hidden = !entries.length;
+      typeGrid.innerHTML = entries.map(([type, count]) => `
+        <div class="conversion-review-type-pill">
+          <span>${escapeHtml(type)}</span>
+          <strong>${count}</strong>
         </div>
-      `).join("")
-      : `<p class="conversion-review-structured-empty">${escapeHtml(getConversionReviewEmptyMessage(record))}</p>`;
-  }
-  if (retryBtn) {
-    retryBtn.textContent = "Retry conversion";
-    retryBtn.disabled = !record.sourceFile?.blob;
-  }
+      `).join("");
+    }
+    if (structured) {
+      structured.innerHTML = structuredLines.length
+        ? structuredLines.slice(0, 160).map((line) => `
+          <div class="conversion-review-line">
+            <span class="conversion-review-line-type">${escapeHtml(String(line?.type || "action"))}</span>
+            <div class="conversion-review-line-text">${escapeHtml(String(line?.text || "")).replace(/\n/g, "<br>")}</div>
+          </div>
+        `).join("")
+        : `<p class="conversion-review-structured-empty">${escapeHtml(getConversionReviewEmptyMessage(viewRecord))}</p>`;
+    }
+    if (retryBtn) {
+      retryBtn.textContent = "Retry conversion";
+      retryBtn.disabled = !baseRecord.sourceFile?.blob;
+    }
+    if (applyBtn) {
+      applyBtn.disabled = !structuredLines.length;
+    }
+    if (restoreBtn) {
+      restoreBtn.disabled = selectedVersionId === "current";
+    }
+  };
+
+  const renderVersionOptions = () => {
+    if (!versionSelect) return;
+    const versions = buildConversionVersionOptions(baseRecord);
+    versionSelect.innerHTML = versions.map((entry) => `
+      <option value="${escapeHtml(entry.id)}">${escapeHtml(entry.label)}</option>
+    `).join("");
+    versionSelect.value = selectedVersionId;
+  };
+
+  renderVersionOptions();
+  renderReviewState(baseRecord);
 
   await new Promise((resolve) => {
     let settled = false;
     const cleanup = () => {
       closeBtn?.removeEventListener("click", onClose);
       retryBtn?.removeEventListener("click", onRetry);
+      applyBtn?.removeEventListener("click", onApply);
+      restoreBtn?.removeEventListener("click", onRestore);
+      versionSelect?.removeEventListener("change", onSelectVersion);
       dialog.removeEventListener("cancel", onClose);
       dialog.removeEventListener("close", onClose);
     };
@@ -4481,8 +4675,42 @@ async function openConversionReviewDialog(jobId, projectId = "", recordOverride 
       if (dialog.open) dialog.close();
       finish();
     };
+    const onSelectVersion = () => {
+      selectedVersionId = versionSelect?.value || "current";
+      const selected = resolveSelectedConversionVersion(baseRecord, selectedVersionId);
+      renderReviewState(selected.data);
+    };
+    const onApply = async () => {
+      const selected = resolveSelectedConversionVersion(baseRecord, selectedVersionId);
+      await applyConversionRecordToProject(selected.data, projectId, "Selected conversion pass applied to this script.");
+    };
+    const onRestore = async () => {
+      if (selectedVersionId === "current") return;
+      const selected = resolveSelectedConversionVersion(baseRecord, selectedVersionId);
+      const restoredPatch = {
+        rawText: String(selected.data.rawText || ""),
+        normalizedText: String(selected.data.normalizedText || ""),
+        structuredLines: Array.isArray(selected.data.structuredLines) ? selected.data.structuredLines : [],
+        structuredLineCount: Number(selected.data.structuredLineCount || selected.data.structuredLines?.length || 0),
+        warnings: Array.isArray(selected.data.warnings) ? selected.data.warnings : [],
+        coverPageCandidate: selected.data.coverPageCandidate || null,
+        operatorGuidance: String(selected.data.operatorGuidance || baseRecord.operatorGuidance || ""),
+        status: String(selected.data.status || baseRecord.status || "imported"),
+        stageLabel: `Restored ${selected.data.label || "saved pass"}`,
+        activeVersionId: selectedVersionId
+      };
+      await patchConversionJobRecord(jobId, restoredPatch);
+      baseRecord = {
+        ...(await getConversionJobRecord(jobId) || baseRecord),
+        ...restoredPatch
+      };
+      selectedVersionId = "current";
+      renderVersionOptions();
+      renderReviewState(baseRecord);
+      showToast("Saved pass restored to the current conversion workspace.", "success", { duration: 3200 });
+    };
     const onRetry = async () => {
-      const blob = record.sourceFile?.blob;
+      const blob = baseRecord.sourceFile?.blob;
       const nextProject = state.projects.find((entry) => entry.id === projectId) || getCurrentProject();
       if (!blob || !nextProject) {
         await customAlert("The original uploaded file is not available for retry.", "Conversion Review");
@@ -4490,15 +4718,15 @@ async function openConversionReviewDialog(jobId, projectId = "", recordOverride 
       }
       const retryFile = blob instanceof File
         ? blob
-        : new File([blob], record.sourceFile?.name || record.fileName || "retry-script", {
-          type: record.sourceFile?.type || "application/octet-stream",
-          lastModified: record.sourceFile?.lastModified || Date.now()
+        : new File([blob], baseRecord.sourceFile?.name || baseRecord.fileName || "retry-script", {
+          type: baseRecord.sourceFile?.type || "application/octet-stream",
+          lastModified: baseRecord.sourceFile?.lastModified || Date.now()
         });
       dialog.close();
       cleanup();
       settled = true;
       resolve();
-      const latestRecord = await getConversionJobRecord(jobId) || record;
+      const latestRecord = await getConversionJobRecord(jobId) || baseRecord;
       await runConvertImportPipeline(retryFile, nextProject, {
         existingJobId: jobId,
         seedRecord: latestRecord
@@ -4507,6 +4735,9 @@ async function openConversionReviewDialog(jobId, projectId = "", recordOverride 
 
     closeBtn?.addEventListener("click", onClose);
     retryBtn?.addEventListener("click", onRetry);
+    applyBtn?.addEventListener("click", onApply);
+    restoreBtn?.addEventListener("click", onRestore);
+    versionSelect?.addEventListener("change", onSelectVersion);
     dialog.addEventListener("cancel", onClose, { once: true });
     dialog.addEventListener("close", onClose, { once: true });
     if (!dialog.open) {

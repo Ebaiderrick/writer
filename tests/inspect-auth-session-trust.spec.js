@@ -46,3 +46,17 @@ test('marketing help page swaps signup CTA to Home for signed-in users', async (
 
   await page.screenshot({ path: 'C:/Users/NKEDE GEOR/Desktop/writer app/writer-repo/artifacts/auth-marketing-home-cta.png' });
 });
+
+test('signed-out settings route falls back to auth cleanly', async ({ page }) => {
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.evaluate(() => {
+    localStorage.removeItem('eyawriter_session');
+  });
+
+  await page.goto('http://127.0.0.1:4173/settings', { waitUntil: 'domcontentloaded', timeout: 45000 });
+
+  await expect(page.locator('#authView')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('#settingsView')).toBeHidden();
+
+  await page.screenshot({ path: 'C:/Users/NKEDE GEOR/Desktop/writer app/writer-repo/artifacts/auth-session-settings-signed-out.png' });
+});

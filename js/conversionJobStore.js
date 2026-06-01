@@ -229,6 +229,7 @@ function buildCloudJobPayload(job) {
   const rawText = String(job.rawText || '');
   const normalizedText = String(job.normalizedText || '');
   const structuredLines = Array.isArray(job.structuredLines) ? job.structuredLines : [];
+  const versions = Array.isArray(job.versions) ? job.versions.slice(-6) : [];
   return {
     id: job.id,
     fileName: job.fileName || '',
@@ -246,9 +247,29 @@ function buildCloudJobPayload(job) {
     normalizedText: normalizedText.slice(0, CLOUD_TEXT_LIMIT),
     normalizedTextTruncated: normalizedText.length > CLOUD_TEXT_LIMIT,
     coverPageCandidate: job.coverPageCandidate || null,
+    activeVersionId: job.activeVersionId || '',
     structuredLines: structuredLines.slice(0, 200).map((line) => ({
       type: String(line?.type || 'action'),
       text: String(line?.text || '').slice(0, 4000)
+    })),
+    versions: versions.map((version) => ({
+      id: String(version?.id || ''),
+      label: String(version?.label || ''),
+      reason: String(version?.reason || ''),
+      createdAt: String(version?.createdAt || ''),
+      status: String(version?.status || ''),
+      stageLabel: String(version?.stageLabel || ''),
+      structuredLineCount: Number(version?.structuredLineCount || 0),
+      warnings: Array.isArray(version?.warnings) ? version.warnings.slice(0, 12) : [],
+      rawText: String(version?.rawText || '').slice(0, 30000),
+      normalizedText: String(version?.normalizedText || '').slice(0, 30000),
+      coverPageCandidate: version?.coverPageCandidate || null,
+      structuredLines: Array.isArray(version?.structuredLines)
+        ? version.structuredLines.slice(0, 160).map((line) => ({
+            type: String(line?.type || 'action'),
+            text: String(line?.text || '').slice(0, 4000)
+          }))
+        : []
     })),
     sourceFile: {
       ...(job.sourceFile || {}),

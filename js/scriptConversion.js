@@ -289,21 +289,37 @@ export async function convertScriptTextToLines(rawText, {
     }
   }
 
+  const latestRecord = await getConversionJobRecord(job.id);
+  const savedRawText = String(latestRecord?.rawText || '').trim();
+  const savedNormalizedText = String(latestRecord?.normalizedText || '').trim();
+  const savedCoverPage = normalizeCoverPageCandidate(latestRecord?.coverPageCandidate);
+  const hasEditedRawText = Boolean(latestRecord?.rawTextEditedAt && savedRawText);
+  const hasEditedNormalizedText = Boolean(latestRecord?.normalizedTextEditedAt && savedNormalizedText);
+  const finalRawText = hasEditedRawText ? savedRawText : screenplayBodyText;
+  const finalNormalizedText = hasEditedNormalizedText ? savedNormalizedText : normalizedScreenplayText;
+  const finalCoverPage = savedCoverPage || coverPage;
+  const finalLines = hasEditedNormalizedText
+    ? buildLocalStructuredPreview(finalNormalizedText)
+    : convertedLines;
+
   await updateConversionJob(job.id, {
     status: usedFallback ? 'completed-with-fallback' : 'completed',
     stageLabel: usedFallback ? 'Imported with fallback review needed' : 'Conversion complete',
-    structuredLines: convertedLines,
-    structuredLineCount: convertedLines.length,
+    rawText: finalRawText,
+    normalizedText: finalNormalizedText,
+    coverPageCandidate: finalCoverPage,
+    structuredLines: finalLines,
+    structuredLineCount: finalLines.length,
     warnings
   });
 
   const uniqueWarnings = [...new Set(warnings.filter(Boolean))];
 
   return {
-    lines: convertedLines.length ? convertedLines : fallbackCandidatesToLines(candidates),
+    lines: finalLines.length ? finalLines : fallbackCandidatesToLines(candidates),
     warnings: uniqueWarnings,
     usedFallback,
-    coverPage,
+    coverPage: finalCoverPage,
     jobId: job.id
   };
 }
@@ -455,7 +471,7 @@ export function separateCoverPageFromScript(text) {
   };
 }
 
-function detectCoverPageCandidate(text) {
+export function detectCoverPageCandidate(text) {
   const lines = String(text || '')
     .replace(/\r/g, '')
     .split('\n')
@@ -466,13 +482,23 @@ function detectCoverPageCandidate(text) {
   const sceneIndex = lines.findIndex((line) => /^(INT\.|EXT\.|EST\.|INT\/EXT\.|INT\.\/EXT\.)/i.test(line));
   const coverLines = sceneIndex >= 0 ? lines.slice(0, sceneIndex) : lines;
   if (coverLines.length < 3) return null;
-  const byIndex = coverLines.findIndex((line) => /^by$/i.test(line) || /^written by$/i.test(line));
-  const title = coverLines[0] || '';
-  const author = byIndex >= 0 ? (coverLines[byIndex + 1] || '') : '';
-  const metaLines = byIndex >= 0 ? coverLines.slice(byIndex + 2) : coverLines.slice(1);
+  const byIndex = coverLines.findIndex((line) => /^(by|written by|screenplay by|a screenplay by)$/i.test(line));
+  const title = detectCoverTitleLine(coverLines);
+  const titleIndex = title ? coverLines.indexOf(title) : 0;
+  const author = byIndex >= 0
+    ? inferCoverAuthor(coverLines.slice(byIndex + 1))
+    : inferCoverAuthor(coverLines.slice(titleIndex + 1));
+  const metaStartIndex = byIndex >= 0
+    ? Math.max(byIndex + 1 + (author ? 1 : 0), titleIndex + 1)
+    : titleIndex + 1;
+  const metaLines = coverLines
+    .slice(metaStartIndex)
+    .filter((line) => line !== author && line !== title && !isCoverMetaNoise(line));
   const contact = metaLines.find((line) => /@|\+?\d[\d\s().-]{6,}/.test(line)) || '';
   const company = metaLines.find((line) => /productions?|pictures?|studios?|films?/i.test(line)) || '';
-  const logline = metaLines.find((line) => line.length > 45) || '';
+  const logline = metaLines.find((line) => /^logline[:\s-]/i.test(line))
+    || metaLines.find((line) => /[.!?]/.test(line) && line.length > 45)
+    || '';
   const details = metaLines.filter((line) => line && line !== contact && line !== company && line !== logline).join(' | ');
   return normalizeCoverPageCandidate({ title, author, contact, company, details, logline });
 }
@@ -514,6 +540,52 @@ export function buildLocalStructuredPreview(text) {
   const candidates = buildConversionCandidates(prepared);
   if (!candidates.length) return [];
   return sanitizeConvertedLines(fallbackCandidatesToLines(candidates));
+}
+
+export function buildConversionVersionSnapshot(record, { label = '', reason = '' } = {}) {
+  if (!record) return null;
+  const structuredLines = Array.isArray(record.structuredLines) ? record.structuredLines : [];
+  const createdAt = new Date().toISOString();
+  const lineCount = Number(record.structuredLineCount || structuredLines.length || 0);
+  return {
+    id: `pass_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    label: String(label || record.stageLabel || record.status || 'Saved pass'),
+    reason: String(reason || '').trim(),
+    createdAt,
+    status: String(record.status || 'queued'),
+    stageLabel: String(record.stageLabel || ''),
+    warnings: Array.isArray(record.warnings) ? record.warnings.filter(Boolean).slice(0, 20) : [],
+    rawText: String(record.rawText || ''),
+    normalizedText: String(record.normalizedText || ''),
+    structuredLines: structuredLines.map((line) => ({
+      type: String(line?.type || 'action'),
+      text: String(line?.text || '')
+    })),
+    structuredLineCount: lineCount,
+    coverPageCandidate: record.coverPageCandidate || null,
+    operatorGuidance: String(record.operatorGuidance || '')
+  };
+}
+
+export async function appendConversionJobVersion(jobId, recordOverride = null, meta = {}) {
+  if (!jobId) return null;
+  const record = recordOverride || await getConversionJobRecord(jobId);
+  if (!record) return null;
+  const snapshot = buildConversionVersionSnapshot(record, meta);
+  if (!snapshot) return record;
+  const versions = Array.isArray(record.versions) ? record.versions.slice(-7) : [];
+  const lastVersion = versions[versions.length - 1] || null;
+  const lastKey = lastVersion
+    ? `${lastVersion.status}|${lastVersion.stageLabel}|${lastVersion.structuredLineCount}|${String(lastVersion.normalizedText || '').slice(0, 240)}`
+    : '';
+  const nextKey = `${snapshot.status}|${snapshot.stageLabel}|${snapshot.structuredLineCount}|${String(snapshot.normalizedText || '').slice(0, 240)}`;
+  if (lastKey === nextKey) {
+    return record;
+  }
+  return patchConversionJobRecord(jobId, {
+    versions: [...versions, snapshot],
+    activeVersionId: snapshot.id
+  });
 }
 
 function fallbackCandidatesToLines(candidates) {
@@ -740,6 +812,12 @@ function looksLikeDialogueText(text) {
   if (/^\[.*\]$/.test(text) || /^\(.*\)$/.test(text)) {
     return false;
   }
+  if (/^[A-Z0-9 .'\-()]+$/.test(text) && text.length <= 32) {
+    return false;
+  }
+  if (/^(CONT'D|O\.S\.|V\.O\.)$/i.test(text)) {
+    return false;
+  }
   return !/^[A-Z0-9 .'\-()]+$/.test(text);
 }
 
@@ -771,7 +849,7 @@ function repairConvertedLines(lines) {
       continue;
     }
 
-    if (current.type === 'action' && previous?.type === 'action' && shouldMergeActionBlocks(previous.text, current.text)) {
+    if (current.type === 'action' && previous?.type === 'action' && shouldMergeActionBlocksAdvanced(previous.text, current.text)) {
       previous.text = `${previous.text} ${current.text}`.replace(/\s+/g, ' ').trim();
       continue;
     }
@@ -794,6 +872,17 @@ function shouldMergeActionBlocks(previousText, currentText) {
   }
   if (/^[a-z("'“]/.test(currentText)) return true;
   if (currentText.length <= 42 && !/[.!?:"”')\]]$/.test(previousText)) return true;
+  return false;
+}
+
+function shouldMergeActionBlocksAdvanced(previousText, currentText) {
+  if (shouldMergeActionBlocks(previousText, currentText)) return true;
+  if (!previousText || !currentText) return false;
+  if (/^[a-z("'`]/.test(currentText)) return true;
+  if (/[,:;\-—]$/.test(previousText) || /\.\.\.$/.test(previousText)) return true;
+  if (/^(and|but|or|so|because|while|as|with|without|through|into|onto|toward|towards|inside|outside|before|after|then|still|when|where|as if|like)\b/i.test(currentText)) {
+    return true;
+  }
   return false;
 }
 
@@ -860,12 +949,12 @@ function mergeSoftWrappedScreenplayLines(lines) {
     const previous = merged[merged.length - 1];
 
     if (previous?.text && previous.role === role) {
-      if (role === 'dialogue' && shouldJoinDialogueLine(previous.text, trimmed)) {
+      if (role === 'dialogue' && shouldJoinDialogueLineAdvanced(previous.text, trimmed)) {
         previous.text = `${previous.text} ${trimmed}`.replace(/\s+/g, ' ').trim();
         continue;
       }
 
-      if (role === 'action' && shouldJoinActionLine(previous.text, trimmed, previous.indent ?? 0, indent)) {
+      if (role === 'action' && shouldJoinActionLineAdvanced(previous.text, trimmed, previous.indent ?? 0, indent)) {
         previous.text = `${previous.text} ${trimmed}`.replace(/\s+/g, ' ').trim();
         continue;
       }
@@ -937,6 +1026,29 @@ function shouldJoinActionLine(previousText, currentText, previousIndent, current
   if (indentDelta > 3) return false;
   if (/^[a-z("'“]/.test(currentText)) return true;
   if (!/[.!?:"”')\]]$/.test(previousText)) return true;
+  return false;
+}
+
+function shouldJoinDialogueLineAdvanced(previousText, currentText) {
+  if (shouldJoinDialogueLine(previousText, currentText)) return true;
+  if (!previousText || !currentText) return false;
+  if (/^(CONT'D|O\.S\.|V\.O\.)$/i.test(currentText)) return false;
+  if (/[,:;\-—]$/.test(previousText) || /\.\.\.$/.test(previousText)) return true;
+  if (/^(and|but|or|so|because|if|when|while|then|still|just|maybe|really|please|well|no|yes)\b/i.test(currentText)) {
+    return true;
+  }
+  return currentText.length <= 72 && !isCharacterCueLike(currentText);
+}
+
+function shouldJoinActionLineAdvanced(previousText, currentText, previousIndent, currentIndent) {
+  if (shouldJoinActionLine(previousText, currentText, previousIndent, currentIndent)) return true;
+  if (!previousText || !currentText) return false;
+  const indentDelta = Math.abs((previousIndent || 0) - (currentIndent || 0));
+  if (indentDelta > 3) return false;
+  if (/[,:;\-—]$/.test(previousText) || /\.\.\.$/.test(previousText)) return true;
+  if (/^(and|but|or|so|because|while|as|with|without|through|into|onto|toward|towards|inside|outside|before|after|then|still|when|where|as if|like)\b/i.test(currentText)) {
+    return true;
+  }
   return false;
 }
 
@@ -1207,6 +1319,44 @@ function isCharacterCueLike(text) {
   return normalized === normalized.toUpperCase();
 }
 
+function detectCoverTitleLine(lines) {
+  const candidates = (lines || []).filter((line) => line && !isCoverMetaNoise(line));
+  if (!candidates.length) return String(lines?.[0] || '').trim();
+  const uppercaseCandidate = candidates.find((line) => line === line.toUpperCase() && line.length >= 4 && line.length <= 72);
+  return uppercaseCandidate || candidates[0];
+}
+
+function inferCoverAuthor(lines) {
+  for (const line of lines || []) {
+    const candidate = String(line || '').trim();
+    if (!candidate || isCoverMetaNoise(candidate)) continue;
+    if (isLikelyAuthorName(candidate)) return candidate;
+  }
+  return '';
+}
+
+function isCoverMetaNoise(line) {
+  const candidate = String(line || '').trim();
+  if (!candidate) return true;
+  if (isLikelyPageNumber(candidate)) return true;
+  if (/^(by|written by|screenplay by|a screenplay by)$/i.test(candidate)) return true;
+  if (/^(first|second|third|fourth|revised|revision|draft|shooting draft|final draft|spec draft)\b/i.test(candidate)) return true;
+  if (/\b(revision|draft)\b/i.test(candidate) && /\d/.test(candidate)) return true;
+  if (/^(copyright|all rights reserved)\b/i.test(candidate)) return true;
+  return false;
+}
+
+function isLikelyAuthorName(line) {
+  const candidate = String(line || '').trim();
+  if (!candidate || candidate.length > 56) return false;
+  if (/@|\+?\d[\d\s().-]{6,}/.test(candidate)) return false;
+  if (/productions?|pictures?|studios?|films?|copyright|draft|revision|logline|story by|teleplay by|screenplay by/i.test(candidate)) return false;
+  if (/^(int\.|ext\.|est\.)/i.test(candidate)) return false;
+  const words = candidate.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 5) return false;
+  return words.every((word) => /^[A-Z][A-Za-z'’-]+$/.test(word));
+}
+
 function normalizeCandidateKind(kind) {
   if (['scene', 'transition', 'shot', 'note', 'image', 'action', 'character', 'dialogue', 'parenthetical'].includes(kind)) {
     return kind;
@@ -1231,8 +1381,27 @@ function createConversionJob({ fileName, rawText, projectId = '' }) {
   return job;
 }
 
-function updateConversionJob(jobId, patch) {
+async function updateConversionJob(jobId, patch) {
   if (!jobId) return Promise.resolve(null);
+  const latestRecord = await getConversionJobRecord(jobId);
+  const preservedPatch = {};
+  if (!Object.prototype.hasOwnProperty.call(patch, 'rawText') && latestRecord?.rawTextEditedAt && String(latestRecord.rawText || '').trim()) {
+    preservedPatch.rawText = latestRecord.rawText;
+    preservedPatch.rawTextEditedAt = latestRecord.rawTextEditedAt;
+  }
+  if (!Object.prototype.hasOwnProperty.call(patch, 'normalizedText') && latestRecord?.normalizedTextEditedAt && String(latestRecord.normalizedText || '').trim()) {
+    preservedPatch.normalizedText = latestRecord.normalizedText;
+    preservedPatch.normalizedTextEditedAt = latestRecord.normalizedTextEditedAt;
+    if (!Object.prototype.hasOwnProperty.call(patch, 'structuredLines')) {
+      const preservedStructuredLines = buildLocalStructuredPreview(latestRecord.normalizedText);
+      preservedPatch.structuredLines = preservedStructuredLines;
+      preservedPatch.structuredLineCount = preservedStructuredLines.length;
+    }
+  }
+  if (!Object.prototype.hasOwnProperty.call(patch, 'coverPageCandidate') && latestRecord?.coverPageCandidate) {
+    preservedPatch.coverPageCandidate = latestRecord.coverPageCandidate;
+  }
+  const mergedPatch = { ...preservedPatch, ...patch };
   let nextJob = null;
   updateStoredJobs((jobs) => {
     let found = false;
@@ -1240,16 +1409,16 @@ function updateConversionJob(jobId, patch) {
     const nextJobs = jobs.map((job) => {
       if (job.id !== jobId) return job;
       found = true;
-      nextJob = { ...job, ...patch, updatedAt };
+      nextJob = { ...job, ...mergedPatch, updatedAt };
       return nextJob;
     });
     if (!found) {
-      nextJob = { id: jobId, ...patch, updatedAt };
+      nextJob = { id: jobId, ...mergedPatch, updatedAt };
       return [nextJob, ...nextJobs].slice(0, 8);
     }
     return nextJobs;
   });
-  const payload = nextJob || { id: jobId, ...patch };
+  const payload = nextJob || { id: jobId, ...mergedPatch };
   try {
     window.dispatchEvent(new CustomEvent('eyawriter:conversion-job-updated', {
       detail: {
