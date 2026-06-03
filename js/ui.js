@@ -1,6 +1,5 @@
 ﻿import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
-import { getSceneIdForIndex } from './editor.js';
 import { getCurrentProject, persistProjects, serializeScript } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode, uid } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
@@ -31,6 +30,16 @@ function getProjectFormatLabel(project) {
     return "Prose / Poetry";
   }
   return "Film Script";
+}
+
+function getSceneIdForLineIndex(index, project = getCurrentProject()) {
+  if (!project || index < 0) return null;
+  for (let cursor = index; cursor >= 0; cursor -= 1) {
+    if (project.lines?.[cursor]?.type === "scene") {
+      return project.lines[cursor].id;
+    }
+  }
+  return null;
 }
 
 function getUserHandle(value, fallback = "user") {
@@ -132,6 +141,33 @@ function getTaskStatusCountLabel(tasks) {
   const openCount = tasks.filter((task) => task.status !== "done").length;
   const doneCount = tasks.filter((task) => task.status === "done").length;
   return { openCount, doneCount };
+}
+
+function renderWorkspaceProjectCards(projects, collaborationLabel) {
+  const grid = refs.workspaceProjectGrid || document.querySelector("#workspaceProjectGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  const template = document.querySelector("#projectCardTemplate");
+  if (!projects.length || !template) {
+    grid.innerHTML = '<article class="workspace-projects-empty">No projects yet. Create the first project in this workspace to start writing.</article>';
+    return;
+  }
+
+  projects.forEach((project) => {
+    const node = template.content.firstElementChild.cloneNode(true);
+    const lines = Array.isArray(project.lines) ? project.lines : [];
+    const sceneCount = lines.filter((line) => line.type === "scene" && line.text.trim()).length;
+    const characterCount = new Set(lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+    node.querySelector(".project-card-title").textContent = project.title;
+    node.querySelector(".project-script-id").textContent = project.scriptId;
+    node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
+    node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
+    node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
+    node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
+    node.dataset.projectId = project.id;
+    node.querySelector(".project-card-open").dataset.projectId = project.id;
+    grid.appendChild(node);
+  });
 }
 
 function formatTaskDueLabel(task) {
@@ -319,6 +355,7 @@ export function renderWorkspaceView() {
     return;
   }
 
+  const collaborationLabel = getProjectCollaborationLabel(workspaceLead);
   const projects = allProjects.filter((project) => project.workspace?.id === workspaceId && !project.isWorkspaceRoot);
   const ownerLabel = getMemberDisplayName({ name: workspaceLead.ownerName, email: workspaceLead.ownerEmail }, "Workspace Owner");
   const memberEntries = [
@@ -348,7 +385,7 @@ export function renderWorkspaceView() {
   const lineOptions = projects.flatMap((project) => (project.lines || [])
     .filter((line) => line.text.trim() && line.type !== "scene")
     .map((line, index) => {
-      const owningSceneId = getSceneIdForIndex(index, project);
+      const owningSceneId = getSceneIdForLineIndex(index, project);
       const owningScene = owningSceneId
         ? project.lines.find((entry) => entry.id === owningSceneId)?.text?.trim() || "Scene"
         : "General";
@@ -400,6 +437,9 @@ export function renderWorkspaceView() {
     done: allTaskItems.filter((task) => task.status === "done").length
   };
   const taskStatusSummary = getTaskStatusCountLabel(allTaskItems);
+  const latestProject = projects
+    .filter((project) => !project.isWorkspaceRoot)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0] || null;
   const taskItems = allTaskItems.filter((task) => {
     if (state.workspaceTaskFilter === "mine") {
       return task.assignedTo === currentUid;
@@ -445,6 +485,28 @@ export function renderWorkspaceView() {
           <div class="workspace-home-metric"><span>Members</span><strong>${uniqueMembers.length}</strong></div>
           <div class="workspace-home-metric"><span>Tasks</span><strong>${allTaskItems.length}</strong></div>
           <div class="workspace-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong></div>
+        </div>
+      </section>
+      <section class="workspace-flow-strip" aria-label="Core workspace workflow">
+        <div class="workspace-flow-step is-active">
+          <span>1</span>
+          <strong>Write</strong>
+          <small>${latestProject ? `Continue ${escapeHtml(latestProject.title)}` : "Create the first script"}</small>
+        </div>
+        <div class="workspace-flow-step">
+          <span>2</span>
+          <strong>Assign</strong>
+          <small>${taskStatusSummary.openCount} open task${taskStatusSummary.openCount === 1 ? "" : "s"}</small>
+        </div>
+        <div class="workspace-flow-step">
+          <span>3</span>
+          <strong>Track</strong>
+          <small>${taskStatusSummary.doneCount} completed</small>
+        </div>
+        <div class="workspace-flow-actions">
+          <button class="primary-button btn-sm" type="button" data-workspace-home-action="continue-writing">${latestProject ? "Continue Writing" : "Create Script"}</button>
+          <button class="ghost-button btn-sm" type="button" data-workspace-home-action="focus-task-form">Add Task</button>
+          <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">New Script</button>
         </div>
       </section>
       <div class="workspace-home-grid">
@@ -767,28 +829,8 @@ export function renderWorkspaceView() {
     </div>
   `;
 
-  refs.workspaceProjectGrid.innerHTML = "";
-  const template = document.querySelector("#projectCardTemplate");
-  if (!projects.length) {
-    refs.workspaceProjectGrid.innerHTML = '<article class="workspace-projects-empty">No projects yet. Create the first project in this workspace to start writing.</article>';
-  } else {
-    projects.forEach((project) => {
-      const node = template.content.firstElementChild.cloneNode(true);
-      const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
-      const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
-      node.querySelector(".project-card-title").textContent = project.title;
-      node.querySelector(".project-script-id").textContent = project.scriptId;
-      node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
-      node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
-      node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
-      node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
-      node.dataset.projectId = project.id;
-      node.querySelector(".project-card-open").dataset.projectId = project.id;
-      refs.workspaceProjectGrid.appendChild(node);
-    });
-  }
-
   applyTranslations();
+  renderWorkspaceProjectCards(projects, collaborationLabel);
 }
 
 export function showNewCreationFlow() {
@@ -1002,6 +1044,10 @@ export function renderHome() {
     const uniqueMembers = [...new Set(memberEntries)];
     const activityItems = (workspaceLead.activityLog || []).slice(-3).reverse();
     const taskItems = [...(workspaceLead.workspace?.tasks || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    const taskStatusSummary = getTaskStatusCountLabel(taskItems);
+    const latestProject = projects
+      .filter((project) => !project.isWorkspaceRoot)
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0] || null;
     const assignees = [
       { id: workspaceLead.ownerId || "workspace_owner", label: ownerLabel },
       ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
@@ -1038,6 +1084,28 @@ export function renderHome() {
               <span>Last activity</span>
               <strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong>
             </div>
+          </div>
+        </section>
+        <section class="workspace-flow-strip" aria-label="Core workspace workflow">
+          <div class="workspace-flow-step is-active">
+            <span>1</span>
+            <strong>Write</strong>
+            <small>${latestProject ? `Continue ${escapeHtml(latestProject.title)}` : "Create the first script"}</small>
+          </div>
+          <div class="workspace-flow-step">
+            <span>2</span>
+            <strong>Assign</strong>
+            <small>${taskStatusSummary.openCount} open task${taskStatusSummary.openCount === 1 ? "" : "s"}</small>
+          </div>
+          <div class="workspace-flow-step">
+            <span>3</span>
+            <strong>Track</strong>
+            <small>${taskStatusSummary.doneCount} completed</small>
+          </div>
+          <div class="workspace-flow-actions">
+            <button class="primary-button btn-sm" type="button" data-workspace-home-action="continue-writing">${latestProject ? "Continue Writing" : "Create Script"}</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="focus-task-form">Add Task</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">New Script</button>
           </div>
         </section>
         <div class="workspace-home-grid">
@@ -1362,7 +1430,7 @@ export function showCharacterScenes(characterName, onSelect) {
   const targetName = characterName.trim().toUpperCase();
   project.lines.forEach((line, index) => {
     if ((line.type === "character" || line.type === "dual") && normalizeLineText(line.text, line.type).trim().toUpperCase() === targetName) {
-      const sceneId = getSceneIdForIndex(index, project);
+      const sceneId = getSceneIdForLineIndex(index, project);
       if (sceneId) {
         sceneIds.add(sceneId);
       }
@@ -2079,7 +2147,7 @@ export async function showCharactersInterface(startWithForm = false, onNavigate 
 
     project.lines.forEach((line, index) => {
       if ((line.type === "character" || line.type === "dual") && normalizeLineText(line.text, line.type).trim().toUpperCase() === targetName) {
-        const sceneId = getSceneIdForIndex(index, project);
+        const sceneId = getSceneIdForLineIndex(index, project);
         if (sceneId) sceneIds.add(sceneId);
       }
     });

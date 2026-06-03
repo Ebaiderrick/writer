@@ -13,7 +13,8 @@ import {
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
-  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray
+  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray,
+  getSceneIdForIndex
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
 import { buildWordDocxBlob, DOCX_MIME_TYPE } from './docxExport.js';
@@ -536,6 +537,84 @@ function shouldIgnoreProjectCardClick(projectId) {
   return true;
 }
 
+function openWorkspaceDashboardOrNotify(workspaceId) {
+  if (!workspaceId) {
+    showToast("This workspace link is missing. Refresh the project list and try again.", "error", { duration: 4200 });
+    return;
+  }
+  openWorkspaceDashboard(workspaceId);
+}
+
+function openProjectOrNotify(projectId, options = {}) {
+  if (!projectId) {
+    showToast("This project link is missing. Refresh the project list and try again.", "error", { duration: 4200 });
+    return false;
+  }
+  const opened = openProject(projectId, options);
+  if (!opened) {
+    showToast("That project could not be found. Refresh the workspace or recover it from deleted projects.", "error", { duration: 5200 });
+    return false;
+  }
+  return true;
+}
+
+function getLatestWorkspaceScript(workspaceId = state.currentWorkspaceId) {
+  return getWorkspaceProjects(workspaceId)
+    .filter((project) => !project.isWorkspaceRoot)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0] || null;
+}
+
+function continueWorkspaceWriting() {
+  const project = getLatestWorkspaceScript();
+  if (project) {
+    openProjectOrNotify(project.id);
+    return;
+  }
+  createProjectInsideCurrentWorkspace();
+}
+
+function focusWorkspaceTaskForm() {
+  const taskInput = refs.workspaceDashboard?.querySelector("[data-workspace-task-title]")
+    || refs.homeWorkspaceDashboard?.querySelector("[data-workspace-task-title]");
+  if (!taskInput) {
+    showToast("Open a workspace first, then create a task.", "error", { duration: 3600 });
+    return;
+  }
+  taskInput.scrollIntoView({ behavior: "smooth", block: "center" });
+  taskInput.focus();
+  showToast("Add a task title, assign it, then track it here.", "success", { duration: 2400 });
+}
+
+function handleProjectCardGridClick(e, { allowManagement = true } = {}) {
+  const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
+  if (workspaceTrigger) {
+    openWorkspaceDashboardOrNotify(workspaceTrigger.dataset.openWorkspaceId);
+    return true;
+  }
+
+  const card = e.target.closest(".project-card");
+  if (!card) return false;
+
+  const projectId = card.dataset.projectId || e.target.closest("[data-project-id]")?.dataset.projectId || "";
+  if (shouldIgnoreProjectCardClick(projectId)) return true;
+
+  if (allowManagement && e.target.closest(".project-delete")) {
+    removeProject(projectId);
+    return true;
+  }
+  if (allowManagement && e.target.closest('[data-project-action="rename"]')) {
+    renameProjectById(projectId);
+    return true;
+  }
+  if (allowManagement && e.target.closest('[data-project-action="duplicate"]')) {
+    duplicateProjectById(projectId);
+    return true;
+  }
+
+  openProjectOrNotify(projectId);
+  return true;
+}
+
 function updateSelectionToolbar() {
   const toolbar = ensureSelectionToolbar();
   const selection = window.getSelection();
@@ -724,15 +803,17 @@ function ensureWorkspaceClock() {
 }
 
 async function openWorkspaceDashboard(workspaceId) {
-  if (!workspaceId) return;
+  if (!workspaceId) return false;
   const loadToast = showToast("Refreshing workspace...", "loading", { duration: 0 });
   state.activeBlockId = null;
   state.activeType = "action";
   const workspaceRoot = getWorkspaceRootProject(workspaceId) || getWorkspaceProjects(workspaceId)[0] || null;
-  state.currentWorkspaceId = workspaceId;
-  if (workspaceRoot) {
-    state.currentProjectId = workspaceRoot.id;
+  if (!workspaceRoot) {
+    updateToast(loadToast, "Workspace could not be found. Refresh the project list and try again.", "error", { duration: 5200 });
+    return false;
   }
+  state.currentWorkspaceId = workspaceId;
+  state.currentProjectId = workspaceRoot.id;
   await syncWorkspaceState(workspaceId).catch(() => {});
   persistProjects(false, { syncInputs: false });
   showWorkspaceView();
@@ -740,6 +821,7 @@ async function openWorkspaceDashboard(workspaceId) {
   ensureWorkspaceClock();
   syncWorkspaceHeaderActions();
   updateToast(loadToast, "Workspace ready.", "success", { duration: 1200 });
+  return true;
 }
 
 async function createProjectInsideCurrentWorkspace() {
@@ -879,12 +961,20 @@ function getWorkspaceStoryMemoryChoices(workspaceId = state.currentWorkspaceId) 
       }))));
 }
 
+function getWorkspaceLeadProject(workspaceId = state.currentWorkspaceId) {
+  if (!workspaceId) return null;
+  return getWorkspaceRootProject(workspaceId)
+    || getWorkspaceProjects(workspaceId)
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0]
+    || null;
+}
+
 function getWorkspaceTaskById(taskId) {
-  return getWorkspaceRootProject(state.currentWorkspaceId)?.workspace?.tasks?.find((task) => task.id === taskId) || null;
+  return getWorkspaceLeadProject()?.workspace?.tasks?.find((task) => task.id === taskId) || null;
 }
 
 function getWorkspaceNotifications(workspaceId = state.currentWorkspaceId) {
-  return [...(getWorkspaceRootProject(workspaceId)?.workspace?.notifications || [])]
+  return [...(getWorkspaceLeadProject(workspaceId)?.workspace?.notifications || [])]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
@@ -1086,24 +1176,31 @@ function insertAiTaskResultIntoProjectWithMode(task, resultText, mode = "insert-
   return true;
 }
 
-function addWorkspaceTaskFromDashboard() {
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
-  if (!workspaceProject || !refs.workspaceDashboard) return;
-  const templateSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-template]');
-  const titleInput = refs.workspaceDashboard.querySelector('[data-workspace-task-title]');
-  const descriptionInput = refs.workspaceDashboard.querySelector('[data-workspace-task-description]');
-  const projectSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-project]');
-  const sceneSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-scene]');
-  const lineSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-line]');
-  const assigneeSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-assignee]');
-  const referenceInput = refs.workspaceDashboard.querySelector('[data-workspace-task-reference]');
-  const statusSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-status-new]');
-  const prioritySelect = refs.workspaceDashboard.querySelector('[data-workspace-task-priority]');
-  const dueInput = refs.workspaceDashboard.querySelector('[data-workspace-task-due]');
-  const handoffInput = refs.workspaceDashboard.querySelector('[data-workspace-task-handoff]');
-  const memorySelect = refs.workspaceDashboard.querySelector('[data-workspace-task-memory]');
-  const aiStartSelect = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start]');
-  const aiStartManual = refs.workspaceDashboard.querySelector('[data-workspace-task-ai-start-manual]');
+function getWorkspaceTaskFormContainer(trigger = null) {
+  return trigger?.closest?.("#workspaceDashboard, #homeWorkspaceDashboard")
+    || (!refs.workspaceView?.hidden ? refs.workspaceDashboard : refs.homeWorkspaceDashboard)
+    || refs.workspaceDashboard;
+}
+
+function addWorkspaceTaskFromDashboard(trigger = null) {
+  const workspaceProject = getWorkspaceLeadProject();
+  const formContainer = getWorkspaceTaskFormContainer(trigger);
+  if (!workspaceProject || !formContainer) return;
+  const templateSelect = formContainer.querySelector('[data-workspace-task-template]');
+  const titleInput = formContainer.querySelector('[data-workspace-task-title]');
+  const descriptionInput = formContainer.querySelector('[data-workspace-task-description]');
+  const projectSelect = formContainer.querySelector('[data-workspace-task-project]');
+  const sceneSelect = formContainer.querySelector('[data-workspace-task-scene]');
+  const lineSelect = formContainer.querySelector('[data-workspace-task-line]');
+  const assigneeSelect = formContainer.querySelector('[data-workspace-task-assignee]');
+  const referenceInput = formContainer.querySelector('[data-workspace-task-reference]');
+  const statusSelect = formContainer.querySelector('[data-workspace-task-status-new]');
+  const prioritySelect = formContainer.querySelector('[data-workspace-task-priority]');
+  const dueInput = formContainer.querySelector('[data-workspace-task-due]');
+  const handoffInput = formContainer.querySelector('[data-workspace-task-handoff]');
+  const memorySelect = formContainer.querySelector('[data-workspace-task-memory]');
+  const aiStartSelect = formContainer.querySelector('[data-workspace-task-ai-start]');
+  const aiStartManual = formContainer.querySelector('[data-workspace-task-ai-start-manual]');
   const templateKey = templateSelect?.value || "custom";
   const title = titleInput?.value?.trim();
   if (!title) {
@@ -1170,7 +1267,11 @@ function addWorkspaceTaskFromDashboard() {
   });
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
-  renderWorkspaceView();
+  if (!refs.workspaceView?.hidden) {
+    renderWorkspaceView();
+  } else {
+    renderHome();
+  }
   showToast(
     assignee?.assigneeType === "system"
       ? `AI task queued for ${nextTask.assignedLabel}.`
@@ -1368,7 +1469,7 @@ function dismissAiTaskResult(taskId) {
 }
 
 async function editWorkspaceTask(taskId) {
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const workspaceProject = getWorkspaceLeadProject();
   const task = getWorkspaceTaskById(taskId);
   if (!workspaceProject || !task) return;
   const assignees = getWorkspaceTaskAssignees(workspaceProject);
@@ -1494,7 +1595,7 @@ async function deleteWorkspaceTask(taskId) {
 async function commentOnWorkspaceTask(taskId) {
   const task = getWorkspaceTaskById(taskId);
   if (!task) return;
-  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId);
+  const workspaceProject = getWorkspaceLeadProject();
   const assignees = workspaceProject ? getWorkspaceTaskAssignees(workspaceProject).filter((entry) => entry.assigneeType === "human") : [];
   const container = document.createElement("div");
   container.className = "workspace-task-comments";
@@ -1630,6 +1731,26 @@ export function bindEvents() {
     if (filterTrigger) {
       state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
       renderHome();
+      return;
+    }
+    const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
+    if (action === "new-project") {
+      createProjectInsideCurrentWorkspace();
+      return;
+    }
+    if (action === "continue-writing") {
+      continueWorkspaceWriting();
+      return;
+    }
+    if (action === "focus-task-form") {
+      focusWorkspaceTaskForm();
+      return;
+    }
+    if (action === "add-task") {
+      event.preventDefault();
+      event.stopPropagation();
+      addWorkspaceTaskFromDashboard(event.target);
+      return;
     }
   });
 
@@ -1694,12 +1815,22 @@ export function bindEvents() {
       createProjectInsideCurrentWorkspace();
       return;
     }
+    if (action === "continue-writing") {
+      continueWorkspaceWriting();
+      return;
+    }
+    if (action === "focus-task-form") {
+      focusWorkspaceTaskForm();
+      return;
+    }
     if (action === "open-popup") {
       showWorkspacePopup();
       return;
     }
     if (action === "add-task") {
-      addWorkspaceTaskFromDashboard();
+      event.preventDefault();
+      event.stopPropagation();
+      addWorkspaceTaskFromDashboard(event.target);
       return;
     }
     if (action === "mark-all-notifications-read") {
@@ -1736,17 +1867,14 @@ export function bindEvents() {
       const projectId = trigger?.dataset.taskProjectId;
       const taskId = trigger?.dataset.taskId;
       const task = taskId ? getWorkspaceTaskById(taskId) : null;
-      if (projectId) {
-        openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
-      }
+      openProjectOrNotify(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       return;
     }
     if (action === "open-task-memory") {
       const trigger = event.target.closest("[data-memory-project-id]");
       const projectId = trigger?.dataset.memoryProjectId;
-      if (projectId) {
-        openProject(projectId);
-      }
+      const opened = openProjectOrNotify(projectId);
+      if (!opened) return;
       setTimeout(() => {
         showStoryMemoryPopup();
       }, 60);
@@ -1762,7 +1890,9 @@ export function bindEvents() {
         const task = notification?.taskId
           ? getWorkspaceTaskById(notification.taskId)
           : (trigger?.dataset.taskId ? getWorkspaceTaskById(trigger.dataset.taskId) : null);
-        openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+        openProjectOrNotify(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+      } else {
+        showToast("This notification is no longer linked to a project.", "error", { duration: 4200 });
       }
       return;
     }
@@ -1786,6 +1916,13 @@ export function bindEvents() {
       if (taskId) dismissAiTaskResult(taskId);
       return;
     }
+  });
+
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-workspace-home-action='add-task']");
+    if (!trigger) return;
+    event.preventDefault();
+    addWorkspaceTaskFromDashboard(trigger);
   });
 
   refs.workspaceDashboard?.addEventListener("change", (event) => {
@@ -2492,25 +2629,11 @@ export function bindEvents() {
           renderHome();
           return;
       }
-      const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
-      if (workspaceTrigger) {
-          openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
-          return;
-      }
-      const card = e.target.closest(".project-card");
-      if (!card) return;
-      const projectId = card.dataset.projectId;
-      if (shouldIgnoreProjectCardClick(projectId)) return;
+      handleProjectCardGridClick(e);
+  });
 
-      if (e.target.closest(".project-delete")) {
-          removeProject(projectId);
-      } else if (e.target.closest('[data-project-action="rename"]')) {
-          renameProjectById(projectId);
-      } else if (e.target.closest('[data-project-action="duplicate"]')) {
-          duplicateProjectById(projectId);
-      } else {
-          openProject(projectId);
-      }
+  refs.workspaceProjectGrid?.addEventListener("click", (e) => {
+      handleProjectCardGridClick(e, { allowManagement: false });
   });
 
   refs.projectGrid.addEventListener("touchstart", (e) => {
@@ -2560,7 +2683,7 @@ export function bindEvents() {
       container.addEventListener("click", (e) => {
         const btn = e.target.closest(".recent-project-button");
         if (btn) {
-            openProject(btn.dataset.projectId);
+            openProjectOrNotify(btn.dataset.projectId);
             closeMenus();
         }
       });
@@ -2673,10 +2796,10 @@ export function bindEvents() {
 // Action Handlers
 export function openProject(projectId, options = {}) {
     const project = state.projects.find((item) => item.id === projectId);
-    if (!project) return;
+    if (!project) return false;
     if (project.isWorkspaceRoot) {
       openWorkspaceDashboard(project.workspace?.id || project.id);
-      return;
+      return true;
     }
     const projectLoadToast = options.silentLoadToast ? null : showToast("Opening project...", "loading", { duration: 0 });
     state.currentProjectId = project.id;
@@ -2716,6 +2839,7 @@ export function openProject(projectId, options = {}) {
     if (projectLoadToast) {
       updateToast(projectLoadToast, "Project opened.", "success", { duration: 1200 });
     }
+    return true;
 }
 
 export function renderStudio() {

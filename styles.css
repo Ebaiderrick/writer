@@ -959,6 +959,70 @@ html[data-theme="rose"] .mesh-background {
   min-width: 180px;
 }
 
+.workspace-flow-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 8px;
+  align-items: stretch;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+}
+
+.workspace-flow-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  align-content: center;
+  min-height: 52px;
+  padding: 8px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 86%, transparent);
+}
+
+.workspace-flow-step span {
+  grid-row: 1 / span 2;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.workspace-flow-step strong {
+  font-size: 0.72rem;
+  color: var(--ink);
+}
+
+.workspace-flow-step small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.64rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-flow-step.is-active {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-strong));
+}
+
+.workspace-flow-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 230px;
+}
+
 .workspace-home-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6671,10 +6735,21 @@ body.outline-hidden .section-scenes {
   .smart-proofread-mode-grid,
   .smart-proofread-range-grid,
   .workspace-home-hero-card,
+  .workspace-flow-strip,
   .workspace-home-grid,
   .workspace-task-form,
   .project-grid {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-flow-actions {
+    justify-content: stretch;
+    min-width: 0;
+  }
+
+  .workspace-flow-actions .primary-button,
+  .workspace-flow-actions .ghost-button {
+    flex: 1 1 100%;
   }
 
   .work-tracking-report .analytics-section:last-of-type,
