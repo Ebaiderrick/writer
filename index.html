@@ -278,15 +278,6 @@
         </header>
         <section class="workspace-view-body">
           <section id="workspaceDashboard" class="workspace-home"></section>
-          <section class="workspace-projects">
-            <div class="home-projects-head workspace-projects-head">
-              <div class="home-projects-copy">
-                <h2>Workspace Projects</h2>
-                <p class="home-projects-subtitle">Every script in this workspace stays connected to the same team context.</p>
-              </div>
-            </div>
-            <div id="workspaceProjectGrid" class="project-grid"></div>
-          </section>
         </section>
       </div>
     </section>
@@ -1561,6 +1552,13 @@
           <span class="project-scenes"></span>
           <span class="project-characters"></span>
         </div>
+        <div class="project-work-status" data-project-work-status hidden>
+          <div class="project-work-status-head">
+            <span class="project-work-status-label"></span>
+            <strong class="project-work-status-count"></strong>
+          </div>
+          <div class="project-work-progress" style="--progress:0%"></div>
+        </div>
         <p class="project-card-logline"></p>
         <p class="project-card-updated"></p>
       </div>
@@ -1612,6 +1610,7 @@
     <div class="menu-item" data-action="ai-grammar">AI Grammar Check <span class="menu-shortcut">Alt+G</span></div>
     <div class="menu-item" data-action="intelligent-split">Intelligent Split <span class="menu-shortcut">`+Enter</span></div>
     <div class="menu-divider"></div>
+    <div class="menu-item" data-action="create-task">Create task from line</div>
     <div class="menu-item" data-action="comment">Comment on line</div>
   </div>
 

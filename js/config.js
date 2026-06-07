@@ -72,6 +72,13 @@ export const WORKSPACE_TASK_TEMPLATES = [
     aiInstruction: "Complete the assigned writing task using the user's exact title and description."
   },
   {
+    key: "story-memory",
+    label: "Story Memory",
+    title: "Review story memory",
+    description: "Review the selected story memory element and make the assigned update clear for the team.",
+    aiInstruction: "Use the linked story memory element as the source of truth for this task."
+  },
+  {
     key: "rewrite-dialogue",
     label: "Rewrite Dialogue",
     title: "Rewrite dialogue",
@@ -155,6 +162,7 @@ export const state = {
   homeWorkspaceFilter: "all",
   workspaceTaskFilter: "all",
   workspaceTaskSort: "latest",
+  lastCreatedWorkspaceTaskId: "",
   backupPrompted: false,
   history: [],
   historyIndex: -1

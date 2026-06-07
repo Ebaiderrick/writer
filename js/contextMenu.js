@@ -1,6 +1,6 @@
 import { state } from "./config.js";
 import { AI } from "./ai.js";
-import { duplicateActiveBlock, findInScript, intelligentSplit } from "./events.js";
+import { createWorkspaceTaskFromEditorLine, duplicateActiveBlock, findInScript, intelligentSplit } from "./events.js";
 import { getActiveEditableBlock } from "./editor.js";
 import { showCommentCompose } from "./collaborate.js";
 
@@ -126,6 +126,9 @@ export const ContextMenu = (() => {
       case "comment":
         triggerComment();
         break;
+      case "create-task":
+        triggerCreateTask();
+        break;
     }
   }
 
@@ -200,6 +203,10 @@ export const ContextMenu = (() => {
     const lineId = row?.dataset?.id || null;
     const rect = row?.getBoundingClientRect?.() || null;
     showCommentCompose(lineId, rect);
+  }
+
+  function triggerCreateTask() {
+    createWorkspaceTaskFromEditorLine(preservedBlock);
   }
 
   function preserveSelection(targetBlock = null) {

@@ -143,15 +143,48 @@ function getTaskStatusCountLabel(tasks) {
   return { openCount, doneCount };
 }
 
+function applyProjectCardWorkspaceStatus(node, project, workspaceTasks = [], { showStatus = false } = {}) {
+  const status = node.querySelector("[data-project-work-status]");
+  if (!status) return;
+  const linkedTasks = workspaceTasks.filter((task) => task.projectId === project.id);
+  if (!showStatus) {
+    status.hidden = true;
+    return;
+  }
+  const openCount = linkedTasks.filter((task) => task.status !== "done").length;
+  const doneCount = linkedTasks.filter((task) => task.status === "done").length;
+  const totalCount = linkedTasks.length;
+  const progress = totalCount ? Math.round((doneCount / totalCount) * 100) : 0;
+  status.hidden = false;
+  status.querySelector(".project-work-status-label").textContent = totalCount
+    ? `${doneCount} done`
+    : "Ready to plan";
+  status.querySelector(".project-work-status-count").textContent = totalCount
+    ? `${openCount} open`
+    : "No tasks";
+  status.querySelector(".project-work-progress").style.setProperty("--progress", `${progress}%`);
+  status.classList.toggle("has-open-work", openCount > 0);
+}
+
 function renderWorkspaceProjectCards(projects, collaborationLabel) {
   const grid = refs.workspaceProjectGrid || document.querySelector("#workspaceProjectGrid");
   if (!grid) return;
   grid.innerHTML = "";
   const template = document.querySelector("#projectCardTemplate");
   if (!projects.length || !template) {
-    grid.innerHTML = '<article class="workspace-projects-empty">No projects yet. Create the first project in this workspace to start writing.</article>';
+    grid.innerHTML = `
+      <article class="workspace-projects-empty">
+        <strong>No scripts in this workspace yet.</strong>
+        <span>Create the first script and it will appear here with linked tasks, scenes, and team progress.</span>
+      </article>
+    `;
     return;
   }
+
+  const workspaceLead = state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId && project.isWorkspaceRoot)
+    || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId)
+    || null;
+  const workspaceTasks = workspaceLead?.workspace?.tasks || [];
 
   projects.forEach((project) => {
     const node = template.content.firstElementChild.cloneNode(true);
@@ -160,12 +193,18 @@ function renderWorkspaceProjectCards(projects, collaborationLabel) {
     const characterCount = new Set(lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
     node.querySelector(".project-card-title").textContent = project.title;
     node.querySelector(".project-script-id").textContent = project.scriptId;
+    node.querySelector(".project-card-context").textContent = "Workspace script";
+    const workspaceAction = node.querySelector(".project-card-context-action");
+    workspaceAction.textContent = "Open Board";
+    workspaceAction.dataset.openWorkspaceId = project.workspace?.id || state.currentWorkspaceId || project.id;
     node.querySelector(".project-scenes").textContent = t("project.scenes", { count: sceneCount });
     node.querySelector(".project-characters").textContent = t("project.characters", { count: characterCount });
     node.querySelector(".project-card-logline").textContent = project.logline || t("project.descriptionFallback");
     node.querySelector(".project-card-updated").textContent = `${t("project.modified", { value: formatDateTime(project.updatedAt) })} · ${collaborationLabel}`;
     node.dataset.projectId = project.id;
+    node.classList.add("workspace-project-card");
     node.querySelector(".project-card-open").dataset.projectId = project.id;
+    applyProjectCardWorkspaceStatus(node, project, workspaceTasks, { showStatus: true });
     grid.appendChild(node);
   });
 }
@@ -469,48 +508,34 @@ export function renderWorkspaceView() {
     <div class="workspace-home-shell">
       <section class="workspace-home-hero-card">
         <div class="workspace-home-hero-copy">
+          <span class="workspace-home-hero-eyebrow">Team writing workspace</span>
           <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
           <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
+          <div class="workspace-home-hero-actions">
+            <button class="primary-button btn-sm" type="button" data-workspace-home-action="continue-writing">${latestProject ? "Continue Writing" : "Create Script"}</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="focus-task-form">Assign Task</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Board</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-notepad">Notepad</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-story-memory">Story Memory</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-review-center">Review Center</button>
+          </div>
           ${workspaceOptions.length > 1 ? `
             <div class="workspace-switch-row">
               <span>Workspace</span>
               <select class="comment-filter-select workspace-switch-select" data-workspace-switch aria-label="Switch workspace">
                 ${workspaceOptions.map((group) => `<option value="${escapeHtml(group.workspaceId)}" ${group.workspaceId === workspaceId ? "selected" : ""}>${escapeHtml(group.workspaceName)}</option>`).join("")}
               </select>
+              <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">New Script</button>
             </div>
           ` : ""}
         </div>
         <div class="workspace-home-hero-metrics">
-          <div class="workspace-home-metric"><span>Projects</span><strong>${projects.length}</strong></div>
-          <div class="workspace-home-metric"><span>Members</span><strong>${uniqueMembers.length}</strong></div>
-          <div class="workspace-home-metric"><span>Tasks</span><strong>${allTaskItems.length}</strong></div>
-          <div class="workspace-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong></div>
-        </div>
-      </section>
-      <section class="workspace-flow-strip" aria-label="Core workspace workflow">
-        <div class="workspace-flow-step is-active">
-          <span>1</span>
-          <strong>Write</strong>
-          <small>${latestProject ? `Continue ${escapeHtml(latestProject.title)}` : "Create the first script"}</small>
-        </div>
-        <div class="workspace-flow-step">
-          <span>2</span>
-          <strong>Assign</strong>
-          <small>${taskStatusSummary.openCount} open task${taskStatusSummary.openCount === 1 ? "" : "s"}</small>
-        </div>
-        <div class="workspace-flow-step">
-          <span>3</span>
-          <strong>Track</strong>
-          <small>${taskStatusSummary.doneCount} completed</small>
-        </div>
-        <div class="workspace-flow-actions">
-          <button class="primary-button btn-sm" type="button" data-workspace-home-action="continue-writing">${latestProject ? "Continue Writing" : "Create Script"}</button>
-          <button class="ghost-button btn-sm" type="button" data-workspace-home-action="focus-task-form">Add Task</button>
-          <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">New Script</button>
+          <div class="workspace-home-metric is-focus"><span>Projects</span><strong>${projects.length}</strong><small>scripts in motion</small></div>
+          <div class="workspace-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong><small>latest update</small></div>
         </div>
       </section>
       <div class="workspace-home-grid">
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-panel-members">
           <div class="workspace-home-panel-head">
             <h4>Members</h4>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
@@ -527,21 +552,7 @@ export function renderWorkspaceView() {
             ].join("")}
           </div>
         </section>
-        <section class="workspace-home-panel">
-          <div class="workspace-home-panel-head">
-            <h4>Recent activity</h4>
-          </div>
-          <div class="workspace-home-activity workspace-home-activity-timeline">
-            ${activityItems.length ? activityItems.map((item) => `
-              <article class="workspace-home-activity-item">
-                <strong>${escapeHtml(item.label || item.message || "Workspace updated")}</strong>
-                <span>${escapeHtml(item.actor || "Workspace")}</span>
-                <small>${escapeHtml(formatDateTime(item.at || item.timestamp || workspaceLead.updatedAt))}</small>
-              </article>
-            `).join("") : '<p class="workspace-home-empty">No activity yet. The next change here will start the trail.</p>'}
-          </div>
-        </section>
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-panel-progress">
           <div class="workspace-home-panel-head">
             <h4>Team progress</h4>
             <span class="workspace-home-panel-meta">${memberTaskSummary.length} active</span>
@@ -549,14 +560,17 @@ export function renderWorkspaceView() {
           <div class="workspace-summary-list">
             ${memberTaskSummary.map((entry) => `
               <article class="workspace-summary-item">
-                <strong>${escapeHtml(entry.label)}</strong>
-                <span>Open ${entry.openCount}</span>
-                <span>Done ${entry.doneCount}</span>
+                <div class="workspace-summary-item-head">
+                  <strong>${escapeHtml(entry.label)}</strong>
+                  <span>${entry.openCount} open</span>
+                </div>
+                <div class="workspace-summary-progress" style="--progress:${entry.openCount + entry.doneCount ? Math.round((entry.doneCount / (entry.openCount + entry.doneCount)) * 100) : 0}%"></div>
+                <small>${entry.doneCount} completed</small>
               </article>
             `).join("") || '<p class="workspace-home-empty">Assign tasks to teammates to see progress here.</p>'}
           </div>
         </section>
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-panel-inbox">
           <div class="workspace-home-panel-head">
             <h4>My Inbox</h4>
             <span class="workspace-home-panel-meta">${personalInboxItems.length} active</span>
@@ -576,7 +590,7 @@ export function renderWorkspaceView() {
             `).join("") || '<p class="workspace-home-empty">Assignments, mentions, and review items for you will collect here.</p>'}
           </div>
         </section>
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-panel-notifications">
           <div class="workspace-home-panel-head">
             <h4>Notifications</h4>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-all-notifications-read">Mark all read</button>
@@ -601,7 +615,7 @@ export function renderWorkspaceView() {
             `).join("") || '<p class="workspace-home-empty">No notifications yet.</p>'}
           </div>
         </section>
-        <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-panel-completed">
           <div class="workspace-home-panel-head">
             <h4>Completed & Review</h4>
             <span class="workspace-home-panel-meta">${inboxItems.length} item${inboxItems.length === 1 ? "" : "s"}</span>
@@ -623,159 +637,125 @@ export function renderWorkspaceView() {
             `).join("") || '<p class="workspace-home-empty">Completed work and AI review items will collect here.</p>'}
           </div>
         </section>
-        <section class="workspace-home-panel workspace-home-panel-wide">
+        <section class="workspace-home-panel workspace-panel-story-links">
           <div class="workspace-home-panel-head">
-            <h4>Tasks & Delegation</h4>
+            <h4>Story links</h4>
+            <span class="workspace-home-panel-meta">${storyMemoryLinks.length} memory links</span>
           </div>
-          <div class="workspace-task-filters" role="tablist" aria-label="Workspace tasks filter">
-            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "all" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
-            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">My Tasks</button>
-            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "ai" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
-            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "due-soon" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="due-soon">Due Soon</button>
-            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "overdue" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="overdue">Overdue</button>
-            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "open" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="open">Open</button>
-            <button class="workspace-filter-chip ${state.workspaceTaskFilter === "done" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="done">Done</button>
-            <select class="comment-filter-select workspace-task-sort-select" data-workspace-home-action="set-task-sort" aria-label="Sort tasks">
-              <option value="latest" ${state.workspaceTaskSort === "latest" ? "selected" : ""}>Latest</option>
-              <option value="due" ${state.workspaceTaskSort === "due" ? "selected" : ""}>Due Date</option>
-              <option value="status" ${state.workspaceTaskSort === "status" ? "selected" : ""}>By Status</option>
-              <option value="comments" ${state.workspaceTaskSort === "comments" ? "selected" : ""}>Most Discussed</option>
-            </select>
+          <div class="workspace-summary-list">
+            ${storyMemoryLinks.slice(0, 6).map((item) => `
+              <article class="workspace-summary-item workspace-summary-item-action">
+                <strong>${escapeHtml(item.name)}</strong>
+                <span>${escapeHtml(item.label)}</span>
+                <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-memory" data-memory-id="${escapeHtml(item.id)}" data-memory-project-id="${escapeHtml(item.projectId)}">Open Memory</button>
+              </article>
+            `).join("") || '<p class="workspace-home-empty">Add story memory to scripts and link tasks back to those elements.</p>'}
           </div>
-          <div class="workspace-task-summary">
-            <span class="workspace-task-summary-chip">To Do ${taskSummary.todo}</span>
-            <span class="workspace-task-summary-chip">In Progress ${taskSummary.inProgress}</span>
-            <span class="workspace-task-summary-chip">Done ${taskSummary.done}</span>
-            <span class="workspace-task-summary-chip">Open ${taskStatusSummary.openCount}</span>
-            <span class="workspace-task-summary-chip">Assigned to you ${myAssignedTasks.length}</span>
-            <span class="workspace-task-summary-chip">Due soon ${dueSoonCount}</span>
-            <span class="workspace-task-summary-chip">Overdue ${overdueCount}</span>
+        </section>
+        <section class="workspace-home-panel workspace-home-panel-wide workspace-panel-tasks">
+          <div class="workspace-home-panel-head workspace-task-board-head">
+            <div>
+              <h4>Tasks & Delegation</h4>
+              <span class="workspace-home-panel-meta">Create, assign, and open writing work from one place.</span>
+            </div>
+            <div class="workspace-task-board-actions">
+              <select class="comment-filter-select workspace-task-sort-select" data-workspace-home-action="set-task-sort" aria-label="Sort tasks">
+                <option value="latest" ${state.workspaceTaskSort === "latest" ? "selected" : ""}>Latest</option>
+                <option value="due" ${state.workspaceTaskSort === "due" ? "selected" : ""}>Due Date</option>
+                <option value="status" ${state.workspaceTaskSort === "status" ? "selected" : ""}>By Status</option>
+                <option value="comments" ${state.workspaceTaskSort === "comments" ? "selected" : ""}>Most Discussed</option>
+              </select>
+            </div>
           </div>
-          <div class="workspace-task-form">
-            <label class="workspace-task-field">
-              <span>Template</span>
-              <select class="comment-filter-select" data-workspace-task-template>
-                ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.label)}</option>`).join("")}
-              </select>
-            </label>
-            <label class="workspace-task-field workspace-task-field-wide">
-              <span>Task</span>
-              <input class="modal-input" type="text" placeholder="Task title" data-workspace-task-title>
-            </label>
-            <label class="workspace-task-field">
-              <span>Project</span>
-              <select class="comment-filter-select" data-workspace-task-project>
-                ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
-              </select>
-            </label>
-            <label class="workspace-task-field">
-              <span>Scene</span>
-              <select class="comment-filter-select" data-workspace-task-scene>
-                <option value="">General task</option>
-                ${sceneOptions.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" data-scene-project-id="${escapeHtml(scene.projectId)}">${escapeHtml(scene.label)}</option>`).join("")}
-              </select>
-            </label>
-            <label class="workspace-task-field">
-              <span>Line</span>
-              <select class="comment-filter-select" data-workspace-task-line>
-                <option value="">Scene level</option>
-                ${lineOptions.map((line) => `<option value="${escapeHtml(line.lineId)}" data-line-project-id="${escapeHtml(line.projectId)}" data-line-scene-id="${escapeHtml(line.sceneId || "")}">${escapeHtml(line.label)}</option>`).join("")}
-              </select>
-            </label>
-            <label class="workspace-task-field">
-              <span>Assign to</span>
-              <select class="comment-filter-select" data-workspace-task-assignee>
-                ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
-              </select>
-            </label>
-            <label class="workspace-task-field">
-              <span>Status</span>
-              <select class="comment-filter-select" data-workspace-task-status-new>
-                <option value="todo">To Do</option>
-                <option value="in-progress">In Progress</option>
-                <option value="done">Done</option>
-              </select>
-            </label>
-            <label class="workspace-task-field">
-              <span>Priority</span>
-              <select class="comment-filter-select" data-workspace-task-priority>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="low">Low</option>
-              </select>
-            </label>
-            <label class="workspace-task-field">
-              <span>Due</span>
-              <input class="modal-input" type="datetime-local" data-workspace-task-due>
-            </label>
-            <label class="workspace-task-field">
-              <span>AI start</span>
-              <select class="comment-filter-select" data-workspace-task-ai-start>
-                <option value="now">Run now</option>
-                <option value="in-3m">In 3 mins</option>
-                <option value="in-10m">In 10 mins</option>
-                <option value="manual">Custom time</option>
-              </select>
-            </label>
-            <label class="workspace-task-field">
-              <span>Custom time</span>
-              <input class="modal-input" type="datetime-local" data-workspace-task-ai-start-manual>
-            </label>
-            <label class="workspace-task-field">
-              <span>Reference</span>
-              <input class="modal-input" type="text" placeholder="Scene / block reference" data-workspace-task-reference>
-            </label>
-            <label class="workspace-task-field">
-              <span>Story memory</span>
-              <select class="comment-filter-select" data-workspace-task-memory>
-                <option value="">None</option>
-                ${storyMemoryLinks.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)} Â· ${escapeHtml(item.name)}</option>`).join("")}
-              </select>
-            </label>
-            <label class="workspace-task-field workspace-task-field-wide">
-              <span>Handoff cue</span>
-              <input class="modal-input" type="text" placeholder="@mention note or handoff cue" data-workspace-task-handoff>
-            </label>
-            <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
-            <p class="workspace-task-template-hint" data-workspace-task-template-hint>${escapeHtml(getWorkspaceTaskTemplate("custom").aiInstruction)}</p>
-            <button class="primary-button btn-sm" type="button" data-workspace-home-action="add-task">Create Task</button>
+          <div class="workspace-task-command">
+            <div class="workspace-task-metrics" aria-label="Task summary">
+              <button class="workspace-task-metric ${state.workspaceTaskFilter === "open" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="open">
+                <span>Open</span>
+                <strong>${taskStatusSummary.openCount}</strong>
+              </button>
+              <button class="workspace-task-metric ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">
+                <span>Mine</span>
+                <strong>${myAssignedTasks.length}</strong>
+              </button>
+              <button class="workspace-task-metric ${state.workspaceTaskFilter === "due-soon" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="due-soon">
+                <span>Due soon</span>
+                <strong>${dueSoonCount}</strong>
+              </button>
+              <button class="workspace-task-metric ${state.workspaceTaskFilter === "overdue" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="overdue">
+                <span>Overdue</span>
+                <strong>${overdueCount}</strong>
+              </button>
+              <button class="workspace-task-metric ${state.workspaceTaskFilter === "done" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="done">
+                <span>Done</span>
+                <strong>${taskSummary.done}</strong>
+              </button>
+            </div>
+            <div class="workspace-task-filters" role="tablist" aria-label="Workspace tasks filter">
+              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "all" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
+              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "open" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="open">Open</button>
+              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">Assigned to Me</button>
+              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "ai" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
+              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "done" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="done">Done</button>
+            </div>
           </div>
-          <div class="workspace-home-subgrid">
-            <section class="workspace-home-panel workspace-home-panel-soft">
-              <div class="workspace-home-panel-head">
-                <h4>Project workload</h4>
-                <span class="workspace-home-panel-meta">${projectWorkload.length} tracked</span>
-              </div>
-              <div class="workspace-summary-list">
-                ${projectWorkload.map((entry) => `
-                  <article class="workspace-summary-item">
-                    <strong>${escapeHtml(entry.title)}</strong>
-                    <span>Open ${entry.openCount}</span>
-                    <span>Done ${entry.doneCount}</span>
-                    <span>Due soon ${entry.dueSoonCount}</span>
-                  </article>
-                `).join("") || '<p class="workspace-home-empty">Create linked tasks to see workload by project.</p>'}
-              </div>
-            </section>
-            <section class="workspace-home-panel workspace-home-panel-soft">
-              <div class="workspace-home-panel-head">
-                <h4>Story links</h4>
-                <span class="workspace-home-panel-meta">${storyMemoryLinks.length} memory links</span>
-              </div>
-              <div class="workspace-summary-list">
-                ${storyMemoryLinks.slice(0, 6).map((item) => `
-                  <article class="workspace-summary-item workspace-summary-item-action">
-                    <strong>${escapeHtml(item.name)}</strong>
-                    <span>${escapeHtml(item.label)}</span>
-                    <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-memory" data-memory-id="${escapeHtml(item.id)}" data-memory-project-id="${escapeHtml(item.projectId)}">Open Memory</button>
-                  </article>
-                `).join("") || '<p class="workspace-home-empty">Add story memory to scripts and link tasks back to those elements.</p>'}
-              </div>
-            </section>
+          <div class="workspace-task-composer">
+            <div class="workspace-task-composer-head">
+              <span class="workspace-task-composer-kicker">Quick assign</span>
+              <strong>Turn the next writing step into a trackable task.</strong>
+            </div>
+            <div class="workspace-task-form">
+              <label class="workspace-task-field workspace-task-field-title">
+                <span>Task</span>
+                <input class="modal-input workspace-task-title-input" type="text" placeholder="e.g. tighten the opening scene" data-workspace-task-title>
+              </label>
+              <label class="workspace-task-field">
+                <span>Assign to</span>
+                <select class="comment-filter-select" data-workspace-task-assignee>
+                  ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+                </select>
+              </label>
+              <label class="workspace-task-field">
+                <span>Project</span>
+                <select class="comment-filter-select" data-workspace-task-project>
+                  ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
+                </select>
+              </label>
+              <label class="workspace-task-field">
+                <span>Type</span>
+                <select class="comment-filter-select" data-workspace-task-template>
+                  ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.label)}</option>`).join("")}
+                </select>
+              </label>
+              <label class="workspace-task-field">
+                <span data-workspace-task-scene-label>Scene</span>
+                <select class="comment-filter-select" data-workspace-task-scene>
+                  <option value="">General task</option>
+                  ${sceneOptions.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" data-scene-project-id="${escapeHtml(scene.projectId)}">${escapeHtml(scene.label)}</option>`).join("")}
+                </select>
+              </label>
+              <label class="workspace-task-field" data-workspace-task-line-field>
+                <span>Line</span>
+                <select class="comment-filter-select" data-workspace-task-line>
+                  <option value="">Scene level</option>
+                  ${lineOptions.map((line) => `<option value="${escapeHtml(line.lineId)}" data-line-project-id="${escapeHtml(line.projectId)}" data-line-scene-id="${escapeHtml(line.sceneId || "")}">${escapeHtml(line.label)}</option>`).join("")}
+                </select>
+              </label>
+              <label class="workspace-task-field">
+                <span>AI start</span>
+                <select class="comment-filter-select" data-workspace-task-ai-start>
+                  <option value="now">Run now</option>
+                  <option value="in-3m">In 3 mins</option>
+                  <option value="in-10m">In 10 mins</option>
+                </select>
+              </label>
+              <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
+              <p class="workspace-task-template-hint" data-workspace-task-template-hint>${escapeHtml(getWorkspaceTaskTemplate("custom").aiInstruction)}</p>
+              <button class="primary-button workspace-task-create-button" type="button" data-workspace-home-action="add-task">Create Task</button>
+            </div>
           </div>
           <div class="workspace-task-list">
             ${taskItems.length ? taskItems.map((task) => `
-                <article class="workspace-task-card ${task.assignedTo === currentUid ? "is-owned-by-you" : ""} ${task.assigneeType === "system" ? "is-ai-task" : ""}">
+                <article class="workspace-task-card ${task.assignedTo === currentUid ? "is-owned-by-you" : ""} ${task.assigneeType === "system" ? "is-ai-task" : ""} ${task.id === state.lastCreatedWorkspaceTaskId ? "is-new" : ""}" data-workspace-task-card-id="${escapeHtml(task.id)}">
                   <div class="workspace-task-head">
                     <div>
                       <strong>${escapeHtml(task.title)}</strong>
@@ -791,6 +771,7 @@ export function renderWorkspaceView() {
                   ${buildWorkspaceTaskAssigneeMarkup(task, currentUid)}
                   <div class="workspace-task-chip-row">
                     <span class="workspace-task-tag">${escapeHtml(getWorkspaceTaskTemplate(task.templateKey).label)}</span>
+                    ${task.id === state.lastCreatedWorkspaceTaskId ? '<span class="workspace-task-tag workspace-task-tag-new">New</span>' : ""}
                     <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
                     ${task.assignedTo === currentUid ? '<span class="workspace-task-tag workspace-task-tag-focus">Assigned to you</span>' : ""}
                     ${getTaskDueState(task) ? `<span class="workspace-task-tag workspace-task-tag-${escapeHtml(getTaskDueState(task))}">${escapeHtml(getTaskDueLabel(task))}</span>` : ""}
@@ -1109,7 +1090,7 @@ export function renderHome() {
           </div>
         </section>
         <div class="workspace-home-grid">
-          <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-panel-completed">
             <div class="workspace-home-panel-head">
               <h4>Members</h4>
               <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
@@ -1126,7 +1107,7 @@ export function renderHome() {
               ].join("")}
             </div>
           </section>
-          <section class="workspace-home-panel">
+        <section class="workspace-home-panel workspace-panel-story-links">
             <div class="workspace-home-panel-head">
               <h4>Recent activity</h4>
               <button class="primary-button btn-sm" type="button" data-workspace-home-action="new-project">New Project</button>
@@ -1140,7 +1121,7 @@ export function renderHome() {
               `).join("") : '<p class="workspace-home-empty">No activity yet. The next change here will start the trail.</p>'}
             </div>
           </section>
-          <section class="workspace-home-panel workspace-home-panel-wide">
+        <section class="workspace-home-panel workspace-home-panel-wide workspace-panel-tasks">
             <div class="workspace-home-panel-head">
               <h4>Tasks & Delegation</h4>
               <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">Add Script</button>
@@ -1153,18 +1134,12 @@ export function renderHome() {
               <select class="comment-filter-select" data-workspace-task-assignee>
                 ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
               </select>
-              <select class="comment-filter-select" data-workspace-task-status-new>
-                <option value="todo">To Do</option>
-                <option value="in-progress">In Progress</option>
-                <option value="done">Done</option>
-              </select>
-              <input class="modal-input" type="text" placeholder="Scene / block reference (optional)" data-workspace-task-reference>
               <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
               <button class="primary-button btn-sm" type="button" data-workspace-home-action="add-task">Create Task</button>
             </div>
             <div class="workspace-task-list">
               ${taskItems.length ? taskItems.map((task) => `
-                <article class="workspace-task-card ${task.assignedTo === currentUid ? "is-owned-by-you" : ""} ${task.assigneeType === "system" ? "is-ai-task" : ""}">
+                <article class="workspace-task-card ${task.assignedTo === currentUid ? "is-owned-by-you" : ""} ${task.assigneeType === "system" ? "is-ai-task" : ""} ${task.id === state.lastCreatedWorkspaceTaskId ? "is-new" : ""}" data-workspace-task-card-id="${escapeHtml(task.id)}">
                   <div class="workspace-task-head">
                     <div>
                       <strong>${escapeHtml(task.title)}</strong>

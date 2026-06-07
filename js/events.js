@@ -580,6 +580,13 @@ function focusWorkspaceTaskForm() {
     showToast("Open a workspace first, then create a task.", "error", { duration: 3600 });
     return;
   }
+  const composer = taskInput.closest(".workspace-task-composer, .workspace-home-panel");
+  if (composer) {
+    composer.classList.remove("is-focusing");
+    void composer.offsetWidth;
+    composer.classList.add("is-focusing");
+    window.setTimeout(() => composer.classList.remove("is-focusing"), 1400);
+  }
   taskInput.scrollIntoView({ behavior: "smooth", block: "center" });
   taskInput.focus();
   showToast("Add a task title, assign it, then track it here.", "success", { duration: 2400 });
@@ -681,6 +688,32 @@ function getWorkspaceTaskTemplate(templateKey) {
   return WORKSPACE_TASK_TEMPLATES.find((template) => template.key === templateKey) || WORKSPACE_TASK_TEMPLATES[0];
 }
 
+function updateWorkspaceTaskTypeFields(container, templateKey) {
+  if (!container) return;
+  const sceneLabel = container.querySelector("[data-workspace-task-scene-label]");
+  const sceneSelect = container.querySelector("[data-workspace-task-scene]");
+  const lineField = container.querySelector("[data-workspace-task-line-field]");
+  const lineSelect = container.querySelector("[data-workspace-task-line]");
+  if (!sceneSelect) return;
+  if (!sceneSelect.dataset.defaultOptions) {
+    sceneSelect.dataset.defaultOptions = sceneSelect.innerHTML;
+  }
+  if (templateKey === "story-memory") {
+    const memoryChoices = getWorkspaceStoryMemoryChoices();
+    if (sceneLabel) sceneLabel.textContent = "Story memory";
+    sceneSelect.innerHTML = `
+      <option value="">Choose story memory</option>
+      ${memoryChoices.map((item) => `<option value="${escapeHtml(item.id)}" data-memory-project-id="${escapeHtml(item.projectId)}" data-memory-type="${escapeHtml(item.type)}" data-memory-name="${escapeHtml(item.name)}">${escapeHtml(item.label)}</option>`).join("")}
+    `;
+    if (lineField) lineField.hidden = true;
+    if (lineSelect) lineSelect.value = "";
+    return;
+  }
+  if (sceneLabel) sceneLabel.textContent = "Scene";
+  sceneSelect.innerHTML = sceneSelect.dataset.defaultOptions;
+  if (lineField) lineField.hidden = false;
+}
+
 function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = false } = {}) {
   if (!container) return;
   const template = getWorkspaceTaskTemplate(templateKey);
@@ -709,6 +742,7 @@ function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = fals
   if (hint) {
     hint.textContent = template.aiInstruction;
   }
+  updateWorkspaceTaskTypeFields(container, template.key);
   container.dataset.workspaceTemplateApplied = template.key;
 }
 
@@ -973,6 +1007,112 @@ function getWorkspaceTaskById(taskId) {
   return getWorkspaceLeadProject()?.workspace?.tasks?.find((task) => task.id === taskId) || null;
 }
 
+function showWorkspaceReviewCenter() {
+  const workspaceProject = getWorkspaceLeadProject();
+  if (!workspaceProject) {
+    customAlert("Open a workspace first to generate reports.", "Review Center");
+    return;
+  }
+  const workspaceId = state.currentWorkspaceId || workspaceProject.workspace?.id || "";
+  const projects = getWorkspaceProjects(workspaceId).filter((project) => !project.isWorkspaceRoot);
+  const tasks = workspaceProject.workspace?.tasks || [];
+  const notifications = workspaceProject.workspace?.notifications || [];
+  const storyMemoryItems = getWorkspaceStoryMemoryChoices(workspaceId);
+  const comments = projects.flatMap((project) => project.comments || []);
+  const unresolvedComments = comments.filter((comment) => !comment.resolved);
+  const openTasks = tasks.filter((task) => task.status !== "done");
+  const completedTasks = tasks.filter((task) => task.status === "done");
+  const aiTasks = tasks.filter((task) => task.assigneeType === "system");
+  const aiReviewTasks = aiTasks.filter((task) => task.aiState === "review");
+  const aiFailedTasks = aiTasks.filter((task) => task.aiState === "failed");
+  const lines = projects.flatMap((project) => project.lines || []);
+  const sceneCount = lines.filter((line) => line.type === "scene" && line.text?.trim()).length;
+  const characterCount = new Set(lines.filter((line) => line.type === "character" && line.text?.trim()).map((line) => normalizeLineText(line.text, line.type))).size;
+  const wordCount = lines.reduce((count, line) => count + String(line.text || "").trim().split(/\s+/).filter(Boolean).length, 0);
+  const readinessChecks = [
+    { label: "Workspace has a script", done: projects.length > 0 },
+    { label: "Tasks are being tracked", done: tasks.length > 0 },
+    { label: "No failed AI tasks", done: aiFailedTasks.length === 0 },
+    { label: "Comments are resolved", done: unresolvedComments.length === 0 },
+    { label: "Story memory is started", done: storyMemoryItems.length > 0 }
+  ];
+  const readinessScore = Math.round((readinessChecks.filter((item) => item.done).length / readinessChecks.length) * 100);
+  const reportTypes = {
+    stat: {
+      title: "Stat",
+      eyebrow: "Workspace numbers",
+      body: `
+        <div class="workspace-review-stat-grid">
+          <div><span>Scripts</span><strong>${projects.length}</strong></div>
+          <div><span>Open tasks</span><strong>${openTasks.length}</strong></div>
+          <div><span>Completed</span><strong>${completedTasks.length}</strong></div>
+          <div><span>Words</span><strong>${wordCount.toLocaleString()}</strong></div>
+          <div><span>Scenes</span><strong>${sceneCount}</strong></div>
+          <div><span>Comments</span><strong>${comments.length}</strong></div>
+          <div><span>Story memory</span><strong>${storyMemoryItems.length}</strong></div>
+          <div><span>Readiness</span><strong>${readinessScore}%</strong></div>
+        </div>
+      `
+    },
+    summary: {
+      title: "AI Summary",
+      eyebrow: "Generated workspace summary",
+      body: `
+        <p>AI summary: This workspace currently has ${projects.length} active script${projects.length === 1 ? "" : "s"}, ${openTasks.length} open task${openTasks.length === 1 ? "" : "s"}, and ${completedTasks.length} completed task${completedTasks.length === 1 ? "" : "s"}. The writing base includes ${wordCount.toLocaleString()} words across ${sceneCount} scene${sceneCount === 1 ? "" : "s"}, with ${characterCount} character${characterCount === 1 ? "" : "s"} detected.</p>
+        <p>${unresolvedComments.length ? `There are ${unresolvedComments.length} unresolved comment${unresolvedComments.length === 1 ? "" : "s"} that should be reviewed.` : "There are no unresolved comments in the current workspace data."} ${storyMemoryItems.length ? `Story memory has ${storyMemoryItems.length} linked element${storyMemoryItems.length === 1 ? "" : "s"} available for continuity checks.` : "Story memory has not been built yet, so continuity support is still light."}</p>
+      `
+    },
+    progress: {
+      title: "AI Progress Report",
+      eyebrow: "Generated progress report",
+      body: `
+        <p>AI progress report: The workspace readiness score is ${readinessScore}%. ${tasks.length ? `Task tracking is active with ${openTasks.length} open and ${completedTasks.length} completed.` : "Task tracking has not started yet."} ${aiTasks.length ? `AI work includes ${aiTasks.length} task${aiTasks.length === 1 ? "" : "s"}, with ${aiReviewTasks.length} waiting for review and ${aiFailedTasks.length} failed.` : "No AI tasks are currently queued."}</p>
+        <p>Recommended next steps: ${openTasks.length ? "finish or reassign the open tasks" : "create the next task"}, ${storyMemoryItems.length ? "review story memory for completeness" : "add story memory elements"}, and ${unresolvedComments.length ? "resolve outstanding comments" : "keep collaboration comments clear"}.</p>
+      `
+    }
+  };
+  const container = document.createElement("div");
+  container.className = "workspace-review-center";
+  container.innerHTML = `
+    <div class="workspace-review-center-head">
+      <strong>${escapeHtml(workspaceProject.workspace?.name || workspaceProject.title || "Workspace")}</strong>
+      <span>Choose a report type to generate from current workspace activity.</span>
+    </div>
+    <div class="workspace-review-report-tabs">
+      <button class="workspace-review-report-tab is-active" type="button" data-review-report="stat">Stat</button>
+      <button class="workspace-review-report-tab" type="button" data-review-report="summary">AI Summary</button>
+      <button class="workspace-review-report-tab" type="button" data-review-report="progress">AI Progress Report</button>
+    </div>
+    <article class="workspace-review-report-output" data-review-report-output>
+      <span>${escapeHtml(reportTypes.stat.eyebrow)}</span>
+      <strong>${escapeHtml(reportTypes.stat.title)}</strong>
+      ${reportTypes.stat.body}
+    </article>
+  `;
+  container.querySelectorAll("[data-review-report]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const report = reportTypes[button.dataset.reviewReport] || reportTypes.stat;
+      container.querySelectorAll("[data-review-report]").forEach((item) => {
+        item.classList.toggle("is-active", item === button);
+      });
+      const output = container.querySelector("[data-review-report-output]");
+      if (!output) return;
+      output.innerHTML = `
+        <span>${escapeHtml(report.eyebrow)}</span>
+        <strong>${escapeHtml(report.title)}</strong>
+        ${report.body}
+      `;
+    });
+  });
+  showModal({
+    title: "Review Center",
+    message: container,
+    showConfirm: false,
+    cancelLabel: "Close",
+    contentClass: "modal-content-review-center"
+  });
+}
+
 function getWorkspaceNotifications(workspaceId = state.currentWorkspaceId) {
   return [...(getWorkspaceLeadProject(workspaceId)?.workspace?.notifications || [])]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -1202,19 +1342,21 @@ function addWorkspaceTaskFromDashboard(trigger = null) {
   const aiStartSelect = formContainer.querySelector('[data-workspace-task-ai-start]');
   const aiStartManual = formContainer.querySelector('[data-workspace-task-ai-start-manual]');
   const templateKey = templateSelect?.value || "custom";
+  const isStoryMemoryTask = templateKey === "story-memory";
   const title = titleInput?.value?.trim();
   if (!title) {
     customAlert("Enter a task title first.", "Workspace Tasks");
     return;
   }
   const projectId = projectSelect?.value || "";
-  const sceneId = sceneSelect?.value || "";
-  const lineId = lineSelect?.value || "";
-  const sceneChoice = getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
-  const lineChoice = getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null;
+  const sceneId = isStoryMemoryTask ? "" : (sceneSelect?.value || "");
+  const lineId = isStoryMemoryTask ? "" : (lineSelect?.value || "");
+  const sceneChoice = isStoryMemoryTask ? null : (getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null);
+  const lineChoice = isStoryMemoryTask ? null : (getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null);
   const assignedTo = assigneeSelect?.value || "";
   const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
-  const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
+  const selectedMemoryId = isStoryMemoryTask ? (sceneSelect?.value || "") : (memorySelect?.value || "");
+  const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === selectedMemoryId) || null;
   const aiStartChoice = aiStartSelect?.value || "now";
   const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
   const initialAiState = assignee?.assigneeType === "system"
@@ -1232,7 +1374,7 @@ function addWorkspaceTaskFromDashboard(trigger = null) {
     assignedLabel: assignee?.label || "Unassigned",
     assigneeType: assignee?.assigneeType || "human",
     handoffNote: handoffInput?.value?.trim() || "",
-    projectId: lineChoice?.projectId || sceneChoice?.projectId || projectId,
+    projectId: memoryChoice?.projectId || lineChoice?.projectId || sceneChoice?.projectId || projectId,
     reference: referenceInput?.value?.trim() || "",
     sceneId: lineChoice?.sceneId || sceneChoice?.sceneId || "",
     sceneLabel: lineChoice?.sceneLabel || sceneChoice?.label || "",
@@ -1265,6 +1407,7 @@ function addWorkspaceTaskFromDashboard(trigger = null) {
     message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the workspace"}.`}`,
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
+  state.lastCreatedWorkspaceTaskId = nextTask.id;
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
   if (!refs.workspaceView?.hidden) {
@@ -1272,12 +1415,137 @@ function addWorkspaceTaskFromDashboard(trigger = null) {
   } else {
     renderHome();
   }
+  window.requestAnimationFrame(() => {
+    const card = document.querySelector(`[data-workspace-task-card-id="${CSS.escape(nextTask.id)}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
   showToast(
     assignee?.assigneeType === "system"
       ? `AI task queued for ${nextTask.assignedLabel}.`
       : `${nextTask.title} assigned to ${nextTask.assignedLabel || "the workspace"}.`,
     "success"
   );
+}
+
+export async function createWorkspaceTaskFromEditorLine(targetBlock = null) {
+  const project = getCurrentProject();
+  const block = targetBlock?.closest?.(".script-block") || getActiveEditableBlock();
+  const lineId = block?.dataset?.id || state.activeBlockId || "";
+  const line = lineId ? getLine(lineId) : null;
+  const workspaceId = project?.workspace?.id || "";
+  const workspaceProject = getWorkspaceLeadProject(workspaceId);
+  if (!project || !line || !workspaceId || !workspaceProject) {
+    await customAlert("Open a workspace script first, then right-click a line to create a task.", "Workspace Tasks");
+    return;
+  }
+
+  const sceneId = line.type === "scene" ? line.id : getOwningSceneId(line.id);
+  const sceneLine = sceneId ? project.lines.find((entry) => entry.id === sceneId) : null;
+  const assignees = getWorkspaceTaskAssignees(workspaceProject);
+  const container = document.createElement("div");
+  container.className = "line-task-form";
+  container.innerHTML = `
+    <label class="workspace-task-field line-task-title-field">
+      <span>Task</span>
+      <input id="lineTaskTitle" class="modal-input" type="text" value="Review this line">
+    </label>
+    <div class="line-task-grid">
+      <label class="workspace-task-field">
+        <span>Assign to</span>
+        <select id="lineTaskAssignee" class="comment-filter-select">
+          ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="workspace-task-field">
+        <span>Priority</span>
+        <select id="lineTaskPriority" class="comment-filter-select">
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+      <label class="workspace-task-field">
+        <span>Template</span>
+        <select id="lineTaskTemplate" class="comment-filter-select">
+          ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.label)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <textarea id="lineTaskDescription" class="collab-textarea line-task-description" placeholder="What should happen on this line?">${escapeHtml(formatLineText(line.text, line.type).slice(0, 180))}</textarea>
+  `;
+
+  const confirmed = await showModal({
+    title: "Create Task From Line",
+    message: container,
+    confirmLabel: "Create Task",
+    cancelLabel: "Cancel",
+    contentClass: "modal-content-line-task"
+  });
+  if (!confirmed) return;
+
+  const title = container.querySelector("#lineTaskTitle")?.value?.trim();
+  if (!title) {
+    await customAlert("Enter a task title first.", "Workspace Tasks");
+    return;
+  }
+  const assignedTo = container.querySelector("#lineTaskAssignee")?.value || "";
+  const assignee = assignees.find((entry) => entry.id === assignedTo) || assignees[0];
+  const templateKey = container.querySelector("#lineTaskTemplate")?.value || "custom";
+  const priority = container.querySelector("#lineTaskPriority")?.value || "normal";
+  const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart("now", "") : "";
+  const nextTask = {
+    id: uid("task"),
+    templateKey,
+    priority,
+    title,
+    description: container.querySelector("#lineTaskDescription")?.value?.trim() || "",
+    status: "todo",
+    dueAt: "",
+    assignedTo: assignee?.id || "",
+    assignedLabel: assignee?.label || "Unassigned",
+    assigneeType: assignee?.assigneeType || "human",
+    handoffNote: "",
+    projectId: project.id,
+    reference: `${project.title} - ${formatLineText(line.text, line.type).slice(0, 56)}`,
+    sceneId: sceneId || "",
+    sceneLabel: sceneLine?.text?.trim() || "",
+    lineId: line.id,
+    lineLabel: formatLineText(line.text, line.type).slice(0, 80),
+    memoryLinkType: "",
+    memoryLinkId: "",
+    memoryLinkName: "",
+    memoryProjectId: "",
+    comments: [],
+    aiState: assignee?.assigneeType === "system" ? (aiStartAt ? "scheduled" : "ready") : "idle",
+    aiStartAt,
+    aiLastRunAt: "",
+    aiResultText: "",
+    aiResultSummary: "",
+    aiError: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  };
+
+  updateWorkspaceAcrossProjects(workspaceId, (workspace) => ({
+    ...workspace,
+    tasks: [...(workspace.tasks || []), nextTask]
+  }));
+  createWorkspaceNotification({
+    workspaceId,
+    task: nextTask,
+    category: assignee?.assigneeType === "system" ? "ai" : "task",
+    title: assignee?.assigneeType === "system" ? "AI task queued" : "New task created",
+    message: `${nextTask.title} was assigned to ${nextTask.assignedLabel || "the workspace"}.`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  });
+  state.lastCreatedWorkspaceTaskId = nextTask.id;
+  persistProjects(true, { syncInputs: false });
+  scheduleAiTaskRun(nextTask);
+  renderStudio();
+  focusBlock(line.id);
+  showToast(`${nextTask.title} linked to this line.`, "success");
 }
 
 function updateWorkspaceTask(taskId, patch) {
@@ -1579,6 +1847,166 @@ async function editWorkspaceTask(taskId) {
   });
 }
 
+function buildWorkspaceTaskSummary(task) {
+  const statusLabel = task.status === "in-progress" ? "In Progress" : task.status === "done" ? "Done" : "To Do";
+  const priorityLabel = (task.priority || "normal").replace(/^./, (value) => value.toUpperCase());
+  const targetLabel = task.lineLabel || task.sceneLabel || task.reference || "General workspace task";
+  const dueLabel = task.dueAt ? new Date(task.dueAt).toLocaleString() : "No due date";
+  const updatedLabel = task.updatedAt ? new Date(task.updatedAt).toLocaleString() : "Just now";
+  const description = task.description || targetLabel;
+  const container = document.createElement("div");
+  container.className = "workspace-task-quick-summary";
+  container.innerHTML = `
+    <div class="workspace-task-quick-head">
+      <span class="workspace-task-tag">${escapeHtml(statusLabel)}</span>
+      <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml(priorityLabel)} Priority</span>
+    </div>
+    <strong>${escapeHtml(task.title || "Workspace task")}</strong>
+    <p>${escapeHtml(description)}</p>
+    <dl>
+      <div>
+        <dt>Assigned to</dt>
+        <dd>${escapeHtml(task.assignedLabel || "Unassigned")}</dd>
+      </div>
+      <div>
+        <dt>Target</dt>
+        <dd>${escapeHtml(targetLabel)}</dd>
+      </div>
+      <div>
+        <dt>Due</dt>
+        <dd>${escapeHtml(dueLabel)}</dd>
+      </div>
+      <div>
+        <dt>Updated</dt>
+        <dd>${escapeHtml(updatedLabel)}</dd>
+      </div>
+    </dl>
+  `;
+  return container;
+}
+
+async function editWorkspaceTaskFromLine(taskId) {
+  const workspaceProject = getWorkspaceLeadProject();
+  const task = getWorkspaceTaskById(taskId);
+  if (!workspaceProject || !task) return;
+  const assignees = getWorkspaceTaskAssignees(workspaceProject);
+  const container = document.createElement("div");
+  container.className = "line-task-form";
+  container.innerHTML = `
+    <label class="workspace-task-field line-task-title-field">
+      <span>Task</span>
+      <input id="lineTaskTitle" class="modal-input" type="text" value="${escapeHtml(task.title || "Review this line")}">
+    </label>
+    <div class="line-task-grid">
+      <label class="workspace-task-field">
+        <span>Assign to</span>
+        <select id="lineTaskAssignee" class="comment-filter-select">
+          ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}" ${assignee.id === task.assignedTo ? "selected" : ""}>${escapeHtml(assignee.label)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="workspace-task-field">
+        <span>Priority</span>
+        <select id="lineTaskPriority" class="comment-filter-select">
+          <option value="normal" ${(task.priority || "normal") === "normal" ? "selected" : ""}>Normal</option>
+          <option value="high" ${(task.priority || "normal") === "high" ? "selected" : ""}>High</option>
+          <option value="low" ${(task.priority || "normal") === "low" ? "selected" : ""}>Low</option>
+        </select>
+      </label>
+      <label class="workspace-task-field">
+        <span>Template</span>
+        <select id="lineTaskTemplate" class="comment-filter-select">
+          ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}" ${template.key === (task.templateKey || "custom") ? "selected" : ""}>${escapeHtml(template.label)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <textarea id="lineTaskDescription" class="collab-textarea line-task-description" placeholder="What should happen on this line?">${escapeHtml(task.description || task.lineLabel || task.sceneLabel || "")}</textarea>
+  `;
+  const confirmed = await showModal({
+    title: "Edit Task From Line",
+    message: container,
+    confirmLabel: "Save",
+    cancelLabel: "Cancel",
+    contentClass: "modal-content-line-task"
+  });
+  if (!confirmed) return;
+  const title = container.querySelector("#lineTaskTitle")?.value?.trim();
+  if (!title) {
+    await customAlert("Enter a task title first.", "Workspace Tasks");
+    return;
+  }
+  const assignedTo = container.querySelector("#lineTaskAssignee")?.value || "";
+  const assignee = assignees.find((entry) => entry.id === assignedTo) || assignees[0];
+  const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart("now", "") : "";
+  updateWorkspaceTask(taskId, {
+    title,
+    templateKey: container.querySelector("#lineTaskTemplate")?.value || "custom",
+    priority: container.querySelector("#lineTaskPriority")?.value || task.priority || "normal",
+    description: container.querySelector("#lineTaskDescription")?.value?.trim() || "",
+    assignedTo,
+    assignedLabel: assignee?.label || "Unassigned",
+    assigneeType: assignee?.assigneeType || "human",
+    aiStartAt,
+    aiState: assignee?.assigneeType === "system" ? (aiStartAt ? "scheduled" : "ready") : "idle"
+  });
+  renderStudio();
+  if (task.lineId) focusBlock(task.lineId);
+}
+
+async function showWorkspaceTaskFlagSummary(taskId) {
+  const workspaceProject = getWorkspaceLeadProject();
+  const task = getWorkspaceTaskById(taskId);
+  if (!workspaceProject || !task) return;
+  const currentUser = auth.currentUser || {};
+  const isAssignee = Boolean(
+    task.assignedTo
+    && (
+      task.assignedTo === currentUser.uid
+      || task.assignedTo === currentUser.email
+      || task.assignedTo === currentUser.displayName
+    )
+  );
+  const summary = buildWorkspaceTaskSummary(task);
+
+  if (isAssignee) {
+    const shouldComplete = await showModal({
+      title: "Task Summary",
+      message: summary,
+      confirmLabel: "Completed",
+      cancelLabel: "Cancel",
+      contentClass: "modal-content-task-summary"
+    });
+    if (!shouldComplete) return;
+    updateWorkspaceTask(taskId, { status: "done" });
+    renderStudio();
+    return;
+  }
+
+  let nextAction = "edit";
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "ghost-button btn-sm workspace-task-summary-delete";
+  deleteButton.textContent = "Delete";
+  deleteButton.addEventListener("click", () => {
+    nextAction = "delete";
+    document.getElementById("modalConfirmBtn")?.click();
+  });
+  summary.appendChild(deleteButton);
+  const confirmed = await showModal({
+    title: "Task Summary",
+    message: summary,
+    confirmLabel: "Edit",
+    cancelLabel: "Cancel",
+    contentClass: "modal-content-task-summary"
+  });
+  if (!confirmed) return;
+  if (nextAction === "delete") {
+    await deleteWorkspaceTask(taskId);
+    renderStudio();
+    return;
+  }
+  await editWorkspaceTaskFromLine(taskId);
+}
+
 async function deleteWorkspaceTask(taskId) {
   const confirmed = await customConfirm("Delete this task and its comments?", "Delete Task");
   if (!confirmed) return;
@@ -1827,6 +2255,18 @@ export function bindEvents() {
       showWorkspacePopup();
       return;
     }
+    if (action === "open-notepad") {
+      openNotepad();
+      return;
+    }
+    if (action === "open-story-memory") {
+      showStoryMemoryPopup();
+      return;
+    }
+    if (action === "open-review-center") {
+      showWorkspaceReviewCenter();
+      return;
+    }
     if (action === "add-task") {
       event.preventDefault();
       event.stopPropagation();
@@ -1928,7 +2368,7 @@ export function bindEvents() {
   refs.workspaceDashboard?.addEventListener("change", (event) => {
     const templateSelect = event.target.closest("[data-workspace-task-template]");
     if (templateSelect) {
-      applyWorkspaceTaskTemplateToForm(refs.workspaceDashboard, templateSelect.value);
+      applyWorkspaceTaskTemplateToForm(templateSelect.closest(".workspace-task-composer, .workspace-home-panel, .workspace-task-form") || refs.workspaceDashboard, templateSelect.value);
       return;
     }
     const taskSortSelect = event.target.closest("[data-workspace-home-action='set-task-sort']");
@@ -2496,7 +2936,11 @@ export function bindEvents() {
     if (taskMarker) {
       const [firstTaskId] = String(taskMarker.dataset.taskIds || "").split(",").filter(Boolean);
       if (firstTaskId) {
-        await commentOnWorkspaceTask(firstTaskId);
+        const project = getCurrentProject();
+        if (project?.workspace?.id) {
+          state.currentWorkspaceId = project.workspace.id;
+        }
+        await showWorkspaceTaskFlagSummary(firstTaskId);
       }
       return;
     }

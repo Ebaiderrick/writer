@@ -123,8 +123,9 @@ function _renderEditorInner() {
       marker.dataset.scriptTaskTarget = line.id;
       marker.dataset.taskIds = linkedTasks.map((task) => task.id).join(",");
       marker.title = linkedTasks.map((task) => task.title).join("\n");
-      marker.textContent = linkedTasks.length === 1 ? "Task" : `${linkedTasks.length} Tasks`;
-      row.insertBefore(marker, row.querySelector(".dual-columns") || row.querySelector(".script-block"));
+      marker.setAttribute("aria-label", `${linkedTasks.length} linked task${linkedTasks.length === 1 ? "" : "s"}`);
+      marker.textContent = linkedTasks.length > 1 ? String(linkedTasks.length) : "";
+      row.appendChild(marker);
     }
 
     const hiddenByScene = !filterSet && Boolean(collapsedSceneId && line.type !== "scene");
