@@ -1,48 +1,60 @@
 import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
-import { Telemetry } from './telemetry.js';
-import { Logger } from './logger.js';
-import { Funnel } from './funnel.js';
-import { showToast } from './toast.js';
 import { refs } from './dom.js';
-import { Billing, FREE_SCRIPT_LIMIT } from './billing.js';
 import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, createProjectWithOptions, upsertProject, sanitizeProject, cloneProject,
-  getEditorProjects, getEditorRootProject, updateEditorAcrossProjects,
+  getWorkspaceProjects, getWorkspaceRootProject, updateWorkspaceAcrossProjects,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
-  deleteProjectFromCloud, archiveProject, togglePinProject
+  deleteProjectFromCloud, getDeletedProjects, archiveDeletedProjects,
+  recoverDeletedProject, permanentlyDeleteRecoveredProject
 } from './project.js';
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
   showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray,
-  renderSuggestionTray
+  getSceneIdForIndex
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
 import { buildWordDocxBlob, DOCX_MIME_TYPE } from './docxExport.js';
 import { paginateScriptLines } from './pagination.js';
 import { auth } from './firebase.js';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { logActivity } from './activity.js';
 import {
   renderHome, renderRecentProjectMenus, syncInputsFromProject,
-  showStudio, showHome, showEditorView, applyViewState, setTheme, toggleMenu,
+  showStudio, showHome, showWorkspaceView, applyViewState, setTheme, toggleMenu,
   closeMenus, applyToolbarState, renderMetrics, renderSceneList,
   renderCharacterList, showCharacterScenes, showProofreadReport, showWorkTracking, revealMetricsPanel,
   updateMenuStateButtons, customAlert, customConfirm, customPrompt,
   showModal, showToast, updateToast,
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
-  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderEditorView, renderStudioProjectContext,
-  showStoryMemoryPopup, showEditorPopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow
+  renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView, renderStudioProjectContext,
+  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow, showFilmProjectSetupFlow, renderWorkspaceInboxPopup
 } from './ui.js';
 import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
   placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
-  formatLineText
+  formatLineText, escapeHtml
 } from './utils.js';
+import {
+  extractScriptTextFromFile,
+  convertScriptTextToLines,
+  buildLocalStructuredPreview,
+  appendConversionJobVersion,
+  beginConversionUpload,
+  attachSourceFileToConversionJob,
+  markConversionExtractionStarted,
+  attachRawTextToConversionJob,
+  markConversionImporting,
+  finalizeConversionImport,
+  failConversionJob,
+  waitForConversionJobRecord
+} from './scriptConversion.js';
 import { applyTranslations, getTypeLabel, setLanguage, t } from './i18n.js';
 import {
   applyWordCase, clearSpellingHighlights, ensureLanguageDictionary, getSpellingContextAtOffset,
@@ -55,21 +67,446 @@ import {
 import {
   inviteCollaborator, addComment, renderCollaboratorList, onStudioEnter,
   hideCommentCompose, submitCommentCompose, setCommentFilter, updateCommentIcons, showCommentPanel,
-  canEditProject, updateCollaboratorRole, addEditorReminder,
-  toggleEditorReminder, deleteEditorReminder, renameEditor,
-  showCollabProfile
+  canEditProject, canManageWorkspaceProjects, canDeleteWorkspace, getWorkspacePermissions,
+  updateCollaboratorRole, addWorkspaceReminder, kickCollaborator,
+  toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace,
+  showCollabProfile, noteRealtimeActivity, syncWorkspaceState,
+  leaveWorkspace, deleteWorkspaceData
 } from './collaborate.js';
+import { getConversionJobRecord, listConversionJobRecords, patchConversionJobRecord } from './conversionJobStore.js';
 
 let studioSidebarRefreshFrame = 0;
 let previewRefreshTimer = 0;
 let focusModeTimer = 0;
 let hasShownReadOnlyNotice = false;
+let workspaceClockTimer = 0;
+let pendingConvertImportProjectId = "";
+let activeConversionLiveJobId = "";
+let activeConversionLiveProjectId = "";
+const conversionWorkspaceOverrides = new Map();
 const aiTaskTimers = new Map();
+const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
+const PROJECT_CARD_CLICK_SUPPRESSION_MS = 750;
+let projectCardTouchState = null;
+let suppressedProjectCardClick = null;
 const INLINE_SELECTION_TOOLS = [
   { label: "Improve", action: "Improve", requiresAi: true },
   { label: "Rewrite", action: "Rephrase", requiresAi: true },
   { label: "Fix Grammar", action: "Grammar", requiresGrammar: true }
 ];
+
+function renderRecoveryList() {
+  const dialog = document.getElementById("fileRecoveryDialog");
+  const list = document.getElementById("fileRecoveryList");
+  const empty = document.getElementById("fileRecoveryEmpty");
+  const stateTitle = document.getElementById("fileRecoveryStateTitle");
+  const stateBody = document.getElementById("fileRecoveryStateBody");
+  if (!dialog || !list || !empty) return;
+
+  const deletedProjects = getDeletedProjects();
+  empty.hidden = deletedProjects.length > 0;
+  list.hidden = deletedProjects.length === 0;
+
+  if (stateTitle && stateBody) {
+    if (deletedProjects.length) {
+      stateTitle.textContent = `${deletedProjects.length} recoverable file${deletedProjects.length === 1 ? "" : "s"} ready.`;
+      stateBody.textContent = "Restore sends a script back to Home immediately. Delete removes it from recovery forever, so use it only when you are sure.";
+    } else {
+      stateTitle.textContent = "Recovery keeps your recent deletions close.";
+      stateBody.textContent = "Restore returns a script to your library. Delete removes it from recovery permanently, so recheck the title before you confirm.";
+    }
+  }
+
+  if (!deletedProjects.length) {
+    list.innerHTML = "";
+    return;
+  }
+
+  list.innerHTML = deletedProjects.map((entry) => {
+    const deletedAt = entry.deletedAt
+      ? new Date(entry.deletedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+      : "Unknown";
+    const lineCount = Array.isArray(entry.project?.lines)
+      ? entry.project.lines.filter((line) => String(line?.text || "").trim() || String(line?.secondary || "").trim()).length
+      : 0;
+    return `
+      <article class="recovery-item" data-recovery-id="${entry.id}">
+        <div class="recovery-item-copy">
+          <h3 class="recovery-item-title">${entry.project?.title || "Untitled Script"}</h3>
+          <p class="recovery-item-meta">Deleted ${deletedAt}</p>
+          <p class="recovery-item-meta">${lineCount} line${lineCount === 1 ? "" : "s"}</p>
+        </div>
+          <div class="recovery-item-actions">
+            <button class="ghost-button btn-sm" type="button" data-recovery-action="recover">Recover</button>
+            <button class="ghost-button btn-sm recovery-delete-button" type="button" data-recovery-action="permanent-delete">Delete</button>
+          </div>
+        </article>
+      `;
+  }).join("");
+}
+
+function openFileRecoveryDialog() {
+  const dialog = document.getElementById("fileRecoveryDialog");
+  if (!dialog) return;
+  renderRecoveryList();
+  dialog.showModal();
+}
+
+function closeFileRecoveryDialog() {
+  document.getElementById("fileRecoveryDialog")?.close();
+}
+
+function openWorkspaceInboxPopup(trigger) {
+  const popup = document.getElementById("workspace-inbox-popup");
+  const card = popup?.querySelector(".popup-card");
+  if (!popup || !card || !trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  popup.classList.add("active");
+  const cardWidth = 360;
+  const viewportPadding = 12;
+  let left = rect.right - cardWidth;
+  if (left < viewportPadding) left = viewportPadding;
+  if (left + cardWidth > window.innerWidth - viewportPadding) {
+    left = Math.max(viewportPadding, window.innerWidth - cardWidth - viewportPadding);
+  }
+  const preferredTop = rect.bottom + 8;
+  const cardHeight = card.offsetHeight || 0;
+  const maxTop = Math.max(viewportPadding, window.innerHeight - cardHeight - viewportPadding);
+  const top = Math.min(preferredTop, maxTop);
+  card.style.top = `${top}px`;
+  card.style.left = `${left}px`;
+}
+
+function closeWorkspaceInboxPopup() {
+  document.getElementById("workspace-inbox-popup")?.classList.remove("active");
+}
+
+async function renderConversionJobsList() {
+  const dialog = document.getElementById("conversionJobsDialog");
+  const list = document.getElementById("conversionJobsList");
+  const empty = document.getElementById("conversionJobsEmpty");
+  if (!dialog || !list || !empty) return;
+
+  const jobs = await listConversionJobRecords();
+  empty.hidden = jobs.length > 0;
+  list.hidden = jobs.length === 0;
+
+  if (!jobs.length) {
+    list.innerHTML = "";
+    return;
+  }
+
+    list.innerHTML = jobs.map((job) => {
+      const updatedAt = job.updatedAt || job.createdAt;
+      const timestamp = updatedAt
+        ? new Date(updatedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+        : "Unknown";
+      const lineCount = Number(job.structuredLineCount || job.structuredLines?.length || 0);
+      const warningCount = Array.isArray(job.warnings) ? job.warnings.filter(Boolean).length : 0;
+      const statusLabel = escapeHtml(String(job.status || "queued"));
+      return `
+        <button class="conversion-job-item" type="button" data-conversion-job-id="${job.id}" data-conversion-job-status="${escapeHtml(String(job.status || "queued"))}">
+          <div class="conversion-job-item-main">
+            <div class="conversion-job-item-top">
+              <div>
+                <h4 class="conversion-job-item-title">${escapeHtml(job.fileName || "Untitled upload")}</h4>
+                <p class="conversion-job-item-meta">Updated ${escapeHtml(timestamp)}</p>
+              </div>
+              <span class="conversion-job-item-status">${statusLabel}</span>
+            </div>
+            <p class="conversion-job-item-stage">${escapeHtml(job.stageLabel || "No stage available")}</p>
+            <div class="conversion-job-item-grid">
+              <div>
+                <span>Project</span>
+                <strong>${escapeHtml(job.projectId || "Not linked")}</strong>
+              </div>
+              <div>
+                <span>Structured lines</span>
+                <strong>${lineCount}</strong>
+              </div>
+              <div>
+                <span>Warnings</span>
+                <strong>${warningCount}</strong>
+              </div>
+            </div>
+          </div>
+        </button>
+      `;
+    }).join("");
+  }
+
+async function openConversionJobsDialog() {
+  const dialog = document.getElementById("conversionJobsDialog");
+  if (!dialog) return;
+  await renderConversionJobsList();
+  dialog.showModal();
+}
+
+async function openCurrentProjectConversionInterface() {
+  const project = getCurrentProject();
+  if (!project?.conversionJobId) {
+    await customAlert("This script does not have a saved conversion workspace yet.", "Conversion Interface");
+    return;
+  }
+  const record = await getConversionJobRecord(project.conversionJobId);
+  if (!record) {
+    await customAlert("The saved conversion workspace for this script is not available on this device right now.", "Conversion Interface");
+    return;
+  }
+  await openConversionLiveDialog(project.conversionJobId, project.id, record);
+}
+
+function closeConversionJobsDialog() {
+  document.getElementById("conversionJobsDialog")?.close();
+}
+
+function getCurrentProjectConversionRecord() {
+  const project = getCurrentProject();
+  if (!project?.conversionJobId) return Promise.resolve(null);
+  return getConversionJobRecord(project.conversionJobId);
+}
+
+const CONVERSION_LIVE_STEPS = [
+  { key: "uploading", label: "Upload" },
+  { key: "extracting", label: "Extract" },
+  { key: "cover", label: "Cover" },
+  { key: "normalizing", label: "Normalize" },
+  { key: "structuring", label: "Structure" },
+  { key: "importing", label: "Import" }
+];
+
+function getConversionLiveStepState(record, stepKey) {
+  const status = String(record?.status || "").toLowerCase();
+  if (status === "failed") return "error";
+  const order = CONVERSION_LIVE_STEPS.map((step) => step.key);
+  const activeIndex = Math.max(order.indexOf(status), order.indexOf(status.replace(/^completed.*|^imported.*$/i, "importing")));
+  const stepIndex = order.indexOf(stepKey);
+  if (status === "completed" || status === "completed-with-fallback" || status === "imported" || status === "imported-with-fallback") {
+    return "done";
+  }
+  if (activeIndex > stepIndex) return "done";
+  if (activeIndex === stepIndex) return "active";
+  if (status === "queued" && stepKey === "uploading") return "active";
+  return "idle";
+}
+
+function renderConversionStructuredPreview(container, record, emptyMessage) {
+  const structuredLines = Array.isArray(record?.structuredLines) ? record.structuredLines : [];
+  if (!container) return;
+  container.innerHTML = structuredLines.length
+    ? structuredLines.slice(0, 120).map((line) => `
+      <div class="conversion-review-line">
+        <span class="conversion-review-line-type">${escapeHtml(String(line?.type || "action"))}</span>
+        <div class="conversion-review-line-text">${escapeHtml(String(line?.text || "")).replace(/\n/g, "<br>")}</div>
+      </div>
+    `).join("")
+    : `<p class="conversion-live-structured-empty">${escapeHtml(emptyMessage)}</p>`;
+}
+
+function getConversionWorkspaceOverride(jobId) {
+  if (!jobId) return null;
+  return conversionWorkspaceOverrides.get(jobId) || null;
+}
+
+async function refreshActiveConversionLiveDialog(jobId, recordOverride = null) {
+  const dialog = document.getElementById("conversionLiveDialog");
+  if (!dialog || !jobId || activeConversionLiveJobId !== jobId) return;
+
+  const baseRecord = recordOverride || await getConversionJobRecord(jobId);
+  const record = {
+    ...(baseRecord || {}),
+    ...(getConversionWorkspaceOverride(jobId) || {})
+  };
+  if (!record) return;
+  if (record.projectId) {
+    activeConversionLiveProjectId = record.projectId;
+  }
+
+  document.getElementById("conversionLiveTitle").textContent = record.fileName ? `Watching "${record.fileName}"` : "Current Conversion Job";
+  document.getElementById("conversionLiveStatus").textContent = String(record.status || "queued");
+  document.getElementById("conversionLiveStage").textContent = String(record.stageLabel || "Queued");
+  document.getElementById("conversionLiveFile").textContent = record.sourceFile?.name || record.fileName || "Unknown";
+  document.getElementById("conversionLiveWarningsCount").textContent = String(Array.isArray(record.warnings) ? record.warnings.filter(Boolean).length : 0);
+  const rawInput = document.getElementById("conversionLiveRaw");
+  const normalizedInput = document.getElementById("conversionLiveNormalized");
+  if (rawInput && document.activeElement !== rawInput) {
+    rawInput.value = String(record.rawText || "");
+  }
+  if (normalizedInput && document.activeElement !== normalizedInput) {
+    normalizedInput.value = String(record.normalizedText || "");
+  }
+  const coverPage = record.coverPageCandidate || {};
+  const coverInputs = {
+    title: document.getElementById("conversionLiveCoverTitle"),
+    author: document.getElementById("conversionLiveCoverAuthor"),
+    contact: document.getElementById("conversionLiveCoverContact"),
+    company: document.getElementById("conversionLiveCoverCompany"),
+    details: document.getElementById("conversionLiveCoverDetails"),
+    logline: document.getElementById("conversionLiveCoverLogline")
+  };
+  Object.entries(coverInputs).forEach(([key, input]) => {
+    if (input && document.activeElement !== input) {
+      input.value = String(coverPage?.[key] || "");
+    }
+  });
+  const guidanceInput = document.getElementById("conversionLiveGuidance");
+  if (guidanceInput && document.activeElement !== guidanceInput) {
+    guidanceInput.value = String(record.operatorGuidance || "");
+  }
+  const warningsBox = document.getElementById("conversionLiveWarnings");
+  if (warningsBox) {
+    const warningText = Array.isArray(record.warnings) ? record.warnings.filter(Boolean).join("\n\n") : "";
+    warningsBox.hidden = !warningText;
+    warningsBox.textContent = warningText;
+  }
+  const timeline = document.getElementById("conversionLiveTimeline");
+  if (timeline) {
+    timeline.innerHTML = CONVERSION_LIVE_STEPS.map((step) => `
+      <div class="conversion-live-step" data-step-state="${getConversionLiveStepState(record, step.key)}">
+        <span>${escapeHtml(step.key)}</span>
+        <strong>${escapeHtml(step.label)}</strong>
+      </div>
+    `).join("");
+  }
+  renderConversionStructuredPreview(
+    document.getElementById("conversionLiveStructured"),
+    record,
+    "Structured screenplay blocks will appear here as soon as the current job reaches that stage."
+  );
+
+  const openReviewBtn = document.getElementById("conversionLiveOpenReviewBtn");
+  if (openReviewBtn) {
+    openReviewBtn.disabled = !["failed", "completed", "completed-with-fallback", "imported", "imported-with-fallback"].includes(String(record.status || "").toLowerCase());
+  }
+}
+
+async function openConversionLiveDialog(jobId, projectId = "", recordOverride = null) {
+  const dialog = document.getElementById("conversionLiveDialog");
+  if (!dialog || !jobId) return;
+  activeConversionLiveJobId = jobId;
+  activeConversionLiveProjectId = projectId || "";
+  await refreshActiveConversionLiveDialog(jobId, recordOverride);
+  if (!dialog.open) {
+    dialog.showModal();
+  }
+}
+
+function closeConversionLiveDialog() {
+  activeConversionLiveJobId = "";
+  activeConversionLiveProjectId = "";
+  document.getElementById("conversionLiveDialog")?.close();
+}
+
+function captureActiveConversionWorkspacePatch(jobId) {
+  if (!jobId || activeConversionLiveJobId !== jobId) return null;
+  const rawText = String(document.getElementById("conversionLiveRaw")?.value || "");
+  const normalizedText = String(document.getElementById("conversionLiveNormalized")?.value || "");
+  const coverPageCandidate = {
+    title: String(document.getElementById("conversionLiveCoverTitle")?.value || "").trim(),
+    author: String(document.getElementById("conversionLiveCoverAuthor")?.value || "").trim(),
+    contact: String(document.getElementById("conversionLiveCoverContact")?.value || "").trim(),
+    company: String(document.getElementById("conversionLiveCoverCompany")?.value || "").trim(),
+    details: String(document.getElementById("conversionLiveCoverDetails")?.value || "").trim(),
+    logline: String(document.getElementById("conversionLiveCoverLogline")?.value || "").trim()
+  };
+  const previewSource = normalizedText.trim() || rawText.trim();
+  const structuredLines = buildLocalStructuredPreview(previewSource);
+  const patch = {
+    rawText,
+    normalizedText,
+    structuredLines,
+    structuredLineCount: structuredLines.length
+  };
+  if (rawText.trim()) {
+    patch.rawTextEditedAt = new Date().toISOString();
+  }
+  if (normalizedText.trim()) {
+    patch.normalizedTextEditedAt = new Date().toISOString();
+  }
+  if (Object.values(coverPageCandidate).some(Boolean)) {
+    patch.coverPageCandidate = coverPageCandidate;
+  }
+  return patch;
+}
+
+function buildConversionVersionOptions(record) {
+  const versions = Array.isArray(record?.versions) ? record.versions.slice() : [];
+  versions.sort((left, right) => new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime());
+  return [
+    {
+      id: "current",
+      label: "Current workspace",
+      data: record
+    },
+    ...versions.map((version, index) => {
+      const stamp = version?.createdAt
+        ? new Date(version.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+        : `Saved pass ${versions.length - index}`;
+      const count = Number(version?.structuredLineCount || version?.structuredLines?.length || 0);
+      const label = `${version?.label || `Saved pass ${versions.length - index}`} · ${count} lines · ${stamp}`;
+      return {
+        id: String(version?.id || `version_${index}`),
+        label,
+        data: {
+          ...record,
+          ...version,
+          structuredLines: Array.isArray(version?.structuredLines) ? version.structuredLines : [],
+          structuredLineCount: count
+        }
+      };
+    })
+  ];
+}
+
+function resolveSelectedConversionVersion(record, versionId) {
+  const options = buildConversionVersionOptions(record);
+  return options.find((entry) => entry.id === versionId) || options[0] || { id: "current", label: "Current workspace", data: record };
+}
+
+async function applyConversionRecordToProject(record, projectId = "", successMessage = "Reviewed screenplay applied to this script.") {
+  const targetProject = state.projects.find((entry) => entry.id === projectId)
+    || state.projects.find((entry) => entry.conversionJobId === record?.id)
+    || getCurrentProject();
+  const structuredLines = Array.isArray(record?.structuredLines) ? record.structuredLines : [];
+  if (!targetProject) {
+    await customAlert("The target script for this conversion is not available right now.", "Conversion Review");
+    return false;
+  }
+  if (!structuredLines.length) {
+    await customAlert("There is no structured screenplay preview to apply yet.", "Conversion Review");
+    return false;
+  }
+  const nextProject = sanitizeProject({
+    ...targetProject,
+    lines: structuredLines,
+    conversionJobId: record.id || targetProject.conversionJobId || "",
+    conversionSourceFileName: record?.sourceFile?.name || record?.fileName || targetProject.conversionSourceFileName || ""
+  });
+  applyCoverPageCandidateToProject(nextProject, record?.coverPageCandidate || null);
+  upsertProject(nextProject);
+  openProject(nextProject.id, { silentLoadToast: true });
+  persistProjects(true);
+  showToast(successMessage, "success", { duration: 3200 });
+  return true;
+}
+
+function applyCoverPageCandidateToProject(project, coverPage) {
+  if (!project || !coverPage) return;
+  const normalized = {
+    title: String(coverPage.title || "").trim(),
+    author: String(coverPage.author || "").trim(),
+    contact: String(coverPage.contact || "").trim(),
+    company: String(coverPage.company || "").trim(),
+    details: String(coverPage.details || "").trim(),
+    logline: String(coverPage.logline || "").trim()
+  };
+  if (normalized.title) project.title = normalized.title;
+  if (normalized.author) project.author = normalized.author;
+  if (normalized.contact) project.contact = normalized.contact;
+  if (normalized.company) project.company = normalized.company;
+  if (normalized.details) project.details = normalized.details;
+  if (normalized.logline) project.logline = normalized.logline;
+}
 
 function ensureSelectionToolbar() {
   let toolbar = document.getElementById("selectionAiToolbar");
@@ -99,6 +536,115 @@ function hideSelectionToolbar() {
   if (!toolbar) return;
   toolbar.hidden = true;
   toolbar.classList.remove("is-visible");
+}
+
+function resetProjectCardTouchState() {
+  projectCardTouchState = null;
+}
+
+function suppressProjectCardClick(projectId) {
+  suppressedProjectCardClick = {
+    projectId,
+    until: Date.now() + PROJECT_CARD_CLICK_SUPPRESSION_MS
+  };
+}
+
+function shouldIgnoreProjectCardClick(projectId) {
+  if (!suppressedProjectCardClick) return false;
+  if (suppressedProjectCardClick.until <= Date.now()) {
+    suppressedProjectCardClick = null;
+    return false;
+  }
+  if (suppressedProjectCardClick.projectId !== projectId) {
+    return false;
+  }
+  suppressedProjectCardClick = null;
+  return true;
+}
+
+function openWorkspaceDashboardOrNotify(workspaceId) {
+  if (!workspaceId) {
+    showToast("This workspace link is missing. Refresh the project list and try again.", "error", { duration: 4200 });
+    return;
+  }
+  openWorkspaceDashboard(workspaceId);
+}
+
+function openProjectOrNotify(projectId, options = {}) {
+  if (!projectId) {
+    showToast("This project link is missing. Refresh the project list and try again.", "error", { duration: 4200 });
+    return false;
+  }
+  const opened = openProject(projectId, options);
+  if (!opened) {
+    showToast("That project could not be found. Refresh the workspace or recover it from deleted projects.", "error", { duration: 5200 });
+    return false;
+  }
+  return true;
+}
+
+function getLatestWorkspaceScript(workspaceId = state.currentWorkspaceId) {
+  return getWorkspaceProjects(workspaceId)
+    .filter((project) => !project.isWorkspaceRoot)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0] || null;
+}
+
+function continueWorkspaceWriting() {
+  const project = getLatestWorkspaceScript();
+  if (project) {
+    openProjectOrNotify(project.id);
+    return;
+  }
+  createProjectInsideCurrentWorkspace();
+}
+
+function focusWorkspaceTaskForm() {
+  const taskInput = refs.workspaceDashboard?.querySelector("[data-workspace-task-title]")
+    || refs.homeWorkspaceDashboard?.querySelector("[data-workspace-task-title]");
+  if (!taskInput) {
+    showToast("Open a workspace first, then create a task.", "error", { duration: 3600 });
+    return;
+  }
+  const composer = taskInput.closest(".workspace-task-composer, .workspace-home-panel");
+  if (composer) {
+    composer.classList.remove("is-focusing");
+    void composer.offsetWidth;
+    composer.classList.add("is-focusing");
+    window.setTimeout(() => composer.classList.remove("is-focusing"), 1400);
+  }
+  taskInput.scrollIntoView({ behavior: "smooth", block: "center" });
+  taskInput.focus();
+  showToast("Add a task title, assign it, then track it here.", "success", { duration: 2400 });
+}
+
+function handleProjectCardGridClick(e, { allowManagement = true } = {}) {
+  const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
+  if (workspaceTrigger) {
+    openWorkspaceDashboardOrNotify(workspaceTrigger.dataset.openWorkspaceId);
+    return true;
+  }
+
+  const card = e.target.closest(".project-card");
+  if (!card) return false;
+
+  const projectId = card.dataset.projectId || e.target.closest("[data-project-id]")?.dataset.projectId || "";
+  if (shouldIgnoreProjectCardClick(projectId)) return true;
+
+  if (allowManagement && e.target.closest(".project-delete")) {
+    removeProject(projectId);
+    return true;
+  }
+  if (allowManagement && e.target.closest('[data-project-action="rename"]')) {
+    renameProjectById(projectId);
+    return true;
+  }
+  if (allowManagement && e.target.closest('[data-project-action="duplicate"]')) {
+    duplicateProjectById(projectId);
+    return true;
+  }
+
+  openProjectOrNotify(projectId);
+  return true;
 }
 
 function updateSelectionToolbar() {
@@ -163,19 +709,45 @@ function schedulePreviewRefresh({ includeCover = false } = {}) {
   }, 90);
 }
 
-function getEditorTaskTemplate(templateKey) {
-  return EDITOR_TASK_TEMPLATES.find((template) => template.key === templateKey) || EDITOR_TASK_TEMPLATES[0];
+function getWorkspaceTaskTemplate(templateKey) {
+  return WORKSPACE_TASK_TEMPLATES.find((template) => template.key === templateKey) || WORKSPACE_TASK_TEMPLATES[0];
 }
 
-function applyEditorTaskTemplateToForm(container, templateKey, { force = false } = {}) {
+function updateWorkspaceTaskTypeFields(container, templateKey) {
   if (!container) return;
-  const template = getEditorTaskTemplate(templateKey);
-  const titleInput = container.querySelector('[data-editor-task-title], #taskEditTitle');
-  const descriptionInput = container.querySelector('[data-editor-task-description], #taskEditDescription');
-  const templateInput = container.querySelector('[data-editor-task-template], #taskEditTemplate');
-  const hint = container.querySelector('[data-editor-task-template-hint], #taskEditTemplateHint');
-  const previousKey = container.dataset.editorTemplateApplied || "custom";
-  const previousTemplate = getEditorTaskTemplate(previousKey);
+  const sceneLabel = container.querySelector("[data-workspace-task-scene-label]");
+  const sceneSelect = container.querySelector("[data-workspace-task-scene]");
+  const lineField = container.querySelector("[data-workspace-task-line-field]");
+  const lineSelect = container.querySelector("[data-workspace-task-line]");
+  if (!sceneSelect) return;
+  if (!sceneSelect.dataset.defaultOptions) {
+    sceneSelect.dataset.defaultOptions = sceneSelect.innerHTML;
+  }
+  if (templateKey === "story-memory") {
+    const memoryChoices = getWorkspaceStoryMemoryChoices();
+    if (sceneLabel) sceneLabel.textContent = "Story memory";
+    sceneSelect.innerHTML = `
+      <option value="">Choose story memory</option>
+      ${memoryChoices.map((item) => `<option value="${escapeHtml(item.id)}" data-memory-project-id="${escapeHtml(item.projectId)}" data-memory-type="${escapeHtml(item.type)}" data-memory-name="${escapeHtml(item.name)}">${escapeHtml(item.label)}</option>`).join("")}
+    `;
+    if (lineField) lineField.hidden = true;
+    if (lineSelect) lineSelect.value = "";
+    return;
+  }
+  if (sceneLabel) sceneLabel.textContent = "Scene";
+  sceneSelect.innerHTML = sceneSelect.dataset.defaultOptions;
+  if (lineField) lineField.hidden = false;
+}
+
+function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = false } = {}) {
+  if (!container) return;
+  const template = getWorkspaceTaskTemplate(templateKey);
+  const titleInput = container.querySelector('[data-workspace-task-title], #taskEditTitle');
+  const descriptionInput = container.querySelector('[data-workspace-task-description], #taskEditDescription');
+  const templateInput = container.querySelector('[data-workspace-task-template], #taskEditTemplate');
+  const hint = container.querySelector('[data-workspace-task-template-hint], #taskEditTemplateHint');
+  const previousKey = container.dataset.workspaceTemplateApplied || "custom";
+  const previousTemplate = getWorkspaceTaskTemplate(previousKey);
 
   if (templateInput) {
     templateInput.value = template.key;
@@ -195,86 +767,131 @@ function applyEditorTaskTemplateToForm(container, templateKey, { force = false }
   if (hint) {
     hint.textContent = template.aiInstruction;
   }
-  container.dataset.editorTemplateApplied = template.key;
+  updateWorkspaceTaskTypeFields(container, template.key);
+  container.dataset.workspaceTemplateApplied = template.key;
+  syncWorkspaceTaskDraftFromContainer(container);
 }
 
-function ensureDefaultEditorRoot() {
-  const currentEditorRoot = state.currentEditorId
-    ? getEditorRootProject(state.currentEditorId)
+function ensureDefaultWorkspaceRoot() {
+  const currentWorkspaceRoot = state.currentWorkspaceId
+    ? getWorkspaceRootProject(state.currentWorkspaceId)
     : null;
-  if (currentEditorRoot) return currentEditorRoot;
+  if (currentWorkspaceRoot) return currentWorkspaceRoot;
 
-  const existingEditorRoot = state.projects.find((project) => project.isEditorRoot);
-  if (existingEditorRoot) return existingEditorRoot;
+  const existingWorkspaceRoot = state.projects.find((project) => project.isWorkspaceRoot);
+  if (existingWorkspaceRoot) return existingWorkspaceRoot;
 
   return createProjectWithOptions({
-    creationKind: "editor",
+    creationKind: "workspace",
     workType: "film-script",
-    isEditorRoot: true,
-    title: "My Editor",
-    editorName: "My Editor"
+    isWorkspaceRoot: true,
+    title: "My Workspace",
+    workspaceName: "My Workspace"
   });
 }
 
-function _ownedScriptCount() {
-  return state.projects.filter(p => !p.isWorkspaceRoot && !p.isShared).length;
-}
-
 async function launchNewCreationFlow() {
-  if (!Billing.canCreateScript(_ownedScriptCount())) {
-    Billing.showUpgradeModal(`You've reached the ${FREE_SCRIPT_LIMIT}-script limit on the Free plan. Upgrade to Premium for unlimited scripts.`);
-    return;
-  }
-
   const selection = await showNewCreationFlow();
   if (!selection || selection.workType !== "film-script") {
     return;
   }
 
-  const projectName = await customPrompt("Name this project before creating it.", "", "New Project");
-  if (!projectName || !projectName.trim()) {
-    await customAlert("A project name is required before creation.", "Project Not Created");
+  const setup = await showFilmProjectSetupFlow();
+  if (!setup?.projectName || !setup.action) {
     return;
   }
-  const editorRoot = ensureDefaultEditorRoot();
+  const workspaceRoot = ensureDefaultWorkspaceRoot();
   const project = createProjectWithOptions({
     creationKind: "project",
     workType: selection.workType,
-    title: projectName.trim(),
-    editor: {
-      id: editorRoot.editor?.id || editorRoot.id,
-      name: editorRoot.editor?.name || editorRoot.title,
-      inviteCode: editorRoot.editor?.inviteCode,
-      reminders: editorRoot.editor?.reminders || [],
-      targets: editorRoot.editor?.targets || {},
-      tasks: editorRoot.editor?.tasks || []
+    title: setup.projectName.trim(),
+    workspace: {
+      id: workspaceRoot.workspace?.id || workspaceRoot.id,
+      name: workspaceRoot.workspace?.name || workspaceRoot.title,
+      inviteCode: workspaceRoot.workspace?.inviteCode,
+      reminders: workspaceRoot.workspace?.reminders || [],
+      targets: workspaceRoot.workspace?.targets || {},
+      tasks: workspaceRoot.workspace?.tasks || []
     }
   });
-  Funnel.milestone('first_project_created');
-  openProject(project.id);
-}
 
-function openEditorDashboard(editorId) {
-  if (!editorId) return;
-  const editorRoot = getEditorRootProject(editorId) || getEditorProjects(editorId)[0] || null;
-  state.currentEditorId = editorId;
-  if (editorRoot) {
-    state.currentProjectId = editorRoot.id;
-  }
-  persistProjects(false, { syncInputs: false });
-  showEditorView();
-  renderEditorView();
-}
-
-async function createProjectInsideCurrentWorkspace() {
-  if (!Billing.canCreateScript(_ownedScriptCount())) {
-    Billing.showUpgradeModal(`You've reached the ${FREE_SCRIPT_LIMIT}-script limit on the Free plan. Upgrade to Premium for unlimited scripts.`);
+  if (setup.action === "convert-import") {
+    pendingConvertImportProjectId = project.id;
+    persistProjects(true, { syncInputs: false });
+    showToast("Choose a screenplay file to convert into this project.", "success");
+    refs.convertImportInput?.click();
     return;
   }
 
+  openProject(project.id, { silentLoadToast: true });
+
+  if (setup.action === "import") {
+    showToast("Choose a file to import into this script.", "success");
+    refs.fileInput?.click();
+    return;
+  }
+
+  showToast("Project created.", "success");
+}
+
+function syncWorkspaceHeaderActions() {
+  const refreshBtn = document.getElementById("workspaceRefreshBtn");
+  const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId)
+    || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId)
+    || null;
+
+  if (refreshBtn) {
+    refreshBtn.hidden = !workspaceProject;
+  }
+}
+
+function updateWorkspaceClock() {
+  const clock = document.getElementById("workspaceViewClock");
+  if (!clock) return;
+  const now = new Date();
+  clock.textContent = now.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function ensureWorkspaceClock() {
+  updateWorkspaceClock();
+  if (workspaceClockTimer) return;
+  workspaceClockTimer = window.setInterval(updateWorkspaceClock, 1000);
+}
+
+async function openWorkspaceDashboard(workspaceId) {
+  if (!workspaceId) return false;
+  const loadToast = showToast("Refreshing workspace...", "loading", { duration: 0 });
+  state.activeBlockId = null;
+  state.activeType = "action";
+  const workspaceRoot = getWorkspaceRootProject(workspaceId) || getWorkspaceProjects(workspaceId)[0] || null;
+  if (!workspaceRoot) {
+    updateToast(loadToast, "Workspace could not be found. Refresh the project list and try again.", "error", { duration: 5200 });
+    return false;
+  }
+  state.currentWorkspaceId = workspaceId;
+  state.currentProjectId = workspaceRoot.id;
+  await syncWorkspaceState(workspaceId).catch(() => {});
+  persistProjects(false, { syncInputs: false });
+  showWorkspaceView();
+  renderWorkspaceView();
+  ensureWorkspaceClock();
+  syncWorkspaceHeaderActions();
+  updateToast(loadToast, "Workspace ready.", "success", { duration: 1200 });
+  return true;
+}
+
+async function createProjectInsideCurrentWorkspace() {
   const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId) || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId);
   if (!workspaceProject) {
     launchNewCreationFlow();
+    return;
+  }
+  if (!canManageWorkspaceProjects(workspaceProject)) {
+    await customAlert("Only workspace owners and admins can create new projects in this workspace.", "Workspace Access");
     return;
   }
   const projectName = await customPrompt("Name this project before creating it.", "", "New Project");
@@ -300,16 +917,17 @@ async function createProjectInsideCurrentWorkspace() {
       name: workspaceProject.workspace?.name || workspaceProject.title,
       inviteCode: workspaceProject.workspace?.inviteCode,
       reminders: workspaceProject.workspace?.reminders || [],
+      commentingEnabled: Boolean(workspaceProject.workspace?.commentingEnabled),
       targets: workspaceProject.workspace?.targets || {},
       tasks: workspaceProject.workspace?.tasks || []
     }
   });
-  Funnel.milestone('first_project_created');
-  openProject(project.id);
+  openProject(project.id, { silentLoadToast: true });
+  showToast("Project created.", "success");
 }
 
 function isDisposableUntitledDraft(project = getCurrentProject()) {
-  if (!project || project.isEditorRoot) return false;
+  if (!project || project.isWorkspaceRoot) return false;
   const defaultLikeTitle = /^(Untitled Script|Film Script \d+)$/i.test(String(project.title || "").trim());
   const hasMeta = [project.author, project.contact, project.company, project.details, project.logline].some((value) => String(value || "").trim());
   const hasContent = (project.lines || []).some((line) => String(line?.text || "").trim() || String(line?.secondary || "").trim());
@@ -320,14 +938,14 @@ async function discardUntitledDraftIfNeeded() {
   if (refs.studioView?.hidden) return false;
   const project = getCurrentProject();
   if (!isDisposableUntitledDraft(project)) return false;
-  const editorId = project.editor?.id || project.id;
+  const workspaceId = project.workspace?.id || project.id;
   state.projects = state.projects.filter((item) => item.id !== project.id);
   if (!state.projects.length) {
     const fallback = createProjectWithOptions();
     state.projects = [fallback];
   }
-  if (state.currentEditorId === editorId && project.editor?.id !== project.id) {
-    state.currentEditorId = editorId;
+  if (state.currentWorkspaceId === workspaceId && project.workspace?.id !== project.id) {
+    state.currentWorkspaceId = workspaceId;
   }
   state.currentProjectId = state.projects[0].id;
   persistProjects(true, { syncInputs: false });
@@ -335,10 +953,10 @@ async function discardUntitledDraftIfNeeded() {
   return true;
 }
 
-function getEditorTaskAssignees(editorProject) {
-  const ownerUid = editorProject.ownerId || "editor_owner";
-  const ownerLabel = editorProject.ownerName || editorProject.ownerEmail || editorProject.author || "Editor Owner";
-  const collaboratorEntries = Object.entries(editorProject.collaborators || {}).map(([uid, person]) => ({
+function getWorkspaceTaskAssignees(workspaceProject) {
+  const ownerUid = workspaceProject.ownerId || "workspace_owner";
+  const ownerLabel = workspaceProject.ownerName || workspaceProject.ownerEmail || workspaceProject.author || "Workspace Owner";
+  const collaboratorEntries = Object.entries(workspaceProject.collaborators || {}).map(([uid, person]) => ({
     id: uid,
     label: person.name || person.email || "Collaborator",
     assigneeType: "human"
@@ -350,9 +968,9 @@ function getEditorTaskAssignees(editorProject) {
   ];
 }
 
-function getEditorTaskSceneChoices(editorId = state.currentEditorId) {
-  return getEditorProjects(editorId)
-    .filter((project) => !project.isEditorRoot)
+function getWorkspaceTaskSceneChoices(workspaceId = state.currentWorkspaceId) {
+  return getWorkspaceProjects(workspaceId)
+    .filter((project) => !project.isWorkspaceRoot)
     .flatMap((project) => (project.lines || [])
       .filter((line) => line.type === "scene" && line.text.trim())
       .map((line) => ({
@@ -363,9 +981,9 @@ function getEditorTaskSceneChoices(editorId = state.currentEditorId) {
       })));
 }
 
-function getEditorTaskLineChoices(editorId = state.currentEditorId) {
-  return getEditorProjects(editorId)
-    .filter((project) => !project.isEditorRoot)
+function getWorkspaceTaskLineChoices(workspaceId = state.currentWorkspaceId) {
+  return getWorkspaceProjects(workspaceId)
+    .filter((project) => !project.isWorkspaceRoot)
     .flatMap((project) => (project.lines || [])
       .map((line, index) => ({ line, index }))
       .filter(({ line }) => line.type !== "scene" && line.text.trim())
@@ -383,15 +1001,15 @@ function getEditorTaskLineChoices(editorId = state.currentEditorId) {
       }));
 }
 
-function getEditorStoryMemoryChoices(editorId = state.currentEditorId) {
+function getWorkspaceStoryMemoryChoices(workspaceId = state.currentWorkspaceId) {
   const bucketLabels = {
     characters: "Character",
     locations: "Location",
     scenes: "Scene",
     themes: "Theme"
   };
-  return getEditorProjects(editorId)
-    .filter((project) => !project.isEditorRoot)
+  return getWorkspaceProjects(workspaceId)
+    .filter((project) => !project.isWorkspaceRoot)
     .flatMap((project) => Object.entries(project.storyMemory || {})
       .filter(([bucket]) => bucketLabels[bucket])
       .flatMap(([bucket, items]) => (Array.isArray(items) ? items : []).map((item) => ({
@@ -403,19 +1021,483 @@ function getEditorStoryMemoryChoices(editorId = state.currentEditorId) {
       }))));
 }
 
-function getEditorTaskById(taskId) {
-  return getEditorRootProject(state.currentEditorId)?.editor?.tasks?.find((task) => task.id === taskId) || null;
+function getWorkspaceLeadProject(workspaceId = state.currentWorkspaceId) {
+  if (!workspaceId) return null;
+  return getWorkspaceRootProject(workspaceId)
+    || getWorkspaceProjects(workspaceId)
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0]
+    || null;
 }
 
-function getEditorNotifications(editorId = state.currentEditorId) {
-  return [...(getEditorRootProject(editorId)?.editor?.notifications || [])]
+function getWorkspaceTaskDraft(workspaceId = state.currentWorkspaceId) {
+  if (!workspaceId) return null;
+  const draft = state.workspaceTaskDraft;
+  if (!draft || draft.workspaceId !== workspaceId) return null;
+  return draft;
+}
+
+function syncWorkspaceTaskDraftFromContainer(container, workspaceId = state.currentWorkspaceId) {
+  if (!container || !workspaceId) return;
+  const titleInput = container.querySelector('[data-workspace-task-title]');
+  const descriptionInput = container.querySelector('[data-workspace-task-description]');
+  const projectSelect = container.querySelector('[data-workspace-task-project]');
+  const sceneSelect = container.querySelector('[data-workspace-task-scene]');
+  const lineSelect = container.querySelector('[data-workspace-task-line]');
+  const assigneeSelect = container.querySelector('[data-workspace-task-assignee]');
+  const templateSelect = container.querySelector('[data-workspace-task-template]');
+  const aiStartSelect = container.querySelector('[data-workspace-task-ai-start]');
+  state.workspaceTaskDraft = {
+    workspaceId,
+    title: titleInput?.value || "",
+    description: descriptionInput?.value || "",
+    projectId: projectSelect?.value || "",
+    sceneId: sceneSelect?.value || "",
+    lineId: lineSelect?.value || "",
+    assignedTo: assigneeSelect?.value || "",
+    templateKey: templateSelect?.value || "custom",
+    aiStart: aiStartSelect?.value || "now"
+  };
+}
+
+function clearWorkspaceTaskDraft(workspaceId = state.currentWorkspaceId) {
+  if (!workspaceId) {
+    state.workspaceTaskDraft = null;
+    return;
+  }
+  if (state.workspaceTaskDraft?.workspaceId === workspaceId) {
+    state.workspaceTaskDraft = null;
+  }
+}
+
+function flushPendingWorkspaceRefresh() {
+  if (!state.workspaceRefreshPending || !state.currentWorkspaceId) return;
+  const activeElement = document.activeElement;
+  const activeForm = activeElement?.closest?.(".workspace-task-form");
+  if (activeForm && refs.workspaceDashboard?.contains(activeForm)) return;
+  state.workspaceRefreshPending = false;
+  renderWorkspaceView();
+}
+
+function getWorkspaceTaskById(taskId) {
+  return getWorkspaceLeadProject()?.workspace?.tasks?.find((task) => task.id === taskId) || null;
+}
+
+function showWorkspaceReviewCenter() {
+  const workspaceProject = getWorkspaceLeadProject();
+  if (!workspaceProject) {
+    customAlert("Open a workspace first to generate reports.", "Review Center");
+    return;
+  }
+  const workspaceId = state.currentWorkspaceId || workspaceProject.workspace?.id || "";
+  const projects = getWorkspaceProjects(workspaceId).filter((project) => !project.isWorkspaceRoot);
+  const tasks = workspaceProject.workspace?.tasks || [];
+  const notifications = workspaceProject.workspace?.notifications || [];
+  const storyMemoryItems = getWorkspaceStoryMemoryChoices(workspaceId);
+  const comments = projects.flatMap((project) => project.comments || []);
+  const unresolvedComments = comments.filter((comment) => !comment.resolved);
+  const openTasks = tasks.filter((task) => task.status !== "done");
+  const completedTasks = tasks.filter((task) => task.status === "done");
+  const aiTasks = tasks.filter((task) => task.assigneeType === "system");
+  const aiReviewTasks = aiTasks.filter((task) => task.aiState === "review");
+  const aiFailedTasks = aiTasks.filter((task) => task.aiState === "failed");
+  const lines = projects.flatMap((project) => project.lines || []);
+  const sceneCount = lines.filter((line) => line.type === "scene" && line.text?.trim()).length;
+  const characterCount = new Set(lines.filter((line) => line.type === "character" && line.text?.trim()).map((line) => normalizeLineText(line.text, line.type))).size;
+  const wordCount = lines.reduce((count, line) => count + String(line.text || "").trim().split(/\s+/).filter(Boolean).length, 0);
+  const readinessChecks = [
+    { label: "Workspace has a script", done: projects.length > 0 },
+    { label: "Tasks are being tracked", done: tasks.length > 0 },
+    { label: "No failed AI tasks", done: aiFailedTasks.length === 0 },
+    { label: "Comments are resolved", done: unresolvedComments.length === 0 },
+    { label: "Story memory is started", done: storyMemoryItems.length > 0 }
+  ];
+  const readinessScore = Math.round((readinessChecks.filter((item) => item.done).length / readinessChecks.length) * 100);
+  const readinessTone = readinessScore >= 80 ? "strong" : readinessScore >= 55 ? "steady" : "warning";
+  const readinessLabel = readinessScore >= 80 ? "Strong" : readinessScore >= 55 ? "Steady" : "Needs attention";
+  const nextFocus = aiFailedTasks.length
+    ? "Resolve failed AI tasks first so the workspace can trust its delegated work."
+    : unresolvedComments.length
+      ? "Resolve the outstanding comments so collaborators have a cleaner review trail."
+      : !tasks.length
+        ? "Start assigning tasks so the workspace becomes trackable, not just writable."
+        : !storyMemoryItems.length
+          ? "Add story memory links to strengthen continuity and team context."
+          : "The workspace is in a healthy place. Focus on moving the next open task forward.";
+  const readinessMarkup = readinessChecks.map((item) => `
+    <div class="workspace-review-check" data-check-state="${item.done ? "done" : "todo"}">
+      <span class="workspace-review-check-dot" aria-hidden="true"></span>
+      <strong>${escapeHtml(item.label)}</strong>
+      <small>${item.done ? "Ready" : "Pending"}</small>
+    </div>
+  `).join("");
+  const sceneHeadings = lines
+    .filter((line) => line.type === "scene" && line.text?.trim())
+    .map((line) => line.text.trim());
+  const dialogueLines = lines.filter((line) => line.type === "dialogue" && line.text?.trim());
+  const actionLines = lines.filter((line) => line.type === "action" && line.text?.trim());
+  const dialogueWordCount = dialogueLines.reduce((count, line) => count + String(line.text || "").trim().split(/\s+/).filter(Boolean).length, 0);
+  const actionWordCount = actionLines.reduce((count, line) => count + String(line.text || "").trim().split(/\s+/).filter(Boolean).length, 0);
+  const averageDialogueLength = dialogueLines.length ? Math.round(dialogueWordCount / dialogueLines.length) : 0;
+  const averageActionLength = actionLines.length ? Math.round(actionWordCount / actionLines.length) : 0;
+  const characterFrequency = Array.from(
+    lines
+      .filter((line) => line.type === "character" && line.text?.trim())
+      .reduce((map, line) => {
+        const key = normalizeLineText(line.text, line.type);
+        map.set(key, (map.get(key) || 0) + 1);
+        return map;
+      }, new Map())
+      .entries()
+  )
+    .sort((a, b) => b[1] - a[1]);
+  const characterSet = new Set(characterFrequency.map(([name]) => name.toLowerCase()));
+  const stopWords = new Set(["the", "and", "with", "from", "into", "that", "this", "there", "their", "about", "after", "before", "while", "where", "when", "have", "has", "were", "been", "will", "would", "could", "should", "then", "them", "they", "your", "ours", "through", "across", "scene", "interior", "exterior"]);
+  const recurringTerms = Array.from(
+    lines
+      .filter((line) => ["action", "dialogue", "note", "text"].includes(line.type) && line.text?.trim())
+      .flatMap((line) => String(line.text || "").match(/[A-Za-z][A-Za-z'-]{3,}/g) || [])
+      .reduce((map, word) => {
+        const normalized = word.toLowerCase();
+        if (stopWords.has(normalized) || characterSet.has(normalized)) return map;
+        map.set(normalized, (map.get(normalized) || 0) + 1);
+        return map;
+      }, new Map())
+      .entries()
+  )
+    .filter(([, count]) => count > 1)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([term]) => term.replace(/^./, (value) => value.toUpperCase()));
+  const reviewInsightOptions = [
+    {
+      key: "scripts",
+      label: "Scripts",
+      value: String(projects.length),
+      meta: `${sceneCount} scenes · ${characterCount} characters`,
+      note: "How much writing structure is already active inside this workspace."
+    },
+    {
+      key: "tasks",
+      label: "Task load",
+      value: String(openTasks.length),
+      meta: `${completedTasks.length} completed · ${aiTasks.length} AI tasks`,
+      note: "The active load the team is carrying right now."
+    },
+    {
+      key: "queue",
+      label: "Review queue",
+      value: String(unresolvedComments.length + aiReviewTasks.length),
+      meta: `${unresolvedComments.length} comments · ${aiReviewTasks.length} AI reviews`,
+      note: "What still needs review before the workspace feels clear."
+    },
+    {
+      key: "checks",
+      label: "Readiness checks",
+      value: `${readinessChecks.filter((item) => item.done).length}/${readinessChecks.length}`,
+      meta: `${readinessLabel} at ${readinessScore}%`,
+      note: "A condensed view of the workspace trust checks.",
+      body: `<div class="workspace-review-check-list">${readinessMarkup}</div>`
+    }
+  ];
+  const reviewInsightDefault = reviewInsightOptions[0];
+  const reportOptions = [
+    { key: "", label: "Choose one" },
+    { key: "storyline-theme", label: "Storyline & Theme" },
+    { key: "writing-style", label: "Writing Style" },
+    { key: "scenery-development", label: "Scenery Development" },
+    { key: "character-list", label: "Character List" },
+    { key: "props-details", label: "Props & Details" },
+    { key: "continuity-focus", label: "Continuity Focus" }
+  ];
+  const reportDefault = reportOptions[0];
+  function buildReport(type, customPrompt = "") {
+    const leadCharacters = characterFrequency.slice(0, 5);
+    const firstScene = sceneHeadings[0] || "No opening scene detected yet.";
+    const middleScene = sceneHeadings[Math.floor(sceneHeadings.length / 2)] || firstScene;
+    const lastScene = sceneHeadings[sceneHeadings.length - 1] || middleScene;
+    const motifCopy = recurringTerms.length ? recurringTerms.join(", ") : "No strong recurring motifs detected yet";
+    const continuityWarnings = [
+      !sceneHeadings.length ? "Add scene headings so place and time are easier to track." : "",
+      !characterFrequency.length ? "Character cues are still too light to build a cast report." : "",
+      !storyMemoryItems.length ? "Story memory has not been built yet, so continuity support is still shallow." : "",
+      aiFailedTasks.length ? `${aiFailedTasks.length} failed AI task${aiFailedTasks.length === 1 ? "" : "s"} could leave review gaps.` : ""
+    ].filter(Boolean);
+    const reportMap = {
+      "storyline-theme": {
+        eyebrow: "AI report",
+        title: "Storyline & Theme Report",
+        description: "A script-led reading of the story path, key motifs, and the emotional direction that is showing up on the page.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The script currently opens in <strong>${escapeHtml(firstScene)}</strong>, moves through <strong>${escapeHtml(middleScene)}</strong>, and most recently lands on <strong>${escapeHtml(lastScene)}</strong>.</p>
+            <p>The recurring thematic signals showing up most often are <strong>${escapeHtml(motifCopy)}</strong>. This suggests the draft is leaning on those images, ideas, or objects to hold the story together.</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${sceneCount ? `${sceneCount} scene${sceneCount === 1 ? "" : "s"} already give the story a visible progression path.` : "Scene structure is still too light to read a full storyline arc."}</li>
+              <li>${dialogueLines.length ? `Dialogue is present in ${dialogueLines.length} line${dialogueLines.length === 1 ? "" : "s"}, which means voice is already carrying part of the theme.` : "Dialogue is still sparse, so the thematic voice is mainly coming from description."}</li>
+              <li>${nextFocus}</li>
+            </ul>
+          </div>
+        `
+      },
+      "writing-style": {
+        eyebrow: "AI report",
+        title: "Writing Style Report",
+        description: "A style reading based on how the draft balances action, dialogue, pace, and visual density.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The script currently carries <strong>${dialogueLines.length}</strong> dialogue line${dialogueLines.length === 1 ? "" : "s"} and <strong>${actionLines.length}</strong> action line${actionLines.length === 1 ? "" : "s"}, which points to a ${dialogueLines.length > actionLines.length ? "voice-forward" : "visually-forward"} writing style.</p>
+            <p>Average dialogue length is about <strong>${averageDialogueLength || 0}</strong> words per line, while action averages around <strong>${averageActionLength || 0}</strong> words. That gives a sense of whether scenes feel clipped, spacious, or dense.</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${averageDialogueLength > 18 ? "Dialogue reads relatively full, which may give the script a more literary or conversational rhythm." : "Dialogue reads relatively lean, which helps the script move quickly."}</li>
+              <li>${averageActionLength > 22 ? "Action paragraphs are carrying a lot of image detail right now." : "Action writing is staying fairly tight and screen-oriented."}</li>
+              <li>${recurringTerms.length ? `Repeated language like ${escapeHtml(recurringTerms.slice(0, 4).join(", "))} is shaping the page voice.` : "The draft does not yet show many repeated stylistic anchors."}</li>
+            </ul>
+          </div>
+        `
+      },
+      "scenery-development": {
+        eyebrow: "AI report",
+        title: "Scenery Development Report",
+        description: "A look at how place, setting, and visual geography are being built across the draft.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The draft currently has <strong>${sceneCount}</strong> scene heading${sceneCount === 1 ? "" : "s"} anchoring place and time. The first visible location is <strong>${escapeHtml(firstScene)}</strong>.</p>
+            <p>${sceneHeadings.length > 2 ? `The scenery appears to move from ${escapeHtml(firstScene)} through ${escapeHtml(middleScene)} and toward ${escapeHtml(lastScene)}.` : "There are still too few scene anchors to judge how the world expands over time."}</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${actionLines.length ? "Action lines are present, so the script already has visual material to deepen place and atmosphere." : "Action description is still too light to build a strong scenic read."}</li>
+              <li>${sceneHeadings.filter((heading) => /^EXT\./i.test(heading)).length ? `${sceneHeadings.filter((heading) => /^EXT\./i.test(heading)).length} exterior scene${sceneHeadings.filter((heading) => /^EXT\./i.test(heading)).length === 1 ? "" : "s"} help open the world visually.` : "Most current scenes appear to stay indoors or without explicit exterior anchors."}</li>
+              <li>${recurringTerms.length ? `Repeated details such as ${escapeHtml(recurringTerms.slice(0, 3).join(", "))} may be helping location identity.` : "Location-specific detail is still light, so scenery identity may need more concrete objects or textures."}</li>
+            </ul>
+          </div>
+        `
+      },
+      "character-list": {
+        eyebrow: "AI report",
+        title: "Character List Report",
+        description: "A cast-focused read showing who is most active on the page and how strongly they are surfacing.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The script currently exposes <strong>${characterCount}</strong> character${characterCount === 1 ? "" : "s"} through character cues.</p>
+            ${leadCharacters.length ? `
+              <div class="workspace-review-stat-grid">
+                ${leadCharacters.map(([name, count]) => `<div><span>${escapeHtml(name)}</span><strong>${count}</strong></div>`).join("")}
+              </div>
+            ` : `<p>No strong cast list can be built yet because the draft has not surfaced clear character cues.</p>`}
+            <ul class="workspace-review-bullet-list">
+              <li>${leadCharacters[0] ? `${escapeHtml(leadCharacters[0][0])} is currently the strongest visible presence on the page.` : "No clear lead character presence is visible yet."}</li>
+              <li>${leadCharacters.length > 3 ? "The script already has a multi-character footprint, which helps team reviews think about role balance." : "The current cast footprint is still small, so role expansion may still be ahead."}</li>
+              <li>${dialogueLines.length ? "Dialogue is available to help judge who owns the emotional space of scenes." : "Without dialogue, character identity is still being carried mostly by description."}</li>
+            </ul>
+          </div>
+        `
+      },
+      "props-details": {
+        eyebrow: "AI report",
+        title: "Props & Details Report",
+        description: "A heuristic pass over the draft to surface recurring objects, details, and practical story anchors.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>${recurringTerms.length ? `The draft is currently repeating details such as <strong>${escapeHtml(recurringTerms.join(", "))}</strong>. These may be props, motifs, or repeated environmental anchors.` : "The draft does not yet surface enough repeated concrete terms to build a strong prop report."}</p>
+            <p>${actionLines.length ? "Most of the prop and detail signal is coming from action writing, where physical world-building tends to appear first." : "Because action writing is light, the script is not yet surfacing many physical anchors."}</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${recurringTerms.length ? "These repeated terms are the best candidates for deliberate prop tracking or continuity checks." : "Try strengthening physical details in action lines if prop tracking matters for this draft."}</li>
+              <li>${storyMemoryItems.length ? "Story memory is available, so important props can be linked back into continuity once chosen." : "Story memory is not active yet, so recurring props are not being formally tracked."}</li>
+            </ul>
+          </div>
+        `
+      },
+      "continuity-focus": {
+        eyebrow: "AI report",
+        title: "Continuity Focus Report",
+        description: "A trust-oriented pass over the draft, aimed at what could break continuity or make collaboration harder.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The workspace is sitting at <strong>${readinessScore}%</strong> readiness, with the next focus being: <strong>${escapeHtml(nextFocus)}</strong></p>
+            <ul class="workspace-review-bullet-list">
+              ${continuityWarnings.length ? continuityWarnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("") : "<li>No major continuity warnings are visible in the current draft structure.</li>"}
+            </ul>
+            <p>${unresolvedComments.length ? `${unresolvedComments.length} unresolved comment${unresolvedComments.length === 1 ? "" : "s"} may still be carrying decisions that are not yet reflected in the script.` : "Comment decisions look clear right now."}</p>
+          </div>
+        `
+      }
+    };
+    const promptLower = customPrompt.trim().toLowerCase();
+    const keywordMatches = [
+      ["theme", "storyline-theme"],
+      ["story", "storyline-theme"],
+      ["style", "writing-style"],
+      ["voice", "writing-style"],
+      ["scene", "scenery-development"],
+      ["scenery", "scenery-development"],
+      ["setting", "scenery-development"],
+      ["character", "character-list"],
+      ["cast", "character-list"],
+      ["prop", "props-details"],
+      ["detail", "props-details"],
+      ["continuity", "continuity-focus"]
+    ];
+    const matchedKey = keywordMatches.find(([keyword]) => promptLower.includes(keyword))?.[1];
+    if (customPrompt.trim() && !type && matchedKey && reportMap[matchedKey]) {
+      const matched = reportMap[matchedKey];
+      return {
+        ...matched,
+        eyebrow: "Custom report",
+        description: `Prompt: ${customPrompt.trim()}`
+      };
+    }
+    if (customPrompt.trim() && !type) {
+      return {
+        eyebrow: "Custom report",
+        title: "Prompt-guided Report",
+        description: `Prompt: ${customPrompt.trim()}`,
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>This report is grounded in the current script content: <strong>${wordCount.toLocaleString()}</strong> words, <strong>${sceneCount}</strong> scene${sceneCount === 1 ? "" : "s"}, and <strong>${characterCount}</strong> detected character${characterCount === 1 ? "" : "s"}.</p>
+            <p>The strongest currently visible anchors are <strong>${escapeHtml(motifCopy)}</strong>, with the draft opening in <strong>${escapeHtml(firstScene)}</strong> and currently leading toward <strong>${escapeHtml(lastScene)}</strong>.</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${nextFocus}</li>
+              <li>${dialogueLines.length ? `Dialogue-heavy material is available for a deeper prompt follow-up.` : "Dialogue signal is still light, so interpretation will lean more on description and structure."}</li>
+              <li>${storyMemoryItems.length ? "Story memory exists and can support a more focused continuity or theme pass." : "Story memory is not yet populated, so deeper relationship tracking is still limited."}</li>
+            </ul>
+          </div>
+        `
+      };
+    }
+    if (!type) {
+      return {
+        eyebrow: "Report guide",
+        title: "Choose a report or write a prompt",
+        description: "Pick a report type, write your own prompt, or combine both to shape the report from the current script.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>This report center reads the writer's current draft, including scenes, dialogue, characters, and recurring details already on the page.</p>
+            <ul class="workspace-review-bullet-list">
+              <li>Choose a report type for a guided reading.</li>
+              <li>Leave the selector on <strong>Choose one</strong> if you want the prompt alone to drive the report.</li>
+              <li>Add a custom prompt after selecting a report type if you want a more specific angle on that report.</li>
+            </ul>
+          </div>
+        `
+      };
+    }
+    const selected = reportMap[type] || reportMap["storyline-theme"];
+    if (customPrompt.trim()) {
+      return {
+        ...selected,
+        description: `${selected.description} Focus prompt: ${customPrompt.trim()}`
+      };
+    }
+    return selected;
+  }
+  const container = document.createElement("div");
+  container.className = "workspace-review-center";
+  container.innerHTML = `
+    <div class="workspace-review-center-head">
+      <div class="workspace-review-center-head-copy">
+        <strong>${escapeHtml(workspaceProject.workspace?.name || workspaceProject.title || "Workspace")}</strong>
+        <span>Review the health of the workspace, see what is blocked, and keep the team pointed at the next useful move.</span>
+      </div>
+      <div class="workspace-review-center-head-actions">
+      </div>
+    </div>
+    <section class="workspace-review-overview">
+      <div class="workspace-review-hero" data-review-tone="${readinessTone}">
+        <span class="workspace-review-hero-label">Readiness</span>
+        <strong>${readinessScore}%</strong>
+        <p>${readinessLabel} workspace momentum across scripts, tasks, and collaboration checks.</p>
+      </div>
+      <section class="workspace-review-insight-panel">
+        <div class="workspace-review-insight-head">
+          <span>Workspace insight</span>
+          <select class="comment-filter-select workspace-review-insight-select" data-review-insight-select aria-label="Choose workspace insight">
+            ${reviewInsightOptions.map((item) => `<option value="${escapeHtml(item.key)}"${item.key === reviewInsightDefault.key ? " selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+          </select>
+        </div>
+        <article class="workspace-review-insight-display" data-review-insight-display>
+          <span>${escapeHtml(reviewInsightDefault.label)}</span>
+          <strong>${escapeHtml(reviewInsightDefault.value)}</strong>
+          <small>${escapeHtml(reviewInsightDefault.meta)}</small>
+          <p>${escapeHtml(reviewInsightDefault.note)}</p>
+        </article>
+      </section>
+    </section>
+    <section class="workspace-review-report-builder">
+      <div class="workspace-review-report-controls">
+        <label class="workspace-review-report-control">
+          <span>Report type</span>
+          <select class="comment-filter-select workspace-review-report-select" data-review-report-select aria-label="Choose report type">
+            ${reportOptions.map((item) => `<option value="${escapeHtml(item.key)}"${item.key === reportDefault.key ? " selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+          </select>
+        </label>
+        <label class="workspace-review-report-prompt">
+          <span>Custom report prompt</span>
+          <textarea class="collab-textarea workspace-review-report-prompt-input" data-review-report-prompt placeholder="Optional: ask for a more specific angle, like emotional arc, scenery clarity, or dialogue sharpness."></textarea>
+        </label>
+        <button class="primary-button btn-sm workspace-review-run-report" type="button" data-review-run-report>Report</button>
+      </div>
+      <p>Reports are built from what the writer has already written in the current script, not from generic templates.</p>
+    </section>
+    <section class="workspace-review-report-shell">
+      <div class="workspace-review-report-head" data-review-report-head>
+        <span>Report guide</span>
+        <strong>Choose a report or write a prompt</strong>
+        <p>Pick a report type, write your own prompt, or combine both to shape the report from the current script.</p>
+      </div>
+      <article class="workspace-review-report-output" data-review-report-output>
+        ${buildReport(reportDefault.key).body}
+      </article>
+    </section>
+  `;
+  const reviewInsightSelect = container.querySelector("[data-review-insight-select]");
+  const reviewInsightDisplay = container.querySelector("[data-review-insight-display]");
+  const renderReviewInsight = (key) => {
+    const insight = reviewInsightOptions.find((item) => item.key === key) || reviewInsightDefault;
+    if (!reviewInsightDisplay) return;
+    reviewInsightDisplay.innerHTML = `
+      <span>${escapeHtml(insight.label)}</span>
+      <strong>${escapeHtml(insight.value)}</strong>
+      <small>${escapeHtml(insight.meta)}</small>
+      <p>${escapeHtml(insight.note)}</p>
+      ${insight.body || ""}
+    `;
+  };
+  reviewInsightSelect?.addEventListener("change", () => renderReviewInsight(reviewInsightSelect.value));
+  const reportSelect = container.querySelector("[data-review-report-select]");
+  const reportPrompt = container.querySelector("[data-review-report-prompt]");
+  const reportHead = container.querySelector("[data-review-report-head]");
+  const reportOutput = container.querySelector("[data-review-report-output]");
+  const renderWorkspaceReport = () => {
+    const report = buildReport(reportSelect?.value || reportDefault.key, reportPrompt?.value || "");
+    if (reportHead) {
+      reportHead.innerHTML = `
+        <span>${escapeHtml(report.eyebrow)}</span>
+        <strong>${escapeHtml(report.title)}</strong>
+        <p>${escapeHtml(report.description)}</p>
+      `;
+    }
+    if (reportOutput) {
+      reportOutput.innerHTML = report.body;
+    }
+  };
+  container.querySelector("[data-review-run-report]")?.addEventListener("click", renderWorkspaceReport);
+  showModal({
+    title: "Review Center",
+    message: container,
+    showConfirm: false,
+    cancelLabel: "Close",
+    contentClass: "modal-content-review-center"
+  });
+}
+
+function getWorkspaceNotifications(workspaceId = state.currentWorkspaceId) {
+  return [...(getWorkspaceLeadProject(workspaceId)?.workspace?.notifications || [])]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-function createEditorNotification({ editorId = state.currentEditorId, task = null, category = "update", title = "", message = "", actor = "" } = {}) {
-  if (!editorId || !title) return;
-  updateEditorAcrossProjects(editorId, (editor) => ({
-    ...editor,
+function createWorkspaceNotification({ workspaceId = state.currentWorkspaceId, task = null, category = "update", title = "", message = "", actor = "" } = {}) {
+  if (!workspaceId || !title) return;
+  updateWorkspaceAcrossProjects(workspaceId, (workspace) => ({
+    ...workspace,
     notifications: [
       {
         id: uid("notif"),
@@ -428,31 +1510,31 @@ function createEditorNotification({ editorId = state.currentEditorId, task = nul
         createdAt: new Date().toISOString(),
         read: false
       },
-      ...(editor.notifications || [])
+      ...(workspace.notifications || [])
     ].slice(0, 40)
   }));
 }
 
-function markEditorNotificationRead(notificationId, read = true) {
-  if (!state.currentEditorId || !notificationId) return;
-  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
-    ...editor,
-    notifications: (editor.notifications || []).map((notification) => notification.id === notificationId
+function markWorkspaceNotificationRead(notificationId, read = true) {
+  if (!state.currentWorkspaceId || !notificationId) return;
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    notifications: (workspace.notifications || []).map((notification) => notification.id === notificationId
       ? { ...notification, read }
       : notification)
   }));
   persistProjects(true, { syncInputs: false });
-  renderEditorView();
+  renderWorkspaceView();
 }
 
-function markAllEditorNotificationsRead() {
-  if (!state.currentEditorId) return;
-  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
-    ...editor,
-    notifications: (editor.notifications || []).map((notification) => ({ ...notification, read: true }))
+function markAllWorkspaceNotificationsRead() {
+  if (!state.currentWorkspaceId) return;
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    notifications: (workspace.notifications || []).map((notification) => ({ ...notification, read: true }))
   }));
   persistProjects(true, { syncInputs: false });
-  renderEditorView();
+  renderWorkspaceView();
 }
 
 function resolveAiTaskStart(choice, manualValue = "") {
@@ -496,9 +1578,9 @@ function scheduleAiTaskRun(task) {
   aiTaskTimers.set(task.id, timer);
 }
 
-function syncAiTaskSchedules(editorId = state.currentEditorId) {
-  const root = getEditorRootProject(editorId);
-  const tasks = root?.editor?.tasks || [];
+function syncAiTaskSchedules(workspaceId = state.currentWorkspaceId) {
+  const root = getWorkspaceRootProject(workspaceId);
+  const tasks = root?.workspace?.tasks || [];
   const validIds = new Set(tasks.map((task) => task.id));
   [...aiTaskTimers.keys()].forEach((taskId) => {
     if (!validIds.has(taskId)) clearAiTaskTimer(taskId);
@@ -610,38 +1692,47 @@ function insertAiTaskResultIntoProjectWithMode(task, resultText, mode = "insert-
   return true;
 }
 
-function addEditorTaskFromDashboard() {
-  const editorProject = getEditorRootProject(state.currentEditorId);
-  if (!editorProject || !refs.editorDashboard) return;
-  const templateSelect = refs.editorDashboard.querySelector('[data-editor-task-template]');
-  const titleInput = refs.editorDashboard.querySelector('[data-editor-task-title]');
-  const descriptionInput = refs.editorDashboard.querySelector('[data-editor-task-description]');
-  const projectSelect = refs.editorDashboard.querySelector('[data-editor-task-project]');
-  const sceneSelect = refs.editorDashboard.querySelector('[data-editor-task-scene]');
-  const lineSelect = refs.editorDashboard.querySelector('[data-editor-task-line]');
-  const assigneeSelect = refs.editorDashboard.querySelector('[data-editor-task-assignee]');
-  const referenceInput = refs.editorDashboard.querySelector('[data-editor-task-reference]');
-  const statusSelect = refs.editorDashboard.querySelector('[data-editor-task-status-new]');
-  const prioritySelect = refs.editorDashboard.querySelector('[data-editor-task-priority]');
-  const dueInput = refs.editorDashboard.querySelector('[data-editor-task-due]');
-  const handoffInput = refs.editorDashboard.querySelector('[data-editor-task-handoff]');
-  const memorySelect = refs.editorDashboard.querySelector('[data-editor-task-memory]');
-  const aiStartSelect = refs.editorDashboard.querySelector('[data-editor-task-ai-start]');
-  const aiStartManual = refs.editorDashboard.querySelector('[data-editor-task-ai-start-manual]');
+function getWorkspaceTaskFormContainer(trigger = null) {
+  return trigger?.closest?.("#workspaceDashboard, #homeWorkspaceDashboard")
+    || (!refs.workspaceView?.hidden ? refs.workspaceDashboard : refs.homeWorkspaceDashboard)
+    || refs.workspaceDashboard;
+}
+
+function addWorkspaceTaskFromDashboard(trigger = null) {
+  const workspaceProject = getWorkspaceLeadProject();
+  const formContainer = getWorkspaceTaskFormContainer(trigger);
+  if (!workspaceProject || !formContainer) return;
+  const templateSelect = formContainer.querySelector('[data-workspace-task-template]');
+  const titleInput = formContainer.querySelector('[data-workspace-task-title]');
+  const descriptionInput = formContainer.querySelector('[data-workspace-task-description]');
+  const projectSelect = formContainer.querySelector('[data-workspace-task-project]');
+  const sceneSelect = formContainer.querySelector('[data-workspace-task-scene]');
+  const lineSelect = formContainer.querySelector('[data-workspace-task-line]');
+  const assigneeSelect = formContainer.querySelector('[data-workspace-task-assignee]');
+  const referenceInput = formContainer.querySelector('[data-workspace-task-reference]');
+  const statusSelect = formContainer.querySelector('[data-workspace-task-status-new]');
+  const prioritySelect = formContainer.querySelector('[data-workspace-task-priority]');
+  const dueInput = formContainer.querySelector('[data-workspace-task-due]');
+  const handoffInput = formContainer.querySelector('[data-workspace-task-handoff]');
+  const memorySelect = formContainer.querySelector('[data-workspace-task-memory]');
+  const aiStartSelect = formContainer.querySelector('[data-workspace-task-ai-start]');
+  const aiStartManual = formContainer.querySelector('[data-workspace-task-ai-start-manual]');
   const templateKey = templateSelect?.value || "custom";
+  const isStoryMemoryTask = templateKey === "story-memory";
   const title = titleInput?.value?.trim();
   if (!title) {
-    customAlert("Enter a task title first.", "Editor Tasks");
+    customAlert("Enter a task title first.", "Workspace Tasks");
     return;
   }
   const projectId = projectSelect?.value || "";
-  const sceneId = sceneSelect?.value || "";
-  const lineId = lineSelect?.value || "";
-  const sceneChoice = getEditorTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null;
-  const lineChoice = getEditorTaskLineChoices().find((line) => line.lineId === lineId) || null;
+  const sceneId = isStoryMemoryTask ? "" : (sceneSelect?.value || "");
+  const lineId = isStoryMemoryTask ? "" : (lineSelect?.value || "");
+  const sceneChoice = isStoryMemoryTask ? null : (getWorkspaceTaskSceneChoices().find((scene) => scene.sceneId === sceneId) || null);
+  const lineChoice = isStoryMemoryTask ? null : (getWorkspaceTaskLineChoices().find((line) => line.lineId === lineId) || null);
   const assignedTo = assigneeSelect?.value || "";
-  const assignee = getEditorTaskAssignees(editorProject).find((entry) => entry.id === assignedTo);
-  const memoryChoice = getEditorStoryMemoryChoices().find((entry) => entry.id === (memorySelect?.value || "")) || null;
+  const assignee = getWorkspaceTaskAssignees(workspaceProject).find((entry) => entry.id === assignedTo);
+  const selectedMemoryId = isStoryMemoryTask ? (sceneSelect?.value || "") : (memorySelect?.value || "");
+  const memoryChoice = getWorkspaceStoryMemoryChoices().find((entry) => entry.id === selectedMemoryId) || null;
   const aiStartChoice = aiStartSelect?.value || "now";
   const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart(aiStartChoice, aiStartManual?.value || "") : "";
   const initialAiState = assignee?.assigneeType === "system"
@@ -659,7 +1750,7 @@ function addEditorTaskFromDashboard() {
     assignedLabel: assignee?.label || "Unassigned",
     assigneeType: assignee?.assigneeType || "human",
     handoffNote: handoffInput?.value?.trim() || "",
-    projectId: lineChoice?.projectId || sceneChoice?.projectId || projectId,
+    projectId: memoryChoice?.projectId || lineChoice?.projectId || sceneChoice?.projectId || projectId,
     reference: referenceInput?.value?.trim() || "",
     sceneId: lineChoice?.sceneId || sceneChoice?.sceneId || "",
     sceneLabel: lineChoice?.sceneLabel || sceneChoice?.label || "",
@@ -678,152 +1769,219 @@ function addEditorTaskFromDashboard() {
     aiError: "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+    createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   };
 
-  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
-    ...editor,
-    tasks: [...(editor.tasks || []), nextTask]
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    tasks: [...(workspace.tasks || []), nextTask]
   }));
-  createEditorNotification({
+  createWorkspaceNotification({
     task: nextTask,
     category: assignee?.assigneeType === "system" ? "ai" : "task",
     title: assignee?.assigneeType === "system" ? "AI task queued" : "New task created",
-    message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the editor"}.`}`,
-    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+    message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the workspace"}.`}`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
-  Telemetry.track('task_created', { assigneeType: nextTask.assigneeType, templateKey: nextTask.templateKey });
+  clearWorkspaceTaskDraft();
+  state.workspaceRefreshPending = false;
+  state.lastCreatedWorkspaceTaskId = nextTask.id;
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
-  renderEditorView();
+  if (!refs.workspaceView?.hidden) {
+    renderWorkspaceView();
+  } else {
+    renderHome();
+  }
+  window.requestAnimationFrame(() => {
+    const card = document.querySelector(`[data-workspace-task-card-id="${CSS.escape(nextTask.id)}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
   showToast(
     assignee?.assigneeType === "system"
       ? `AI task queued for ${nextTask.assignedLabel}.`
-      : `${nextTask.title} assigned to ${nextTask.assignedLabel || "the editor"}.`,
+      : `${nextTask.title} assigned to ${nextTask.assignedLabel || "the workspace"}.`,
     "success"
   );
+}
+
+export async function createWorkspaceTaskFromEditorLine(targetBlock = null) {
+  const project = getCurrentProject();
+  const block = targetBlock?.closest?.(".script-block") || getActiveEditableBlock();
+  const lineId = block?.dataset?.id || state.activeBlockId || "";
+  const line = lineId ? getLine(lineId) : null;
+  const workspaceId = project?.workspace?.id || "";
+  const workspaceProject = getWorkspaceLeadProject(workspaceId);
+  if (!project || !line || !workspaceId || !workspaceProject) {
+    await customAlert("Open a workspace script first, then right-click a line to create a task.", "Workspace Tasks");
+    return;
+  }
+
+  const sceneId = line.type === "scene" ? line.id : getOwningSceneId(line.id);
+  const sceneLine = sceneId ? project.lines.find((entry) => entry.id === sceneId) : null;
+  const assignees = getWorkspaceTaskAssignees(workspaceProject);
+  const container = document.createElement("div");
+  container.className = "line-task-form";
+  container.innerHTML = `
+    <label class="workspace-task-field line-task-title-field">
+      <span>Task</span>
+      <input id="lineTaskTitle" class="modal-input" type="text" value="Review this line">
+    </label>
+    <div class="line-task-grid">
+      <label class="workspace-task-field">
+        <span>Assign to</span>
+        <select id="lineTaskAssignee" class="comment-filter-select">
+          ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="workspace-task-field">
+        <span>Priority</span>
+        <select id="lineTaskPriority" class="comment-filter-select">
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+      <label class="workspace-task-field">
+        <span>Template</span>
+        <select id="lineTaskTemplate" class="comment-filter-select">
+          ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.label)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <textarea id="lineTaskDescription" class="collab-textarea line-task-description" placeholder="What should happen on this line?">${escapeHtml(formatLineText(line.text, line.type).slice(0, 180))}</textarea>
+  `;
+
+  const confirmed = await showModal({
+    title: "Create Task From Line",
+    message: container,
+    confirmLabel: "Create Task",
+    cancelLabel: "Cancel",
+    contentClass: "modal-content-line-task"
+  });
+  if (!confirmed) return;
+
+  const title = container.querySelector("#lineTaskTitle")?.value?.trim();
+  if (!title) {
+    await customAlert("Enter a task title first.", "Workspace Tasks");
+    return;
+  }
+  const assignedTo = container.querySelector("#lineTaskAssignee")?.value || "";
+  const assignee = assignees.find((entry) => entry.id === assignedTo) || assignees[0];
+  const templateKey = container.querySelector("#lineTaskTemplate")?.value || "custom";
+  const priority = container.querySelector("#lineTaskPriority")?.value || "normal";
+  const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart("now", "") : "";
+  const nextTask = {
+    id: uid("task"),
+    templateKey,
+    priority,
+    title,
+    description: container.querySelector("#lineTaskDescription")?.value?.trim() || "",
+    status: "todo",
+    dueAt: "",
+    assignedTo: assignee?.id || "",
+    assignedLabel: assignee?.label || "Unassigned",
+    assigneeType: assignee?.assigneeType || "human",
+    handoffNote: "",
+    projectId: project.id,
+    reference: `${project.title} - ${formatLineText(line.text, line.type).slice(0, 56)}`,
+    sceneId: sceneId || "",
+    sceneLabel: sceneLine?.text?.trim() || "",
+    lineId: line.id,
+    lineLabel: formatLineText(line.text, line.type).slice(0, 80),
+    memoryLinkType: "",
+    memoryLinkId: "",
+    memoryLinkName: "",
+    memoryProjectId: "",
+    comments: [],
+    aiState: assignee?.assigneeType === "system" ? (aiStartAt ? "scheduled" : "ready") : "idle",
+    aiStartAt,
+    aiLastRunAt: "",
+    aiResultText: "",
+    aiResultSummary: "",
+    aiError: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdByName: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  };
+
+  updateWorkspaceAcrossProjects(workspaceId, (workspace) => ({
+    ...workspace,
+    tasks: [...(workspace.tasks || []), nextTask]
+  }));
+  createWorkspaceNotification({
+    workspaceId,
+    task: nextTask,
+    category: assignee?.assigneeType === "system" ? "ai" : "task",
+    title: assignee?.assigneeType === "system" ? "AI task queued" : "New task created",
+    message: `${nextTask.title} was assigned to ${nextTask.assignedLabel || "the workspace"}.`,
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+  });
+  state.lastCreatedWorkspaceTaskId = nextTask.id;
+  persistProjects(true, { syncInputs: false });
+  scheduleAiTaskRun(nextTask);
+  renderStudio();
+  focusBlock(line.id);
+  showToast(`${nextTask.title} linked to this line.`, "success");
 }
 
 function updateWorkspaceTask(taskId, patch) {
   if (!state.currentWorkspaceId || !taskId) return;
   const previousTask = getWorkspaceTaskById(taskId);
-  const currentUid = auth.currentUser?.uid || "";
-  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member";
-
-  // When a non-assignee marks a human task "done", route to pending-confirmation instead.
-  const effectivePatch = { ...patch };
-  if (
-    patch.status === "done" &&
-    !patch._confirmed &&
-    previousTask?.assigneeType !== "system" &&
-    previousTask?.assignedTo &&
-    previousTask.assignedTo !== currentUid
-  ) {
-    effectivePatch.status = "pending-confirmation";
-    effectivePatch.pendingConfirmBy = previousTask.assignedTo;
-    effectivePatch.pendingConfirmRequestedBy = currentUid;
-    effectivePatch.pendingConfirmRequestedByLabel = currentLabel;
-  }
-  delete effectivePatch._confirmed;
-
   updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
     ...workspace,
     tasks: (workspace.tasks || []).map((task) => task.id === taskId
-      ? { ...task, ...effectivePatch, updatedAt: new Date().toISOString() }
+      ? { ...task, ...patch, updatedAt: new Date().toISOString() }
       : task)
   }));
   persistProjects(true, { syncInputs: false });
-  const task = getEditorTaskById(taskId);
+  const task = getWorkspaceTaskById(taskId);
   if (task && previousTask) {
-    if (effectivePatch.status && effectivePatch.status !== previousTask.status) {
-      if (effectivePatch.status === "pending-confirmation") {
-        createWorkspaceNotification({
-          task,
-          category: "task",
-          title: "Task awaiting your confirmation",
-          message: `${task.title} was marked done by ${currentLabel}. Please confirm to close it.`,
-          actor: currentLabel
-        });
-      } else {
-        createWorkspaceNotification({
-          task,
-          category: effectivePatch.status === "done" ? "completed" : "task",
-          title: effectivePatch.status === "done" ? "Task completed" : "Task status updated",
-          message: `${task.title} is now ${effectivePatch.status === "in-progress" ? "in progress" : effectivePatch.status.replace(/-/g, " ")}.`,
-          actor: currentLabel
-        });
-      }
+    if (patch.status && patch.status !== previousTask.status) {
+      showToast(`${task.title} moved to ${patch.status === "in-progress" ? "In Progress" : patch.status === "done" ? "Done" : "To Do"}.`, "success");
+      createWorkspaceNotification({
+        task,
+        category: patch.status === "done" ? "completed" : "task",
+        title: patch.status === "done" ? "Task completed" : "Task status updated",
+        message: `${task.title} is now ${patch.status === "in-progress" ? "in progress" : patch.status.replace("-", " ")}.`,
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
+      });
     }
     if (patch.assignedTo && patch.assignedTo !== previousTask.assignedTo) {
       showToast(`${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`, "success");
-      createEditorNotification({
+      createWorkspaceNotification({
         task,
         category: task.assigneeType === "system" ? "ai" : "task",
         title: "Task reassigned",
         message: `${task.title} is now assigned to ${task.assignedLabel || "a teammate"}.`,
-        actor: currentLabel
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
       });
     }
     if (patch.dueAt && patch.dueAt !== previousTask.dueAt) {
       showToast(`${task.title} due date updated.`, "success");
-      createEditorNotification({
+      createWorkspaceNotification({
         task,
         category: "task",
         title: "Task due date updated",
         message: `${task.title} is due ${new Date(task.dueAt).toLocaleString()}.`,
-        actor: currentLabel
+        actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
       });
     }
   }
   if (task) scheduleAiTaskRun(task);
-  renderEditorView();
-}
-
-function confirmCompleteTask(taskId) {
-  const task = getWorkspaceTaskById(taskId);
-  if (!task) return;
-  const currentUid = auth.currentUser?.uid || "";
-  if (task.assignedTo !== currentUid && task.pendingConfirmBy !== currentUid) {
-    showToast("Only the assigned member can confirm task completion.", "warning");
-    return;
-  }
-  const currentLabel = auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member";
-  const requesterLabel = task.pendingConfirmRequestedByLabel || "a teammate";
-  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
-    ...workspace,
-    tasks: (workspace.tasks || []).map((t) => t.id === taskId
-      ? {
-          ...t,
-          status: "done",
-          pendingConfirmBy: "",
-          pendingConfirmRequestedBy: "",
-          pendingConfirmRequestedByLabel: "",
-          updatedAt: new Date().toISOString()
-        }
-      : t)
-  }));
-  persistProjects(true, { syncInputs: false });
-  const updatedTask = getWorkspaceTaskById(taskId);
-  createWorkspaceNotification({
-    task: updatedTask || task,
-    category: "completed",
-    title: "Task confirmed complete",
-    message: `${task.title} was confirmed done by ${currentLabel} (requested by ${requesterLabel}).`,
-    actor: currentLabel
-  });
-  Telemetry.track('task_completed', { taskId, assigneeType: task.assigneeType });
   renderWorkspaceView();
 }
 
 async function runAiTask(taskId) {
-  const task = getEditorTaskById(taskId);
+  const task = getWorkspaceTaskById(taskId);
   if (!task || task.assigneeType !== "system" || task.aiState === "running") return;
   const taskToastId = `ai-task-${taskId}`;
   const project = state.projects.find((item) => item.id === task.projectId) || getCurrentProject();
   if (!project) {
-    updateEditorTask(taskId, { aiState: "failed", aiError: "The linked project could not be found." });
+    updateWorkspaceTask(taskId, { aiState: "failed", aiError: "The linked project could not be found." });
     updateToast(taskToastId, "AI task could not find its linked project.", "error", { duration: 4200 });
-    createEditorNotification({
+    createWorkspaceNotification({
       task,
       category: "ai",
       title: "AI task needs relinking",
@@ -832,7 +1990,7 @@ async function runAiTask(taskId) {
     });
     return;
   }
-  updateEditorTask(taskId, {
+  updateWorkspaceTask(taskId, {
     aiState: "running",
     aiError: "",
     status: task.status === "done" ? "done" : "in-progress",
@@ -840,18 +1998,18 @@ async function runAiTask(taskId) {
   });
   updateToast(taskToastId, `${task.title} is processing...`, "loading", { duration: 0 });
   try {
-    const resultText = String(await AI.runEditorTaskAssistant(task, project) || "").trim();
+    const resultText = String(await AI.runWorkspaceTaskAssistant(task, project) || "").trim();
     if (!resultText) {
       throw new Error("AI returned no usable result.");
     }
-    updateEditorTask(taskId, {
+    updateWorkspaceTask(taskId, {
       aiState: "review",
       aiResultText: resultText,
       aiResultSummary: task.title,
       aiError: ""
     });
     updateToast(taskToastId, "AI task finished.", "success");
-    createEditorNotification({
+    createWorkspaceNotification({
       task: { ...task, aiResultText: resultText },
       category: "review",
       title: "AI result ready for review",
@@ -859,12 +2017,12 @@ async function runAiTask(taskId) {
       actor: "@AIassist"
     });
   } catch (error) {
-    updateEditorTask(taskId, {
+    updateWorkspaceTask(taskId, {
       aiState: "failed",
       aiError: error instanceof Error ? error.message : "AI task failed."
     });
     updateToast(taskToastId, "AI task failed.", "error", { duration: 4200 });
-    createEditorNotification({
+    createWorkspaceNotification({
       task,
       category: "ai",
       title: "AI task failed",
@@ -875,34 +2033,34 @@ async function runAiTask(taskId) {
 }
 
 async function reviewAiTaskResult(taskId) {
-  const task = getEditorTaskById(taskId);
+  const task = getWorkspaceTaskById(taskId);
   if (!task?.aiResultText) return;
   const context = getAiTaskTargetContext(task);
   const container = document.createElement("div");
-  container.className = "editor-ai-review";
+  container.className = "workspace-ai-review";
   container.innerHTML = `
-    <div class="editor-ai-review-head">
-      <span class="editor-task-tag">AI Suggestion</span>
-      <span class="editor-task-tag">${escapeHtml(task.assignedLabel || "@AIassist")}</span>
-      <span class="editor-task-tag editor-task-tag-priority editor-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
+    <div class="workspace-ai-review-head">
+      <span class="workspace-task-tag">AI Suggestion</span>
+      <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "@AIassist")}</span>
+      <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
     </div>
-    <div class="editor-ai-review-summary">
+    <div class="workspace-ai-review-summary">
       <p class="modal-copy">${escapeHtml(task.title)}</p>
-      <p class="editor-ai-review-caption">${escapeHtml(context.projectTitle)} · ${escapeHtml(context.targetLabel)}</p>
+      <p class="workspace-ai-review-caption">${escapeHtml(context.projectTitle)} · ${escapeHtml(context.targetLabel)}</p>
     </div>
-    <div class="editor-ai-review-grid">
-      <div class="editor-ai-review-panel">
-        <span class="editor-ai-review-label">Current Script Context</span>
-        <div class="editor-ai-review-body">${escapeHtml(context.originalText).replace(/\n/g, "<br>")}</div>
+    <div class="workspace-ai-review-grid">
+      <div class="workspace-ai-review-panel">
+        <span class="workspace-ai-review-label">Current Script Context</span>
+        <div class="workspace-ai-review-body">${escapeHtml(context.originalText).replace(/\n/g, "<br>")}</div>
       </div>
-      <div class="editor-ai-review-panel">
-        <span class="editor-ai-review-label">AI Suggestion</span>
-        <div class="editor-ai-review-body">${escapeHtml(task.aiResultText).replace(/\n/g, "<br>")}</div>
+      <div class="workspace-ai-review-panel">
+        <span class="workspace-ai-review-label">AI Suggestion</span>
+        <div class="workspace-ai-review-body">${escapeHtml(task.aiResultText).replace(/\n/g, "<br>")}</div>
       </div>
     </div>
-    <label class="editor-ai-apply-row">
-      <span class="editor-ai-review-label">Apply Result As</span>
-      <select class="comment-filter-select" id="editorAiApplyMode">
+    <label class="workspace-ai-apply-row">
+      <span class="workspace-ai-review-label">Apply Result As</span>
+      <select class="comment-filter-select" id="workspaceAiApplyMode">
         <option value="insert-below" ${(task.lastApplyMode || "insert-below") === "insert-below" ? "selected" : ""}>Insert below target</option>
         <option value="replace-target" ${task.lastApplyMode === "replace-target" ? "selected" : ""}>Replace target</option>
         <option value="append-scene" ${task.lastApplyMode === "append-scene" ? "selected" : ""}>Append to scene</option>
@@ -914,15 +2072,15 @@ async function reviewAiTaskResult(taskId) {
     message: container,
     confirmLabel: "Apply",
     cancelLabel: "Close",
-    contentClass: "editor-ai-review-modal"
+    contentClass: "workspace-ai-review-modal"
   });
   if (!shouldApply) return;
-  const applyMode = container.querySelector("#editorAiApplyMode")?.value || task.lastApplyMode || "insert-below";
+  const applyMode = container.querySelector("#workspaceAiApplyMode")?.value || task.lastApplyMode || "insert-below";
   await applyAiTaskResult(taskId, applyMode);
 }
 
 async function applyAiTaskResult(taskId, applyMode = null) {
-  const task = getEditorTaskById(taskId);
+  const task = getWorkspaceTaskById(taskId);
   if (!task?.aiResultText) return;
   const finalMode = applyMode || task.lastApplyMode || "insert-below";
   const applied = insertAiTaskResultIntoProjectWithMode(task, task.aiResultText, finalMode);
@@ -930,50 +2088,50 @@ async function applyAiTaskResult(taskId, applyMode = null) {
     await customAlert("The AI result could not be inserted into the project.", "AI Task");
     return;
   }
-  updateEditorTask(taskId, { aiState: "applied", status: "done", lastApplyMode: finalMode });
-  createEditorNotification({
+  updateWorkspaceTask(taskId, { aiState: "applied", status: "done", lastApplyMode: finalMode });
+  createWorkspaceNotification({
     task,
     category: "completed",
     title: "AI result applied",
     message: `${task.title} was applied to the script with ${finalMode.replace("-", " ")} mode.`,
-    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
   openProject(task.projectId, { focusLineId: task.lineId || task.sceneId || "" });
   showToast("AI result applied to the script.", "success");
 }
 
 function dismissAiTaskResult(taskId) {
-  const task = getEditorTaskById(taskId);
+  const task = getWorkspaceTaskById(taskId);
   if (!task) return;
-  updateEditorTask(taskId, { aiState: "dismissed" });
-  createEditorNotification({
+  updateWorkspaceTask(taskId, { aiState: "dismissed" });
+  createWorkspaceNotification({
     task,
     category: "review",
     title: "AI result dismissed",
     message: `${task.title} was reviewed and dismissed.`,
-    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
   showToast("AI result dismissed.", "success");
 }
 
-async function editEditorTask(taskId) {
-  const editorProject = getEditorRootProject(state.currentEditorId);
-  const task = getEditorTaskById(taskId);
-  if (!editorProject || !task) return;
-  const assignees = getEditorTaskAssignees(editorProject);
-  const scenes = getEditorTaskSceneChoices();
-  const lines = getEditorTaskLineChoices();
-  const memoryChoices = getEditorStoryMemoryChoices();
-  const selectedTemplate = getEditorTaskTemplate(task.templateKey);
+async function editWorkspaceTask(taskId) {
+  const workspaceProject = getWorkspaceLeadProject();
+  const task = getWorkspaceTaskById(taskId);
+  if (!workspaceProject || !task) return;
+  const assignees = getWorkspaceTaskAssignees(workspaceProject);
+  const scenes = getWorkspaceTaskSceneChoices();
+  const lines = getWorkspaceTaskLineChoices();
+  const memoryChoices = getWorkspaceStoryMemoryChoices();
+  const selectedTemplate = getWorkspaceTaskTemplate(task.templateKey);
   const container = document.createElement("div");
-  container.className = "editor-task-form editor-task-form-modal";
+  container.className = "workspace-task-form workspace-task-form-modal";
   container.innerHTML = `
     <select id="taskEditTemplate" class="comment-filter-select">
-      ${EDITOR_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}" ${template.key === (task.templateKey || "custom") ? "selected" : ""}>${escapeHtml(template.label)}</option>`).join("")}
+      ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}" ${template.key === (task.templateKey || "custom") ? "selected" : ""}>${escapeHtml(template.label)}</option>`).join("")}
     </select>
     <input id="taskEditTitle" class="modal-input" type="text" value="${task.title}">
     <select id="taskEditProject" class="comment-filter-select">
-      ${getEditorProjects(state.currentEditorId).filter((project) => !project.isEditorRoot).map((project) => `<option value="${escapeHtml(project.id)}" ${project.id === task.projectId ? "selected" : ""}>${escapeHtml(project.title)}</option>`).join("")}
+      ${getWorkspaceProjects(state.currentWorkspaceId).filter((project) => !project.isWorkspaceRoot).map((project) => `<option value="${escapeHtml(project.id)}" ${project.id === task.projectId ? "selected" : ""}>${escapeHtml(project.title)}</option>`).join("")}
     </select>
     <select id="taskEditScene" class="comment-filter-select">
       <option value="">General task</option>
@@ -989,7 +2147,6 @@ async function editEditorTask(taskId) {
     <select id="taskEditStatus" class="comment-filter-select">
       <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
       <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
-      <option value="pending-confirmation" ${task.status === "pending-confirmation" ? "selected" : ""}>Awaiting Confirmation</option>
       <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
     </select>
     <select id="taskEditPriority" class="comment-filter-select">
@@ -1011,12 +2168,12 @@ async function editEditorTask(taskId) {
       ${memoryChoices.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === task.memoryLinkId ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
     </select>
     <input id="taskEditHandoff" class="modal-input" type="text" value="${escapeHtml(task.handoffNote || "")}" placeholder="Handoff cue or mention (optional)">
-    <textarea id="taskEditDescription" class="collab-textarea editor-task-description" placeholder="Describe what needs to happen...">${escapeHtml(task.description || "")}</textarea>
+    <textarea id="taskEditDescription" class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen...">${escapeHtml(task.description || "")}</textarea>
     <p id="taskEditTemplateHint" class="modal-copy">${escapeHtml(selectedTemplate.aiInstruction)}</p>
   `;
-  container.dataset.editorTemplateApplied = task.templateKey || "custom";
+  container.dataset.workspaceTemplateApplied = task.templateKey || "custom";
   container.querySelector("#taskEditTemplate")?.addEventListener("change", (event) => {
-    applyEditorTaskTemplateToForm(container, event.target.value);
+    applyWorkspaceTaskTemplateToForm(container, event.target.value);
   });
   const saved = await showModal({
     title: "Edit Task",
@@ -1038,7 +2195,7 @@ async function editEditorTask(taskId) {
         container.querySelector("#taskEditAiStartManual")?.value || ""
       )
     : "";
-  updateEditorTask(taskId, {
+  updateWorkspaceTask(taskId, {
     templateKey: container.querySelector("#taskEditTemplate")?.value || "custom",
     priority: container.querySelector("#taskEditPriority")?.value || task.priority || "normal",
     title: container.querySelector("#taskEditTitle")?.value?.trim() || task.title,
@@ -1064,49 +2221,208 @@ async function editEditorTask(taskId) {
           : (aiStartAt ? "scheduled" : "ready"))
       : "idle",
     status: container.querySelector("#taskEditStatus")?.value || task.status,
-    reference: container.querySelector("#taskEditReference")?.value?.trim() || "",
-    _confirmed: (container.querySelector("#taskEditStatus")?.value || task.status) === "done"
+    reference: container.querySelector("#taskEditReference")?.value?.trim() || ""
   });
 }
 
-async function deleteEditorTask(taskId) {
+function buildWorkspaceTaskSummary(task) {
+  const statusLabel = task.status === "in-progress" ? "In Progress" : task.status === "done" ? "Done" : "To Do";
+  const priorityLabel = (task.priority || "normal").replace(/^./, (value) => value.toUpperCase());
+  const targetLabel = task.lineLabel || task.sceneLabel || task.reference || "General workspace task";
+  const dueLabel = task.dueAt ? new Date(task.dueAt).toLocaleString() : "No due date";
+  const updatedLabel = task.updatedAt ? new Date(task.updatedAt).toLocaleString() : "Just now";
+  const description = task.description || targetLabel;
+  const container = document.createElement("div");
+  container.className = "workspace-task-quick-summary";
+  container.innerHTML = `
+    <div class="workspace-task-quick-head">
+      <span class="workspace-task-tag">${escapeHtml(statusLabel)}</span>
+      <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml(priorityLabel)} Priority</span>
+    </div>
+    <strong>${escapeHtml(task.title || "Workspace task")}</strong>
+    <p>${escapeHtml(description)}</p>
+    <dl>
+      <div>
+        <dt>Assigned to</dt>
+        <dd>${escapeHtml(task.assignedLabel || "Unassigned")}</dd>
+      </div>
+      <div>
+        <dt>Target</dt>
+        <dd>${escapeHtml(targetLabel)}</dd>
+      </div>
+      <div>
+        <dt>Due</dt>
+        <dd>${escapeHtml(dueLabel)}</dd>
+      </div>
+      <div>
+        <dt>Updated</dt>
+        <dd>${escapeHtml(updatedLabel)}</dd>
+      </div>
+    </dl>
+  `;
+  return container;
+}
+
+async function editWorkspaceTaskFromLine(taskId) {
+  const workspaceProject = getWorkspaceLeadProject();
+  const task = getWorkspaceTaskById(taskId);
+  if (!workspaceProject || !task) return;
+  const assignees = getWorkspaceTaskAssignees(workspaceProject);
+  const container = document.createElement("div");
+  container.className = "line-task-form";
+  container.innerHTML = `
+    <label class="workspace-task-field line-task-title-field">
+      <span>Task</span>
+      <input id="lineTaskTitle" class="modal-input" type="text" value="${escapeHtml(task.title || "Review this line")}">
+    </label>
+    <div class="line-task-grid">
+      <label class="workspace-task-field">
+        <span>Assign to</span>
+        <select id="lineTaskAssignee" class="comment-filter-select">
+          ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}" ${assignee.id === task.assignedTo ? "selected" : ""}>${escapeHtml(assignee.label)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="workspace-task-field">
+        <span>Priority</span>
+        <select id="lineTaskPriority" class="comment-filter-select">
+          <option value="normal" ${(task.priority || "normal") === "normal" ? "selected" : ""}>Normal</option>
+          <option value="high" ${(task.priority || "normal") === "high" ? "selected" : ""}>High</option>
+          <option value="low" ${(task.priority || "normal") === "low" ? "selected" : ""}>Low</option>
+        </select>
+      </label>
+      <label class="workspace-task-field">
+        <span>Template</span>
+        <select id="lineTaskTemplate" class="comment-filter-select">
+          ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}" ${template.key === (task.templateKey || "custom") ? "selected" : ""}>${escapeHtml(template.label)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <textarea id="lineTaskDescription" class="collab-textarea line-task-description" placeholder="What should happen on this line?">${escapeHtml(task.description || task.lineLabel || task.sceneLabel || "")}</textarea>
+  `;
+  const confirmed = await showModal({
+    title: "Edit Task From Line",
+    message: container,
+    confirmLabel: "Save",
+    cancelLabel: "Cancel",
+    contentClass: "modal-content-line-task"
+  });
+  if (!confirmed) return;
+  const title = container.querySelector("#lineTaskTitle")?.value?.trim();
+  if (!title) {
+    await customAlert("Enter a task title first.", "Workspace Tasks");
+    return;
+  }
+  const assignedTo = container.querySelector("#lineTaskAssignee")?.value || "";
+  const assignee = assignees.find((entry) => entry.id === assignedTo) || assignees[0];
+  const aiStartAt = assignee?.assigneeType === "system" ? resolveAiTaskStart("now", "") : "";
+  updateWorkspaceTask(taskId, {
+    title,
+    templateKey: container.querySelector("#lineTaskTemplate")?.value || "custom",
+    priority: container.querySelector("#lineTaskPriority")?.value || task.priority || "normal",
+    description: container.querySelector("#lineTaskDescription")?.value?.trim() || "",
+    assignedTo,
+    assignedLabel: assignee?.label || "Unassigned",
+    assigneeType: assignee?.assigneeType || "human",
+    aiStartAt,
+    aiState: assignee?.assigneeType === "system" ? (aiStartAt ? "scheduled" : "ready") : "idle"
+  });
+  renderStudio();
+  if (task.lineId) focusBlock(task.lineId);
+}
+
+async function showWorkspaceTaskFlagSummary(taskId) {
+  const workspaceProject = getWorkspaceLeadProject();
+  const task = getWorkspaceTaskById(taskId);
+  if (!workspaceProject || !task) return;
+  const currentUser = auth.currentUser || {};
+  const isAssignee = Boolean(
+    task.assignedTo
+    && (
+      task.assignedTo === currentUser.uid
+      || task.assignedTo === currentUser.email
+      || task.assignedTo === currentUser.displayName
+    )
+  );
+  const summary = buildWorkspaceTaskSummary(task);
+
+  if (isAssignee) {
+    const shouldComplete = await showModal({
+      title: "Task Summary",
+      message: summary,
+      confirmLabel: "Completed",
+      cancelLabel: "Cancel",
+      contentClass: "modal-content-task-summary"
+    });
+    if (!shouldComplete) return;
+    updateWorkspaceTask(taskId, { status: "done" });
+    renderStudio();
+    return;
+  }
+
+  let nextAction = "edit";
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "ghost-button btn-sm workspace-task-summary-delete";
+  deleteButton.textContent = "Delete";
+  deleteButton.addEventListener("click", () => {
+    nextAction = "delete";
+    document.getElementById("modalConfirmBtn")?.click();
+  });
+  summary.appendChild(deleteButton);
+  const confirmed = await showModal({
+    title: "Task Summary",
+    message: summary,
+    confirmLabel: "Edit",
+    cancelLabel: "Cancel",
+    contentClass: "modal-content-task-summary"
+  });
+  if (!confirmed) return;
+  if (nextAction === "delete") {
+    await deleteWorkspaceTask(taskId);
+    renderStudio();
+    return;
+  }
+  await editWorkspaceTaskFromLine(taskId);
+}
+
+async function deleteWorkspaceTask(taskId) {
   const confirmed = await customConfirm("Delete this task and its comments?", "Delete Task");
   if (!confirmed) return;
   clearAiTaskTimer(taskId);
-  updateEditorAcrossProjects(state.currentEditorId, (editor) => ({
-    ...editor,
-    tasks: (editor.tasks || []).filter((task) => task.id !== taskId)
+  updateWorkspaceAcrossProjects(state.currentWorkspaceId, (workspace) => ({
+    ...workspace,
+    tasks: (workspace.tasks || []).filter((task) => task.id !== taskId)
   }));
   persistProjects(true, { syncInputs: false });
-  renderEditorView();
+  renderWorkspaceView();
   showToast("Task deleted.", "success");
 }
 
-async function commentOnEditorTask(taskId) {
-  const task = getEditorTaskById(taskId);
+async function commentOnWorkspaceTask(taskId) {
+  const task = getWorkspaceTaskById(taskId);
   if (!task) return;
-  const editorProject = getEditorRootProject(state.currentEditorId);
-  const assignees = editorProject ? getEditorTaskAssignees(editorProject).filter((entry) => entry.assigneeType === "human") : [];
+  const workspaceProject = getWorkspaceLeadProject();
+  const assignees = workspaceProject ? getWorkspaceTaskAssignees(workspaceProject).filter((entry) => entry.assigneeType === "human") : [];
   const container = document.createElement("div");
-  container.className = "editor-task-comments";
+  container.className = "workspace-task-comments";
   container.innerHTML = `
-    <div class="editor-task-comment-list">
+    <div class="workspace-task-comment-list">
       ${task.comments?.length ? [...task.comments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map((comment) => `
-        <article class="editor-task-comment">
-          <div class="editor-task-comment-head">
-            <strong>${escapeHtml(comment.author || "Editor member")}</strong>
+        <article class="workspace-task-comment">
+          <div class="workspace-task-comment-head">
+            <strong>${escapeHtml(comment.author || "Workspace member")}</strong>
             <span>${escapeHtml(formatDateTime(comment.createdAt))}</span>
           </div>
-          ${comment.mentionLabel ? `<span class="editor-task-comment-mention">Mentioned ${escapeHtml(comment.mentionLabel)}</span>` : ""}
+          ${comment.mentionLabel ? `<span class="workspace-task-comment-mention">Mentioned ${escapeHtml(comment.mentionLabel)}</span>` : ""}
           <p>${escapeHtml(comment.text)}</p>
         </article>
-      `).join("") : '<p class="editor-home-empty">No task comments yet.</p>'}
+      `).join("") : '<p class="workspace-home-empty">No task comments yet.</p>'}
     </div>
-    <select id="editorTaskCommentMention" class="comment-filter-select">
+    <select id="workspaceTaskCommentMention" class="comment-filter-select">
       <option value="">Mention teammate (optional)</option>
       ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
     </select>
-    <textarea id="editorTaskCommentText" class="collab-textarea" placeholder="Add a comment..."></textarea>
+    <textarea id="workspaceTaskCommentText" class="collab-textarea" placeholder="Add a comment..."></textarea>
   `;
   const shouldAdd = await showModal({
     title: task.title,
@@ -1114,125 +2430,146 @@ async function commentOnEditorTask(taskId) {
     confirmLabel: "Add Comment"
   });
   if (!shouldAdd) return;
-  const text = container.querySelector("#editorTaskCommentText")?.value?.trim();
+  const text = container.querySelector("#workspaceTaskCommentText")?.value?.trim();
   if (!text) return;
-  const mentionId = container.querySelector("#editorTaskCommentMention")?.value || "";
+  const mentionId = container.querySelector("#workspaceTaskCommentMention")?.value || "";
   const mention = assignees.find((entry) => entry.id === mentionId);
-  updateEditorTask(taskId, {
+  updateWorkspaceTask(taskId, {
     comments: [
       ...(task.comments || []),
       {
         id: uid("task-comment"),
         text,
-        author: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member",
+        author: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member",
         mentionId,
         mentionLabel: mention?.label || "",
         createdAt: new Date().toISOString()
       }
     ]
   });
-  createEditorNotification({
+  createWorkspaceNotification({
     task,
     category: "comment",
     title: "New task comment",
     message: `${task.title} has a new comment.`,
-    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+    actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
   if (mention) {
-    createEditorNotification({
+    createWorkspaceNotification({
       task,
       category: "comment",
       title: "Task mention",
       message: `${task.title} mentioned ${mention.label}.`,
-      actor: auth.currentUser?.displayName || auth.currentUser?.email || "Editor member"
+      actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
     });
   }
   showToast("Comment added to task.", "success");
 }
 
-function showMentionSuggestions(input, query) {
-  const editorProject = getEditorRootProject(state.currentEditorId);
-  if (!editorProject) return;
-  const assignees = getEditorTaskAssignees(editorProject);
-  const filtered = assignees.filter(a => a.label.toLowerCase().includes(query.toLowerCase()));
-  if (!filtered.length) {
-    hideSuggestionTray();
-    return;
-  }
-
-  const rect = input.getBoundingClientRect();
-  const suggestions = filtered.map(a => ({ label: a.label, value: a.label }));
-
-  state.suggestionContext = {
-    mode: "mention",
-    input: input,
-    query: query
-  };
-
-  renderSuggestionTray("Teammates", suggestions, { rect: {
-    left: rect.left,
-    top: rect.top,
-    bottom: rect.bottom,
-    right: rect.right,
-    width: rect.width,
-    height: rect.height
-  }});
-}
-
 export function bindEvents() {
+  ensureWorkspaceClock();
   syncAiTaskSchedules();
-  applyEditorTaskTemplateToForm(refs.editorDashboard, "custom", { force: true });
+  applyWorkspaceTaskTemplateToForm(refs.workspaceDashboard, "custom", { force: true });
   // Navigation
   refs.newProjectBtn.addEventListener("click", () => {
     launchNewCreationFlow();
   });
 
-  refs.editorNewProjectBtn?.addEventListener("click", () => {
-    createProjectInsideCurrentEditor();
+  refs.workspaceNewProjectBtn?.addEventListener("click", () => {
+    createProjectInsideCurrentWorkspace();
   });
 
-  refs.editorBackBtn?.addEventListener("click", () => {
-    state.currentEditorId = null;
+  refs.workspaceCloseBtn?.addEventListener("click", () => {
+    state.currentWorkspaceId = null;
     persistProjects(false, { syncInputs: false });
     showHome();
     renderHome();
   });
 
-  document.getElementById("editorSaveHomeBtn")?.addEventListener("click", () => {
-    saveAndGoHome();
+  document.getElementById("workspaceRefreshBtn")?.addEventListener("click", async () => {
+    if (!state.currentWorkspaceId) return;
+    await openWorkspaceDashboard(state.currentWorkspaceId);
   });
 
-  refs.editorCloseBtn?.addEventListener("click", () => {
-    state.currentEditorId = null;
-    persistProjects(false, { syncInputs: false });
-    showHome();
-    renderHome();
+  document.getElementById("workspaceLeaveBtn")?.addEventListener("click", async () => {
+    const workspaceId = state.currentWorkspaceId;
+    if (!workspaceId) return;
+    const workspaceProject = getWorkspaceRootProject(workspaceId)
+      || state.projects.find((project) => project.workspace?.id === workspaceId)
+      || null;
+    if (!workspaceProject) return;
+    const confirmed = await customConfirm(
+      `Leave "${workspaceProject.workspace?.name || workspaceProject.title}"? You will lose access to its projects until someone invites you back.`,
+      "Leave Workspace"
+    );
+    if (!confirmed) return;
+    const result = await leaveWorkspace(workspaceId);
+    if (!result.ok) {
+      await customAlert(result.reason || "Unable to leave the workspace right now.", "Leave Workspace");
+      return;
+    }
+    showToast("You left the workspace.", "success");
+    syncWorkspaceHeaderActions();
   });
 
-  refs.editorView?.addEventListener("change", (event) => {
-    const editorSwitch = event.target.closest("[data-editor-switch]");
-    if (!editorSwitch) return;
-    openEditorDashboard(editorSwitch.value);
+  document.getElementById("workspaceDeleteBtn")?.addEventListener("click", async () => {
+    const workspaceProject = getWorkspaceRootProject(state.currentWorkspaceId)
+      || state.projects.find((project) => project.workspace?.id === state.currentWorkspaceId && project.isWorkspaceRoot)
+      || null;
+    if (!workspaceProject) return;
+    await removeProject(workspaceProject.id);
+    syncWorkspaceHeaderActions();
   });
 
-  refs.homeEditorDashboard?.addEventListener("click", (event) => {
+  refs.workspaceView?.addEventListener("change", (event) => {
+    const workspaceSwitch = event.target.closest("[data-workspace-switch]");
+    if (!workspaceSwitch) return;
+    openWorkspaceDashboard(workspaceSwitch.value);
+  });
+
+  window.addEventListener("sharedProjectUpdated", () => {
+    if (!state.currentWorkspaceId) return;
+    syncWorkspaceHeaderActions();
+  });
+
+  refs.homeWorkspaceDashboard?.addEventListener("click", (event) => {
     const filterTrigger = event.target.closest("[data-home-project-filter]");
     if (filterTrigger) {
       state.homeProjectFilter = filterTrigger.dataset.homeProjectFilter || "all";
       renderHome();
+      return;
+    }
+    const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
+    if (action === "new-project") {
+      createProjectInsideCurrentWorkspace();
+      return;
+    }
+    if (action === "continue-writing") {
+      continueWorkspaceWriting();
+      return;
+    }
+    if (action === "focus-task-form") {
+      focusWorkspaceTaskForm();
+      return;
+    }
+    if (action === "add-task") {
+      event.preventDefault();
+      event.stopPropagation();
+      addWorkspaceTaskFromDashboard(event.target);
+      return;
     }
   });
 
-  refs.homeEditorDashboard?.addEventListener("change", (event) => {
+  refs.homeWorkspaceDashboard?.addEventListener("change", (event) => {
     const formatSelect = event.target.closest("[data-home-project-format]");
     if (formatSelect) {
       state.homeProjectFormat = formatSelect.value || "all";
       renderHome();
       return;
     }
-    const editorSelect = event.target.closest("[data-home-editor-filter]");
-    if (editorSelect) {
-      state.homeEditorFilter = editorSelect.value || "all";
+    const workspaceSelect = event.target.closest("[data-home-workspace-filter]");
+    if (workspaceSelect) {
+      state.homeWorkspaceFilter = workspaceSelect.value || "all";
       renderHome();
       return;
     }
@@ -1256,9 +2593,9 @@ export function bindEvents() {
       renderHome();
       return;
     }
-    const editorSelect = event.target.closest("[data-home-editor-filter]");
-    if (editorSelect) {
-      state.homeEditorFilter = editorSelect.value || "all";
+    const workspaceSelect = event.target.closest("[data-home-workspace-filter]");
+    if (workspaceSelect) {
+      state.homeWorkspaceFilter = workspaceSelect.value || "all";
       renderHome();
       return;
     }
@@ -1268,7 +2605,7 @@ export function bindEvents() {
     renderHome();
   });
 
-  refs.editorDashboard?.addEventListener("click", (event) => {
+  refs.workspaceDashboard?.addEventListener("click", (event) => {
     const profileTrigger = event.target.closest("[data-profile-uid]");
     if (profileTrigger) {
       showCollabProfile({
@@ -1278,65 +2615,80 @@ export function bindEvents() {
       });
       return;
     }
-    const action = event.target.closest("[data-editor-home-action]")?.dataset.editorHomeAction;
+    const action = event.target.closest("[data-workspace-home-action]")?.dataset.workspaceHomeAction;
     if (!action) return;
     if (action === "new-project") {
-      createProjectInsideCurrentEditor();
+      createProjectInsideCurrentWorkspace();
+      return;
+    }
+    if (action === "continue-writing") {
+      continueWorkspaceWriting();
+      return;
+    }
+    if (action === "focus-task-form") {
+      focusWorkspaceTaskForm();
       return;
     }
     if (action === "open-popup") {
-      showEditorPopup();
+      showWorkspacePopup();
       return;
     }
-    if (action === "add-editor-task") {
-      addEditorTaskFromDashboard();
+    if (action === "open-notepad") {
+      openNotepad();
       return;
     }
-    if (action === "mark-all-notifications-read") {
-      markAllEditorNotificationsRead();
+    if (action === "open-story-memory") {
+      showStoryMemoryPopup();
+      return;
+    }
+    if (action === "open-review-center") {
+      showWorkspaceReviewCenter();
+      return;
+    }
+    if (action === "add-task") {
+      event.preventDefault();
+      event.stopPropagation();
+      addWorkspaceTaskFromDashboard(event.target);
       return;
     }
     if (action === "mark-notification-read") {
       const notificationId = event.target.closest("[data-notification-id]")?.dataset.notificationId;
-      if (notificationId) markEditorNotificationRead(notificationId, true);
+      if (notificationId) markWorkspaceNotificationRead(notificationId, true);
       return;
     }
     if (action === "set-task-filter") {
-      state.editorTaskFilter = event.target.closest("[data-task-filter]")?.dataset.taskFilter || "all";
-      renderEditorView();
+      state.workspaceTaskFilter = event.target.closest("[data-task-filter]")?.dataset.taskFilter || "all";
+      renderWorkspaceView();
       return;
     }
     if (action === "edit-task") {
       const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
-      if (taskId) editEditorTask(taskId);
+      if (taskId) editWorkspaceTask(taskId);
       return;
     }
     if (action === "delete-task") {
       const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
-      if (taskId) deleteEditorTask(taskId);
+      if (taskId) deleteWorkspaceTask(taskId);
       return;
     }
     if (action === "comment-task") {
       const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
-      if (taskId) commentOnEditorTask(taskId);
+      if (taskId) commentOnWorkspaceTask(taskId);
       return;
     }
     if (action === "open-task-project") {
       const trigger = event.target.closest("[data-task-project-id]");
       const projectId = trigger?.dataset.taskProjectId;
       const taskId = trigger?.dataset.taskId;
-      const task = taskId ? getEditorTaskById(taskId) : null;
-      if (projectId) {
-        openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
-      }
+      const task = taskId ? getWorkspaceTaskById(taskId) : null;
+      openProjectOrNotify(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       return;
     }
     if (action === "open-task-memory") {
       const trigger = event.target.closest("[data-memory-project-id]");
       const projectId = trigger?.dataset.memoryProjectId;
-      if (projectId) {
-        openProject(projectId);
-      }
+      const opened = openProjectOrNotify(projectId);
+      if (!opened) return;
       setTimeout(() => {
         showStoryMemoryPopup();
       }, 60);
@@ -1346,13 +2698,15 @@ export function bindEvents() {
       const trigger = event.target.closest("[data-notification-id]");
       const projectId = trigger?.dataset.taskProjectId;
       const notificationId = trigger?.dataset.notificationId;
-      if (notificationId && !notificationId.startsWith("due-")) markEditorNotificationRead(notificationId, true);
+      if (notificationId && !notificationId.startsWith("due-")) markWorkspaceNotificationRead(notificationId, true);
       if (projectId) {
-        const notification = getEditorNotifications().find((item) => item.id === notificationId);
+        const notification = getWorkspaceNotifications().find((item) => item.id === notificationId);
         const task = notification?.taskId
-          ? getEditorTaskById(notification.taskId)
-          : (trigger?.dataset.taskId ? getEditorTaskById(trigger.dataset.taskId) : null);
-        openProject(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+          ? getWorkspaceTaskById(notification.taskId)
+          : (trigger?.dataset.taskId ? getWorkspaceTaskById(trigger.dataset.taskId) : null);
+        openProjectOrNotify(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+      } else {
+        showToast("This notification is no longer linked to a project.", "error", { duration: 4200 });
       }
       return;
     }
@@ -1376,43 +2730,150 @@ export function bindEvents() {
       if (taskId) dismissAiTaskResult(taskId);
       return;
     }
-    if (action === "confirm-complete") {
+  });
+
+  document.getElementById("studioInboxBellBtn")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    const popup = document.getElementById("workspace-inbox-popup");
+    if (popup?.classList.contains("active")) {
+      closeWorkspaceInboxPopup();
+      return;
+    }
+    openWorkspaceInboxPopup(event.currentTarget);
+  });
+
+  document.getElementById("homeInboxBellBtn")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    const popup = document.getElementById("workspace-inbox-popup");
+    if (popup?.classList.contains("active")) {
+      closeWorkspaceInboxPopup();
+      return;
+    }
+    openWorkspaceInboxPopup(event.currentTarget);
+  });
+
+  document.getElementById("close-workspace-inbox")?.addEventListener("click", () => {
+    closeWorkspaceInboxPopup();
+  });
+
+  document.getElementById("workspace-inbox-popup")?.addEventListener("click", (event) => {
+    const inboxAction = event.target.closest("[data-workspace-inbox-action]")?.dataset.workspaceInboxAction;
+    if (!inboxAction) return;
+    if (inboxAction === "open-invites") {
+      closeWorkspaceInboxPopup();
+      showHome();
+      renderHome();
+      closeMenus();
+      const trigger = document.querySelector('[data-menu-trigger="homeCollabMenu"]');
+      const menu = document.getElementById("homeCollabMenu");
+      trigger?.classList.add("is-open");
+      if (menu) menu.hidden = false;
+      return;
+    }
+    if (inboxAction === "open-comment") {
       const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
-      if (taskId) confirmCompleteTask(taskId);
+      if (taskId) {
+        closeWorkspaceInboxPopup();
+        const trigger = event.target.closest("[data-task-project-id]");
+        const projectId = trigger?.dataset.taskProjectId;
+        const task = taskId ? getWorkspaceTaskById(taskId) : null;
+        const opened = openProjectOrNotify(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+        if (opened) {
+          setTimeout(() => {
+            commentOnWorkspaceTask(taskId);
+          }, 90);
+        }
+      }
+      return;
+    }
+    if (inboxAction === "open-task") {
+      const trigger = event.target.closest("[data-task-project-id]");
+      const projectId = trigger?.dataset.taskProjectId;
+      const taskId = trigger?.dataset.taskId;
+      const task = taskId ? getWorkspaceTaskById(taskId) : null;
+      closeWorkspaceInboxPopup();
+      openProjectOrNotify(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
       return;
     }
   });
 
-  refs.editorDashboard?.addEventListener("input", (event) => {
-    const titleInput = event.target.closest("[data-editor-task-title]");
-    const descInput = event.target.closest("[data-editor-task-description]");
-    if (titleInput || descInput) {
-      const target = titleInput || descInput;
-      const text = target.value;
-      const cursor = target.selectionStart;
-      const lastAt = text.lastIndexOf("@", cursor - 1);
-      if (lastAt !== -1 && !/\s/.test(text.slice(lastAt + 1, cursor))) {
-        showMentionSuggestions(target, text.slice(lastAt + 1, cursor));
-      } else {
-        hideSuggestionTray();
+  document.addEventListener("click", (event) => {
+    const popup = document.getElementById("workspace-inbox-popup");
+    if (!popup?.classList.contains("active")) return;
+    const clickedBell = event.target.closest("#homeInboxBellBtn");
+    const clickedPopup = event.target.closest(".workspace-inbox-popup-card");
+    if (clickedBell || clickedPopup) return;
+    closeWorkspaceInboxPopup();
+  });
+
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-workspace-home-action='add-task']");
+    if (!trigger) return;
+    event.preventDefault();
+    addWorkspaceTaskFromDashboard(trigger);
+  });
+
+  refs.workspaceDashboard?.addEventListener("change", (event) => {
+    const taskFormField = event.target.closest("[data-workspace-task-project], [data-workspace-task-scene], [data-workspace-task-line], [data-workspace-task-assignee], [data-workspace-task-template], [data-workspace-task-ai-start]");
+    if (taskFormField) {
+      const taskForm = taskFormField.closest(".workspace-task-form");
+      if (taskForm) {
+        syncWorkspaceTaskDraftFromContainer(taskForm);
       }
     }
-
-    const templateSelect = event.target.closest("[data-editor-task-template]");
+    const inboxFilterSelect = event.target.closest("[data-workspace-home-action='set-inbox-filter']");
+    if (inboxFilterSelect) {
+      state.workspaceInboxFilter = inboxFilterSelect.value || "all";
+      renderWorkspaceView();
+      return;
+    }
+    const notificationFilterSelect = event.target.closest("[data-workspace-home-action='set-notification-filter']");
+    if (notificationFilterSelect) {
+      state.workspaceNotificationFilter = notificationFilterSelect.value || "all";
+      renderWorkspaceView();
+      return;
+    }
+    const storyMemoryFilterSelect = event.target.closest("[data-workspace-home-action='set-story-memory-filter']");
+    if (storyMemoryFilterSelect) {
+      state.workspaceStoryMemoryFilter = storyMemoryFilterSelect.value || "all";
+      renderWorkspaceView();
+      return;
+    }
+    const completedFilterSelect = event.target.closest("[data-workspace-home-action='set-completed-filter']");
+    if (completedFilterSelect) {
+      state.workspaceCompletedFilter = completedFilterSelect.value || "all";
+      renderWorkspaceView();
+      return;
+    }
+    const templateSelect = event.target.closest("[data-workspace-task-template]");
     if (templateSelect) {
-      applyEditorTaskTemplateToForm(refs.editorDashboard, templateSelect.value);
+      applyWorkspaceTaskTemplateToForm(templateSelect.closest(".workspace-task-composer, .workspace-home-panel, .workspace-task-form") || refs.workspaceDashboard, templateSelect.value);
       return;
     }
-    const taskSortSelect = event.target.closest("[data-editor-home-action='set-task-sort']");
+    const taskSortSelect = event.target.closest("[data-workspace-home-action='set-task-sort']");
     if (taskSortSelect) {
-      state.editorTaskSort = taskSortSelect.value || "latest";
-      renderEditorView();
+      state.workspaceTaskSort = taskSortSelect.value || "latest";
+      renderWorkspaceView();
       return;
     }
-    const statusSelect = event.target.closest("[data-editor-task-status]");
+    const statusSelect = event.target.closest("[data-workspace-task-status]");
     if (statusSelect) {
-      updateEditorTask(statusSelect.dataset.editorTaskStatus, { status: statusSelect.value });
+      updateWorkspaceTask(statusSelect.dataset.workspaceTaskStatus, { status: statusSelect.value });
     }
+  });
+
+  refs.workspaceDashboard?.addEventListener("input", (event) => {
+    const taskFormField = event.target.closest("[data-workspace-task-title], [data-workspace-task-description], [data-workspace-task-project], [data-workspace-task-scene], [data-workspace-task-line], [data-workspace-task-assignee], [data-workspace-task-template], [data-workspace-task-ai-start]");
+    if (!taskFormField) return;
+    const taskForm = taskFormField.closest(".workspace-task-form");
+    if (!taskForm) return;
+    syncWorkspaceTaskDraftFromContainer(taskForm);
+  });
+
+  refs.workspaceDashboard?.addEventListener("focusout", () => {
+    window.setTimeout(() => {
+      flushPendingWorkspaceRefresh();
+    }, 0);
   });
 
   refs.goHomeBtn.addEventListener("click", () => {
@@ -1426,11 +2887,21 @@ export function bindEvents() {
   document.getElementById("smartProofreadBtn")?.addEventListener("click", () => {
     AI.triggerSmartProofread();
   });
+  refs.screenplayEditor?.addEventListener("focusin", (event) => {
+    const block = event.target.closest?.(".script-block");
+    if (!block?.dataset?.id) return;
+    noteRealtimeActivity(block.dataset.id, { isTyping: false });
+  });
   document.addEventListener("selectionchange", () => {
     window.requestAnimationFrame(updateSelectionToolbar);
   });
   window.addEventListener("resize", hideSelectionToolbar);
   refs.screenplayEditor?.addEventListener("scroll", hideSelectionToolbar);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeWorkspaceInboxPopup();
+    }
+  });
 
   // Meta Inputs
   [refs.titleInput, refs.authorInput, refs.contactInput, refs.companyInput, refs.detailsInput, refs.loglineInput]
@@ -1460,11 +2931,22 @@ export function bindEvents() {
         closeMenus();
       }
     });
+    menu.addEventListener("mouseenter", (e) => {
+      if (window.innerWidth <= 900 || !menu.classList.contains("nav-menu-flyout")) return;
+      const summary = e.target.closest(".menu-group-summary");
+      const details = summary?.closest("details.menu-group");
+      if (!details) return;
+      menu.querySelectorAll("details.menu-group[open]").forEach((group) => {
+        if (group !== details) group.removeAttribute("open");
+      });
+      details.setAttribute("open", "");
+    }, true);
     // Accordion behavior for menu groups
     menu.addEventListener("click", (e) => {
       const summary = e.target.closest(".menu-group-summary");
       if (summary) {
-        const details = summary.parentElement;
+        const details = summary.closest("details.menu-group");
+        if (!details) return;
         if (!details.open) {
           menu.querySelectorAll(".menu-group[open]").forEach((group) => {
             if (group !== details) group.removeAttribute("open");
@@ -1519,8 +3001,149 @@ export function bindEvents() {
     }
   });
 
-  document.querySelectorAll("[data-menu-action]").forEach((button) => {
-    button.addEventListener("click", () => handleMenuAction(button.dataset.menuAction));
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-menu-action]");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    handleMenuAction(button.dataset.menuAction);
+  }, true);
+
+  document.getElementById("fileRecoveryCloseBtn")?.addEventListener("click", closeFileRecoveryDialog);
+  document.getElementById("fileRecoveryDialog")?.addEventListener("click", (event) => {
+    if (event.target?.id === "fileRecoveryDialog") {
+      closeFileRecoveryDialog();
+    }
+  });
+  document.getElementById("conversionJobsCloseBtn")?.addEventListener("click", closeConversionJobsDialog);
+  document.getElementById("conversionJobsDialog")?.addEventListener("click", (event) => {
+    if (event.target?.id === "conversionJobsDialog") {
+      closeConversionJobsDialog();
+    }
+  });
+  document.getElementById("conversionJobsList")?.addEventListener("click", async (event) => {
+    const item = event.target.closest("[data-conversion-job-id]");
+    if (!item) return;
+    const jobId = item.dataset.conversionJobId;
+    if (!jobId) return;
+    closeConversionJobsDialog();
+    const record = await getConversionJobRecord(jobId);
+    await openConversionReviewDialog(jobId, record?.projectId || "");
+  });
+  document.getElementById("conversionLiveCloseBtn")?.addEventListener("click", closeConversionLiveDialog);
+  document.getElementById("conversionLiveDialog")?.addEventListener("click", (event) => {
+    if (event.target?.id === "conversionLiveDialog") {
+      closeConversionLiveDialog();
+    }
+  });
+  document.getElementById("conversionLiveSaveGuidanceBtn")?.addEventListener("click", async () => {
+    if (!activeConversionLiveJobId) return;
+    const input = document.getElementById("conversionLiveGuidance");
+    const status = document.getElementById("conversionLiveGuidanceStatus");
+    const guidance = String(input?.value || "").trim();
+    await patchConversionJobRecord(activeConversionLiveJobId, {
+      operatorGuidance: guidance,
+      updatedAt: new Date().toISOString()
+    });
+    if (status) {
+      status.textContent = guidance
+        ? "Guidance saved. The next retry will send it into the AI conversion pass."
+        : "Guidance cleared for this job.";
+    }
+  });
+  document.getElementById("conversionLiveSaveTextBtn")?.addEventListener("click", async () => {
+    if (!activeConversionLiveJobId) return;
+    const rawInput = document.getElementById("conversionLiveRaw");
+    const normalizedInput = document.getElementById("conversionLiveNormalized");
+    const status = document.getElementById("conversionLiveTextStatus");
+    const coverPageCandidate = {
+      title: String(document.getElementById("conversionLiveCoverTitle")?.value || "").trim(),
+      author: String(document.getElementById("conversionLiveCoverAuthor")?.value || "").trim(),
+      contact: String(document.getElementById("conversionLiveCoverContact")?.value || "").trim(),
+      company: String(document.getElementById("conversionLiveCoverCompany")?.value || "").trim(),
+      details: String(document.getElementById("conversionLiveCoverDetails")?.value || "").trim(),
+      logline: String(document.getElementById("conversionLiveCoverLogline")?.value || "").trim()
+    };
+    const patch = {
+      rawText: String(rawInput?.value || ""),
+      normalizedText: String(normalizedInput?.value || ""),
+      coverPageCandidate: Object.values(coverPageCandidate).some(Boolean) ? coverPageCandidate : null
+    };
+    if (patch.rawText.trim()) {
+      patch.rawTextEditedAt = new Date().toISOString();
+    }
+    if (patch.normalizedText.trim()) {
+      patch.normalizedTextEditedAt = new Date().toISOString();
+    }
+    const previewSource = patch.normalizedText.trim() || patch.rawText.trim();
+    patch.structuredLines = buildLocalStructuredPreview(previewSource);
+    patch.structuredLineCount = patch.structuredLines.length;
+    if (!patch.stageLabel || /queued|normalizing|structuring/i.test(String(patch.stageLabel))) {
+      patch.stageLabel = patch.structuredLines.length
+        ? "Preview refreshed from your edits"
+        : "Text edits saved";
+    }
+    conversionWorkspaceOverrides.set(activeConversionLiveJobId, patch);
+    await patchConversionJobRecord(activeConversionLiveJobId, patch);
+    await refreshActiveConversionLiveDialog(activeConversionLiveJobId, {
+      ...(await getConversionJobRecord(activeConversionLiveJobId)),
+      ...patch
+    });
+    if (status) {
+      status.textContent = patch.structuredLines.length
+        ? "Text edits saved. The structured preview updated immediately from your corrected text."
+        : "Text edits saved. Add more text or retry this conversion to rebuild the preview.";
+    }
+  });
+  document.getElementById("conversionLiveApplyBtn")?.addEventListener("click", async () => {
+    if (!activeConversionLiveJobId) return;
+    const record = await getConversionJobRecord(activeConversionLiveJobId);
+    if (!record) return;
+    await applyConversionRecordToProject(record, activeConversionLiveProjectId, "Reviewed preview applied to this script.");
+  });
+  document.getElementById("conversionLiveOpenReviewBtn")?.addEventListener("click", async () => {
+    if (!activeConversionLiveJobId) return;
+    const jobId = activeConversionLiveJobId;
+    const projectId = activeConversionLiveProjectId;
+    closeConversionLiveDialog();
+    await openConversionReviewDialog(jobId, projectId);
+  });
+  window.addEventListener("eyawriter:conversion-job-updated", async (event) => {
+    const jobId = event?.detail?.jobId;
+    const record = event?.detail?.record || null;
+    if (!jobId || jobId !== activeConversionLiveJobId) return;
+    await refreshActiveConversionLiveDialog(jobId, record);
+  });
+  document.getElementById("fileRecoveryList")?.addEventListener("click", async (event) => {
+    const actionButton = event.target.closest("[data-recovery-action]");
+    const item = event.target.closest("[data-recovery-id]");
+    if (!actionButton || !item) return;
+
+    const recoveryId = item.dataset.recoveryId;
+    if (actionButton.dataset.recoveryAction === "recover") {
+      const restoredProject = await recoverDeletedProject(recoveryId);
+      if (restoredProject) {
+        renderRecoveryList();
+        renderHome();
+        if (!refs.studioView.hidden) {
+          renderStudio();
+        }
+        showToast(`Recovered "${restoredProject.title}".`, "success");
+      }
+      return;
+    }
+
+    if (actionButton.dataset.recoveryAction === "permanent-delete") {
+      const confirmed = await customConfirm(
+        "Permanently delete this file from recovery? This cannot be undone.",
+        "Permanent Delete"
+      );
+      if (!confirmed) return;
+      if (permanentlyDeleteRecoveredProject(recoveryId)) {
+        renderRecoveryList();
+        showToast("File permanently deleted.", "success");
+      }
+    }
   });
 
   document.querySelectorAll("[data-format-type]").forEach((button) => {
@@ -1557,6 +3180,7 @@ export function bindEvents() {
   refs.exportWordBtn.addEventListener("click", exportWord);
   refs.exportPdfBtn.addEventListener("click", exportPdf);
   refs.fileInput.addEventListener("change", importFile);
+  refs.convertImportInput?.addEventListener("change", convertImportFile);
 
   refs.autoNumberToggle.addEventListener("change", () => {
     state.autoNumberScenes = refs.autoNumberToggle.checked;
@@ -1599,16 +3223,16 @@ export function bindEvents() {
   // Layout Toggles
   refs.leftRailToggle?.addEventListener("click", () => {
     togglePane("left");
-    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "▶" : "◀");
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
   });
   refs.rightRailToggle?.addEventListener("click", () => {
     togglePane("right");
-    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "◀" : "▶");
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
   });
   refs.toolStripToggle.addEventListener("click", () => {
         state.toolStripCollapsed = !state.toolStripCollapsed;
         applyToolbarState();
-        setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "▼" : "▲");
+        setButtonGlyph(refs.toolStripToggle, state.toolStripCollapsed ? "&#9660;" : "&#9650;");
         persistProjects(false);
     });
 
@@ -1633,6 +3257,11 @@ export function bindEvents() {
     applyViewState();
     persistProjects(false);
   });
+  document.querySelectorAll("[data-mobile-pane]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setMobileStudioPane(button.dataset.mobilePane);
+    });
+  });
   refs.quickDisplayFocusMode?.addEventListener("change", () => {
     state.viewOptions.focusMode = refs.quickDisplayFocusMode.checked;
     if (!state.viewOptions.focusMode) {
@@ -1655,11 +3284,11 @@ export function bindEvents() {
 
   refs.leftPaneSectionToggle.addEventListener("click", () => {
     togglePaneSection(refs.leftPaneBody, refs.leftPaneSectionToggle);
-    setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
+    setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   });
   refs.rightPaneSectionToggle.addEventListener("click", () => {
     togglePaneSection(refs.rightPaneBody, refs.rightPaneSectionToggle);
-    setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
+    setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   });
 
   refs.leftPaneBody.addEventListener("click", (event) => {
@@ -1683,65 +3312,86 @@ export function bindEvents() {
     }
   });
 
-  window.addEventListener("editorInviteRequested", async (event) => {
+  window.addEventListener("workspaceInviteRequested", async (event) => {
     const email = event.detail?.email;
     const role = event.detail?.role || "editor";
     if (!email) {
       return;
     }
     const result = await inviteCollaborator(email, role);
-    window.dispatchEvent(new CustomEvent("editorInviteResult", { detail: result }));
+    window.dispatchEvent(new CustomEvent("workspaceInviteResult", { detail: result }));
     if (result?.ok) {
-      await customAlert("Editor invite sent.", "Editor");
+      showToast("Workspace invite sent.", "success");
     } else if (result?.reason) {
-      await customAlert(result.reason, "Editor");
+      showToast(result.reason, "error");
     }
   });
 
-  window.addEventListener("editorRenameRequested", async (event) => {
-    const result = await renameEditor(event.detail?.projectId, event.detail?.name);
-    window.dispatchEvent(new CustomEvent("editorMutationResult", {
-      detail: { ...result, message: result.ok ? "Editor name saved." : "" }
+  window.addEventListener("workspaceRenameRequested", async (event) => {
+    const result = await renameWorkspace(event.detail?.projectId, event.detail?.name);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ...result, message: result.ok ? "Workspace name saved." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("editorRoleChangeRequested", async (event) => {
+  window.addEventListener("workspaceRoleChangeRequested", async (event) => {
     const result = await updateCollaboratorRole(event.detail?.projectId, event.detail?.collaboratorUid, event.detail?.role);
-    window.dispatchEvent(new CustomEvent("editorMutationResult", {
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
       detail: { ...result, message: result.ok ? "Member role updated." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("editorReminderRequested", async (event) => {
-    const result = await addEditorReminder(event.detail?.projectId, {
+  window.addEventListener("workspaceMemberRemoveRequested", async (event) => {
+    const project = state.projects.find((item) => item.id === event.detail?.projectId);
+    const collaborator = project?.collaborators?.[event.detail?.collaboratorUid];
+    if (!project || !collaborator) {
+      return;
+    }
+    const confirmed = await customConfirm(
+      `Remove ${collaborator.name || collaborator.email || "this collaborator"} from "${project.title}"?`,
+      "Remove Collaborator"
+    );
+    if (!confirmed) {
+      return;
+    }
+    await kickCollaborator(event.detail?.projectId, event.detail?.collaboratorUid);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
+      detail: { ok: true, message: "Collaborator removed." }
+    }));
+    showToast("Collaborator removed.", "success");
+    renderStudio();
+  });
+
+  window.addEventListener("workspaceReminderRequested", async (event) => {
+    const result = await addWorkspaceReminder(event.detail?.projectId, {
       text: event.detail?.text,
       dueAt: event.detail?.dueAt
     });
-    window.dispatchEvent(new CustomEvent("editorMutationResult", {
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
       detail: { ...result, message: result.ok ? "Reminder added." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("editorReminderToggleRequested", async (event) => {
-    const result = await toggleEditorReminder(event.detail?.projectId, event.detail?.reminderId);
-    window.dispatchEvent(new CustomEvent("editorMutationResult", {
+  window.addEventListener("workspaceReminderToggleRequested", async (event) => {
+    const result = await toggleWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
       detail: { ...result, message: result.ok ? "Reminder updated." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("editorReminderDeleteRequested", async (event) => {
-    const result = await deleteEditorReminder(event.detail?.projectId, event.detail?.reminderId);
-    window.dispatchEvent(new CustomEvent("editorMutationResult", {
+  window.addEventListener("workspaceReminderDeleteRequested", async (event) => {
+    const result = await deleteWorkspaceReminder(event.detail?.projectId, event.detail?.reminderId);
+    window.dispatchEvent(new CustomEvent("workspaceMutationResult", {
       detail: { ...result, message: result.ok ? "Reminder deleted." : "" }
     }));
     if (result.ok) renderStudio();
   });
 
-  window.addEventListener("editorMemberProfileRequested", (event) => {
+  window.addEventListener("workspaceMemberProfileRequested", (event) => {
     showCollabProfile({
       uid: event.detail?.uid || "",
       name: event.detail?.name || "",
@@ -1770,13 +3420,6 @@ export function bindEvents() {
         hideSuggestionTray(true);
         clearSuggestionContext();
       }
-      // Workspace switcher chips (outside projectGrid, needs document-level delegation)
-      const workspaceChipDoc = event.target.closest('[data-workspace-chip]');
-      if (workspaceChipDoc) {
-        const chipId = workspaceChipDoc.dataset.workspaceChip;
-        state.homeWorkspaceFilter = chipId === 'all' ? null : chipId;
-        renderHome();
-      }
   });
 
   // Delegated Editor Events
@@ -1791,7 +3434,11 @@ export function bindEvents() {
     if (taskMarker) {
       const [firstTaskId] = String(taskMarker.dataset.taskIds || "").split(",").filter(Boolean);
       if (firstTaskId) {
-        await commentOnEditorTask(firstTaskId);
+        const project = getCurrentProject();
+        if (project?.workspace?.id) {
+          state.currentWorkspaceId = project.workspace.id;
+        }
+        await showWorkspaceTaskFlagSummary(firstTaskId);
       }
       return;
     }
@@ -1924,56 +3571,53 @@ export function bindEvents() {
           renderHome();
           return;
       }
-      // Pinned project chips
-      const pinnedChip = e.target.closest('.pinned-project-chip');
-      if (pinnedChip) {
-          if (!e.target.closest('.pinned-chip-unpin')) {
-              openProject(pinnedChip.dataset.projectId);
-          }
-          return;
-      }
-
-      const workspaceTrigger = e.target.closest("[data-open-workspace-id]");
-      if (workspaceTrigger) {
-          openWorkspaceDashboard(workspaceTrigger.dataset.openWorkspaceId);
-          return;
-      }
-
-      const card = e.target.closest(".project-card");
-      if (!card) return;
-      const projectId = card.dataset.projectId;
-
-      if (e.target.closest(".project-delete")) {
-          removeProject(projectId);
-      } else if (e.target.closest('[data-project-action="rename"]')) {
-          renameProjectById(projectId);
-      } else if (e.target.closest('[data-project-action="duplicate"]')) {
-          duplicateProjectById(projectId);
-      } else if (e.target.closest('[data-project-action="pin"]')) {
-          const pinBtn = e.target.closest('[data-project-action="pin"]');
-          togglePinProject(pinBtn.dataset.projectId || projectId);
-          renderHome();
-      } else {
-          openProject(projectId);
-      }
+      handleProjectCardGridClick(e);
   });
 
-  // Editor Project Grid (Delegated)
-  refs.editorProjectGrid?.addEventListener("click", (e) => {
-      const card = e.target.closest(".project-card");
-      if (!card) return;
-      const projectId = card.dataset.projectId;
-
-      if (e.target.closest(".project-delete")) {
-          removeProject(projectId);
-      } else if (e.target.closest('[data-project-action="rename"]')) {
-          renameProjectById(projectId);
-      } else if (e.target.closest('[data-project-action="duplicate"]')) {
-          duplicateProjectById(projectId);
-      } else {
-          openProject(projectId);
-      }
+  refs.workspaceProjectGrid?.addEventListener("click", (e) => {
+      handleProjectCardGridClick(e, { allowManagement: false });
   });
+
+  refs.projectGrid.addEventListener("touchstart", (e) => {
+      const card = e.target.closest(".project-card");
+      const touch = e.changedTouches?.[0];
+      if (!card || !touch) {
+          resetProjectCardTouchState();
+          return;
+      }
+      projectCardTouchState = {
+          identifier: touch.identifier,
+          startX: touch.clientX,
+          startY: touch.clientY,
+          moved: false
+      };
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("touchmove", (e) => {
+      if (!projectCardTouchState) return;
+      const touch = [...(e.changedTouches || [])]
+        .find((entry) => entry.identifier === projectCardTouchState.identifier);
+      if (!touch) return;
+      const deltaX = Math.abs(touch.clientX - projectCardTouchState.startX);
+      const deltaY = Math.abs(touch.clientY - projectCardTouchState.startY);
+      if (deltaX > PROJECT_CARD_TOUCH_SCROLL_THRESHOLD || deltaY > PROJECT_CARD_TOUCH_SCROLL_THRESHOLD) {
+          projectCardTouchState.moved = true;
+      }
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("touchend", (e) => {
+      if (!projectCardTouchState) return;
+      const touch = [...(e.changedTouches || [])]
+        .find((entry) => entry.identifier === projectCardTouchState.identifier);
+      const card = e.target.closest(".project-card");
+      const shouldSuppressClick = projectCardTouchState.moved || !touch;
+      if (shouldSuppressClick && card?.dataset.projectId) {
+          suppressProjectCardClick(card.dataset.projectId);
+      }
+      resetProjectCardTouchState();
+  }, { passive: true });
+
+  refs.projectGrid.addEventListener("touchcancel", resetProjectCardTouchState, { passive: true });
 
   // Recent Projects (Delegated)
   [refs.homeRecentProjects, refs.studioRecentProjects].forEach(container => {
@@ -1981,7 +3625,7 @@ export function bindEvents() {
       container.addEventListener("click", (e) => {
         const btn = e.target.closest(".recent-project-button");
         if (btn) {
-            openProject(btn.dataset.projectId);
+            openProjectOrNotify(btn.dataset.projectId);
             closeMenus();
         }
       });
@@ -2094,14 +3738,14 @@ export function bindEvents() {
 // Action Handlers
 export function openProject(projectId, options = {}) {
     const project = state.projects.find((item) => item.id === projectId);
-    if (!project) return;
-    if (project.isEditorRoot) {
-      openEditorDashboard(project.editor?.id || project.id);
-      return;
+    if (!project) return false;
+    if (project.isWorkspaceRoot) {
+      openWorkspaceDashboard(project.workspace?.id || project.id);
+      return true;
     }
     const projectLoadToast = options.silentLoadToast ? null : showToast("Opening project...", "loading", { duration: 0 });
     state.currentProjectId = project.id;
-  state.currentEditorId = project.editor?.id !== project.id ? project.editor?.id || null : null;
+  state.currentWorkspaceId = project.workspace?.id !== project.id ? project.workspace?.id || null : null;
   hasShownReadOnlyNotice = false;
 
   // Reset history for the new project
@@ -2137,6 +3781,7 @@ export function openProject(projectId, options = {}) {
     if (projectLoadToast) {
       updateToast(projectLoadToast, "Project opened.", "success", { duration: 1200 });
     }
+    return true;
 }
 
 export function renderStudio() {
@@ -2157,13 +3802,13 @@ export function renderStudio() {
   applyViewState();
   applyToolbarState();
   if (refs.leftRailToggle) {
-    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "▶" : "◀");
+    setButtonGlyph(refs.leftRailToggle, refs.leftPane.classList.contains("is-hidden") ? "&#9654;" : "&#9664;");
   }
   if (refs.rightRailToggle) {
-    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "◀" : "▶");
+    setButtonGlyph(refs.rightRailToggle, refs.rightPane.classList.contains("is-hidden") ? "&#9664;" : "&#9654;");
   }
-  setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
-  setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "▼" : "▲");
+  setButtonGlyph(refs.leftPaneSectionToggle, refs.leftPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
+  setButtonGlyph(refs.rightPaneSectionToggle, refs.rightPaneBody.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;");
   applyTranslations();
   updateSuggestions();
   updateCommentIcons();
@@ -2193,7 +3838,7 @@ function handleMetaInput() {
 
 function togglePaneSection(body, button) {
   body.classList.toggle("is-collapsed");
-  button.textContent = body.classList.contains("is-collapsed") ? "▼" : "▲";
+  button.innerHTML = body.classList.contains("is-collapsed") ? "&#9660;" : "&#9650;";
 }
 
 function readEditableText(element) {
@@ -2219,7 +3864,11 @@ function canEditCurrentProjectWithNotice() {
 
   if (!hasShownReadOnlyNotice) {
     hasShownReadOnlyNotice = true;
-    customAlert("Viewer access is read-only. Ask the editor owner to promote you to Editor if you need to make changes.", "Read-only Editor");
+    const permissions = getWorkspacePermissions(project);
+    const message = permissions.isViewer
+      ? "Viewer access is read-only. Ask a workspace admin or the owner if you need editing access."
+      : "You do not have permission to edit this workspace item.";
+    customAlert(message, "Read-only Workspace");
   }
 
   return false;
@@ -2307,11 +3956,6 @@ function handleBlockInput(id, element) {
   project.updatedAt = new Date().toISOString();
   clearSuggestionContext();
 
-  if (!_funnelFirstLineTracked && normalized.trim()) {
-    _funnelFirstLineTracked = true;
-    Funnel.milestone('first_line_typed');
-  }
-
   const shouldRefreshSpelling = state.grammarCheck
     && hasLanguageDictionary(state.writingLanguage)
     && Boolean(window.getSelection()?.isCollapsed);
@@ -2331,11 +3975,11 @@ function handleBlockInput(id, element) {
   }
   setTypingFocusModeActive();
   queueSave();
+  noteRealtimeActivity(id, { isTyping: true });
 }
 
 let lastKeyDownCode = "";
 let _enterPrevBlockId = null;  // tracks block left behind when Enter creates a new one
-let _funnelFirstLineTracked = false;
 
 function insertSoftLineBreak(id, element) {
   if (!element) {
@@ -2457,18 +4101,28 @@ function handleBlockKeydown(event, id) {
       focusSecondaryBlock(id);
       return;
     }
+    if (!line.text.trim()) {
+      focusBlock(id, true);
+      return;
+    }
     const offset = getCaretOffset(event.target);
-    const textBefore = line.text.substring(0, offset);
-    const textAfter = line.text.substring(offset);
-
-    line.text = textBefore;
+    const originalText = line.text;
+    const textBefore = originalText.substring(0, offset);
+    const textAfter = originalText.substring(offset);
     const nextType = inferNextType(index);
+    const createFreshLine = offset === 0 && Boolean(originalText.trim());
+
+    line.text = createFreshLine ? originalText : textBefore;
     _enterPrevBlockId = id;  // protect this block from focusout deletion during render
-    const newId = addBlock(nextType, textAfter || getDefaultText(nextType, index), index + 1);
+    const newId = addBlock(
+      nextType,
+      createFreshLine ? getDefaultText(nextType, index + 1) : (textAfter || getDefaultText(nextType, index + 1)),
+      index + 1
+    );
 
     renderStudio();
     _enterPrevBlockId = null;
-    focusBlock(newId, !textAfter);
+    focusBlock(newId, createFreshLine || !textAfter);
     queueSave();
     return;
   }
@@ -2606,19 +4260,22 @@ function changeBlockType(id, nextType) {
   const project = getCurrentProject();
   if (!line || !project) return;
 
+  const contextIndex = getLineIndex(id);
+  const previousText = line.text;
   line.type = nextType;
-  line.text = normalizeConvertedText(line.text, nextType);
+  line.text = normalizeConvertedText(previousText, nextType, contextIndex);
   project.updatedAt = new Date().toISOString();
+  state.activeBlockId = id;
   state.activeType = nextType;
   renderStudio();
-  focusBlock(id, !line.text);
+  focusBlock(id, !stripWrapperChars(String(previousText || "").trim()) && Boolean(line.text));
   queueSave();
 }
 
-function normalizeConvertedText(text, type) {
+function normalizeConvertedText(text, type, contextIndex = getLineIndex(state.activeBlockId)) {
   const stripped = stripWrapperChars(String(text || "").trim());
   if (!stripped && type === "character") {
-      return getSuggestedNextSpeaker(getLineIndex(state.activeBlockId));
+      return getSuggestedNextSpeaker(contextIndex);
   }
   return normalizeLineText(stripped, type);
 }
@@ -2644,19 +4301,6 @@ function toggleSceneCollapse(sceneId) {
 }
 
 function applySuggestion(value) {
-  if (state.suggestionContext?.mode === "mention" && state.suggestionContext.input) {
-    const input = state.suggestionContext.input;
-    const text = input.value;
-    const cursor = input.selectionStart;
-    const lastAt = text.lastIndexOf("@", cursor - 1);
-    input.value = text.slice(0, lastAt) + "@" + value + " " + text.slice(cursor);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.focus();
-    hideSuggestionTray();
-    clearSuggestionContext();
-    return;
-  }
-
   const line = getLine(state.activeBlockId);
   const project = getCurrentProject();
   if (!line || !project) return;
@@ -2718,7 +4362,18 @@ function togglePane(side) {
   const collapsed = pane.classList.toggle("is-hidden");
   if (handle) handle.classList.toggle("is-hidden", collapsed);
   refs.studioLayout.classList.toggle(isLeft ? "left-pane-hidden" : "right-pane-hidden", collapsed);
-  button.textContent = collapsed ? (isLeft ? "▶" : "◀") : (isLeft ? "◀" : "▶");
+  button.innerHTML = collapsed ? (isLeft ? "&#9654;" : "&#9664;") : (isLeft ? "&#9664;" : "&#9654;");
+}
+
+function setMobileStudioPane(pane) {
+  const layout = refs.studioLayout;
+  if (!layout) return;
+  const normalizedPane = ["details", "editor", "preview"].includes(pane) ? pane : "editor";
+  layout.classList.remove("mobile-pane-details", "mobile-pane-editor", "mobile-pane-preview");
+  layout.classList.add(`mobile-pane-${normalizedPane}`);
+  document.querySelectorAll("[data-mobile-pane]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.mobilePane === normalizedPane);
+  });
 }
 
 function initResizeHandle(handle, side) {
@@ -2759,6 +4414,15 @@ function handleMenuAction(action) {
       persistProjects(true);
       showHome();
       renderHome();
+      break;
+    case "open-file-recovery":
+      openFileRecoveryDialog();
+      break;
+    case "open-conversion-jobs":
+      openConversionJobsDialog();
+      break;
+    case "open-conversion-interface":
+      openCurrentProjectConversionInterface();
       break;
     case "save-project":
       persistProjects(true);
@@ -2876,9 +4540,6 @@ function handleMenuAction(action) {
     case "proofread":
       showProofreadReport();
       break;
-    case "open-characters":
-      showCharactersPopup();
-      break;
     case "toggle-ai-assistant":
       state.aiAssist = true;
       refs.aiAssistToggle.checked = state.aiAssist;
@@ -2962,8 +4623,8 @@ function handleMenuAction(action) {
     case "pick-story-memory":
       showStoryMemoryPicker();
       break;
-    case "open-editor":
-      showEditorPopup();
+    case "open-workspace":
+      showWorkspacePopup();
       break;
     case "open-analytics": {
       const container = document.createElement("div");
@@ -2996,19 +4657,28 @@ function execEditorCommand(command) {
   }
 }
 
-function saveAndGoHome() {
-  if (isDisposableUntitledDraft()) {
-    discardUntitledDraftIfNeeded().then(() => {
-      state.currentEditorId = null;
-      showHome();
-      renderHome();
-    });
-    return;
+async function saveAndGoHome() {
+  try {
+    if (isDisposableUntitledDraft()) {
+      await discardUntitledDraftIfNeeded();
+    } else {
+      persistProjects(true);
+    }
+  } catch (error) {
+    console.error("Save & Home failed during save", error);
+  } finally {
+    state.currentWorkspaceId = null;
+    state.homeWorkspaceFilter = "all";
+    state.homeProjectFilter = "all";
+    state.homeProjectFormat = "all";
+    state.homeProjectSort = "latest";
+    closeMenus();
+    if (window.location.pathname !== "/") {
+      window.history.replaceState({}, "", "/");
+    }
+    showHome();
+    renderHome();
   }
-  persistProjects(true);
-  state.currentEditorId = null;
-  showHome();
-  renderHome();
 }
 
 function setGrammarCheck(enabled) {
@@ -3236,21 +4906,15 @@ function getPointContext(block, clientX, clientY) {
   };
 }
 
-function setButtonGlyph(button, glyph) {
+function setButtonGlyph(button, entity) {
   if (button) {
-    button.textContent = glyph;
+    button.innerHTML = entity;
   }
 }
 
 async function renameCurrentProject() {
   const project = getCurrentProject();
   if (!project) return;
-
-  if (!canManageEditor(project)) {
-    await customAlert("Only the owner can rename a collaborated file.", "Rename Restricted");
-    return;
-  }
-
   const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (nextTitle === null) return;
   project.title = nextTitle.trim() || "Untitled Script";
@@ -3260,12 +4924,8 @@ async function renameCurrentProject() {
   queueSave();
 }
 
-async function duplicateProject() {
+function duplicateProject() {
   const current = getCurrentProject();
-  if (!current) return;
-  const confirmed = await customPrompt(`Type 'yes' to duplicate "${current.title}":`, "", "Duplicate Project");
-  if (confirmed?.toLowerCase() !== 'yes') return;
-
   const copy = cloneProject({ ...current, title: `${current.title} Copy` }, true);
   upsertProject(copy);
   openProject(copy.id);
@@ -3275,12 +4935,6 @@ async function duplicateProject() {
 async function renameProjectById(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
-
-  if (!canManageEditor(project)) {
-    await customAlert("Only the owner can rename a collaborated file.", "Rename Restricted");
-    return;
-  }
-
   const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (!nextTitle || !nextTitle.trim()) return;
   project.title = nextTitle.trim();
@@ -3293,12 +4947,9 @@ async function renameProjectById(projectId) {
   }
 }
 
-async function duplicateProjectById(projectId) {
+function duplicateProjectById(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
-  const confirmed = await customPrompt(`Type 'yes' to duplicate "${project.title}":`, "", "Duplicate Project");
-  if (confirmed?.toLowerCase() !== 'yes') return;
-
   const copy = cloneProject({ ...project, title: `${project.title} Copy` }, true);
   upsertProject(copy);
   persistProjects(true, { syncInputs: false });
@@ -3310,34 +4961,127 @@ function deleteProject() {
   if (current) removeProject(current.id);
 }
 
+async function confirmWorkspaceDeletion(workspaceProject) {
+  const finalWarningAccepted = await customConfirm(
+    `This will permanently delete the workspace "${workspaceProject.title}" for everyone, including its shared projects, invites, and collaboration records.`,
+    "Final Workspace Warning"
+  );
+  if (!finalWarningAccepted) {
+    return { ok: false, cancelled: true };
+  }
+
+  const nameConfirmation = await customPrompt(
+    `Type the workspace name exactly to continue deleting "${workspaceProject.title}".`,
+    "",
+    "Confirm Workspace Name"
+  );
+  if (nameConfirmation !== workspaceProject.title) {
+    if (nameConfirmation !== null) {
+      await customAlert("Workspace deletion cancelled. The workspace name did not match.", "Cancelled");
+    }
+    return { ok: false, cancelled: true };
+  }
+
+  const user = auth.currentUser;
+  if (!user?.email) {
+    return { ok: false, reason: "A signed-in email account is required to delete a workspace." };
+  }
+  const hasPasswordProvider = user.providerData?.some((provider) => provider?.providerId === "password");
+  if (!hasPasswordProvider) {
+    return { ok: false, reason: "Workspace deletion currently requires an email/password account so the password can be confirmed." };
+  }
+
+  const password = await customPrompt(
+    `Enter the password for ${user.email} to finish deleting this workspace.`,
+    "",
+    "Password Confirmation"
+  );
+  if (password === null) {
+    return { ok: false, cancelled: true };
+  }
+  if (!password) {
+    return { ok: false, reason: "Password confirmation is required." };
+  }
+
+  try {
+    const credential = EmailAuthProvider.credential(user.email, password);
+    await reauthenticateWithCredential(user, credential);
+    return { ok: true };
+  } catch (error) {
+    console.error("Workspace deletion reauthentication failed", error);
+    return { ok: false, reason: "Password confirmation failed. Please try again." };
+  }
+}
+
 async function removeProject(id) {
   const target = state.projects.find((item) => item.id === id);
   if (!target) return;
 
-  const entityLabel = target.isWorkspaceRoot ? "workspace" : "project";
-  const confirmed = await customConfirm(
-    `Move "${target.title}" to the archive? You can restore it from the "Recently Deleted" section on your home screen.`,
-    `Archive ${entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1)}`
-  );
-  if (!confirmed) return;
+  const workspaceId = target.workspace?.id || target.id;
+  const removedProjects = state.projects.filter((item) => {
+    if (target.isWorkspaceRoot) {
+      return item.workspace?.id === workspaceId;
+    }
+    return item.id === id;
+  });
+  const workspaceProject = getWorkspaceRootProject(workspaceId)
+    || state.projects.find((item) => item.id === workspaceId)
+    || target;
 
-  const result = await archiveProject(id);
-  if (!result.ok) {
-    await customAlert(result.reason || 'Could not archive the project.', 'Archive Failed');
+  if (target.isWorkspaceRoot) {
+    if (!canDeleteWorkspace(workspaceProject)) {
+      await customAlert("Only the workspace owner can delete this workspace.", "Workspace Access");
+      return;
+    }
+  } else if (target.isShared && !canManageWorkspaceProjects(workspaceProject)) {
+    await customAlert("Only workspace owners and admins can delete projects inside this workspace.", "Workspace Access");
     return;
   }
 
-  // If the archived project was currently open, navigate to the first active project.
-  const workspaceId = target.workspace?.id || target.id;
-  const wasCurrentProject = target.isWorkspaceRoot
-    ? state.projects.find(p => p.workspace?.id === workspaceId && p.id === state.currentProjectId)
-    : target.id === state.currentProjectId;
-
-  if (wasCurrentProject || (target.isWorkspaceRoot && state.currentWorkspaceId === workspaceId)) {
-    state.currentWorkspaceId = null;
-    state.currentProjectId = state.projects.find(p => !p.isArchived)?.id || state.projects[0]?.id || null;
+  if (target.isWorkspaceRoot) {
+    const workspaceDeletion = await confirmWorkspaceDeletion(target);
+    if (!workspaceDeletion.ok) {
+      if (workspaceDeletion.reason) {
+        await customAlert(workspaceDeletion.reason, "Workspace Deletion");
+      }
+      return;
+    }
+    const deleteResult = await deleteWorkspaceData(workspaceId);
+    if (!deleteResult.ok) {
+        await customAlert(deleteResult.reason || "Unable to delete the workspace right now.", "Workspace Deletion");
+        return;
+      }
+  } else {
+    const confirmation = await customPrompt(`This will permanently delete the project "${target.title}".\n\nTo confirm, please retype the project name below:`, "", "Confirm Deletion");
+    if (confirmation !== target.title) {
+      if (confirmation !== null) {
+        await customAlert("Deletion cancelled. The name you typed did not match.", "Cancelled");
+      }
+      return;
+    }
+    await logActivity(target.id, 'Deleted the project.', {
+      action: 'project.delete',
+      workspaceId
+    });
   }
 
+  archiveDeletedProjects(removedProjects);
+  state.projects = state.projects.filter((item) => {
+    if (target.isWorkspaceRoot) {
+      return item.workspace?.id !== workspaceId;
+    }
+    return item.id !== id;
+  });
+  if (!state.projects.length) {
+    const fallback = createProjectWithOptions();
+    state.projects = [fallback];
+  }
+  if (target.isWorkspaceRoot || state.currentWorkspaceId === workspaceId) {
+    state.currentWorkspaceId = null;
+  }
+  state.currentProjectId = state.projects[0].id;
+  persistProjects(true, { syncInputs: false });
+  await Promise.all(removedProjects.map((project) => deleteProjectFromCloud(project.id)));
   showHome();
   renderHome();
 }
@@ -3346,10 +5090,26 @@ function handleGlobalKeydown(event) {
   const key = event.key.toLowerCase();
   const code = event.code;
 
+  if (event.key === "F1") {
+    event.preventDefault();
+    refs.helpDialog?.showModal();
+    return;
+  }
+
   // Ctrl/Cmd + S to Save
   if ((event.ctrlKey || event.metaKey) && key === "s") {
     event.preventDefault();
+    if (event.shiftKey) {
+      saveAndGoHome();
+      return;
+    }
     persistProjects(true);
+    return;
+  }
+
+  if ((event.ctrlKey || event.metaKey) && key === "f") {
+    event.preventDefault();
+    findInScript();
     return;
   }
 
@@ -3412,6 +5172,36 @@ function handleGlobalKeydown(event) {
     if (blockType) {
       event.preventDefault();
       handleToolSelection(blockType);
+    }
+
+    if (charCode === 'h' || key === 'h') {
+      event.preventDefault();
+      saveAndGoHome();
+      return;
+    }
+
+    if (charCode === 'f' || key === 'f') {
+      event.preventDefault();
+      findInScript();
+      return;
+    }
+
+    if (charCode === 'j' || key === 'j') {
+      event.preventDefault();
+      openConversionJobsDialog();
+      return;
+    }
+
+    if (charCode === 'r' || key === 'r') {
+      event.preventDefault();
+      openFileRecoveryDialog();
+      return;
+    }
+
+    if (charCode === 'v' || key === 'v') {
+      event.preventDefault();
+      openCurrentProjectConversionInterface();
+      return;
     }
 
     // Alt + G for AI Grammar
@@ -3514,15 +5304,17 @@ function exportTxt() {
   const pageBreak = "\n\n" + "-".repeat(60) + "\n\n";
     const scriptBody = preparedLines.map((line) => line.displayText).join("\n\n");
 
-  const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
-  downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
-  showToast('Script exported as TXT', 'success');
+    const content = [cover, scriptBody].filter(Boolean).join(pageBreak) + "\n";
+    downloadFile(`${slugify(project.title)}.txt`, content, "text/plain;charset=utf-8");
+    logActivity(project.id, "Exported the project as plain text.", { action: "export.txt", workspaceId: project.workspace?.id || project.id }).catch(() => {});
+    showToast("Export complete.", "success");
 }
 
 function exportJson() {
-  const project = syncProjectFromInputs() || getCurrentProject();
-  downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
-  showToast('Script exported as JSON', 'success');
+    const project = syncProjectFromInputs() || getCurrentProject();
+    downloadFile(`${slugify(project.title)}.json`, JSON.stringify(project, null, 2), "application/json");
+    logActivity(project.id, "Exported the project as JSON.", { action: "export.json", workspaceId: project.workspace?.id || project.id }).catch(() => {});
+    showToast("Export complete.", "success");
 }
 
 async function exportWord() {
@@ -3530,31 +5322,19 @@ async function exportWord() {
       if (!project) return;
       const exportToast = showToast("Preparing Word export...", "loading", { duration: 0 });
 
-    if (!window.docx?.Document) {
-      showToast('Word export engine is still loading — please try again in a moment', 'warning', 4000);
-      return;
-    }
-
-    const btns = [refs.exportWordBtn, document.querySelector('[data-menu-action="export-word"]')].filter(Boolean);
-    const origLabels = btns.map(b => b.textContent);
-    btns.forEach(b => { b.disabled = true; b.textContent = 'Exporting…'; });
-
-    try {
-      const blob = await buildWordDocxBlob(project);
-      downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
-      Telemetry.track('export_docx', { projectId: project.id });
-      showToast('Script exported as Word document', 'success');
-    } catch (error) {
-      Logger.capture('exportWord', error);
-      showToast('Word export failed — try again once the DOCX engine loads', 'error', 5000);
-    } finally {
-      btns.forEach((b, i) => { b.disabled = false; b.textContent = origLabels[i]; });
-    }
+      try {
+        const blob = await buildWordDocxBlob(project);
+        downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
+        logActivity(project.id, "Exported the project as Word.", { action: "export.word", workspaceId: project.workspace?.id || project.id }).catch(() => {});
+        updateToast(exportToast, "Export complete.", "success");
+      } catch (error) {
+        console.error("DOCX export failed", error);
+        updateToast(exportToast, "Word export failed.", "error", { duration: 4200 });
+        customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
+      }
 }
 
 function exportPdf() {
-  const p = syncProjectFromInputs() || getCurrentProject();
-  if (p) Telemetry.track('export_pdf', { projectId: p.id });
   printWithHiddenFrame();
 }
 
@@ -3607,6 +5387,7 @@ function printWithHiddenFrame() {
       window.setTimeout(() => {
         try {
           frameWindow.print();
+          logActivity(project.id, "Opened the project print flow for PDF export.", { action: "export.pdf", workspaceId: project.workspace?.id || project.id }).catch(() => {});
           updateToast(exportToast, "Print dialog opened.", "success", { duration: 2400 });
         } catch (error) {
           console.error("Unable to start PDF print flow", error);
@@ -3659,13 +5440,14 @@ function importFile(event) {
         nextProject = sanitizeProject(JSON.parse(text));
       } catch (error) {
         console.error("Invalid JSON import", error);
-        showToast('Could not import file — invalid JSON format', 'error');
         return;
       }
     } else {
+      const hasCustomProjectTitle = String(project.title || "").trim()
+        && !/^(Untitled Script|Film Script \d+)$/i.test(String(project.title || "").trim());
       nextProject = sanitizeProject({
         ...project,
-        title: file.name.replace(/\.[^.]+$/, ""),
+        title: hasCustomProjectTitle ? project.title : file.name.replace(/\.[^.]+$/, ""),
         lines: parseTextToLines(text)
       });
     }
@@ -3675,12 +5457,416 @@ function importFile(event) {
     upsertProject(nextProject);
     openProject(nextProject.id);
     persistProjects(true);
-    const lineCount = nextProject.lines.filter(l => l.text.trim()).length;
-    showToast(`Imported "${nextProject.title}" — ${lineCount} line${lineCount !== 1 ? 's' : ''}`, 'success');
   };
 
   reader.readAsText(file);
   refs.fileInput.value = "";
+}
+
+async function convertImportFile(event) {
+  const [file] = event.target.files || [];
+  const project = state.projects.find((entry) => entry.id === pendingConvertImportProjectId)
+    || getCurrentProject();
+
+  refs.convertImportInput.value = "";
+  pendingConvertImportProjectId = "";
+
+  if (!file || !project) return;
+
+  await runConvertImportPipeline(file, project);
+}
+
+async function runConvertImportPipeline(file, project, options = {}) {
+  if (!file || !project) return;
+
+  const seedRecord = options.seedRecord || null;
+  const jobId = options.existingJobId || await beginConversionUpload({
+    fileName: file.name,
+    projectId: project.id
+  });
+  await attachSourceFileToConversionJob(jobId, file);
+  await openConversionLiveDialog(jobId, project.id);
+  const loadingToast = showToast("Uploading your script to the conversion workspace...", "loading", { duration: 0 });
+
+  try {
+    updateToast(loadingToast, "Uploading your script to the conversion workspace...", "loading", { duration: 0 });
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    const savedRawText = String(seedRecord?.rawText || "");
+    const savedNormalizedText = String(seedRecord?.normalizedText || "");
+    const hasEditedRawText = Boolean(seedRecord?.rawTextEditedAt && savedRawText.trim());
+    const hasEditedNormalizedText = Boolean(seedRecord?.normalizedTextEditedAt && savedNormalizedText.trim());
+
+    let rawText = savedRawText;
+    if (hasEditedRawText) {
+      updateToast(loadingToast, "Using your saved extracted text edits...", "loading", { duration: 0 });
+      await attachRawTextToConversionJob(jobId, rawText);
+    } else {
+      await markConversionExtractionStarted(jobId);
+      updateToast(loadingToast, "Extracting readable text from your file...", "loading", { duration: 0 });
+      rawText = await extractScriptTextFromFile(file, {
+        onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
+      });
+      await attachRawTextToConversionJob(jobId, rawText);
+    }
+
+    updateToast(loadingToast, "Normalizing the screenplay text before conversion...", "loading", { duration: 0 });
+
+    const result = await convertScriptTextToLines(rawText, {
+      fileName: file.name,
+      jobId,
+      projectId: project.id,
+      preparedNormalizedText: hasEditedNormalizedText ? savedNormalizedText : "",
+      preparedCoverPage: seedRecord?.coverPageCandidate || null,
+      onProgress: (message) => updateToast(loadingToast, message, "loading", { duration: 0 })
+    });
+
+  const liveWorkspacePatch = captureActiveConversionWorkspacePatch(result.jobId || jobId);
+  const finalLines = Array.isArray(liveWorkspacePatch?.structuredLines) && liveWorkspacePatch.structuredLines.length
+    ? liveWorkspacePatch.structuredLines
+    : result.lines;
+  const finalCoverPage = liveWorkspacePatch?.coverPageCandidate || result.coverPage;
+  if (liveWorkspacePatch) {
+    conversionWorkspaceOverrides.set(result.jobId || jobId, liveWorkspacePatch);
+  }
+
+    await markConversionImporting(result.jobId || jobId, finalLines.length);
+    updateToast(loadingToast, "Importing converted screenplay into your project...", "loading", { duration: 0 });
+
+    const nextProject = sanitizeProject({
+      ...project,
+      lines: finalLines,
+      conversionJobId: result.jobId || jobId,
+      conversionSourceFileName: file.name
+    });
+    applyCoverPageCandidateToProject(nextProject, finalCoverPage);
+    upsertProject(nextProject);
+    openProject(nextProject.id, { silentLoadToast: true });
+    persistProjects(true);
+    await finalizeConversionImport(result.jobId || jobId, {
+      usedFallback: result.usedFallback,
+      warnings: result.warnings,
+      lineCount: finalLines.length
+    });
+    if (liveWorkspacePatch) {
+      await patchConversionJobRecord(result.jobId || jobId, {
+        ...liveWorkspacePatch,
+        coverPageCandidate: finalCoverPage
+      });
+    }
+
+    if (result.usedFallback) {
+      updateToast(loadingToast, "Imported with a plain-text fallback. Review the structure.", "error", { duration: 5200 });
+    } else {
+      updateToast(loadingToast, "Converted script imported.", "success", { duration: 3200 });
+    }
+
+    if (result.warnings.length) {
+      showToast("Conversion finished with notes. Review them in Conversion Review.", "error", { duration: 5200 });
+    }
+    const persistedRecord = await waitForConversionJobRecord(result.jobId || jobId, { requireStructuredData: true });
+    const versionedRecord = await appendConversionJobVersion(result.jobId || jobId, {
+      ...(persistedRecord || {}),
+      id: result.jobId || jobId,
+      fileName: file.name,
+      projectId: nextProject.id,
+      status: result.usedFallback ? 'imported-with-fallback' : 'imported',
+      stageLabel: result.usedFallback ? 'Imported with fallback review needed' : 'Imported into project',
+      rawText,
+      normalizedText: liveWorkspacePatch?.normalizedText || persistedRecord?.normalizedText || '',
+      coverPageCandidate: finalCoverPage || persistedRecord?.coverPageCandidate || null,
+      structuredLines: finalLines,
+      structuredLineCount: finalLines.length,
+      warnings: result.warnings || [],
+      sourceFile: persistedRecord?.sourceFile || { name: file.name, type: file.type || '', size: Number(file.size) || 0 }
+    }, {
+      label: result.usedFallback ? 'Fallback import pass' : 'Imported screenplay pass',
+      reason: 'Automatic conversion result'
+    });
+    const reviewRecord = {
+      ...(versionedRecord || persistedRecord || {}),
+      id: result.jobId || jobId,
+      fileName: file.name,
+      projectId: nextProject.id,
+      status: result.usedFallback ? 'imported-with-fallback' : 'imported',
+      stageLabel: result.usedFallback ? 'Imported with fallback review needed' : 'Imported into project',
+      rawText,
+      normalizedText: liveWorkspacePatch?.normalizedText || persistedRecord?.normalizedText || '',
+      coverPageCandidate: finalCoverPage || persistedRecord?.coverPageCandidate || null,
+      structuredLines: finalLines,
+      structuredLineCount: finalLines.length,
+      warnings: result.warnings || [],
+      sourceFile: persistedRecord?.sourceFile || { name: file.name, type: file.type || '', size: Number(file.size) || 0 }
+    };
+    closeConversionLiveDialog();
+    await openConversionReviewDialog(result.jobId || jobId, nextProject.id, reviewRecord);
+  } catch (error) {
+    console.error("Convert & import failed", error);
+    await failConversionJob(jobId, error.message || "Conversion failed.");
+    updateToast(loadingToast, error.message || "Conversion failed.", "error", { duration: 5200 });
+    const failedRecord = await waitForConversionJobRecord(jobId, { timeoutMs: 2000 });
+    const versionedFailure = await appendConversionJobVersion(jobId, {
+      ...(failedRecord || {}),
+      id: jobId,
+      fileName: file.name,
+      projectId: project.id,
+      status: 'failed',
+      stageLabel: failedRecord?.stageLabel || 'Conversion failed',
+      warnings: failedRecord?.warnings?.length ? failedRecord.warnings : [error.message || "Conversion failed."],
+      sourceFile: failedRecord?.sourceFile || { name: file.name, type: file.type || '', size: Number(file.size) || 0 }
+    }, {
+      label: 'Failed conversion pass',
+      reason: error.message || 'Conversion failed'
+    });
+    const reviewRecord = {
+      ...(versionedFailure || failedRecord || {}),
+      id: jobId,
+      fileName: file.name,
+      projectId: project.id,
+      status: 'failed',
+      stageLabel: failedRecord?.stageLabel || 'Conversion failed',
+      warnings: failedRecord?.warnings?.length ? failedRecord.warnings : [error.message || "Conversion failed."],
+      sourceFile: failedRecord?.sourceFile || { name: file.name, type: file.type || '', size: Number(file.size) || 0 }
+    };
+    showToast("Conversion Review has the failure details and retry option.", "error", { duration: 5200 });
+    closeConversionLiveDialog();
+    await openConversionReviewDialog(jobId, project.id, reviewRecord);
+  }
+}
+
+function getConversionReviewEmptyMessage(record) {
+  const status = String(record?.status || '').toLowerCase();
+  if (status === 'failed') {
+    return 'Conversion stopped before screenplay blocks were created. Review the warning details above, then retry from this job when you are ready.';
+  }
+  if (status === 'queued' || status === 'uploading' || status === 'extracting' || status === 'preparing' || status === 'normalizing' || status === 'structuring' || status === 'importing') {
+    return 'This conversion job is still in progress. Keep this review open or reopen it from Conversion Jobs to watch the next stage appear.';
+  }
+  if (status === 'completed-with-fallback' || status === 'imported-with-fallback') {
+    return 'This job finished with a fallback path, so no fully structured screenplay preview was stored. Review the warnings and retry if you want a cleaner AI pass.';
+  }
+  return 'No structured screenplay lines are stored for this job yet. Retry the conversion if you want the app to rebuild the screenplay preview.';
+}
+
+function getConversionReviewState(record) {
+  const status = String(record?.status || '').toLowerCase();
+  if (status === 'failed') {
+    return {
+      tone: 'error',
+      title: 'This conversion stopped before the screenplay was built.',
+      body: 'Read the warning details, inspect the extracted text, and retry when you are ready. If the source file is a scan or badly wrapped export, a cleaner PDF or DOCX will usually help.'
+    };
+  }
+  if (status === 'queued' || status === 'uploading' || status === 'extracting' || status === 'preparing' || status === 'normalizing' || status === 'structuring' || status === 'importing') {
+    return {
+      tone: 'loading',
+      title: 'This conversion is still moving through the pipeline.',
+      body: 'Keep this review open if you want to watch the current stage, or reopen it later from Conversion Jobs. The extracted text and screenplay preview will fill in as the job advances.'
+    };
+  }
+  if (status === 'completed-with-fallback' || status === 'imported-with-fallback') {
+    return {
+      tone: 'warning',
+      title: 'The script imported with a fallback path.',
+      body: 'You can keep working from this result, but the warnings suggest the AI pass did not complete cleanly. Retry the conversion if you want a stronger structured pass.'
+    };
+  }
+  return {
+    tone: 'success',
+    title: 'This conversion workspace is ready to review.',
+    body: 'Use the extracted text, normalized pass, and structured preview together to confirm the screenplay before you keep writing.'
+  };
+}
+
+async function openConversionReviewDialog(jobId, projectId = "", recordOverride = null) {
+  const dialog = document.getElementById("conversionReviewDialog");
+  if (!dialog || !jobId) return;
+
+  const record = {
+    ...((recordOverride || await getConversionJobRecord(jobId)) || {}),
+    ...(getConversionWorkspaceOverride(jobId) || {})
+  };
+  if (!record) return;
+
+  const title = document.getElementById("conversionReviewTitle");
+  const meta = document.getElementById("conversionReviewMeta");
+  const status = document.getElementById("conversionReviewStatus");
+  const stage = document.getElementById("conversionReviewStage");
+  const file = document.getElementById("conversionReviewFile");
+  const lineCount = document.getElementById("conversionReviewLineCount");
+  const warnings = document.getElementById("conversionReviewWarnings");
+  const typeGrid = document.getElementById("conversionReviewTypeGrid");
+  const raw = document.getElementById("conversionReviewRaw");
+  const normalized = document.getElementById("conversionReviewNormalized");
+  const structured = document.getElementById("conversionReviewStructured");
+  const stateCard = document.getElementById("conversionReviewStateCard");
+  const stateTitle = document.getElementById("conversionReviewStateTitle");
+  const stateBody = document.getElementById("conversionReviewStateBody");
+  const closeBtn = document.getElementById("conversionReviewCloseBtn");
+  const retryBtn = document.getElementById("conversionReviewRetryBtn");
+  const applyBtn = document.getElementById("conversionReviewApplyBtn");
+  const restoreBtn = document.getElementById("conversionReviewRestoreBtn");
+  const versionSelect = document.getElementById("conversionReviewVersionSelect");
+  let baseRecord = record;
+  let selectedVersionId = "current";
+
+  const renderReviewState = (viewRecord) => {
+    if (title) title.textContent = viewRecord.fileName ? `Review "${viewRecord.fileName}"` : "Review Converted Script";
+    if (meta) meta.textContent = "Follow the script from extracted source text through normalization and into the final EyaWriter screenplay structure.";
+    if (status) status.textContent = String(viewRecord.status || "unknown");
+    if (stage) stage.textContent = String(viewRecord.stageLabel || "Unknown stage");
+    if (file) file.textContent = viewRecord.sourceFile?.name || viewRecord.fileName || "Unknown";
+    if (lineCount) lineCount.textContent = String(viewRecord.structuredLineCount || viewRecord.structuredLines?.length || 0);
+    if (raw) raw.value = String(viewRecord.rawText || "");
+    if (normalized) normalized.value = String(viewRecord.normalizedText || "");
+    if (warnings) {
+      const warningText = Array.isArray(viewRecord.warnings) ? viewRecord.warnings.filter(Boolean).join("\n\n") : "";
+      warnings.hidden = !warningText;
+      warnings.textContent = warningText;
+    }
+    const reviewState = getConversionReviewState(viewRecord);
+    if (stateCard) stateCard.dataset.stateTone = reviewState.tone;
+    if (stateTitle) stateTitle.textContent = reviewState.title;
+    if (stateBody) stateBody.textContent = reviewState.body;
+    const structuredLines = Array.isArray(viewRecord.structuredLines) ? viewRecord.structuredLines : [];
+    if (typeGrid) {
+      const counts = structuredLines.reduce((accumulator, line) => {
+        const type = String(line?.type || "action");
+        accumulator[type] = (accumulator[type] || 0) + 1;
+        return accumulator;
+      }, {});
+      const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      typeGrid.hidden = !entries.length;
+      typeGrid.innerHTML = entries.map(([type, count]) => `
+        <div class="conversion-review-type-pill">
+          <span>${escapeHtml(type)}</span>
+          <strong>${count}</strong>
+        </div>
+      `).join("");
+    }
+    if (structured) {
+      structured.innerHTML = structuredLines.length
+        ? structuredLines.slice(0, 160).map((line) => `
+          <div class="conversion-review-line">
+            <span class="conversion-review-line-type">${escapeHtml(String(line?.type || "action"))}</span>
+            <div class="conversion-review-line-text">${escapeHtml(String(line?.text || "")).replace(/\n/g, "<br>")}</div>
+          </div>
+        `).join("")
+        : `<p class="conversion-review-structured-empty">${escapeHtml(getConversionReviewEmptyMessage(viewRecord))}</p>`;
+    }
+    if (retryBtn) {
+      retryBtn.textContent = "Retry conversion";
+      retryBtn.disabled = !baseRecord.sourceFile?.blob;
+    }
+    if (applyBtn) {
+      applyBtn.disabled = !structuredLines.length;
+    }
+    if (restoreBtn) {
+      restoreBtn.disabled = selectedVersionId === "current";
+    }
+  };
+
+  const renderVersionOptions = () => {
+    if (!versionSelect) return;
+    const versions = buildConversionVersionOptions(baseRecord);
+    versionSelect.innerHTML = versions.map((entry) => `
+      <option value="${escapeHtml(entry.id)}">${escapeHtml(entry.label)}</option>
+    `).join("");
+    versionSelect.value = selectedVersionId;
+  };
+
+  renderVersionOptions();
+  renderReviewState(baseRecord);
+
+  await new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      closeBtn?.removeEventListener("click", onClose);
+      retryBtn?.removeEventListener("click", onRetry);
+      applyBtn?.removeEventListener("click", onApply);
+      restoreBtn?.removeEventListener("click", onRestore);
+      versionSelect?.removeEventListener("change", onSelectVersion);
+      dialog.removeEventListener("cancel", onClose);
+      dialog.removeEventListener("close", onClose);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const onClose = () => {
+      if (dialog.open) dialog.close();
+      finish();
+    };
+    const onSelectVersion = () => {
+      selectedVersionId = versionSelect?.value || "current";
+      const selected = resolveSelectedConversionVersion(baseRecord, selectedVersionId);
+      renderReviewState(selected.data);
+    };
+    const onApply = async () => {
+      const selected = resolveSelectedConversionVersion(baseRecord, selectedVersionId);
+      await applyConversionRecordToProject(selected.data, projectId, "Selected conversion pass applied to this script.");
+    };
+    const onRestore = async () => {
+      if (selectedVersionId === "current") return;
+      const selected = resolveSelectedConversionVersion(baseRecord, selectedVersionId);
+      const restoredPatch = {
+        rawText: String(selected.data.rawText || ""),
+        normalizedText: String(selected.data.normalizedText || ""),
+        structuredLines: Array.isArray(selected.data.structuredLines) ? selected.data.structuredLines : [],
+        structuredLineCount: Number(selected.data.structuredLineCount || selected.data.structuredLines?.length || 0),
+        warnings: Array.isArray(selected.data.warnings) ? selected.data.warnings : [],
+        coverPageCandidate: selected.data.coverPageCandidate || null,
+        operatorGuidance: String(selected.data.operatorGuidance || baseRecord.operatorGuidance || ""),
+        status: String(selected.data.status || baseRecord.status || "imported"),
+        stageLabel: `Restored ${selected.data.label || "saved pass"}`,
+        activeVersionId: selectedVersionId
+      };
+      await patchConversionJobRecord(jobId, restoredPatch);
+      baseRecord = {
+        ...(await getConversionJobRecord(jobId) || baseRecord),
+        ...restoredPatch
+      };
+      selectedVersionId = "current";
+      renderVersionOptions();
+      renderReviewState(baseRecord);
+      showToast("Saved pass restored to the current conversion workspace.", "success", { duration: 3200 });
+    };
+    const onRetry = async () => {
+      const blob = baseRecord.sourceFile?.blob;
+      const nextProject = state.projects.find((entry) => entry.id === projectId) || getCurrentProject();
+      if (!blob || !nextProject) {
+        await customAlert("The original uploaded file is not available for retry.", "Conversion Review");
+        return;
+      }
+      const retryFile = blob instanceof File
+        ? blob
+        : new File([blob], baseRecord.sourceFile?.name || baseRecord.fileName || "retry-script", {
+          type: baseRecord.sourceFile?.type || "application/octet-stream",
+          lastModified: baseRecord.sourceFile?.lastModified || Date.now()
+        });
+      dialog.close();
+      cleanup();
+      settled = true;
+      resolve();
+      const latestRecord = await getConversionJobRecord(jobId) || baseRecord;
+      await runConvertImportPipeline(retryFile, nextProject, {
+        existingJobId: jobId,
+        seedRecord: latestRecord
+      });
+    };
+
+    closeBtn?.addEventListener("click", onClose);
+    retryBtn?.addEventListener("click", onRetry);
+    applyBtn?.addEventListener("click", onApply);
+    restoreBtn?.addEventListener("click", onRestore);
+    versionSelect?.addEventListener("change", onSelectVersion);
+    dialog.addEventListener("cancel", onClose, { once: true });
+    dialog.addEventListener("close", onClose, { once: true });
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+  });
 }
 
 function openNotepad() {

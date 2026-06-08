@@ -1,131 +1,191 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper — true when the caller has a record in the admins collection
     function isAdmin() {
       return request.auth != null &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Personal projects and profile — owner or admin
+    // Personal projects and profile — owner only
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
       allow read: if isAdmin();
     }
 
-    // Billing and AI usage — owner only, no client write except via server-side admin SDK
-    match /users/{userId}/billing/{document=**} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if false;
-    }
-    match /users/{userId}/aiUsage/{document=**} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if false;
-    }
-    // Quota — owner can read and update count/resetAt; plan is server-managed only
-    match /users/{userId}/quota/{document=**} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId
-        && !request.resource.data.keys().hasAny(['plan']);
-    }
-
-    // Public user lookup by email (read: any signed-in user; write: own record only)
+    // Public user lookup by email (read: any signed-in user; write: own email only)
     match /usersByEmail/{email} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null
-        && request.auth.token.email == email
-        && request.resource.data.uid == request.auth.uid;
+      allow write: if request.auth != null && request.auth.token.email == email;
     }
 
-    // ── Shared project helpers ──────────────────────────────────────────────
-    function sharedProject(projectId) {
-      return get(/databases/$(database)/documents/sharedProjects/$(projectId)).data;
+    function isSignedIn() {
+      return request.auth != null;
     }
-    function isSharedProjectOwner(projectId) {
-      return sharedProject(projectId).ownerId == request.auth.uid;
+
+    function isWorkspaceOwner() {
+      return isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
-    function isSharedProjectMember(projectId) {
-      let p = sharedProject(projectId);
-      return p.ownerId == request.auth.uid || request.auth.uid in p.collaborators;
+
+    function isWorkspaceCollaborator() {
+      return isSignedIn() && request.auth.uid in resource.data.collaborators;
     }
-    function isSharedProjectEditor(projectId) {
-      let p = sharedProject(projectId);
-      return p.ownerId == request.auth.uid || (
-        request.auth.uid in p.collaborators &&
-        p.collaborators[request.auth.uid].role != 'viewer'
-      );
+
+    function collaboratorRole() {
+      return isWorkspaceCollaborator() ? resource.data.collaborators[request.auth.uid].role : null;
+    }
+
+    function canEditSharedContent() {
+      return isWorkspaceOwner() || (isWorkspaceCollaborator() && collaboratorRole() != 'viewer');
+    }
+
+    function isInviteeSelfJoin(projectId) {
+      return isSignedIn() &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.ownerName == resource.data.ownerName &&
+        request.resource.data.ownerEmail == resource.data.ownerEmail &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['collaborators', 'updatedBy', 'lastEditorName', 'pendingInviteId']) &&
+        request.resource.data.updatedBy == request.auth.uid &&
+        request.resource.data.pendingInviteId is string &&
+        request.resource.data.collaborators[request.auth.uid] != null &&
+        request.resource.data.collaborators[request.auth.uid].email == request.auth.token.email &&
+        request.resource.data.collaborators[request.auth.uid].name is string &&
+        request.resource.data.collaborators[request.auth.uid].role in ['admin', 'editor', 'viewer'] &&
+        (
+          resource.data.collaborators[request.auth.uid] == null ||
+          (
+            resource.data.collaborators[request.auth.uid].email == request.auth.token.email &&
+            resource.data.collaborators[request.auth.uid].role == request.resource.data.collaborators[request.auth.uid].role &&
+            resource.data.collaborators[request.auth.uid].status == 'pending'
+          )
+        ) &&
+        get(/databases/$(database)/documents/invitations/$(request.resource.data.pendingInviteId)).data.projectId == projectId &&
+        get(/databases/$(database)/documents/invitations/$(request.resource.data.pendingInviteId)).data.status == 'pending' &&
+        (
+          get(/databases/$(database)/documents/invitations/$(request.resource.data.pendingInviteId)).data.toUid == request.auth.uid ||
+          get(/databases/$(database)/documents/invitations/$(request.resource.data.pendingInviteId)).data.toEmail == request.auth.token.email
+        );
     }
 
     // Shared projects — owner or collaborators can read/write content
     match /sharedProjects/{projectId} {
       // Allow reading non-existent docs (resource==null) so the client can check
       // existence before creating; no data is exposed from a non-existent document.
-      allow read: if request.auth != null && (
+      allow read: if isSignedIn() && (
         resource == null ||
         resource.data.ownerId == request.auth.uid ||
         request.auth.uid in resource.data.collaborators
       );
-      // Only the owner-to-be can create; they must stamp their own uid.
-      allow create: if request.auth != null &&
-        request.resource.data.ownerId == request.auth.uid &&
-        request.resource.data.collaborators is map;
-      // Update paths — three distinct cases:
-      allow update: if request.auth != null && (
-        // 1. Owner can update anything EXCEPT ownership fields (transfer must go server-side).
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        // Owner can update anything.
+        isWorkspaceOwner() ||
+        // Collaborators can update content fields but NOT ownership or membership.
         (
-          resource.data.ownerId == request.auth.uid &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'ownerEmail'])
-        ) ||
-        // 2. Non-viewer collaborators can update content fields only.
-        //    Ownership fields (including ownerPhotoURL) and membership are locked.
-        (
-          request.auth.uid in resource.data.collaborators &&
-          resource.data.collaborators[request.auth.uid].role != 'viewer' &&
+          canEditSharedContent() &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['ownerId', 'ownerName', 'ownerEmail', 'ownerPhotoURL', 'collaborators'])
+            .hasAny(['ownerId', 'ownerName', 'ownerEmail', 'collaborators'])
         ) ||
-        // 3. Invitee self-add: caller may ONLY add themselves to collaborators (+ updatedBy).
-        //    Role must be a valid value; existing collaborators map entries are preserved.
+        // Admins can update collaborator membership state without touching owner fields
+        // or unrelated workspace state.
         (
+          isWorkspaceCollaborator() &&
+          collaboratorRole() == 'admin' &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.ownerName == resource.data.ownerName &&
+          request.resource.data.ownerEmail == resource.data.ownerEmail &&
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['collaborators', 'updatedBy']) &&
-          request.resource.data.updatedBy == request.auth.uid &&
-          request.auth.uid in request.resource.data.collaborators &&
-          !(request.auth.uid in resource.data.collaborators) &&
-          request.resource.data.collaborators[request.auth.uid].role in ['editor', 'viewer']
+            .hasOnly(['collaborators', 'updatedBy', 'lastEditorName'])
+        ) ||
+        // Invitee self-add: only allowed membership change is adding their own uid.
+        isInviteeSelfJoin(projectId)
+      );
+      allow delete: if isSignedIn() &&
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    match /sharedProjects/{projectId}/presence/{userId} {
+      allow read: if isSignedIn() && (
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
+        request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators
+      );
+      allow create, update: if isSignedIn() && request.auth.uid == userId && (
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
+        request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators
+      );
+      allow delete: if isSignedIn() && (
+        request.auth.uid == userId ||
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid
+      );
+    }
+
+    match /sharedProjects/{projectId}/versions/{versionId} {
+      allow read: if isSignedIn() && (
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
+        request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators
+      );
+      allow create: if isSignedIn() && (
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
+        (
+          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators &&
+          get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators[request.auth.uid].role != 'viewer'
         )
       );
-      // Owner or admin can delete.
-      allow delete: if request.auth != null && (
-        resource.data.ownerId == request.auth.uid || isAdmin()
-      );
+      allow update, delete: if isSignedIn() &&
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid;
     }
 
-    // Presence — members write their own heartbeat; any member can read
-    match /sharedProjects/{projectId}/presence/{uid} {
-      allow read: if request.auth != null && isSharedProjectMember(projectId);
-      allow write: if request.auth != null && request.auth.uid == uid && isSharedProjectMember(projectId);
-      allow delete: if request.auth != null && request.auth.uid == uid;
-    }
-
-    // Comments — readable/writable/deletable by project members
+    // Comments — readable/writable by project members
     match /sharedProjects/{projectId}/comments/{commentId} {
-      allow read: if request.auth != null && isSharedProjectMember(projectId);
-      // Non-viewer members can create comments stamped with their own uid.
-      allow create: if request.auth != null &&
-        isSharedProjectEditor(projectId) &&
-        request.resource.data.uid == request.auth.uid;
-      // Comment author or non-viewer member can update (resolve/unresolve).
-      allow update: if request.auth != null && (
-        resource.data.uid == request.auth.uid ||
-        isSharedProjectEditor(projectId)
+      allow read: if isSignedIn() && (
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
+        request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators
       );
-      // Comment author, project owner, or admin can delete.
-      allow delete: if request.auth != null && (
+      allow create: if isSignedIn() && (
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
+        (
+          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators &&
+          (
+            get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators[request.auth.uid].role != 'viewer' ||
+            get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.workspace.commentingEnabled == true
+          )
+        )
+      );
+      allow update: if isSignedIn() && (
         resource.data.uid == request.auth.uid ||
-        isSharedProjectOwner(projectId) ||
-        isAdmin()
+        get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid ||
+        (
+          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators &&
+          get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.collaborators[request.auth.uid].role != 'viewer'
+        )
+      );
+    }
+
+    match /workspace_members/{memberId} {
+      allow read: if request.auth != null && (
+        resource.data.user_id == request.auth.uid ||
+        get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspace_id)).data.ownerId == request.auth.uid ||
+        (
+          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspace_id)).data.collaborators &&
+          get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspace_id)).data.collaborators[request.auth.uid].role == 'admin'
+        )
+      );
+      allow create, update: if request.auth != null && (
+        get(/databases/$(database)/documents/sharedProjects/$(request.resource.data.workspace_id)).data.ownerId == request.auth.uid ||
+        (
+          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(request.resource.data.workspace_id)).data.collaborators &&
+          get(/databases/$(database)/documents/sharedProjects/$(request.resource.data.workspace_id)).data.collaborators[request.auth.uid].role == 'admin'
+        ) ||
+        request.resource.data.user_id == request.auth.uid
+      );
+      allow delete: if request.auth != null && (
+        get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspace_id)).data.ownerId == request.auth.uid ||
+        (
+          request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspace_id)).data.collaborators &&
+          get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspace_id)).data.collaborators[request.auth.uid].role == 'admin'
+        ) ||
+        resource.data.user_id == request.auth.uid
       );
     }
 
@@ -133,69 +193,76 @@ service cloud.firestore {
     match /invitations/{inviteId} {
       allow read: if request.auth != null && (
         resource.data.fromUid == request.auth.uid ||
-        resource.data.toEmail == request.auth.token.email
+        resource.data.toEmail == request.auth.token.email ||
+        (
+          resource.data.workspaceId != null &&
+          (
+            get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspaceId)).data.ownerId == request.auth.uid ||
+            (
+              request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspaceId)).data.collaborators &&
+              get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspaceId)).data.collaborators[request.auth.uid].role == 'admin'
+            )
+          )
+        )
       );
-      // Sender can only create an invite stamped with their own uid and a valid role
       allow create: if request.auth != null &&
-        request.resource.data.fromUid == request.auth.uid &&
-        request.resource.data.role in ['editor', 'viewer'] &&
-        request.resource.data.status == 'pending';
-      // Recipient can only update status field (accept/decline their own invite)
+        request.resource.data.fromUid == request.auth.uid;
       allow update: if request.auth != null &&
-        resource.data.toEmail == request.auth.token.email &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
-        request.resource.data.status in ['accepted', 'declined'];
-      allow delete: if request.auth != null && (
-        resource.data.fromUid == request.auth.uid ||
-        isAdmin()
-      );
+        (
+          resource.data.toEmail == request.auth.token.email ||
+          resource.data.toUid == request.auth.uid ||
+          resource.data.fromUid == request.auth.uid
+        );
+      allow delete: if request.auth != null &&
+        (
+          resource.data.fromUid == request.auth.uid ||
+          (
+            resource.data.workspaceId != null &&
+            (
+              get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspaceId)).data.ownerId == request.auth.uid ||
+              (
+                request.auth.uid in get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspaceId)).data.collaborators &&
+                get(/databases/$(database)/documents/sharedProjects/$(resource.data.workspaceId)).data.collaborators[request.auth.uid].role == 'admin'
+              )
+            )
+          )
+        );
     }
 
-    // Waitlist — anyone can submit; only admins can read/manage
     match /waitlist/{docId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 
-    // Admin identity — admins read their own record; no client write ever
     match /admins/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
     }
 
-    // Feature flags — any signed-in user can read; only admins can write
     match /config/{document} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
 
-    // Incidents — public read (including signed-out); only admins can write
     match /incidents/{incidentId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Admin aggregate data (flat top-level collections)
-    // signupRecords: owner creates their own record on signup; admins can manage
     match /adminSignups/{uid} {
       allow create: if request.auth != null && request.auth.uid == uid;
       allow read, update, delete: if isAdmin();
     }
-    // feedback: any auth'd user can submit, stamped with their uid; admins can manage
+
     match /adminFeedback/{feedbackId} {
       allow create: if request.auth != null &&
         request.resource.data.uid == request.auth.uid;
       allow read, update, delete: if isAdmin();
     }
-    // activeUsers: owner or admin can read/write
+
     match /adminActiveUsers/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
       allow read, update, delete: if isAdmin();
-    }
-
-    // Webhook event idempotency store — admin SDK writes only; no client access
-    match /webhookEvents/{eventId} {
-      allow read, write: if false;
     }
 
     // Deny all other access

@@ -3,58 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EyaWriter — Screenplay Writing Software with AI</title>
-  <meta name="description" content="Write professional screenplays with AI assistance. Collaborate in real-time, export to DOCX and PDF, and bring your stories to life with EyaWriter.">
-  <meta name="keywords" content="screenplay software, script writing app, screenwriter tool, AI writing assistant, film script editor, collaborate on scripts">
-  <link rel="canonical" href="https://eyawriter.com">
-  <meta name="robots" content="index, follow">
-
-  <!-- Open Graph -->
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://eyawriter.com">
-  <meta property="og:title" content="EyaWriter — Screenplay Writing Software with AI">
-  <meta property="og:description" content="Write professional screenplays with AI assistance. Collaborate in real-time, export to DOCX and PDF, track story memory, and bring your scripts to life.">
-  <meta property="og:image" content="https://eyawriter.com/og-image.png">
-  <meta property="og:site_name" content="EyaWriter">
-
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="EyaWriter — Screenplay Writing Software with AI">
-  <meta name="twitter:description" content="Write professional screenplays with AI assistance. Export, collaborate, and tell your story.">
-  <meta name="twitter:image" content="https://eyawriter.com/og-image.png">
-
-  <!-- Structured data -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "EyaWriter",
-    "applicationCategory": "CreativeWritingApplication",
-    "operatingSystem": "Web",
-    "description": "Professional screenplay writing software with AI assistance, real-time collaboration, and DOCX/PDF export.",
-    "url": "https://eyawriter.com",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
-    },
-    "featureList": [
-      "AI writing assistance",
-      "Real-time collaboration",
-      "DOCX and PDF export",
-      "Story memory tracking",
-      "Workspace task management"
-    ]
-  }
-  </script>
-
+  <title>EyaWriter</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
-  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+  <script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
-  <script src="https://code.jquery.com/jquery-3.5.1.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js" defer></script>
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
 </head>
 <body>
   <div id="liquid-bg-container" class="mesh-background"></div>
@@ -73,6 +33,10 @@
       <!-- Auth Container -->
       <div class="auth-wrapper">
         <div class="auth-card">
+          <div id="authPendingState" class="auth-pending-state" hidden aria-live="polite" aria-busy="true">
+            <div class="auth-pending-spinner" aria-hidden="true"></div>
+            <p id="authPendingMessage" class="auth-pending-message">Signing you in...</p>
+          </div>
           <!-- Logo/Header -->
           <div class="auth-header">
             <h1>Eya<span>Writer</span></h1>
@@ -105,7 +69,10 @@
             <button type="submit" class="btn-primary">Continue</button>
             <button type="button" class="btn-google" id="google-signin">
               <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-              <span class="btn-google-label">Continue with Google</span>
+              Continue with Google
+            </button>
+            <button type="button" class="btn-google" id="demo-login-btn">
+              Try Demo Account
             </button>
           </form>
 
@@ -121,8 +88,7 @@
             </div>
             <div class="input-group">
               <label for="signup-pass">Password</label>
-              <input type="password" id="signup-pass" placeholder="••••••••" minlength="6" required>
-              <span class="input-hint">Min 6 characters, with uppercase, lowercase &amp; a number</span>
+              <input type="password" id="signup-pass" placeholder="••••••••" minlength="8" required>
             </div>
             <div class="input-group">
               <label for="signup-pass2">Confirm Password</label>
@@ -130,14 +96,36 @@
             </div>
             <label class="checkbox-group">
               <input type="checkbox" required>
-              <span>I agree to the <a href="#" id="authTosLink">Terms</a> and <a href="#" id="authPrivacyLink">Privacy Policy</a></span>
+              <span>I agree to the <a href="#">Terms</a> and <a href="#">Privacy Policy</a></span>
             </label>
             <button type="submit" class="btn-primary">Create Account</button>
             <button type="button" class="btn-google" id="google-signup">
               <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-              <span class="btn-google-label">Continue with Google</span>
+              Continue with Google
             </button>
           </form>
+        </div>
+      </div>
+
+      <!-- OTP Verification Modal -->
+      <div id="otp-modal-overlay" class="auth-overlay">
+        <div class="auth-card modal-card">
+          <div class="auth-header">
+            <h1>Verify <span>Email</span></h1>
+            <p class="tagline">Enter the 6-digit code sent to <br><strong id="otp-email-display"></strong></p>
+          </div>
+          <div class="otp-inputs">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+            <input type="text" maxlength="1" class="otp-field" inputmode="numeric">
+          </div>
+          <p id="otp-error" class="error-msg"></p>
+          <button type="button" id="otp-submit-btn" class="btn-primary">Verify Code</button>
+          <button type="button" id="otp-resend-btn" class="resend-link">Didn't get a code? Resend</button>
+          <button type="button" id="otp-cancel-btn" class="resend-link">Cancel</button>
         </div>
       </div>
 
@@ -166,14 +154,20 @@
           <nav class="home-nav" aria-label="Primary navigation">
             <button class="nav-link" type="button" data-home-nav="file" data-menu-trigger="homeFileMenu">File</button>
             <button class="nav-link" type="button" data-home-nav="view" data-menu-trigger="homeThemeMenu">View</button>
+            <button class="nav-link" type="button" data-home-nav="format">Format</button>
+            <button class="nav-link" type="button" data-home-nav="metrics">Metrics</button>
+            <button class="nav-link" type="button" data-home-nav="revision">Revision</button>
             <button class="nav-link" type="button" data-menu-trigger="homeCollabMenu">Collaborate</button>
-            <button class="nav-link" type="button" data-home-nav="shortcuts">Help</button>
+            <button class="nav-link" type="button" data-menu-trigger="homeHelpMenu">Help</button>
+            <button class="nav-link" type="button" data-home-nav="shortcuts">Shortcuts</button>
           </nav>
           <div id="homeFileMenu" class="nav-menu nav-menu-wide" hidden>
             <div class="nav-menu-section">
               <span class="nav-menu-label">File</span>
               <button class="nav-menu-button" type="button" data-menu-action="new-project">New Project</button>
               <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
+              <button class="nav-menu-button" type="button" data-menu-action="open-file-recovery">File Recovery</button>
+              <button class="nav-menu-button" type="button" data-menu-action="open-conversion-jobs">Conversion Jobs</button>
             </div>
             <div class="nav-menu-section">
               <details id="homeRecentProjectsToggle" class="recent-projects-group" open>
@@ -219,8 +213,22 @@
               </div>
             </details>
           </div>
+          <div id="homeHelpMenu" class="nav-menu" hidden>
+            <span class="nav-menu-label">Help &amp; Resources</span>
+            <a class="nav-menu-button nav-menu-link" href="/help">Help Center</a>
+            <a class="nav-menu-button nav-menu-link" href="/faq">FAQ</a>
+            <a class="nav-menu-button nav-menu-link" href="/features">Features</a>
+            <a class="nav-menu-button nav-menu-link" href="/pricing">Pricing</a>
+            <a class="nav-menu-button nav-menu-link" href="mailto:hello@eyawriter.com">Contact</a>
+          </div>
         </div>
         <div class="home-topbar-user">
+          <button id="homeInboxBellBtn" class="home-inbox-trigger" type="button" aria-label="Notifications" title="Notifications">
+            <span class="tool-icon home-inbox-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 4a4 4 0 0 0-4 4v2.3c0 .7-.2 1.4-.6 2L6 15h12l-1.4-2.7c-.4-.6-.6-1.3-.6-2V8a4 4 0 0 0-4-4"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
+            </span>
+            <span id="homeInboxBellBadge" class="workspace-bell-badge home-inbox-badge" hidden></span>
+          </button>
           <button class="user-trigger open-profile-btn" aria-label="Open profile">
             <div class="user-avatar-circle">
               <img src="" alt="" class="user-avatar-img" hidden>
@@ -237,8 +245,6 @@
         <p class="home-tagline">Where your stories take flight.</p>
       </section>
 
-      <div id="homeWorkspaceSwitcher" class="home-workspace-switcher" hidden></div>
-
       <section class="home-projects">
         <div class="home-projects-head">
           <div class="home-projects-copy">
@@ -249,56 +255,42 @@
             <button id="newProjectBtn" class="primary-button" type="button">New Project</button>
           </div>
         </div>
-        <div id="homeWorkspaceDashboard"></div>
-        <section id="pinnedProjectSection" class="pinned-projects-section" hidden>
-          <div class="pinned-projects-head">
-            <span class="pinned-projects-label">Pinned</span>
-          </div>
-          <div id="pinnedProjectGrid" class="pinned-project-row"></div>
-        </section>
         <div id="projectGrid" class="project-grid"></div>
-        <section id="archivedProjectSection" class="archived-projects-section" hidden>
-          <div class="archived-projects-head">
-            <h3 class="archived-projects-title">Recently Deleted</h3>
-          </div>
-          <div id="archivedProjectGrid" class="archived-project-grid"></div>
-        </section>
+        <div class="home-resource-links" aria-label="Resources">
+          <a href="/features">Features</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/faq">FAQ</a>
+          <a href="/help">Help</a>
+          <a href="mailto:hello@eyawriter.com">Contact</a>
+        </div>
       </section>
     </section>
 
-    <section id="editorView" class="editor-view" hidden>
-      <header class="editor-view-header">
-        <div class="nav-stack">
-          <div class="editor-view-brand editor-view-header-content">
-            <strong id="editorViewTitle">Editor</strong>
-            <span id="editorViewSubtitle">Projects, members, and delegation live here.</span>
-          </div>
-        </div>
-        <div class="home-projects-actions">
-          <button id="editorBackBtn" class="ghost-button" type="button">All Projects</button>
-          <div id="editorDigitalClock" class="editor-digital-clock" style="margin: 0 15px; font-family: monospace; font-size: 1.1rem; color: var(--accent-strong); font-weight: bold;">00:00:00</div>
-          <button id="editorSaveHomeBtn" class="primary-button" type="button">Save & Home</button>
-          <button id="editorCloseBtn" class="icon-button editor-close-button" type="button" aria-label="Close Editor" style="display:none">✕</button>
-        </div>
-      </header>
-      <section class="editor-view-body">
-        <section id="editorDashboard" class="editor-home"></section>
-        <section class="editor-projects">
-          <div class="home-projects-head editor-projects-head">
-            <div class="home-projects-copy">
-              <h2>Editor Projects</h2>
-              <p class="home-projects-subtitle">Every script in this editor stays connected to the same team context.</p>
+    <section id="workspaceView" class="workspace-view" hidden>
+      <div class="workspace-shell">
+        <header class="home-topbar workspace-topbar">
+          <div class="workspace-topbar-slot workspace-topbar-slot-left">
+            <div class="workspace-view-brand">
+              <strong id="workspaceViewTitle">Workspace</strong>
             </div>
           </div>
-          <div id="editorProjectGrid" class="project-grid"></div>
+          <div class="workspace-topbar-slot workspace-topbar-slot-center">
+            <div id="workspaceViewClock" class="workspace-view-clock" aria-live="polite">--:-- --</div>
+          </div>
+          <div class="workspace-topbar-slot workspace-topbar-slot-right">
+            <button id="workspaceRefreshBtn" class="icon-button workspace-icon-button" type="button" aria-label="Refresh workspace">&#x21bb;</button>
+            <button id="workspaceCloseBtn" class="ghost-button workspace-exit-button" type="button" aria-label="Exit workspace">Exit</button>
+          </div>
+        </header>
+        <section class="workspace-view-body">
+          <section id="workspaceDashboard" class="workspace-home"></section>
         </section>
-      </section>
+      </div>
     </section>
 
-    <!-- Settings View -->
     <section id="settingsView" class="settings-view" hidden>
       <header class="settings-topbar">
-        <button class="ghost-button settings-back-btn" id="settingsBackBtn">← Back</button>
+        <button class="ghost-button settings-back-btn" id="settingsBackBtn" type="button">&larr; Back</button>
         <h1 class="settings-topbar-title">Settings</h1>
         <div class="home-topbar-user">
           <button class="user-trigger open-profile-btn" aria-label="Open profile">
@@ -312,40 +304,26 @@
       </header>
       <div class="settings-body">
         <nav class="settings-nav">
-          <button class="settings-tab is-active" data-settings-tab="general">General</button>
-          <button class="settings-tab" data-settings-tab="editor">Editor</button>
-          <button class="settings-tab" data-settings-tab="ai">AI</button>
-          <button class="settings-tab" data-settings-tab="account">Account</button>
-          <button class="settings-tab" data-settings-tab="billing">Billing</button>
-          <button class="settings-tab" data-settings-tab="usage">Usage</button>
-          <button class="settings-tab" data-settings-tab="legal">Legal</button>
-          <button class="settings-tab" data-settings-tab="support">Support</button>
+          <button class="settings-tab is-active" type="button" data-settings-tab="general">General</button>
+          <button class="settings-tab" type="button" data-settings-tab="editor">Editor</button>
+          <button class="settings-tab" type="button" data-settings-tab="ai">AI</button>
+          <button class="settings-tab" type="button" data-settings-tab="account">Account</button>
+          <button class="settings-tab" type="button" data-settings-tab="billing">Billing</button>
+          <button class="settings-tab" type="button" data-settings-tab="usage">Usage</button>
+          <button class="settings-tab" type="button" data-settings-tab="legal">Legal</button>
+          <button class="settings-tab" type="button" data-settings-tab="support">Support</button>
         </nav>
         <main class="settings-content">
-
-          <!-- General -->
           <section class="settings-section is-active" data-settings-section="general">
             <div class="settings-section-inner">
               <h2>General</h2>
               <div class="settings-group">
                 <label class="settings-label">Theme</label>
                 <div class="settings-theme-grid">
-                  <button class="settings-theme-btn" data-settings-theme="cedar">
-                    <span class="theme-swatch" style="background:linear-gradient(135deg,#fff1f2,#ffe4e6)"></span>
-                    Cedar
-                  </button>
-                  <button class="settings-theme-btn" data-settings-theme="dark">
-                    <span class="theme-swatch" style="background:linear-gradient(135deg,#1a1a1a,#252525)"></span>
-                    Dark
-                  </button>
-                  <button class="settings-theme-btn" data-settings-theme="white">
-                    <span class="theme-swatch" style="background:linear-gradient(135deg,#ffffff,#f8f9fa)"></span>
-                    White
-                  </button>
-                  <button class="settings-theme-btn" data-settings-theme="navy">
-                    <span class="theme-swatch" style="background:linear-gradient(135deg,#0f172a,#1e293b)"></span>
-                    Dark Blue
-                  </button>
+                  <button class="settings-theme-btn" type="button" data-settings-theme="cedar">Cedar</button>
+                  <button class="settings-theme-btn" type="button" data-settings-theme="dark">Dark</button>
+                  <button class="settings-theme-btn" type="button" data-settings-theme="white">White</button>
+                  <button class="settings-theme-btn" type="button" data-settings-theme="navy">Dark Blue</button>
                 </div>
               </div>
               <div class="settings-group">
@@ -354,15 +332,11 @@
                   <option value="en">English</option>
                   <option value="fr">French</option>
                   <option value="de">German</option>
-                  <option value="es">Spanish</option>
-                  <option value="it">Italian</option>
-                  <option value="pt">Portuguese</option>
                 </select>
               </div>
             </div>
           </section>
 
-          <!-- Editor -->
           <section class="settings-section" data-settings-section="editor">
             <div class="settings-section-inner">
               <h2>Editor</h2>
@@ -400,7 +374,6 @@
             </div>
           </section>
 
-          <!-- AI -->
           <section class="settings-section" data-settings-section="ai">
             <div class="settings-section-inner">
               <h2>AI Assistant</h2>
@@ -410,9 +383,9 @@
                 <input type="url" id="settingsAiUrl" class="settings-input" placeholder="https://your-server.com/api/ai-assist">
               </div>
               <div class="settings-actions">
-                <button id="settingsAiSave" class="primary-button btn-sm">Save Endpoint</button>
-                <button id="settingsAiTest" class="ghost-button btn-sm">Test Connection</button>
-                <button id="settingsAiReset" class="ghost-button btn-sm">Reset to Default</button>
+                <button id="settingsAiSave" class="primary-button btn-sm" type="button">Save Endpoint</button>
+                <button id="settingsAiTest" class="ghost-button btn-sm" type="button">Test Connection</button>
+                <button id="settingsAiReset" class="ghost-button btn-sm" type="button">Reset to Default</button>
               </div>
               <div class="settings-info-card">
                 <p>EyaWriter routes AI requests through OpenRouter. You need an <code>OPENAI_API_KEY</code> set on the server to enable AI features. Without a key, the server runs in test mode and returns stub responses.</p>
@@ -420,7 +393,6 @@
             </div>
           </section>
 
-          <!-- Account -->
           <section class="settings-section" data-settings-section="account">
             <div class="settings-section-inner">
               <h2>Account</h2>
@@ -433,30 +405,29 @@
                 <p class="settings-value" id="settingsAccountEmail">—</p>
               </div>
               <div class="settings-actions">
-                <button id="settingsChangePassword" class="ghost-button btn-sm">Send Password Reset Email</button>
+                <button id="settingsChangePassword" class="ghost-button btn-sm" type="button">Send Password Reset Email</button>
               </div>
               <div class="settings-group" id="settingsReferralGroup" style="display:none">
                 <label class="settings-label">Invite Friends</label>
                 <p class="settings-hint">Share your personal link — help grow the community.</p>
                 <div class="settings-referral-row">
                   <input type="text" id="settingsReferralLink" class="settings-input" readonly aria-label="Referral link">
-                  <button id="settingsCopyReferral" class="ghost-button btn-sm">Copy</button>
+                  <button id="settingsCopyReferral" class="ghost-button btn-sm" type="button">Copy</button>
                 </div>
               </div>
               <div class="settings-danger-zone">
                 <h3>Profile</h3>
-                <p>Manage your display name, avatar, and bio from the profile popup (top-right corner).</p>
+                <p>Manage your display name, avatar, and bio from the profile popup in the top-right corner.</p>
               </div>
               <div class="settings-group" id="settingsAdminGroup" style="display:none">
                 <label class="settings-label">Administration</label>
                 <div class="settings-actions">
-                  <button class="ghost-button btn-sm open-admin-btn" id="settingsAdminBtn">Open Admin Dashboard</button>
+                  <button class="ghost-button btn-sm open-admin-btn" id="settingsAdminBtn" type="button">Open Admin Dashboard</button>
                 </div>
               </div>
             </div>
           </section>
 
-          <!-- Billing -->
           <section class="settings-section" data-settings-section="billing">
             <div class="settings-section-inner">
               <h2>Billing</h2>
@@ -467,30 +438,22 @@
                 </div>
                 <div class="billing-plan-row">
                   <span class="settings-label">Status</span>
-                  <span id="billingSubStatus">—</span>
+                  <span id="billingSubStatus">Active</span>
                 </div>
                 <div class="billing-plan-row">
                   <span class="settings-label">Renews</span>
                   <span id="billingRenewDate">—</span>
                 </div>
-                <div class="billing-plan-row" id="billingCanceledRow" hidden>
-                  <span class="settings-label">Canceled</span>
-                  <span id="billingCanceledDate">—</span>
-                </div>
               </div>
-
               <div id="billingFreeSection">
-                <div id="billingQuotaBar" class="billing-quota-wrap"></div>
-                <p class="settings-hint">Free plan includes 50 AI requests/month and up to 2 projects. Upgrade to Premium for 300 AI requests and unlimited projects.</p>
-                <button class="primary-button billing-upgrade-btn" id="billingUpgradeBtn">Upgrade to Premium — $10/mo</button>
+                <div id="billingQuotaBar" class="billing-quota-wrap">
+                  <div class="billing-quota-bar">
+                    <span class="billing-quota-fill" style="width:0%;"></span>
+                  </div>
+                </div>
+                <p class="settings-hint">Free plan includes 50 AI requests each month and up to 2 projects. Upgrade options from the original billing stack can be connected back here later.</p>
+                <button class="primary-button btn-sm" id="billingUpgradeBtn" type="button">Upgrade to Premium</button>
               </div>
-
-              <div id="billingProSection" hidden>
-                <p class="settings-hint" id="billingProHint">You're on the Premium plan — 300 AI requests/month and unlimited projects.</p>
-                <button class="primary-button billing-upgrade-btn" id="billingUpgradePlusBtn" style="margin-bottom:8px">Upgrade to Premium Plus — $25/mo</button>
-                <button class="ghost-button" id="billingPortalBtn">Manage Subscription</button>
-              </div>
-
               <details class="plan-compare-details">
                 <summary class="plan-compare-summary">Compare plans</summary>
                 <table class="plan-compare-table" aria-label="Plan comparison">
@@ -498,8 +461,8 @@
                     <tr>
                       <th>Feature</th>
                       <th>Free</th>
-                      <th class="plan-col-pro">Premium</th>
-                      <th class="plan-col-plus">Plus</th>
+                      <th>Premium</th>
+                      <th>Plus</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -515,7 +478,6 @@
             </div>
           </section>
 
-          <!-- Usage -->
           <section class="settings-section" data-settings-section="usage">
             <div class="settings-section-inner">
               <h2>Usage</h2>
@@ -537,16 +499,14 @@
                   <span class="usage-stat-label">Member Since</span>
                 </div>
               </div>
-              <p class="settings-hint" style="margin-top:24px;">Detailed analytics and writing streaks are coming in a future update.</p>
             </div>
           </section>
 
-          <!-- Legal -->
           <section class="settings-section" data-settings-section="legal">
             <div class="settings-section-inner">
               <h2>Legal</h2>
               <div class="settings-legal-links">
-                <button class="settings-legal-btn" id="settingsPrivacyBtn">
+                <button class="settings-legal-btn" id="settingsPrivacyBtn" type="button">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                   <div>
                     <strong>Privacy Policy</strong>
@@ -554,7 +514,7 @@
                   </div>
                   <span class="legal-arrow">›</span>
                 </button>
-                <button class="settings-legal-btn" id="settingsTosBtn">
+                <button class="settings-legal-btn" id="settingsTosBtn" type="button">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                   <div>
                     <strong>Terms of Service</strong>
@@ -562,7 +522,7 @@
                   </div>
                   <span class="legal-arrow">›</span>
                 </button>
-                <button class="settings-legal-btn" id="settingsAiDisclosureBtn">
+                <button class="settings-legal-btn" id="settingsAiDisclosureBtn" type="button">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                   <div>
                     <strong>AI Usage Disclosure</strong>
@@ -575,15 +535,26 @@
             </div>
           </section>
 
-          <!-- Support -->
           <section class="settings-section" data-settings-section="support">
             <div class="settings-section-inner">
               <h2>Support &amp; Diagnostics</h2>
               <div class="settings-group">
+                <label class="settings-label">Resources</label>
+                <p class="settings-hint">Open help, review product details, or contact the team directly.</p>
+                <div class="settings-actions settings-resource-actions">
+                  <button id="settingsConversionJobsBtn" class="ghost-button btn-sm" type="button">Conversion Jobs</button>
+                  <a class="ghost-button btn-sm" href="/help">Help Center</a>
+                  <a class="ghost-button btn-sm" href="/faq">FAQ</a>
+                  <a class="ghost-button btn-sm" href="/features">Features</a>
+                  <a class="ghost-button btn-sm" href="/pricing">Pricing</a>
+                  <a class="primary-button btn-sm" href="mailto:hello@eyawriter.com">Contact</a>
+                </div>
+              </div>
+              <div class="settings-group">
                 <label class="settings-label">Send Feedback</label>
                 <p class="settings-hint">Report a bug, suggest a feature, or ask a question.</p>
                 <div class="settings-actions">
-                  <button id="settingsFeedbackBtn" class="primary-button btn-sm">Send Feedback</button>
+                  <button id="settingsFeedbackBtn" class="primary-button btn-sm" type="button">Send Feedback</button>
                 </div>
               </div>
               <div class="settings-group">
@@ -593,8 +564,8 @@
                   <p class="settings-hint">Loading diagnostics…</p>
                 </div>
                 <div class="settings-actions" style="margin-top:10px;">
-                  <button id="settingsCopyDiagnostics" class="ghost-button btn-sm">Copy Diagnostics</button>
-                  <button id="settingsClearErrorLog" class="ghost-button btn-sm">Clear Error Log</button>
+                  <button id="settingsCopyDiagnostics" class="ghost-button btn-sm" type="button">Copy Diagnostics</button>
+                  <button id="settingsClearErrorLog" class="ghost-button btn-sm" type="button">Clear Error Log</button>
                 </div>
               </div>
               <div class="settings-group">
@@ -605,56 +576,50 @@
               </div>
             </div>
           </section>
-
         </main>
       </div>
     </section>
 
-    <!-- Admin View -->
     <section id="adminView" class="admin-view" hidden>
       <header class="admin-topbar">
-        <button class="ghost-button admin-back-btn" id="adminBackBtn">← Back</button>
+        <button class="ghost-button admin-back-btn" id="adminBackBtn" type="button">&larr; Back</button>
         <h1 class="admin-topbar-title">Admin Dashboard</h1>
         <span class="admin-topbar-badge">Internal</span>
       </header>
       <div class="admin-body">
         <nav class="admin-nav">
-          <button class="admin-tab is-active" data-admin-tab="overview">Overview</button>
-          <button class="admin-tab" data-admin-tab="users">Users</button>
-          <button class="admin-tab" data-admin-tab="feedback">Feedback</button>
-          <button class="admin-tab" data-admin-tab="flags">Feature Flags</button>
-          <button class="admin-tab" data-admin-tab="incidents">Incidents</button>
-          <button class="admin-tab" data-admin-tab="waitlist">Waitlist</button>
-          <button class="admin-tab" data-admin-tab="announcements">Announcements</button>
+          <button class="admin-tab is-active" type="button" data-admin-tab="overview">Overview</button>
+          <button class="admin-tab" type="button" data-admin-tab="users">Users</button>
+          <button class="admin-tab" type="button" data-admin-tab="feedback">Feedback</button>
+          <button class="admin-tab" type="button" data-admin-tab="flags">Feature Flags</button>
+          <button class="admin-tab" type="button" data-admin-tab="incidents">Incidents</button>
+          <button class="admin-tab" type="button" data-admin-tab="waitlist">Waitlist</button>
+          <button class="admin-tab" type="button" data-admin-tab="announcements">Announcements</button>
         </nav>
         <main class="admin-content">
-
-          <!-- Overview -->
           <section class="admin-section is-active" data-admin-section="overview">
             <div class="admin-section-inner">
               <h2>Overview</h2>
-              <div id="adminOverviewPanel"><p class="admin-loading">Loading…</p></div>
+              <div id="adminOverviewPanel"><p class="admin-loading">Loading...</p></div>
             </div>
           </section>
 
-          <!-- Users -->
           <section class="admin-section" data-admin-section="users">
             <div class="admin-section-inner">
               <h2>User Lookup</h2>
               <div class="admin-search-row">
                 <input type="email" id="adminUserSearch" class="settings-input" placeholder="user@example.com" aria-label="User email">
-                <button id="adminUserSearchBtn" class="ghost-button btn-sm">Look Up</button>
+                <button id="adminUserSearchBtn" class="ghost-button btn-sm" type="button">Look Up</button>
               </div>
               <div id="adminUserList"><p class="admin-loading">Enter an email to look up a user.</p></div>
             </div>
           </section>
 
-          <!-- Feedback -->
           <section class="admin-section" data-admin-section="feedback">
             <div class="admin-section-inner">
               <h2>Feedback</h2>
               <div class="admin-filter-row">
-                <label class="settings-label">Filter</label>
+                <label class="settings-label" for="adminFeedbackFilter">Filter</label>
                 <select id="adminFeedbackFilter" class="comment-filter-select">
                   <option value="all">All types</option>
                   <option value="bug">Bug reports</option>
@@ -663,11 +628,10 @@
                   <option value="other">Other</option>
                 </select>
               </div>
-              <div id="adminFeedbackList"><p class="admin-loading">Loading…</p></div>
+              <div id="adminFeedbackList"><p class="admin-loading">Loading...</p></div>
             </div>
           </section>
 
-          <!-- Feature Flags -->
           <section class="admin-section" data-admin-section="flags">
             <div class="admin-section-inner">
               <h2>Feature Flags</h2>
@@ -675,15 +639,14 @@
               <div id="adminFlagList"></div>
               <div class="admin-flag-add-row">
                 <input type="text" id="adminFlagNewName" class="settings-input" placeholder="new_flag_name" aria-label="New flag name">
-                <button id="adminFlagAddBtn" class="ghost-button btn-sm">Add Flag</button>
+                <button id="adminFlagAddBtn" class="ghost-button btn-sm" type="button">Add Flag</button>
               </div>
               <div class="admin-flag-save-row">
-                <button id="adminFlagSave" class="primary-button btn-sm">Save All Flags</button>
+                <button id="adminFlagSave" class="primary-button btn-sm" type="button">Save All Flags</button>
               </div>
             </div>
           </section>
 
-          <!-- Incidents -->
           <section class="admin-section" data-admin-section="incidents">
             <div class="admin-section-inner">
               <h2>Incidents</h2>
@@ -698,26 +661,24 @@
                     <option value="critical">Critical</option>
                   </select>
                 </div>
-                <textarea id="adminIncidentBody" class="collab-textarea" placeholder="Describe the incident…" rows="3" maxlength="1000"></textarea>
-                <button id="adminIncidentCreateBtn" class="ghost-button btn-sm">Create Incident</button>
+                <textarea id="adminIncidentBody" class="collab-textarea" placeholder="Describe the incident..." rows="3" maxlength="1000"></textarea>
+                <button id="adminIncidentCreateBtn" class="ghost-button btn-sm" type="button">Create Incident</button>
               </div>
-              <div id="adminIncidentList"><p class="admin-loading">Loading…</p></div>
+              <div id="adminIncidentList"><p class="admin-loading">Loading...</p></div>
             </div>
           </section>
 
-          <!-- Waitlist -->
           <section class="admin-section" data-admin-section="waitlist">
             <div class="admin-section-inner">
               <h2>Waitlist <span id="adminWaitlistCount" style="font-size:1rem;font-weight:400;color:var(--text-muted);"></span></h2>
               <p class="settings-hint">Users who signed up for Premium early access from the marketing site.</p>
               <div style="margin-bottom:16px;">
-                <button id="adminWaitlistExport" class="ghost-button btn-sm">Export CSV</button>
+                <button id="adminWaitlistExport" class="ghost-button btn-sm" type="button">Export CSV</button>
               </div>
-              <div id="adminWaitlistList"><p class="admin-loading">Loading…</p></div>
+              <div id="adminWaitlistList"><p class="admin-loading">Loading...</p></div>
             </div>
           </section>
 
-          <!-- Announcements -->
           <section class="admin-section" data-admin-section="announcements">
             <div class="admin-section-inner">
               <h2>Announcement Banner</h2>
@@ -736,7 +697,7 @@
                     <option value="success">Success (green)</option>
                   </select>
                   <label class="settings-label" for="adminAnnDismissKey" style="margin-left:16px;">Dismiss key</label>
-                  <input type="text" id="adminAnnDismissKey" class="settings-input" style="max-width:180px;" placeholder="e.g. ann-2024-01" maxlength="60" aria-label="Dismiss key (change to re-show for users who dismissed)">
+                  <input type="text" id="adminAnnDismissKey" class="settings-input" style="max-width:180px;" placeholder="e.g. ann-2024-01" maxlength="60" aria-label="Dismiss key">
                 </div>
                 <div class="admin-form-row">
                   <label class="admin-toggle-label">
@@ -749,20 +710,19 @@
                   </label>
                 </div>
                 <div class="admin-ann-actions">
-                  <button id="adminAnnSave" class="primary-button btn-sm">Save Announcement</button>
-                  <button id="adminAnnDisable" class="ghost-button btn-sm">Disable Banner</button>
+                  <button id="adminAnnSave" class="primary-button btn-sm" type="button">Save Announcement</button>
+                  <button id="adminAnnDisable" class="ghost-button btn-sm" type="button">Disable Banner</button>
                 </div>
               </div>
             </div>
           </section>
-
         </main>
       </div>
     </section>
 
     <section id="studioView" class="studio-view" hidden>
       <header class="studio-topbar">
-        <div class="editor-brand">
+        <div class="workspace-brand">
           <img src="logo.png" alt="EyaWriter logo">
           <div>
             <strong>EyaWriter</strong>
@@ -777,18 +737,20 @@
             <button class="nav-link" type="button" data-menu-trigger="studioFormatMenu">Format</button>
             <button class="nav-link" type="button" data-menu-trigger="studioViewMenu">View</button>
             <button class="nav-link" type="button" data-menu-trigger="studioSettingsMenu">Settings</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tool</button>
-            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate <span id="studioCollabBadge" class="collab-badge" hidden></span></button>
+            <button class="nav-link" type="button" data-menu-trigger="studioToolsMenu">Tools</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioCollabMenu">Collaborate</button>
+            <button class="nav-link" type="button" data-menu-trigger="studioHelpMenu">Help</button>
             <button id="helpBtn" class="nav-link" type="button">Shortcuts</button>
           </nav>
 
-          <div id="studioFileMenu" class="nav-menu nav-menu-wide" hidden>
+          <div id="studioFileMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
             <details class="menu-group" open>
               <summary class="menu-group-summary">Project</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="new-project">New Project</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-projects">Open Project</button>
-                <button class="nav-menu-button" type="button" data-menu-action="import-file">Import</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-file-recovery">File Recovery</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-conversion-jobs">Conversion Jobs</button>
                 <details id="studioRecentProjectsToggle" class="recent-projects-group menu-group-inline" open>
                   <summary class="recent-projects-summary">
                     <span class="recent-projects-label">Recent Projects</span>
@@ -798,7 +760,7 @@
               </div>
             </details>
               <details class="menu-group">
-                <summary class="menu-group-summary">Manage</summary>
+                <summary class="menu-group-summary">Save</summary>
                 <div class="menu-group-body">
                   <button class="nav-menu-button" type="button" data-menu-action="save-project">Save Project</button>
                   <button class="nav-menu-button" type="button" data-menu-action="save-home">Save &amp; Home</button>
@@ -826,33 +788,16 @@
                 </div>
               </details>
               <details class="menu-group">
-                <summary class="menu-group-summary">Export</summary>
-                <div class="menu-group-body">
-                  <button class="nav-menu-button" type="button" data-menu-action="export-txt">Export as TXT</button>
-                  <button class="nav-menu-button" type="button" data-menu-action="export-word">Export as Word</button>
-                  <button class="nav-menu-button" type="button" data-menu-action="export-pdf">Export as PDF</button>
-                  <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
-                </div>
-              </details>
-            <details class="menu-group" id="fileRecoveryGroup">
-              <summary class="menu-group-summary">File Recovery</summary>
+              <summary class="menu-group-summary">Import &amp; Export</summary>
               <div class="menu-group-body">
-                <div id="recoverySessionAlert" class="recovery-alert" hidden></div>
-                <div class="recovery-info-row">
-                  <span class="recovery-info-label">Last autosave</span>
-                  <span id="recoveryLastSave" class="recovery-info-value">—</span>
-                </div>
-                <div class="recovery-info-row">
-                  <span class="recovery-info-label">Projects saved</span>
-                  <span id="recoveryProjectCount" class="recovery-info-value">—</span>
-                </div>
-                <div id="recoveryOfflineRow" class="recovery-info-row recovery-offline-row" hidden>
-                  <span>Sync pending — offline</span>
-                </div>
+                <button class="nav-menu-button" type="button" data-menu-action="export-txt">Export as TXT</button>
+                <button class="nav-menu-button" type="button" data-menu-action="export-word">Export as Word</button>
+                <button class="nav-menu-button" type="button" data-menu-action="export-pdf">Export as PDF</button>
+                <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
               </div>
             </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Output</summary>
+              <summary class="menu-group-summary">Preview &amp; Print</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="preview-new-tab">Preview in New Tab</button>
                 <button class="nav-menu-button" type="button" data-menu-action="print-project">Print</button>
@@ -861,7 +806,7 @@
             </details>
           </div>
 
-          <div id="studioEditMenu" class="nav-menu nav-menu-wide" hidden>
+          <div id="studioEditMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
             <details class="menu-group" open>
               <summary class="menu-group-summary">History</summary>
               <div class="menu-group-body">
@@ -871,7 +816,7 @@
               </div>
             </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Capitalization</summary>
+              <summary class="menu-group-summary">Transform Text</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="text-caps-sentence">Sentence Case</button>
                 <button class="nav-menu-button" type="button" data-menu-action="text-caps-each">Title Case</button>
@@ -881,7 +826,7 @@
               </div>
             </details>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Text</summary>
+              <summary class="menu-group-summary">Clipboard</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="text-copy">Copy</button>
                 <button class="nav-menu-button" type="button" data-menu-action="text-cut">Cut</button>
@@ -898,7 +843,7 @@
               </div>
             </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Search</summary>
+              <summary class="menu-group-summary">Find &amp; Filter</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="find">Find</button>
                 <button class="nav-menu-button" type="button" data-menu-action="filter">Filter</button>
@@ -907,9 +852,9 @@
             </details>
           </div>
 
-          <div id="studioFormatMenu" class="nav-menu" hidden>
+          <div id="studioFormatMenu" class="nav-menu nav-menu-flyout" hidden>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Line Function</summary>
+              <summary class="menu-group-summary">Line Type</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-format-type="scene">Scene</button>
                 <button class="nav-menu-button" type="button" data-format-type="action">Action</button>
@@ -926,9 +871,9 @@
             </details>
           </div>
 
-          <div id="studioViewMenu" class="nav-menu nav-menu-wide" hidden>
+          <div id="studioViewMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Theme</summary>
+              <summary class="menu-group-summary">Appearance</summary>
               <div class="menu-group-body">
                 <div class="theme-options">
                   <button class="theme-option" type="button" data-theme-value="cedar">Cedar</button>
@@ -940,7 +885,7 @@
             </details>
             <div class="nav-menu-section">
               <label class="menu-row toggle-row">
-                <span>Bg Annim</span>
+                <span>Background Animation</span>
                 <input id="bgAnimationToggle" type="checkbox">
               </label>
               <button class="nav-menu-button" type="button" data-view-toggle="pageNumbers">Page numbering</button>
@@ -959,17 +904,18 @@
             </details>
           </div>
 
-          <div id="studioToolsMenu" class="nav-menu nav-menu-wide" hidden>
+          <div id="studioToolsMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Tools</summary>
+              <summary class="menu-group-summary">Utilities</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="open-notepad">Notepad</button>
-                <button class="nav-menu-button" type="button" data-menu-action="open-editor">Editor</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-workspace">Workspace</button>
+                <button id="openConversionInterfaceMenuBtn" class="nav-menu-button" type="button" data-menu-action="open-conversion-interface">Conversion Interface</button>
               </div>
             </details>
 
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Writing</summary>
+              <summary class="menu-group-summary">Writing Tools</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-grammar-check">Grammar Check</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-scenes">Scenes</button>
@@ -978,7 +924,7 @@
             </details>
 
             <details class="menu-group" open>
-              <summary class="menu-group-summary">AI</summary>
+              <summary class="menu-group-summary">AI Tools</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="toggle-ai-assistant">AI Assistant</button>
                 <button class="nav-menu-button" type="button" data-menu-action="open-story-memory">Story Memory</button>
@@ -988,7 +934,7 @@
             </details>
 
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Revision &amp; Insight</summary>
+              <summary class="menu-group-summary">Insights</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="show-metrics">Metrics</button>
                 <button class="nav-menu-button" type="button" data-menu-action="show-work-tracking">Work Tracking</button>
@@ -998,10 +944,10 @@
             </details>
           </div>
 
-          <div id="studioCollabMenu" class="nav-menu nav-menu-wide" hidden>
-            <div class="nav-menu-label">Editor</div>
+          <div id="studioCollabMenu" class="nav-menu nav-menu-wide nav-menu-flyout" hidden>
+            <div class="nav-menu-label">Collaborate</div>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Invite Teammate</summary>
+              <summary class="menu-group-summary">Invite</summary>
               <div class="menu-group-body">
                 <div class="collab-invite-row">
                   <input id="collabInviteEmail" type="email" class="collab-input" placeholder="collaborator@email.com">
@@ -1011,7 +957,7 @@
               </div>
             </details>
             <details class="menu-group" open>
-              <summary class="menu-group-summary">Collaborators <span id="collabCount"></span></summary>
+              <summary class="menu-group-summary">People <span id="collabCount"></span></summary>
               <div class="menu-group-body">
                 <div id="studioCollaboratorList" class="collaborator-list">
                   <p class="collab-empty">No collaborators yet.</p>
@@ -1019,7 +965,7 @@
               </div>
             </details>
             <details class="menu-group">
-              <summary class="menu-group-summary">Collab Requests <span class="collab-badge" hidden></span></summary>
+              <summary class="menu-group-summary">Requests <span class="collab-badge" hidden></span></summary>
               <div class="menu-group-body">
                 <div id="studioCollabRequests" class="collab-requests-list">
                   <p class="collab-empty">No pending requests.</p>
@@ -1048,7 +994,7 @@
             </details>
           </div>
 
-          <div id="studioSettingsMenu" class="nav-menu" hidden>
+          <div id="studioSettingsMenu" class="nav-menu nav-menu-flyout" hidden>
             <details class="menu-group" open>
               <summary class="menu-group-summary">Editor</summary>
               <div class="menu-group-body">
@@ -1076,6 +1022,14 @@
                 </div>
               </div>
             </details>
+          </div>
+          <div id="studioHelpMenu" class="nav-menu" hidden>
+            <span class="nav-menu-label">Help &amp; Resources</span>
+            <a class="nav-menu-button nav-menu-link" href="/help">Help Center</a>
+            <a class="nav-menu-button nav-menu-link" href="/faq">FAQ</a>
+            <a class="nav-menu-button nav-menu-link" href="/features">Features</a>
+            <a class="nav-menu-button nav-menu-link" href="/pricing">Pricing</a>
+            <a class="nav-menu-button nav-menu-link" href="mailto:hello@eyawriter.com">Contact</a>
           </div>
         </div>
 
@@ -1229,7 +1183,13 @@
         <div id="suggestionList" class="suggestion-list"></div>
       </div>
 
-      <section id="studioLayout" class="studio-layout">
+      <nav class="studio-mobile-nav" aria-label="Studio mobile panes">
+        <button class="studio-mobile-nav-btn is-active" type="button" data-mobile-pane="details">Details</button>
+        <button class="studio-mobile-nav-btn" type="button" data-mobile-pane="editor">Editor</button>
+        <button class="studio-mobile-nav-btn" type="button" data-mobile-pane="preview">Preview</button>
+      </nav>
+
+      <section id="studioLayout" class="studio-layout mobile-pane-editor">
         <aside id="leftPane" class="left-pane">
           <div class="pane-shell">
             <div class="pane-shell-header">
@@ -1279,17 +1239,15 @@
                 </div>
               </section>
 
-              <section class="panel section-editor" data-left-pane-block="editor" data-left-pane-label="Team Editor" hidden>
+              <section class="panel section-workspace" data-left-pane-block="workspace" data-left-pane-label="Team Assembly" hidden>
                 <div class="panel-head">
                   <div>
-                    <h3>Team Editor</h3>
+                    <h3>Team Assembly</h3>
                     <p>Shared access, roles, comments, and activity</p>
                   </div>
-                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Team Workspace">▼</button>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="workspace" aria-label="Collapse Team Assembly">â–¼</button>
                 </div>
                 <div class="panel-section-body">
-                  <div id="workspaceAwareness" class="workspace-awareness" hidden></div>
-                  <div id="miniActivityFeed" class="mini-activity-feed" hidden></div>
                   <button class="ghost-button btn-sm" data-menu-action="open-workspace">Open Workspace</button>
                 </div>
               </section>
@@ -1308,6 +1266,7 @@
                     <span class="import-button-label">Import</span>
                     <input id="fileInput" type="file" accept=".txt,.fountain,.md,.json">
                   </label>
+                  <input id="convertImportInput" type="file" accept=".txt,.fountain,.md,.doc,.docx,.pdf" hidden>
                   <button id="saveBtn" class="ghost-button project-tool-button" type="button">Save</button>
                   <button id="exportTxtBtn" class="ghost-button project-tool-button" type="button">Export TXT</button>
                   <button id="exportJsonBtn" class="ghost-button project-tool-button" type="button">Export JSON</button>
@@ -1338,7 +1297,7 @@
                 <div class="panel-head">
                   <div>
                     <h3>Characters</h3>
-                    <p id="characterSummary">Open saved character entries</p>
+                    <p>Suggested again when needed</p>
                   </div>
                   <button class="panel-toggle" type="button" data-left-pane-section-toggle="characters" aria-label="Collapse Characters">▼</button>
                 </div>
@@ -1498,7 +1457,7 @@
                   <button class="panel-toggle" type="button" data-left-pane-section-toggle="proofread" aria-label="Collapse Style Proofread">▼</button>
                 </div>
                 <div class="panel-section-body">
-                   <button class="ghost-button btn-sm" data-menu-action="proofread">Open Simple Proofread</button>
+                   <button class="ghost-button btn-sm" data-menu-action="proofread">View Report</button>
                 </div>
               </section>
 
@@ -1578,10 +1537,6 @@
   <template id="projectCardTemplate">
     <article class="project-card">
       <div class="project-card-top">
-        <div class="project-card-heading">
-          <h3 class="project-card-title"></h3>
-          <span class="project-script-id script-id-flag"></span>
-        </div>
         <div class="project-card-actions">
           <button class="project-quick-action" type="button" data-project-action="rename">Rename</button>
           <button class="project-quick-action" type="button" data-project-action="duplicate">Duplicate</button>
@@ -1590,18 +1545,29 @@
           </button>
         </div>
       </div>
-      <button class="project-card-open" type="button">
+      <div class="project-card-open">
+        <div class="project-card-heading">
+          <h3 class="project-card-title"></h3>
+          <span class="project-script-id script-id-flag"></span>
+        </div>
         <div class="project-card-context-row">
           <span class="project-card-context"></span>
-          <span class="project-card-context-action" role="button" tabindex="0">Open Editor</span>
+          <span class="project-card-context-action" role="button" tabindex="0">Open Workspace</span>
         </div>
         <div class="project-meta-row">
           <span class="project-scenes"></span>
           <span class="project-characters"></span>
         </div>
+        <div class="project-work-status" data-project-work-status hidden>
+          <div class="project-work-status-head">
+            <span class="project-work-status-label"></span>
+            <strong class="project-work-status-count"></strong>
+          </div>
+          <div class="project-work-progress" style="--progress:0%"></div>
+        </div>
         <p class="project-card-logline"></p>
         <p class="project-card-updated"></p>
-      </button>
+      </div>
     </article>
   </template>
 
@@ -1650,6 +1616,7 @@
     <div class="menu-item" data-action="ai-grammar">AI Grammar Check <span class="menu-shortcut">Alt+G</span></div>
     <div class="menu-item" data-action="intelligent-split">Intelligent Split <span class="menu-shortcut">`+Enter</span></div>
     <div class="menu-divider"></div>
+    <div class="menu-item" data-action="create-task">Create task from line</div>
     <div class="menu-item" data-action="comment">Comment on line</div>
   </div>
 
@@ -1658,8 +1625,7 @@
       <span class="comment-compose-label">Add comment</span>
       <button id="commentComposeCancel" class="comment-compose-close" type="button" aria-label="Cancel">✕</button>
     </div>
-    <textarea id="commentComposeText" class="comment-compose-textarea" placeholder="Write a comment… (type @ to mention)" rows="3"></textarea>
-    <div id="mentionDropdown" class="mention-dropdown" hidden></div>
+    <textarea id="commentComposeText" class="comment-compose-textarea" placeholder="Write a comment…" rows="3"></textarea>
     <div class="comment-compose-footer">
       <button id="commentComposeSubmit" class="ghost-button comment-compose-submit" type="button">Post</button>
     </div>
@@ -1684,14 +1650,9 @@
       </div>
       <p id="cdText" class="cd-text"></p>
       <div id="cdReplies" class="cd-replies"></div>
-      <div class="cd-reply-compose cld-reply-compose" id="cdReplyCompose" hidden>
-        <textarea class="cld-reply-input" id="cdReplyText" rows="2" placeholder="Write a reply… (Enter to send)"></textarea>
-        <button class="ghost-button btn-sm" id="cdReplySend" type="button">Send</button>
-      </div>
       <div class="cd-actions">
-        <button id="cdDeleteBtn" class="ghost-button cd-delete-btn">Delete</button>
-        <button id="cdReplyBtn" class="ghost-button btn-sm" type="button">Reply</button>
         <button id="cdResolveBtn" class="ghost-button cd-resolve-btn"></button>
+        <button id="cdDeleteBtn" class="ghost-button cd-delete-btn">Delete</button>
         <button id="cdCloseBtn" class="ghost-button">Close</button>
       </div>
     </div>
@@ -1718,28 +1679,232 @@
         <button class="ghost-button btn-sm" type="submit">Close</button>
       </div>
       <div class="shortcut-grid">
-        <p><kbd>Ctrl/Cmd + S</kbd><span>Save project</span></p>
-        <p><kbd>Ctrl/Cmd + Z</kbd><span>Undo</span></p>
-        <p><kbd>Ctrl/Cmd + Y</kbd><span>Redo</span></p>
-        <p><kbd>Ctrl/Cmd + D</kbd><span>Duplicate Block</span></p>
-        <p><kbd>Alt + E</kbd><span>Scene</span></p>
-        <p><kbd>Alt + A</kbd><span>Action</span></p>
-        <p><kbd>Alt + C</kbd><span>Character</span></p>
-        <p><kbd>Alt + D</kbd><span>Dialogue</span></p>
-        <p><kbd>Alt + T</kbd><span>Transition</span></p>
-        <p><kbd>Alt + P</kbd><span>Parenthetical</span></p>
-        <p><kbd>Alt + S</kbd><span>Shot</span></p>
-        <p><kbd>Alt + X</kbd><span>Text</span></p>
-        <p><kbd>Alt + N</kbd><span>Note</span></p>
-        <p><kbd>Alt + U</kbd><span>Dual</span></p>
-        <p><kbd>Alt + I</kbd><span>Image</span></p>
-        <p><kbd>Alt + G</kbd><span>AI Grammar Check</span></p>
+        <p><kbd>Ctrl / Cmd + S</kbd><span>Save project</span></p>
+        <p><kbd>Alt / Option + H</kbd><span>Save &amp; Home</span></p>
+        <p><kbd>Ctrl / Cmd + Z</kbd><span>Undo</span></p>
+        <p><kbd>Ctrl / Cmd + Y</kbd><span>Redo</span></p>
+        <p><kbd>Ctrl / Cmd + D</kbd><span>Duplicate Block</span></p>
+        <p><kbd>Alt / Option + F</kbd><span>Find in script</span></p>
+        <p><kbd>Alt / Option + J</kbd><span>Conversion Jobs</span></p>
+        <p><kbd>Alt / Option + R</kbd><span>File Recovery</span></p>
+        <p><kbd>Alt / Option + V</kbd><span>Conversion Interface</span></p>
+        <p><kbd>F1</kbd><span>Open shortcuts</span></p>
+        <p><kbd>Alt / Option + E</kbd><span>Scene</span></p>
+        <p><kbd>Alt / Option + A</kbd><span>Action</span></p>
+        <p><kbd>Alt / Option + C</kbd><span>Character</span></p>
+        <p><kbd>Alt / Option + D</kbd><span>Dialogue</span></p>
+        <p><kbd>Alt / Option + T</kbd><span>Transition</span></p>
+        <p><kbd>Alt / Option + P</kbd><span>Parenthetical</span></p>
+        <p><kbd>Alt / Option + S</kbd><span>Shot</span></p>
+        <p><kbd>Alt / Option + X</kbd><span>Text</span></p>
+        <p><kbd>Alt / Option + N</kbd><span>Note</span></p>
+        <p><kbd>Alt / Option + U</kbd><span>Dual</span></p>
+        <p><kbd>Alt / Option + I</kbd><span>Image</span></p>
+        <p><kbd>Alt / Option + G</kbd><span>AI Grammar Check</span></p>
         <p><kbd>Tab</kbd><span>Cycle block type</span></p>
-        <p><kbd>▲ / ▼</kbd><span>Previous / Next Block</span></p>
-        <p><kbd>Ctrl + ▲ / ▼</kbd><span>Previous / Next Scene</span></p>
+        <p><kbd>Up / Down</kbd><span>Previous / Next Block</span></p>
+        <p><kbd>Ctrl / Cmd + Up / Down</kbd><span>Previous / Next Scene</span></p>
         <p><kbd>1-9</kbd><span>Choose suggestion</span></p>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="fileRecoveryDialog" class="file-recovery-dialog">
+    <div class="file-recovery-sheet">
+      <div class="file-recovery-head">
+        <div>
+          <h3>File Recovery</h3>
+          <p>Recover files deleted in the last 60 days.</p>
+        </div>
+        <button id="fileRecoveryCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+      </div>
+      <section id="fileRecoveryStateCard" class="file-recovery-state-card">
+        <div class="file-recovery-state-copy">
+          <strong id="fileRecoveryStateTitle">Recovery keeps your recent deletions close.</strong>
+          <p id="fileRecoveryStateBody">Restore returns a script to your library. Delete removes it from recovery permanently, so recheck the title before you confirm.</p>
+        </div>
+      </section>
+      <div id="fileRecoveryEmpty" class="file-recovery-empty">
+        <strong>Nothing to recover right now.</strong>
+        <p>Deleted scripts will stay here until they are permanently removed, so you can restore them when needed.</p>
+      </div>
+      <div id="fileRecoveryList" class="file-recovery-list" hidden></div>
+    </div>
+  </dialog>
+
+  <dialog id="conversionReviewDialog" class="conversion-review-dialog">
+      <div class="conversion-review-sheet">
+        <div class="conversion-review-head">
+          <div>
+            <span class="conversion-sheet-step">Conversion Review</span>
+            <h3 id="conversionReviewTitle">Conversion Review</h3>
+            <p id="conversionReviewMeta">Inspect how the uploaded script moved through extraction and conversion.</p>
+          </div>
+          <div class="conversion-review-head-actions">
+            <button id="conversionReviewApplyBtn" class="ghost-button btn-sm" type="button">Apply to Script</button>
+            <button id="conversionReviewRetryBtn" class="ghost-button btn-sm" type="button">Retry</button>
+            <button id="conversionReviewCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+          </div>
+        </div>
+        <div class="conversion-review-summary">
+          <div><span>Status</span><strong id="conversionReviewStatus">-</strong></div>
+          <div><span>Stage</span><strong id="conversionReviewStage">-</strong></div>
+          <div><span>Source file</span><strong id="conversionReviewFile">-</strong></div>
+          <div><span>Structured lines</span><strong id="conversionReviewLineCount">0</strong></div>
+        </div>
+        <section id="conversionReviewStateCard" class="conversion-review-state-card">
+          <div class="conversion-review-state-copy">
+            <strong id="conversionReviewStateTitle">Conversion workspace ready</strong>
+            <p id="conversionReviewStateBody">This review keeps the extracted text, the cleaned screenplay pass, and the final structured preview together so you always have a clear next step.</p>
+          </div>
+        </section>
+        <section class="conversion-review-version-row">
+          <label for="conversionReviewVersionSelect">Saved passes</label>
+          <div class="conversion-review-version-actions">
+            <select id="conversionReviewVersionSelect" class="settings-select"></select>
+            <button id="conversionReviewRestoreBtn" class="ghost-button btn-sm" type="button">Restore pass</button>
+          </div>
+        </section>
+        <div class="conversion-review-body">
+          <section class="conversion-review-panel conversion-review-panel-source">
+            <div class="conversion-review-panel-head">
+              <div>
+                <span class="conversion-sheet-label">Source</span>
+                <h4>Document Preparation</h4>
+                <p>Check the extracted text and the cleaned screenplay pass before the final block structure is applied.</p>
+              </div>
+            </div>
+            <div id="conversionReviewWarnings" class="conversion-review-warnings" hidden></div>
+            <div class="conversion-review-block">
+              <label for="conversionReviewRaw">Extracted text</label>
+              <textarea id="conversionReviewRaw" readonly spellcheck="false"></textarea>
+            </div>
+            <div class="conversion-review-block">
+              <label for="conversionReviewNormalized">Normalized screenplay text</label>
+              <textarea id="conversionReviewNormalized" readonly spellcheck="false"></textarea>
+            </div>
+          </section>
+          <section class="conversion-review-panel conversion-review-panel-structure">
+            <div class="conversion-review-panel-head">
+              <div>
+                <span class="conversion-sheet-label">Output</span>
+                <h4>Structured Screenplay</h4>
+                <p>Review how the converter mapped the screenplay into EyaWriter block types before you continue editing.</p>
+              </div>
+            </div>
+            <div id="conversionReviewTypeGrid" class="conversion-review-type-grid" hidden></div>
+            <div class="conversion-review-block">
+              <label>Structured screenplay preview</label>
+              <div id="conversionReviewStructured" class="conversion-review-structured"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+  <dialog id="conversionLiveDialog" class="conversion-live-dialog">
+      <div class="conversion-live-sheet">
+        <div class="conversion-live-top">
+          <div class="conversion-live-head">
+            <div>
+              <span class="conversion-sheet-step">Live Conversion</span>
+              <h3 id="conversionLiveTitle">Current Conversion Job</h3>
+              <p id="conversionLiveMeta">Watch the uploaded file move through extraction, normalization, structuring, and import.</p>
+            </div>
+            <div class="conversion-live-head-actions">
+              <button id="conversionLiveApplyBtn" class="ghost-button btn-sm" type="button">Apply Preview</button>
+              <button id="conversionLiveOpenReviewBtn" class="ghost-button btn-sm" type="button" disabled>Open Review</button>
+              <button id="conversionLiveCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+            </div>
+          </div>
+          <div class="conversion-live-summary">
+            <div><span>Status</span><strong id="conversionLiveStatus">Queued</strong></div>
+            <div><span>Stage</span><strong id="conversionLiveStage">Queued</strong></div>
+            <div><span>Source file</span><strong id="conversionLiveFile">-</strong></div>
+            <div><span>Warnings</span><strong id="conversionLiveWarningsCount">0</strong></div>
+          </div>
+          <div id="conversionLiveTimeline" class="conversion-live-timeline"></div>
+          <section class="conversion-live-warning-card">
+            <strong>Recheck this data before you trust it.</strong>
+            <p>The extracted and normalized text may still miss exact screenplay intent, page-spacing meaning, or cover-page details. Review and adjust it before the next pass.</p>
+          </section>
+        </div>
+        <div class="conversion-live-body">
+          <section class="conversion-live-panel">
+            <div class="conversion-live-panel-head">
+              <div>
+                <span class="conversion-sheet-label">Live Feed</span>
+                <h4>Pipeline Output</h4>
+                <p>Each stage fills in here as the current job advances.</p>
+              </div>
+            </div>
+            <div class="conversion-live-block">
+              <label for="conversionLiveRaw">Extracted text</label>
+              <textarea id="conversionLiveRaw" spellcheck="false"></textarea>
+            </div>
+              <div class="conversion-live-block">
+                <label for="conversionLiveNormalized">Normalized screenplay text</label>
+                <p class="conversion-live-field-hint">Editable. Refine line breaks, dialogue wraps, and spacing here before the next retry or preview apply.</p>
+                <textarea id="conversionLiveNormalized" spellcheck="false"></textarea>
+              </div>
+            <div class="conversion-live-guidance-actions conversion-live-edit-actions">
+              <button id="conversionLiveSaveTextBtn" class="ghost-button btn-sm" type="button">Save Text Edits</button>
+              <p id="conversionLiveTextStatus" class="conversion-live-guidance-status">Saved edits will be reused when you retry this conversion.</p>
+            </div>
+            <div class="conversion-live-block">
+              <label>Recovered cover page</label>
+              <div class="conversion-live-cover-grid">
+                <input id="conversionLiveCoverTitle" type="text" placeholder="Title">
+                <input id="conversionLiveCoverAuthor" type="text" placeholder="Author">
+                <input id="conversionLiveCoverContact" type="text" placeholder="Contact">
+                <input id="conversionLiveCoverCompany" type="text" placeholder="Company">
+                <input id="conversionLiveCoverDetails" type="text" placeholder="Details">
+                <input id="conversionLiveCoverLogline" type="text" placeholder="Logline">
+              </div>
+            </div>
+            <div class="conversion-live-block">
+              <label>Structured preview</label>
+              <div id="conversionLiveStructured" class="conversion-live-structured"></div>
+            </div>
+          </section>
+          <section class="conversion-live-panel conversion-live-panel-assist">
+            <div class="conversion-live-panel-head">
+              <div>
+                <span class="conversion-sheet-label">Assist AI</span>
+                <h4>Operator Guidance</h4>
+                <p>Leave short notes about scene headings, dialogue wraps, or formatting problems before retrying.</p>
+              </div>
+            </div>
+            <div class="conversion-live-block conversion-live-guidance-block">
+              <label for="conversionLiveGuidance">Guidance for the next pass</label>
+              <textarea id="conversionLiveGuidance" spellcheck="true" placeholder="Example: treat centered uppercase names as character cues, keep wrapped speech as one dialogue block, and preserve scene headings on their own line."></textarea>
+              <div class="conversion-live-guidance-actions">
+                <button id="conversionLiveSaveGuidanceBtn" class="ghost-button btn-sm" type="button">Save Guidance</button>
+                <p id="conversionLiveGuidanceStatus" class="conversion-live-guidance-status">Guidance is saved to this job and reused on retry.</p>
+              </div>
+            </div>
+            <div id="conversionLiveWarnings" class="conversion-review-warnings" hidden></div>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+  <dialog id="conversionJobsDialog" class="conversion-jobs-dialog">
+      <div class="conversion-jobs-sheet">
+        <div class="conversion-jobs-head">
+          <div>
+            <span class="conversion-sheet-step">Conversion Jobs</span>
+            <h3>Conversion Jobs</h3>
+            <p>Review recent upload, normalization, and import jobs.</p>
+          </div>
+          <button id="conversionJobsCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+        </div>
+      <div id="conversionJobsEmpty" class="conversion-jobs-empty">
+        <strong>No conversion jobs yet.</strong>
+        <p>Run Convert &amp; import to keep a saved trail of upload progress, warnings, structured output, and retry options.</p>
+      </div>
+      <div id="conversionJobsList" class="conversion-jobs-list" hidden></div>
+    </div>
   </dialog>
 
   <!-- Notepad Modal -->
@@ -1796,14 +1961,21 @@
           </button>
           <input type="file" id="profile-upload" accept="image/*" hidden>
         </div>
-        <h2 class="profile-name" id="profile-name"></h2>
-        <p class="profile-email" id="profile-email" hidden></p>
+        <h2 class="profile-name" id="profile-name">Jane Doe</h2>
+        <p class="profile-email" id="profile-email" hidden>jane@example.com</p>
       </div>
 
       <div class="profile-identity-row">
-        <label class="bio-label" for="profile-username">Username</label>
-        <input id="profile-username" class="modal-input profile-username-input" type="text" minlength="4" maxlength="20" spellcheck="false" disabled>
-        <p class="profile-username-hint" id="profile-username-hint">At least 4 characters. You can change it once every 3 months.</p>
+        <label class="bio-label" for="profile-username">Full name</label>
+        <input id="profile-username" class="modal-input profile-username-input" type="text" minlength="2" maxlength="60" spellcheck="false" disabled>
+        <p class="profile-username-hint" id="profile-username-hint">Workspace members are identified by full name and email.</p>
+      </div>
+
+      <div class="profile-bio-container">
+        <label class="bio-label">Recent invitations</label>
+        <div id="profile-invite-history" class="collab-requests-list">
+          <p class="collab-empty">No recent invitations yet.</p>
+        </div>
       </div>
 
       <!-- Profile Writeup -->
@@ -1824,7 +1996,7 @@
           </svg>
           <span>Edit</span>
         </button>
-        <button class="profile-action-btn open-settings-btn" id="open-settings-btn">
+        <button class="profile-action-btn open-settings-btn" id="open-settings-btn" type="button">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -1843,213 +2015,91 @@
     </div>
   </div>
 
-  <!-- Onboarding Overlay -->
-  <div id="onboardingOverlay" class="ob-overlay" aria-modal="true" role="dialog" aria-label="Welcome to EyaWriter">
-    <div class="ob-card">
-      <div class="ob-dots">
-        <span class="ob-dot is-active"></span>
-        <span class="ob-dot"></span>
-        <span class="ob-dot"></span>
-      </div>
-
-      <!-- Step 1: Welcome -->
-      <div class="ob-step is-active" data-step="0">
-        <div class="ob-icon">⚡</div>
-        <h2>Welcome to EyaWriter</h2>
-        <p class="ob-subtitle">The screenplay editor built for serious writers.</p>
-        <ul class="ob-features">
-          <li><span class="ob-feature-icon">✍️</span><span>Industry-format screenplay editing with block-based flow</span></li>
-          <li><span class="ob-feature-icon">🤖</span><span>AI assistant for scene expansion, dialogue rewrites, and next-beat prediction</span></li>
-          <li><span class="ob-feature-icon">🤝</span><span>Real-time collaboration, comments, and shared workspaces</span></li>
-          <li><span class="ob-feature-icon">🌍</span><span>Six-language UI with spellcheck and grammar tools</span></li>
-        </ul>
-        <button class="primary-button ob-btn" data-ob-next="1">Get Started →</button>
-        <button class="ob-skip">Skip for now</button>
-      </div>
-
-      <!-- Step 2: Theme -->
-      <div class="ob-step" data-step="1">
-        <div class="ob-icon">🎨</div>
-        <h2>Make it yours</h2>
-        <p class="ob-subtitle">Pick a theme that fits your writing mood.</p>
-        <div class="ob-theme-grid">
-          <button class="ob-theme-btn is-active" data-ob-theme="cedar">
-            <span class="ob-theme-swatch" style="background:linear-gradient(135deg,#fff1f2,#ffe4e6)"></span>
-            <span>Cedar</span>
-          </button>
-          <button class="ob-theme-btn" data-ob-theme="dark">
-            <span class="ob-theme-swatch" style="background:linear-gradient(135deg,#1a1a1a,#252525)"></span>
-            <span>Dark</span>
-          </button>
-          <button class="ob-theme-btn" data-ob-theme="white">
-            <span class="ob-theme-swatch" style="background:linear-gradient(135deg,#ffffff,#f8f9fa); border:1px solid #e5e7eb"></span>
-            <span>White</span>
-          </button>
-          <button class="ob-theme-btn" data-ob-theme="navy">
-            <span class="ob-theme-swatch" style="background:linear-gradient(135deg,#0f172a,#1e293b)"></span>
-            <span>Dark Blue</span>
-          </button>
+  <div class="popup-overlay workspace-inbox-popup-overlay" id="workspace-inbox-popup">
+    <div class="popup-card workspace-inbox-popup-card">
+      <button class="popup-close" id="close-workspace-inbox" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+      <div class="workspace-inbox-popup-head">
+        <div>
+          <h2>Inbox</h2>
+          <p>New invites, tasks, and comments in one simple list.</p>
         </div>
-        <button class="primary-button ob-btn" data-ob-next="2">Continue →</button>
-        <button class="ob-skip">Skip for now</button>
       </div>
-
-      <!-- Step 3: First project -->
-      <div class="ob-step" data-step="2">
-        <div class="ob-icon">🎬</div>
-        <h2>Ready to write?</h2>
-        <p class="ob-subtitle">Start your first script or explore with a demo.</p>
-        <div class="ob-cta-grid">
-          <button class="ob-cta-btn" data-ob-new-project>
-            <span class="ob-cta-icon">✦</span>
-            <strong>Start Fresh</strong>
-            <span>Create a new screenplay from scratch</span>
-          </button>
-          <button class="ob-cta-btn" data-ob-demo>
-            <span class="ob-cta-icon">▶</span>
-            <strong>Explore Demo</strong>
-            <span>See EyaWriter in action with sample content</span>
-          </button>
-        </div>
-        <button class="primary-button ob-btn" data-ob-next="99">Start Writing →</button>
+      <div id="workspaceInboxPopupList" class="workspace-inbox-popup-list">
+        <p class="collab-empty">No incoming items right now.</p>
       </div>
     </div>
   </div>
 
-  <!-- Privacy Policy Dialog -->
   <dialog id="privacyDialog" class="legal-dialog">
     <div class="legal-dialog-inner">
       <div class="legal-dialog-header">
         <h2>Privacy Policy</h2>
-        <form method="dialog"><button class="ghost-button btn-sm">Close</button></form>
+        <form method="dialog"><button class="ghost-button btn-sm" type="submit">Close</button></form>
       </div>
       <div class="legal-dialog-body">
         <p><strong>Last updated: May 2026</strong></p>
         <h3>What we collect</h3>
-        <p>EyaWriter collects the minimum information needed to provide the service: your email address and display name (via Firebase Authentication), and the screenplay projects you save to cloud storage (via Firestore).</p>
+        <p>EyaWriter collects the minimum information needed to provide the service: your email address and display name through Firebase Authentication, plus screenplay projects you save in cloud storage through Firestore.</p>
         <h3>How we use your data</h3>
-        <p>Your data is used exclusively to provide the EyaWriter service — syncing projects, enabling collaboration, and authenticating your account. We do not sell or share your personal data with third parties for marketing purposes.</p>
-        <h3>Firebase &amp; third-party services</h3>
-        <p>EyaWriter uses Firebase (Google) for authentication and data storage. Projects saved to the cloud are stored in Firestore under your user account. Please review <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Google's Privacy Policy</a> for more information about how Firebase handles data.</p>
+        <p>Your data is used only to provide the EyaWriter service, including syncing projects, enabling collaboration, and authenticating your account. We do not sell or share your personal data for marketing purposes.</p>
+        <h3>Firebase and third-party services</h3>
+        <p>EyaWriter uses Firebase for authentication and data storage. Projects saved to the cloud are stored in Firestore under your user account.</p>
         <h3>AI features</h3>
-        <p>When you use AI writing features, the text of the current screenplay block and recent story context are sent to an AI provider (OpenRouter / OpenAI) to generate suggestions. No personal identifying information is included in these requests. See our AI Usage Disclosure for details.</p>
+        <p>When you use AI writing features, the text of the current screenplay block and recent story context are sent to an AI provider to generate suggestions. No personal identifying information is included in these requests.</p>
         <h3>Local storage</h3>
-        <p>EyaWriter stores application preferences (theme, language, editor settings) in your browser's localStorage. This data never leaves your device.</p>
-        <h3>Contact</h3>
-        <p>For privacy enquiries, please contact us through the repository at github.com/Ebaiderrick/writer.</p>
+        <p>EyaWriter stores application preferences such as theme, language, and editor settings in your browser's localStorage. This data stays on your device.</p>
       </div>
     </div>
   </dialog>
 
-  <!-- Terms of Service Dialog -->
   <dialog id="tosDialog" class="legal-dialog">
     <div class="legal-dialog-inner">
       <div class="legal-dialog-header">
         <h2>Terms of Service</h2>
-        <form method="dialog"><button class="ghost-button btn-sm">Close</button></form>
+        <form method="dialog"><button class="ghost-button btn-sm" type="submit">Close</button></form>
       </div>
       <div class="legal-dialog-body">
         <p><strong>Last updated: May 2026</strong></p>
         <h3>Acceptance</h3>
         <p>By using EyaWriter, you agree to these Terms of Service. If you do not agree, please discontinue use of the service.</p>
         <h3>Your content</h3>
-        <p>You retain full ownership of all screenplay content you create with EyaWriter. By storing projects in the cloud you grant EyaWriter a limited, non-exclusive licence to store and display your content solely for the purpose of providing the service to you.</p>
+        <p>You retain ownership of all screenplay content you create with EyaWriter. By storing projects in the cloud, you grant EyaWriter a limited non-exclusive licence to store and display your content solely to provide the service to you.</p>
         <h3>Acceptable use</h3>
-        <p>You may not use EyaWriter to create, distribute, or store content that is illegal, harmful, defamatory, or that violates the intellectual property rights of others. You may not attempt to circumvent any security measures or disrupt service for other users.</p>
+        <p>You may not use EyaWriter to create, distribute, or store illegal, harmful, defamatory, or rights-violating content. You may not attempt to bypass security measures or disrupt service for other users.</p>
         <h3>AI features</h3>
-        <p>AI-generated content is provided as a writing aid. You are solely responsible for reviewing, editing, and any use of AI suggestions in your work. EyaWriter does not claim ownership of AI-generated text.</p>
+        <p>AI-generated content is a writing aid. You are responsible for reviewing, editing, and using AI suggestions in your work.</p>
         <h3>Service availability</h3>
-        <p>EyaWriter is provided "as is" without warranty of any kind. We do not guarantee continuous availability and reserve the right to modify or discontinue features at any time.</p>
-        <h3>Limitation of liability</h3>
-        <p>To the maximum extent permitted by law, EyaWriter shall not be liable for any indirect, incidental, or consequential damages arising from your use of the service.</p>
+        <p>EyaWriter is provided as-is without warranty of any kind. We do not guarantee uninterrupted availability and may modify or discontinue features over time.</p>
       </div>
     </div>
   </dialog>
 
-  <!-- AI Usage Disclosure Dialog -->
   <dialog id="aiDisclosureDialog" class="legal-dialog">
     <div class="legal-dialog-inner">
       <div class="legal-dialog-header">
         <h2>AI Usage Disclosure</h2>
-        <form method="dialog"><button class="ghost-button btn-sm">Close</button></form>
+        <form method="dialog"><button class="ghost-button btn-sm" type="submit">Close</button></form>
       </div>
       <div class="legal-dialog-body">
         <p><strong>Last updated: May 2026</strong></p>
         <h3>What gets sent to the AI</h3>
-        <p>When you use an AI writing action (Expand, Rephrase, Predict, etc.), EyaWriter sends the following to the AI provider:</p>
-        <ul>
-          <li>The text of the current screenplay block</li>
-          <li>Recent story context (up to the last few scenes)</li>
-          <li>The selected action type and any custom instruction you typed</li>
-        </ul>
-        <p>No account information, email address, or other personal data is included in AI requests.</p>
+        <p>When you use an AI writing action, EyaWriter sends the text of the current screenplay block, recent story context, and the action or instruction you selected. No account information or email address is included in those requests.</p>
         <h3>AI provider</h3>
-        <p>By default, EyaWriter routes AI requests through <strong>OpenRouter</strong>, which provides access to multiple language models (including OpenAI's GPT series). You can configure a custom endpoint in Settings → AI to use any compatible API.</p>
+        <p>By default, EyaWriter routes AI requests through an OpenAI-compatible endpoint. You can configure a custom compatible endpoint in Settings.</p>
         <h3>Data retention</h3>
-        <p>EyaWriter does not store AI request or response data. Requests are processed in real-time and the response is returned directly to your editor. Refer to the AI provider's privacy policy for their data handling practices.</p>
+        <p>EyaWriter does not store AI request or response data in the app itself. Requests are processed in real time and returned to your editor.</p>
         <h3>Your control</h3>
-        <p>AI features are opt-in and require enabling "AI Assistance" in the editor toolbar. You can disable AI assistance at any time. No AI processing occurs unless you explicitly trigger an AI action.</p>
-      </div>
-    </div>
-  </dialog>
-
-  <!-- Announcement banner -->
-  <div id="announcementBanner" class="announcement-banner" hidden>
-    <span id="announcementMsg"></span>
-    <button id="announcementDismiss" class="announcement-dismiss" aria-label="Dismiss">&times;</button>
-  </div>
-
-  <!-- Upgrade modal -->
-  <dialog id="upgradeModal" class="app-dialog upgrade-dialog">
-    <div class="upgrade-dialog-inner">
-      <h2 class="upgrade-dialog-title">Upgrade to Pro</h2>
-      <p id="upgradeModalReason" class="upgrade-dialog-reason">Unlock unlimited AI requests and Pro features.</p>
-      <ul class="upgrade-feature-list">
-        <li>Unlimited AI requests every month</li>
-        <li>Priority support</li>
-        <li>All future Pro features</li>
-      </ul>
-      <div class="upgrade-dialog-price">$12 <span>/month</span></div>
-      <div class="dialog-actions">
-        <button class="primary-button billing-upgrade-btn">Upgrade to Pro</button>
-        <button class="ghost-button" onclick="document.getElementById('upgradeModal').close()">Maybe later</button>
-      </div>
-    </div>
-  </dialog>
-
-  <!-- NPS survey dialog -->
-  <dialog id="npsDialog" class="app-dialog nps-dialog">
-    <div class="nps-dialog-inner">
-      <h2 class="nps-dialog-title">How likely are you to recommend EyaWriter?</h2>
-      <p class="settings-hint">0 = Not at all likely &nbsp;&bull;&nbsp; 10 = Extremely likely</p>
-      <div class="nps-score-row">
-        <button class="nps-score-btn" data-score="0" type="button">0</button>
-        <button class="nps-score-btn" data-score="1" type="button">1</button>
-        <button class="nps-score-btn" data-score="2" type="button">2</button>
-        <button class="nps-score-btn" data-score="3" type="button">3</button>
-        <button class="nps-score-btn" data-score="4" type="button">4</button>
-        <button class="nps-score-btn" data-score="5" type="button">5</button>
-        <button class="nps-score-btn" data-score="6" type="button">6</button>
-        <button class="nps-score-btn" data-score="7" type="button">7</button>
-        <button class="nps-score-btn" data-score="8" type="button">8</button>
-        <button class="nps-score-btn" data-score="9" type="button">9</button>
-        <button class="nps-score-btn" data-score="10" type="button">10</button>
-      </div>
-      <textarea class="nps-comment" placeholder="What could we do better? (optional)" rows="3"></textarea>
-      <div class="dialog-actions">
-        <button class="primary-button nps-submit-btn" disabled>Submit</button>
-        <button class="ghost-button nps-dismiss-btn">Not now</button>
+        <p>AI features are opt-in and only run when you explicitly trigger an AI action. You can disable AI assistance at any time.</p>
       </div>
     </div>
   </dialog>
 
   <script type="module" src="js/main.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
-      });
-    }
-  </script>
 </body>
 </html>
+
+

@@ -1,5 +1,4 @@
 export const STORAGE_KEY = "eyawriter-projects-v5";
-export const APP_VERSION = "1.1.0";
 export const TYPE_SEQUENCE = ["scene", "action", "character", "dialogue", "transition", "parenthetical", "shot", "text", "note", "dual", "image"];
 export const TYPE_LABELS = {
   scene: "Scene",
@@ -34,7 +33,7 @@ export const DEFAULT_VIEW_OPTIONS = {
 };
 export const LEFT_PANE_BLOCK_DEFS = [
   { key: "current", label: "Current Script" },
-  { key: "editor", label: "Team Editor" },
+  { key: "workspace", label: "Team Assembly" },
   { key: "characters", label: "Characters" },
   { key: "scenes", label: "Scenes" },
   { key: "comments", label: "Comments" },
@@ -64,13 +63,20 @@ export const DEFAULT_STORY_MEMORY = {
   plotPoints: []
 };
 
-export const EDITOR_TASK_TEMPLATES = [
+export const WORKSPACE_TASK_TEMPLATES = [
   {
     key: "custom",
     label: "Custom Task",
     title: "",
     description: "",
     aiInstruction: "Complete the assigned writing task using the user's exact title and description."
+  },
+  {
+    key: "story-memory",
+    label: "Story Memory",
+    title: "Review story memory",
+    description: "Review the selected story memory element and make the assigned update clear for the team.",
+    aiInstruction: "Use the linked story memory element as the source of truth for this task."
   },
   {
     key: "rewrite-dialogue",
@@ -126,7 +132,7 @@ export const EDITOR_TASK_TEMPLATES = [
 export const state = {
   projects: [],
   currentProjectId: null,
-  currentEditorId: null,
+  currentWorkspaceId: null,
   activeBlockId: null,
   activeType: "action",
   visibleSuggestions: [],
@@ -153,9 +159,17 @@ export const state = {
   homeProjectFilter: "all",
   homeProjectSort: "latest",
   homeProjectFormat: "all",
-  homeWorkspaceFilter: null,
+  homeWorkspaceFilter: "all",
   workspaceTaskFilter: "all",
   workspaceTaskSort: "latest",
+  workspaceInboxFilter: "all",
+  workspaceNotificationFilter: "all",
+  workspaceStoryMemoryFilter: "all",
+  workspaceCompletedFilter: "all",
+  workspaceTaskDraft: null,
+  workspaceRefreshPending: false,
+  pendingInvitations: [],
+  lastCreatedWorkspaceTaskId: "",
   backupPrompted: false,
   history: [],
   historyIndex: -1
