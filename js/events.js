@@ -1551,6 +1551,18 @@ function clearWorkspaceInboxItems() {
   renderWorkspaceInboxPopup();
 }
 
+function dismissWorkspaceInboxItem(itemId) {
+  const workspaceId = state.currentWorkspaceId || getCurrentProject()?.workspace?.id || getCurrentProject()?.id || "";
+  if (!workspaceId || !itemId) return;
+  const existing = new Set(state.workspaceInboxDismissedIds?.[workspaceId] || []);
+  existing.add(itemId);
+  state.workspaceInboxDismissedIds = {
+    ...(state.workspaceInboxDismissedIds || {}),
+    [workspaceId]: [...existing]
+  };
+  renderWorkspaceInboxPopup();
+}
+
 function resolveAiTaskStart(choice, manualValue = "") {
   const now = Date.now();
   if (choice === "in-3m") return new Date(now + (3 * 60 * 1000)).toISOString();
@@ -2777,6 +2789,13 @@ export function bindEvents() {
   document.getElementById("workspace-inbox-popup")?.addEventListener("click", (event) => {
     const inboxAction = event.target.closest("[data-workspace-inbox-action]")?.dataset.workspaceInboxAction;
     if (!inboxAction) return;
+    if (inboxAction === "dismiss-item") {
+      event.preventDefault();
+      event.stopPropagation();
+      const itemId = event.target.closest("[data-workspace-inbox-item-id]")?.dataset.workspaceInboxItemId;
+      dismissWorkspaceInboxItem(itemId);
+      return;
+    }
     if (inboxAction === "open-invites") {
       closeWorkspaceInboxPopup();
       showHome();

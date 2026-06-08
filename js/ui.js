@@ -385,9 +385,11 @@ export function renderWorkspaceInboxPopup() {
   const { workspaceLead, inboxPopupItems } = getActiveWorkspaceInboxContext();
   const workspaceId = workspaceLead?.workspace?.id || workspaceLead?.id || state.currentWorkspaceId || "";
   const clearedAt = workspaceId ? state.workspaceInboxClearedAt?.[workspaceId] || "" : "";
-  const visibleInboxPopupItems = clearedAt
+  const dismissedIds = new Set(state.workspaceInboxDismissedIds?.[workspaceId] || []);
+  const visibleInboxPopupItems = (clearedAt
     ? inboxPopupItems.filter((item) => new Date(item.createdAt).getTime() > new Date(clearedAt).getTime())
-    : inboxPopupItems;
+    : inboxPopupItems)
+    .filter((item) => !dismissedIds.has(item.id));
   const unseenCount = visibleInboxPopupItems.filter((item) => item.unseen).length;
   const badge = document.getElementById("homeInboxBellBadge");
   if (badge) {
@@ -398,6 +400,7 @@ export function renderWorkspaceInboxPopup() {
   const clearButton = document.getElementById("clear-workspace-inbox");
   if (clearButton) clearButton.hidden = visibleInboxPopupItems.length <= 0;
   if (!popupList) return;
+  popupList.classList.toggle("has-scroll", visibleInboxPopupItems.length > 3);
   if (!workspaceLead && !visibleInboxPopupItems.length) {
     popupList.innerHTML = '<p class="collab-empty">Open a workspace-linked script to see inbox activity.</p>';
     return;
@@ -406,25 +409,29 @@ export function renderWorkspaceInboxPopup() {
     ? visibleInboxPopupItems.map((item) => {
       if (item.invite) {
         return `
-          <button class="workspace-inbox-popup-row workspace-notification-item workspace-inbox-popup-line is-unseen" type="button" data-workspace-inbox-action="open-invites">
-            <span class="workspace-notification-copy workspace-inbox-popup-line-main">
-              <strong>${escapeHtml(item.title)}</strong>
-              <span>${escapeHtml(item.message)}</span>
-              <small>${escapeHtml(item.meta)}</small>
-            </span>
-            <span class="workspace-inbox-popup-line-meta">${escapeHtml(item.meta)}</span>
-          </button>
+          <div class="workspace-inbox-popup-row workspace-notification-item workspace-inbox-popup-entry">
+            <button class="workspace-inbox-popup-line is-unseen" type="button" data-workspace-inbox-action="open-invites">
+              <span class="workspace-notification-copy workspace-inbox-popup-line-main">
+                <strong>${escapeHtml(item.title)}</strong>
+                <small>${escapeHtml(item.message)}</small>
+              </span>
+              <span class="workspace-inbox-popup-line-meta">${escapeHtml(item.meta)}</span>
+            </button>
+            <button class="workspace-inbox-dismiss-btn" type="button" data-workspace-inbox-action="dismiss-item" data-workspace-inbox-item-id="${escapeHtml(item.id)}" aria-label="Clear notification" title="Clear notification">&#10003;</button>
+          </div>
         `;
       }
       return `
-        <button class="workspace-inbox-popup-row workspace-notification-item workspace-inbox-popup-line is-unseen${item.type === "task" ? " workspace-notification-item-due" : ""}" type="button" data-workspace-inbox-action="${item.type === "comment" ? "open-comment" : "open-task"}" data-task-id="${escapeHtml(item.task?.id || "")}" data-task-project-id="${escapeHtml(item.task?.projectId || "")}">
-          <span class="workspace-notification-copy workspace-inbox-popup-line-main">
-            <strong>${escapeHtml(item.title)}</strong>
-            <span>${escapeHtml(item.message)}</span>
-            <small>${escapeHtml(item.meta)}</small>
-          </span>
-          <span class="workspace-inbox-popup-line-meta">${escapeHtml(item.meta)}</span>
-        </button>
+        <div class="workspace-inbox-popup-row workspace-notification-item workspace-inbox-popup-entry">
+          <button class="workspace-inbox-popup-line is-unseen${item.type === "task" ? " workspace-notification-item-due" : ""}" type="button" data-workspace-inbox-action="${item.type === "comment" ? "open-comment" : "open-task"}" data-task-id="${escapeHtml(item.task?.id || "")}" data-task-project-id="${escapeHtml(item.task?.projectId || "")}">
+            <span class="workspace-notification-copy workspace-inbox-popup-line-main">
+              <strong>${escapeHtml(item.title)}</strong>
+              <small>${escapeHtml(item.message)}</small>
+            </span>
+            <span class="workspace-inbox-popup-line-meta">${escapeHtml(item.meta)}</span>
+          </button>
+          <button class="workspace-inbox-dismiss-btn" type="button" data-workspace-inbox-action="dismiss-item" data-workspace-inbox-item-id="${escapeHtml(item.id)}" aria-label="Clear notification" title="Clear notification">&#10003;</button>
+        </div>
       `;
     }).join("")
     : '<p class="collab-empty">No new invites, tasks, or comments right now.</p>';
