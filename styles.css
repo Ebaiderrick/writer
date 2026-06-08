@@ -1218,14 +1218,58 @@ html[data-theme="rose"] .mesh-background {
 .workspace-home-member-pill {
   display: inline-grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 80px;
+  height: 80px;
   padding: 0;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--workspace-member-accent, var(--accent)) 72%, white 28%);
+  background: color-mix(in srgb, var(--workspace-member-accent, var(--accent)) 10%, var(--surface-strong) 90%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 78%, transparent);
   font-size: 0.65rem;
   font-weight: 700;
   color: var(--ink);
+  overflow: hidden;
+}
+
+.workspace-home-members .workspace-home-member-pill:nth-child(4n + 1) {
+  --workspace-member-accent: #3b82f6;
+}
+
+.workspace-home-members .workspace-home-member-pill:nth-child(4n + 2) {
+  --workspace-member-accent: #ef4444;
+}
+
+.workspace-home-members .workspace-home-member-pill:nth-child(4n + 3) {
+  --workspace-member-accent: #10b981;
+}
+
+.workspace-home-members .workspace-home-member-pill:nth-child(4n + 4) {
+  --workspace-member-accent: #f59e0b;
+}
+
+.workspace-profile-avatar {
+  position: relative;
+}
+
+.workspace-profile-avatar-fallback {
+  display: inline-grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.workspace-profile-avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.workspace-profile-avatar.has-photo .workspace-profile-avatar-fallback {
+  display: none;
 }
 
 .workspace-home-activity {
@@ -8769,8 +8813,10 @@ html[data-theme="white"] .user-trigger {
 }
 
 .workspace-inbox-popup-head {
-  display: grid;
-  gap: 0.2rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding-right: 36px;
 }
 
@@ -8782,9 +8828,15 @@ html[data-theme="white"] .user-trigger {
 
 .workspace-inbox-popup-head p {
   margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.42;
+  font-size: 0.72rem;
+  line-height: 1.2;
   color: var(--muted);
+  white-space: nowrap;
+}
+
+.workspace-inbox-clear-btn {
+  flex: 0 0 auto;
+  margin-top: 0.08rem;
 }
 
 .workspace-inbox-popup-list {

@@ -98,7 +98,10 @@ function buildProfileAvatarMarkup({ uid = "", name = "", photoURL = "", classNam
     .map((part) => part[0])
     .join("")
     .toUpperCase() || "W";
-  return `<button class="${escapeHtml(classes)}" type="button" title="${escapeHtml(getUserHandle(name, "user"))}" aria-label="${escapeHtml(getUserHandle(name, "user"))}" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(photoURL)}">${escapeHtml(initials)}</button>`;
+  const label = getUserHandle(name, "user");
+  const normalizedPhotoURL = String(photoURL || "").trim();
+  const hasPhoto = Boolean(normalizedPhotoURL);
+  return `<button class="${escapeHtml(classes)}${hasPhoto ? " has-photo" : ""}" type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(normalizedPhotoURL)}"><span class="workspace-profile-avatar-fallback" aria-hidden="true">${escapeHtml(initials)}</span>${hasPhoto ? `<img class="workspace-profile-avatar-image" src="${escapeHtml(normalizedPhotoURL)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ""}</button>`;
 }
 
 function buildWorkspaceTaskAssigneeMarkup(task, currentUid) {
@@ -380,20 +383,27 @@ function getActiveWorkspaceInboxContext() {
 
 export function renderWorkspaceInboxPopup() {
   const { workspaceLead, inboxPopupItems } = getActiveWorkspaceInboxContext();
-  const unseenCount = inboxPopupItems.filter((item) => item.unseen).length;
+  const workspaceId = workspaceLead?.workspace?.id || workspaceLead?.id || state.currentWorkspaceId || "";
+  const clearedAt = workspaceId ? state.workspaceInboxClearedAt?.[workspaceId] || "" : "";
+  const visibleInboxPopupItems = clearedAt
+    ? inboxPopupItems.filter((item) => new Date(item.createdAt).getTime() > new Date(clearedAt).getTime())
+    : inboxPopupItems;
+  const unseenCount = visibleInboxPopupItems.filter((item) => item.unseen).length;
   const badge = document.getElementById("homeInboxBellBadge");
   if (badge) {
     badge.hidden = unseenCount <= 0;
     badge.textContent = unseenCount > 99 ? "99+" : String(unseenCount);
   }
   const popupList = document.getElementById("workspaceInboxPopupList");
+  const clearButton = document.getElementById("clear-workspace-inbox");
+  if (clearButton) clearButton.hidden = visibleInboxPopupItems.length <= 0;
   if (!popupList) return;
-  if (!workspaceLead && !inboxPopupItems.length) {
+  if (!workspaceLead && !visibleInboxPopupItems.length) {
     popupList.innerHTML = '<p class="collab-empty">Open a workspace-linked script to see inbox activity.</p>';
     return;
   }
-  popupList.innerHTML = inboxPopupItems.length
-    ? inboxPopupItems.map((item) => {
+  popupList.innerHTML = visibleInboxPopupItems.length
+    ? visibleInboxPopupItems.map((item) => {
       if (item.invite) {
         return `
           <button class="workspace-inbox-popup-row workspace-notification-item workspace-inbox-popup-line is-unseen" type="button" data-workspace-inbox-action="open-invites">
@@ -1267,8 +1277,8 @@ export function renderHome() {
             </div>
             <div class="workspace-home-members">
               ${[
-                buildProfileTriggerMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
-                ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => buildProfileTriggerMarkup({
+                buildProfileAvatarMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
+                ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => buildProfileAvatarMarkup({
                   uid,
                   name: getMemberDisplayName(person),
                   photoURL: person.photoURL || "",

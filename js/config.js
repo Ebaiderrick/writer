@@ -166,6 +166,7 @@ export const state = {
   workspaceNotificationFilter: "all",
   workspaceStoryMemoryFilter: "all",
   workspaceCompletedFilter: "all",
+  workspaceInboxClearedAt: {},
   workspaceTaskDraft: null,
   workspaceRefreshPending: false,
   pendingInvitations: [],
