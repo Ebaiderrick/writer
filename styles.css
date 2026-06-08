@@ -8801,7 +8801,7 @@ html[data-theme="white"] .user-trigger {
 }
 
 .workspace-inbox-popup-overlay.active {
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .workspace-inbox-popup-overlay .workspace-inbox-popup-card {
