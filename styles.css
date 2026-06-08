@@ -989,48 +989,52 @@ html[data-theme="rose"] .mesh-background {
   display: none;
 }
 
-.workspace-home-hero-metrics {
+.workspace-home-hero-insight {
   display: grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
-  gap: 8px;
-  align-items: stretch;
+  gap: 10px;
   justify-self: end;
   width: min(100%, 360px);
   min-width: 0;
 }
 
-.workspace-home-metric {
+.workspace-home-insight-head {
   display: grid;
-  gap: 3px;
-  align-content: center;
-  min-height: 58px;
-  min-width: 0;
-  padding: 8px 9px;
-  border-radius: 13px;
-  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
-  background: color-mix(in srgb, var(--panel) 94%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 54%, transparent);
+  gap: 8px;
 }
 
-button.workspace-home-metric {
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-button.workspace-home-metric:hover {
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 24%, var(--panel));
-}
-
-.workspace-home-metric span {
+.workspace-home-insight-head span {
   font-size: 0.62rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  font-weight: 800;
 }
 
-.workspace-home-metric strong {
+.workspace-home-insight-select {
+  min-height: 38px;
+}
+
+.workspace-home-insight-display {
+  display: grid;
+  gap: 5px;
+  min-height: 110px;
+  padding: 12px 13px;
+  border-radius: 13px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 54%, transparent);
+  align-content: start;
+}
+
+.workspace-home-insight-display span {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 800;
+}
+
+.workspace-home-insight-display strong {
   font-size: 0.92rem;
   color: var(--ink);
   line-height: 1.16;
@@ -1038,20 +1042,17 @@ button.workspace-home-metric:hover {
   overflow-wrap: anywhere;
 }
 
-.workspace-home-metric small {
+.workspace-home-insight-display small {
   color: var(--muted);
   font-size: 0.6rem;
   line-height: 1.15;
 }
 
-.workspace-home-metric.is-focus {
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 26%, var(--panel));
-}
-
-.workspace-home-metric.is-alert {
-  border-color: color-mix(in srgb, #ef4444 34%, var(--line));
-  background: color-mix(in srgb, #ef4444 10%, var(--panel));
+.workspace-home-insight-display p {
+  margin: 0;
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  font-size: 0.74rem;
+  line-height: 1.45;
 }
 
 .workspace-review-center-trigger {
@@ -1182,6 +1183,16 @@ button.workspace-home-metric:hover {
   gap: 8px;
 }
 
+.workspace-feed-panel-head {
+  align-items: start;
+}
+
+.workspace-feed-panel-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .workspace-home-panel-head h4 {
   margin: 0;
   font-size: 0.78rem;
@@ -1191,6 +1202,11 @@ button.workspace-home-metric:hover {
 .workspace-home-panel-meta {
   font-size: 0.66rem;
   color: var(--muted);
+}
+
+.workspace-home-panel-filter {
+  min-width: 120px;
+  max-width: 160px;
 }
 
 .workspace-home-members {
@@ -1277,6 +1293,17 @@ button.workspace-home-metric:hover {
   background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
 }
 
+.workspace-notification-item-button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-notification-item-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 22%, var(--surface-strong));
+}
+
 .workspace-notification-item.is-unread {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
   background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-strong));
@@ -1286,6 +1313,13 @@ button.workspace-home-metric:hover {
 .workspace-inbox-copy {
   display: grid;
   gap: 3px;
+}
+
+.workspace-inbox-row-meta {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.67rem;
+  white-space: nowrap;
 }
 
 .workspace-notification-copy strong,
@@ -1509,9 +1543,7 @@ button.workspace-home-metric:hover {
   padding: 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line));
   border-radius: 16px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 18%, transparent), transparent 42%),
-    color-mix(in srgb, var(--surface-strong) 94%, transparent);
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
   box-shadow: 0 14px 32px rgba(15, 23, 42, 0.055);
 }
 
@@ -1534,8 +1566,8 @@ button.workspace-home-metric:hover {
   width: fit-content;
   padding: 3px 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-soft) 58%, transparent);
-  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--panel) 88%, var(--surface-strong));
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
   font-size: 0.62rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -1571,17 +1603,57 @@ button.workspace-home-metric:hover {
 }
 
 .workspace-task-title-input {
-  min-height: 42px;
+  box-sizing: border-box;
+  height: 38px;
+  min-height: 38px;
+  line-height: 1.2;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
+  background: color-mix(in srgb, var(--panel) 98%, transparent);
+  color: var(--ink);
   font-size: 0.88rem;
+}
+
+.workspace-task-title-input::placeholder {
+  color: color-mix(in srgb, var(--ink) 42%, var(--muted));
+}
+
+.workspace-task-form .comment-filter-select {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border-color: color-mix(in srgb, var(--accent) 8%, var(--line));
+  background: color-mix(in srgb, var(--panel) 98%, transparent);
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.workspace-task-form .comment-filter-select:hover,
+.workspace-task-title-input:hover {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
+.workspace-task-form .comment-filter-select:focus,
+.workspace-task-title-input:focus,
+.workspace-task-description:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 38%, transparent);
 }
 
 .workspace-task-description {
   grid-column: 1 / span 3;
   min-height: 62px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
+  background: color-mix(in srgb, var(--panel) 98%, transparent);
+  color: var(--ink);
+  padding: 10px 12px;
 }
 
 .workspace-task-template-hint {
-  grid-column: 1 / span 3;
+  grid-column: 1 / -1;
   margin: 0;
   color: var(--muted);
   font-size: 0.66rem;
@@ -1594,7 +1666,10 @@ button.workspace-home-metric:hover {
 }
 
 .workspace-task-create-button {
-  min-height: 42px;
+  grid-column: 4;
+  align-self: start;
+  justify-self: stretch;
+  min-height: 38px;
   border-radius: 12px;
   font-size: 0.78rem;
   font-weight: 800;
@@ -1724,47 +1799,278 @@ button.workspace-home-metric:hover {
   color: #b91c1c;
 }
 
-.modal-content-review-center {
-  width: min(760px, calc(100vw - 32px));
+.modal-content.modal-content-review-center {
+  width: min(1040px, calc(100vw - 40px));
+  max-height: min(88vh, 940px);
 }
 
 .workspace-review-center {
   display: grid;
-  gap: 14px;
+  gap: 18px;
   text-align: left;
 }
 
 .workspace-review-center-head {
   display: grid;
-  gap: 4px;
+  gap: 8px;
+}
+
+.workspace-review-center-head-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-review-center-head-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: end;
+}
+
+.workspace-review-report-control {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-review-report-control span,
+.workspace-review-report-prompt span {
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-review-report-select,
+.workspace-review-run-report {
+  min-height: 38px;
 }
 
 .workspace-review-center-head strong {
   color: var(--ink);
-  font-size: 1rem;
+  font-size: 1.02rem;
 }
 
 .workspace-review-center-head span {
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.workspace-review-overview {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.workspace-review-hero,
+.workspace-review-insight-panel,
+.workspace-review-insight-display,
+.workspace-review-check,
+.workspace-review-report-shell {
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+}
+
+.workspace-review-hero {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  align-content: start;
+  height: 262px;
+  overflow: auto;
+}
+
+.workspace-review-hero-label {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-review-hero strong {
+  color: var(--ink);
+  font-size: 1.9rem;
+  line-height: 1;
+}
+
+.workspace-review-hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.workspace-review-hero[data-review-tone="strong"] {
+  border-color: color-mix(in srgb, #22c55e 24%, var(--line));
+  background: color-mix(in srgb, #22c55e 8%, var(--surface-strong));
+}
+
+.workspace-review-hero[data-review-tone="steady"] {
+  border-color: color-mix(in srgb, #f59e0b 24%, var(--line));
+  background: color-mix(in srgb, #f59e0b 8%, var(--surface-strong));
+}
+
+.workspace-review-hero[data-review-tone="warning"] {
+  border-color: color-mix(in srgb, #ef4444 24%, var(--line));
+  background: color-mix(in srgb, #ef4444 8%, var(--surface-strong));
+}
+
+.workspace-review-insight-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  height: 262px;
+  overflow: hidden;
+}
+
+.workspace-review-insight-head {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-review-insight-head span,
+.workspace-review-check small,
+.workspace-review-report-head span {
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-review-insight-select {
+  min-height: 38px;
+}
+
+.workspace-review-insight-display {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  height: 100%;
+  padding: 14px;
+  align-content: start;
+  overflow: auto;
+}
+
+.workspace-review-insight-display span {
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-review-insight-display strong {
+  color: var(--ink);
+  font-size: 1.08rem;
+}
+
+.workspace-review-report-builder {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+}
+
+.workspace-review-report-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.workspace-review-report-prompt {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-review-report-prompt-input {
+  min-height: 62px;
+  max-height: 88px;
+  resize: vertical;
+}
+
+.workspace-review-report-builder p {
+  margin: 0;
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.workspace-review-insight-display p,
+.workspace-review-report-head p,
+.workspace-review-report-stack p,
+.workspace-review-next-step p {
+  margin: 0;
+  color: color-mix(in srgb, var(--ink) 74%, var(--muted));
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.workspace-review-insight-display small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.3;
+}
+
+.workspace-review-check-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.workspace-review-check {
+  display: grid;
+  gap: 5px;
+  min-height: 82px;
+  padding: 12px;
+  align-content: start;
+}
+
+.workspace-review-check strong {
+  color: var(--ink);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.workspace-review-check-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 35%, var(--line));
+}
+
+.workspace-review-check[data-check-state="done"] .workspace-review-check-dot {
+  background: color-mix(in srgb, #22c55e 74%, var(--accent));
+}
+
+.workspace-review-check[data-check-state="todo"] .workspace-review-check-dot {
+  background: color-mix(in srgb, #f59e0b 74%, var(--accent));
 }
 
 .workspace-review-report-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .workspace-review-report-tab {
-  min-height: 36px;
-  padding: 8px 10px;
+  min-height: 34px;
+  padding: 7px 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
   color: var(--ink);
   cursor: pointer;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.77rem;
   font-weight: 800;
 }
 
@@ -1775,29 +2081,34 @@ button.workspace-home-metric:hover {
   color: var(--accent-strong);
 }
 
+.workspace-review-report-shell {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+}
+
+.workspace-review-report-head {
+  display: grid;
+  gap: 5px;
+  padding: 13px 14px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.workspace-review-report-head strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
 .workspace-review-report-output {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  min-height: 260px;
   min-width: 0;
-  max-height: min(360px, 46vh);
+  max-height: min(420px, 50vh);
   overflow: auto;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-strong) 94%, transparent);
-}
-
-.workspace-review-report-output span {
-  color: var(--muted);
-  font-size: 0.67rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.workspace-review-report-output strong {
-  color: var(--ink);
-  font-size: 1.05rem;
+  padding: 14px;
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
 }
 
 .workspace-review-report-output p {
@@ -1807,19 +2118,62 @@ button.workspace-home-metric:hover {
   line-height: 1.45;
 }
 
+.workspace-review-report-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-review-bullet-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: color-mix(in srgb, var(--ink) 74%, var(--muted));
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.workspace-review-next-step {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+}
+
+.workspace-review-next-step strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .workspace-review-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .workspace-review-stat-grid div {
   display: grid;
-  gap: 3px;
-  padding: 9px;
+  gap: 4px;
+  padding: 11px;
   border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
-  border-radius: 8px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.workspace-review-stat-grid div span {
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-review-stat-grid div strong {
+  color: var(--ink);
+  font-size: 1rem;
 }
 
 .workspace-task-card {
@@ -2434,16 +2788,6 @@ button.workspace-home-metric:hover {
   touch-action: pan-y;
 }
 
-.project-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: color-mix(in srgb, var(--accent) 48%, var(--line));
-  opacity: 0.68;
-  transition: opacity 0.22s ease, width 0.22s ease;
-}
-
 .project-card:hover {
   transform: translateY(-3px);
   box-shadow: 0 18px 36px rgba(15, 23, 42, 0.095);
@@ -2451,11 +2795,6 @@ button.workspace-home-metric:hover {
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 28%, transparent), transparent 46%),
     var(--panel);
-}
-
-.project-card:hover::before {
-  width: 5px;
-  opacity: 1;
 }
 
 .project-dashboard-controls {
@@ -2538,6 +2877,48 @@ button.workspace-home-metric:hover {
   align-items: center;
   gap: 3px;
   flex-shrink: 0;
+}
+
+.home-inbox-trigger {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  margin-right: 2px;
+}
+
+.home-inbox-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.home-inbox-badge {
+  top: -3px;
+  right: -4px;
+}
+
+.workspace-bell-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
 }
 
 .project-quick-action {
@@ -4212,6 +4593,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   width: 100%;
   transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, transform 0.22s ease;
 }
+
 
 .workspace-task-card .workspace-task-status-select {
   width: 132px;
@@ -6682,6 +7064,13 @@ kbd {
   grid-column: 1 / -1;
 }
 
+.workspace-popup-section {
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+}
+
 .story-memory-popup-group h4,
 .workspace-popup-section h4 {
   margin: 0;
@@ -6726,6 +7115,33 @@ kbd {
   gap: var(--space-3);
 }
 
+.workspace-popup .modal-input,
+.workspace-popup .comment-filter-select {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
+  background: color-mix(in srgb, var(--panel) 98%, transparent);
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.workspace-popup .modal-input::placeholder {
+  color: color-mix(in srgb, var(--ink) 42%, var(--muted));
+}
+
+.workspace-popup .modal-input:hover,
+.workspace-popup .comment-filter-select:hover {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
+.workspace-popup .modal-input:focus,
+.workspace-popup .comment-filter-select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 38%, transparent);
+}
+
 .workspace-link-input {
   min-width: 0;
 }
@@ -6740,6 +7156,8 @@ kbd {
 
 .workspace-inline-button {
   white-space: nowrap;
+  min-height: 38px;
+  border-radius: 12px;
 }
 
 .workspace-member-row {
@@ -6792,6 +7210,13 @@ kbd {
 .workspace-role-select,
 .collab-role-select {
   min-width: 112px;
+}
+
+.workspace-action-row .ghost-button,
+.workspace-title-row .ghost-button,
+.workspace-share-row .ghost-button {
+  min-height: 38px;
+  border-radius: 12px;
 }
 
 .workspace-reminder-item {
@@ -7475,8 +7900,8 @@ body.outline-hidden .section-scenes {
     grid-template-columns: 1fr;
   }
 
+  .workspace-home-hero-insight,
   .workspace-home-hero-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-self: stretch;
     width: 100%;
   }
@@ -7585,6 +8010,7 @@ body.outline-hidden .section-scenes {
   .smart-proofread-range-grid,
   .workspace-home-hero-card,
   .workspace-flow-strip,
+  .workspace-review-overview,
   .workspace-home-hero-metrics,
   .workspace-task-metrics,
   .workspace-home-grid,
@@ -7596,6 +8022,14 @@ body.outline-hidden .section-scenes {
   .workspace-task-board-head,
   .workspace-task-board-actions {
     align-items: stretch;
+  }
+
+  .workspace-review-center-head-actions {
+    justify-content: stretch;
+  }
+
+  .workspace-review-report-controls {
+    grid-template-columns: 1fr;
   }
 
   .workspace-task-command,
@@ -8325,6 +8759,113 @@ html[data-theme="white"] .user-trigger {
   padding: 20px;
   transform: translateY(8px);
   transition: none;
+}
+
+.workspace-inbox-popup-card {
+  width: 350px;
+  display: grid;
+  gap: 0.62rem;
+  padding-top: 18px;
+}
+
+.workspace-inbox-popup-head {
+  display: grid;
+  gap: 0.2rem;
+  padding-right: 36px;
+}
+
+.workspace-inbox-popup-head h2 {
+  margin: 0 0 0.22rem;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.workspace-inbox-popup-head p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.42;
+  color: var(--muted);
+}
+
+.workspace-inbox-popup-list {
+  display: grid;
+  gap: 0.3rem;
+  max-height: min(62vh, 540px);
+  overflow: auto;
+  padding-right: 0.22rem;
+}
+
+.workspace-inbox-popup-overlay {
+  background: transparent;
+  pointer-events: none;
+}
+
+.workspace-inbox-popup-overlay.active {
+  pointer-events: auto;
+}
+
+.workspace-inbox-popup-overlay .workspace-inbox-popup-card {
+  pointer-events: auto;
+}
+
+.workspace-inbox-popup-row {
+  min-height: 0;
+  width: 100%;
+}
+
+.workspace-inbox-popup-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.54rem 0.68rem;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 10%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-inbox-popup-line:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-strong));
+}
+
+.workspace-inbox-popup-line.is-unseen {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+
+.workspace-inbox-popup-line-main {
+  display: grid;
+  gap: 0.06rem;
+  min-width: 0;
+}
+
+.workspace-inbox-popup-line-main strong,
+.workspace-inbox-popup-line-main span,
+.workspace-inbox-popup-line-main small,
+.workspace-inbox-popup-line-meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-inbox-popup-line-main strong {
+  font-size: 0.76rem;
+  color: var(--ink);
+}
+
+.workspace-inbox-popup-line-main span,
+.workspace-inbox-popup-line-main small,
+.workspace-inbox-popup-line-meta {
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+.workspace-inbox-popup-line .workspace-notification-copy {
+  gap: 1px;
 }
 
 .popup-overlay.active .popup-card {

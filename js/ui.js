@@ -47,6 +47,38 @@ function getUserHandle(value, fallback = "user") {
   return raw || fallback;
 }
 
+function buildWorkspaceFeedPanel({
+  panelClass = "",
+  title = "",
+  meta = "",
+  filterAction = "",
+  filterLabel = "",
+  filterOptions = [],
+  summaryChips = [],
+  listClass = "",
+  bodyMarkup = ""
+} = {}) {
+  return `
+    <section class="workspace-home-panel ${escapeHtml(panelClass)}">
+      <div class="workspace-home-panel-head workspace-feed-panel-head">
+        <div class="workspace-feed-panel-title">
+          <h4>${escapeHtml(title)}</h4>
+          <span class="workspace-home-panel-meta">${escapeHtml(meta)}</span>
+        </div>
+        <select class="comment-filter-select workspace-home-panel-filter" data-workspace-home-action="${escapeHtml(filterAction)}" aria-label="${escapeHtml(filterLabel)}">
+          ${filterOptions.map((option) => `<option value="${escapeHtml(option.value)}"${option.selected ? " selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="workspace-task-summary workspace-feed-panel-summary">
+        ${summaryChips.map((chip) => `<span class="workspace-task-summary-chip">${escapeHtml(chip)}</span>`).join("")}
+      </div>
+      <div class="${escapeHtml(listClass)}">
+        ${bodyMarkup}
+      </div>
+    </section>
+  `;
+}
+
 function getMemberDisplayName(member = {}, fallback = "Collaborator") {
   return member.name || member.email || fallback;
 }
@@ -297,6 +329,97 @@ function buildWorkspacePersonalInbox(tasks, currentUid) {
   }).slice(0, 8);
 }
 
+function buildWorkspaceInboxPopupItems({ pendingInvitations = [], personalInboxItems = [] } = {}) {
+  const inviteItems = pendingInvitations.map((invite) => ({
+    id: `invite-${invite.id}`,
+    createdAt: invite.createdAt || new Date().toISOString(),
+    unseen: true,
+    type: "invite",
+    title: `Invite · ${invite.projectTitle || "Shared workspace"}`,
+    message: `${invite.fromName || invite.fromEmail || "A teammate"} invited you as ${String(invite.role || "editor").replace(/^./, (value) => value.toUpperCase())}.`,
+    meta: invite.expiresAt ? `Expires ${formatDateTime(invite.expiresAt)}` : "Awaiting response",
+    invite
+  }));
+
+  const inboxItems = personalInboxItems.map((item) => ({
+    id: `inbox-${item.id}`,
+    createdAt: item.task?.updatedAt || item.task?.createdAt || new Date().toISOString(),
+    unseen: true,
+    type: item.type === "mention" ? "comment" : "task",
+    title: `${item.type === "mention" ? "Comment" : "Task"} · ${item.task?.title || "Workspace task"}`,
+    message: item.message || item.task?.description || item.task?.title || "Needs your attention.",
+    meta: item.task ? getTaskTargetLabel(item.task) : "Workspace",
+    task: item.task
+  }));
+
+  return [...inviteItems, ...inboxItems]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function getActiveWorkspaceInboxContext() {
+  const activeProject = getCurrentProject();
+  const workspaceId = state.currentWorkspaceId || activeProject?.workspace?.id || activeProject?.id || "";
+  const allProjects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  const workspaceLead = workspaceId
+    ? allProjects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot)
+      || allProjects.find((project) => project.workspace?.id === workspaceId)
+      || null
+    : null;
+  const projects = workspaceLead
+    ? allProjects.filter((project) => project.workspace?.id === workspaceId && !project.isWorkspaceRoot)
+    : [];
+  const allTaskItems = sortWorkspaceTasks(workspaceLead?.workspace?.tasks || []);
+  const currentUid = auth.currentUser?.uid || "";
+  const personalInboxItems = buildWorkspacePersonalInbox(allTaskItems, currentUid);
+  const inboxPopupItems = buildWorkspaceInboxPopupItems({
+    pendingInvitations: state.pendingInvitations || [],
+    personalInboxItems
+  });
+  return { workspaceLead, projects, inboxPopupItems };
+}
+
+export function renderWorkspaceInboxPopup() {
+  const { workspaceLead, inboxPopupItems } = getActiveWorkspaceInboxContext();
+  const unseenCount = inboxPopupItems.filter((item) => item.unseen).length;
+  const badge = document.getElementById("homeInboxBellBadge");
+  if (badge) {
+    badge.hidden = unseenCount <= 0;
+    badge.textContent = unseenCount > 99 ? "99+" : String(unseenCount);
+  }
+  const popupList = document.getElementById("workspaceInboxPopupList");
+  if (!popupList) return;
+  if (!workspaceLead && !inboxPopupItems.length) {
+    popupList.innerHTML = '<p class="collab-empty">Open a workspace-linked script to see inbox activity.</p>';
+    return;
+  }
+  popupList.innerHTML = inboxPopupItems.length
+    ? inboxPopupItems.map((item) => {
+      if (item.invite) {
+        return `
+          <button class="workspace-inbox-popup-row workspace-notification-item workspace-inbox-popup-line is-unseen" type="button" data-workspace-inbox-action="open-invites">
+            <span class="workspace-notification-copy workspace-inbox-popup-line-main">
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.message)}</span>
+              <small>${escapeHtml(item.meta)}</small>
+            </span>
+            <span class="workspace-inbox-popup-line-meta">${escapeHtml(item.meta)}</span>
+          </button>
+        `;
+      }
+      return `
+        <button class="workspace-inbox-popup-row workspace-notification-item workspace-inbox-popup-line is-unseen${item.type === "task" ? " workspace-notification-item-due" : ""}" type="button" data-workspace-inbox-action="${item.type === "comment" ? "open-comment" : "open-task"}" data-task-id="${escapeHtml(item.task?.id || "")}" data-task-project-id="${escapeHtml(item.task?.projectId || "")}">
+          <span class="workspace-notification-copy workspace-inbox-popup-line-main">
+            <strong>${escapeHtml(item.title)}</strong>
+            <span>${escapeHtml(item.message)}</span>
+            <small>${escapeHtml(item.meta)}</small>
+          </span>
+          <span class="workspace-inbox-popup-line-meta">${escapeHtml(item.meta)}</span>
+        </button>
+      `;
+    }).join("")
+    : '<p class="collab-empty">No new invites, tasks, or comments right now.</p>';
+}
+
 function formatRelativeTaskTime(task) {
   if (!task.aiStartAt) return "";
   const diffMs = new Date(task.aiStartAt).getTime() - Date.now();
@@ -379,8 +502,13 @@ export function showStudio() {
 
 export function renderWorkspaceView() {
   const workspaceId = state.currentWorkspaceId;
+  state.workspaceRefreshPending = false;
   state.workspaceTaskFilter = state.workspaceTaskFilter || "all";
   state.workspaceTaskSort = state.workspaceTaskSort || "latest";
+  state.workspaceInboxFilter = state.workspaceInboxFilter || "all";
+  state.workspaceNotificationFilter = state.workspaceNotificationFilter || "all";
+  state.workspaceStoryMemoryFilter = state.workspaceStoryMemoryFilter || "all";
+  state.workspaceCompletedFilter = state.workspaceCompletedFilter || "all";
   const allProjects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   const workspaceOptions = buildProjectGroups(allProjects.filter((project) => !project.isWorkspaceRoot));
   const workspaceLead = allProjects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot)
@@ -409,11 +537,36 @@ export function renderWorkspaceView() {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const unreadNotifications = notifications.filter((notification) => !notification.read);
   const inboxItems = allTaskItems.filter((task) => task.status === "done" || task.aiState === "review" || task.aiState === "failed").slice(0, 6);
+  const completedReviewItems = allTaskItems.filter((task) => task.status === "done" || task.aiState === "review" || task.aiState === "failed");
+  const filteredCompletedReviewItems = completedReviewItems.filter((task) => {
+    if (state.workspaceCompletedFilter === "review") return task.aiState === "review";
+    if (state.workspaceCompletedFilter === "retry") return task.aiState === "failed";
+    if (state.workspaceCompletedFilter === "completed") return task.status === "done" && task.aiState !== "review" && task.aiState !== "failed";
+    return true;
+  }).slice(0, 6);
+  const reviewQueueCount = completedReviewItems.filter((task) => task.aiState === "review").length;
+  const retryQueueCount = completedReviewItems.filter((task) => task.aiState === "failed").length;
+  const completedCount = completedReviewItems.filter((task) => task.status === "done" && task.aiState !== "review" && task.aiState !== "failed").length;
   const assignees = [
     { id: workspaceLead.ownerId || "workspace_owner", label: ownerLabel },
     ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => ({ id: uid, label: getMemberDisplayName(person) })),
     { id: "ai_assist", label: "@AIassist" }
   ];
+  const taskDraft = state.workspaceTaskDraft?.workspaceId === workspaceId ? state.workspaceTaskDraft : null;
+  const draftTitle = taskDraft?.title || "";
+  const draftDescription = taskDraft?.description || "";
+  const draftProjectId = taskDraft?.projectId && projects.some((project) => project.id === taskDraft.projectId)
+    ? taskDraft.projectId
+    : (projects[0]?.id || "");
+  const draftAssignedTo = taskDraft?.assignedTo && assignees.some((assignee) => assignee.id === taskDraft.assignedTo)
+    ? taskDraft.assignedTo
+    : (assignees[0]?.id || "");
+  const draftTemplateKey = taskDraft?.templateKey && WORKSPACE_TASK_TEMPLATES.some((template) => template.key === taskDraft.templateKey)
+    ? taskDraft.templateKey
+    : "custom";
+  const draftSceneId = taskDraft?.sceneId || "";
+  const draftLineId = taskDraft?.lineId || "";
+  const draftAiStart = taskDraft?.aiStart || "now";
   const sceneOptions = projects.flatMap((project) => (project.lines || [])
     .filter((line) => line.type === "scene" && line.text.trim())
     .map((line) => ({
@@ -440,6 +593,20 @@ export function renderWorkspaceView() {
   const dueSoonCount = allTaskItems.filter((task) => ["soon", "today"].includes(getTaskDueState(task))).length;
   const overdueCount = allTaskItems.filter((task) => getTaskDueState(task) === "overdue").length;
   const personalInboxItems = buildWorkspacePersonalInbox(allTaskItems, currentUid);
+  const filteredInboxItems = personalInboxItems.filter((item) => {
+    if (state.workspaceInboxFilter === "mentions") return item.type === "mention";
+    if (state.workspaceInboxFilter === "assigned") return item.type === "assigned";
+    if (state.workspaceInboxFilter === "due") return item.type === "due";
+    if (state.workspaceInboxFilter === "overdue") return item.type === "overdue";
+    return true;
+  });
+  const inboxAssignedCount = personalInboxItems.filter((item) => item.type === "assigned").length;
+  const inboxMentionsCount = personalInboxItems.filter((item) => item.type === "mention").length;
+  const filteredNotifications = notifications.filter((notification) => {
+    if (state.workspaceNotificationFilter === "read") return Boolean(notification.read);
+    if (state.workspaceNotificationFilter === "unread") return !notification.read;
+    return true;
+  });
   const memberTaskSummary = assignees
     .filter((assignee) => assignee.id !== "ai_assist")
     .map((assignee) => {
@@ -468,8 +635,13 @@ export function renderWorkspaceView() {
       bucket,
       id: item.id,
       name: item.name || "Untitled",
-      label: `${project.title} Â· ${bucket.replace(/^./, (value) => value.toUpperCase())}`
+      label: `${project.title} · ${bucket.replace(/^./, (value) => value.toUpperCase())}`
     }))));
+  const storyMemoryBuckets = [...new Set(storyMemoryLinks.map((item) => item.bucket))];
+  const filteredStoryMemoryLinks = storyMemoryLinks.filter((item) => {
+    if (state.workspaceStoryMemoryFilter === "all") return true;
+    return item.bucket === state.workspaceStoryMemoryFilter;
+  });
   const taskSummary = {
     todo: allTaskItems.filter((task) => task.status === "todo").length,
     inProgress: allTaskItems.filter((task) => task.status === "in-progress").length,
@@ -479,6 +651,37 @@ export function renderWorkspaceView() {
   const latestProject = projects
     .filter((project) => !project.isWorkspaceRoot)
     .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0] || null;
+  const workspaceInsightOptions = [
+    {
+      key: "projects",
+      label: "Projects",
+      value: String(projects.length),
+      meta: `${allTaskItems.length} tracked tasks`,
+      note: "Scripts currently moving inside this workspace."
+    },
+    {
+      key: "activity",
+      label: "Last activity",
+      value: formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt),
+      meta: latestProject ? latestProject.title : "No script opened yet",
+      note: "Most recent workspace movement and the latest script touched."
+    },
+    {
+      key: "review",
+      label: "Review queue",
+      value: String((notifications.filter((notification) => !notification.read).length) + inboxItems.length),
+      meta: `${notifications.filter((notification) => !notification.read).length} unread · ${inboxItems.length} review items`,
+      note: "What still needs human attention before work feels clear again."
+    },
+    {
+      key: "memory",
+      label: "Story links",
+      value: String(storyMemoryLinks.length),
+      meta: storyMemoryLinks.length ? storyMemoryLinks[0].label : "No memory links yet",
+      note: "Continuity support linked back to active scripts and tasks."
+    }
+  ];
+  const workspaceInsightDefault = workspaceInsightOptions[0];
   const taskItems = allTaskItems.filter((task) => {
     if (state.workspaceTaskFilter === "mine") {
       return task.assignedTo === currentUid;
@@ -529,9 +732,19 @@ export function renderWorkspaceView() {
             </div>
           ` : ""}
         </div>
-        <div class="workspace-home-hero-metrics">
-          <div class="workspace-home-metric is-focus"><span>Projects</span><strong>${projects.length}</strong><small>scripts in motion</small></div>
-          <div class="workspace-home-metric"><span>Last activity</span><strong>${escapeHtml(formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt))}</strong><small>latest update</small></div>
+        <div class="workspace-home-hero-insight">
+          <div class="workspace-home-insight-head">
+            <span>Workspace insight</span>
+            <select class="comment-filter-select workspace-home-insight-select" data-workspace-insight-select aria-label="Choose workspace insight">
+              ${workspaceInsightOptions.map((item) => `<option value="${escapeHtml(item.key)}"${item.key === workspaceInsightDefault.key ? " selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+            </select>
+          </div>
+          <article class="workspace-home-insight-display" data-workspace-insight-display>
+            <span>${escapeHtml(workspaceInsightDefault.label)}</span>
+            <strong>${escapeHtml(workspaceInsightDefault.value)}</strong>
+            <small>${escapeHtml(workspaceInsightDefault.meta)}</small>
+            <p>${escapeHtml(workspaceInsightDefault.note)}</p>
+          </article>
         </div>
       </section>
       <div class="workspace-home-grid">
@@ -570,132 +783,122 @@ export function renderWorkspaceView() {
             `).join("") || '<p class="workspace-home-empty">Assign tasks to teammates to see progress here.</p>'}
           </div>
         </section>
-        <section class="workspace-home-panel workspace-panel-inbox">
-          <div class="workspace-home-panel-head">
-            <h4>My Inbox</h4>
-            <span class="workspace-home-panel-meta">${personalInboxItems.length} active</span>
-          </div>
-          <div class="workspace-inbox-list">
-            ${personalInboxItems.map((item) => `
-              <article class="workspace-inbox-item workspace-inbox-item-${escapeHtml(item.type)}">
-                <div class="workspace-inbox-copy">
-                  <strong>${escapeHtml(item.label)}</strong>
-                  <span>${escapeHtml(item.message)}</span>
-                  <small>${escapeHtml(item.task.assignedLabel || "Workspace task")}</small>
-                </div>
-                <div class="workspace-notification-actions">
-                  <button class="ghost-button btn-sm" type="button" data-workspace-home-action="${item.type === "mention" ? "comment-task" : "open-task-project"}" data-task-id="${escapeHtml(item.task.id)}" data-task-project-id="${escapeHtml(item.task.projectId || "")}">${item.type === "mention" ? "Open Thread" : item.task.lineId ? "Open Line" : item.task.sceneId ? "Open Scene" : "Open Project"}</button>
-                </div>
-              </article>
-            `).join("") || '<p class="workspace-home-empty">Assignments, mentions, and review items for you will collect here.</p>'}
-          </div>
-        </section>
-        <section class="workspace-home-panel workspace-panel-notifications">
-          <div class="workspace-home-panel-head">
-            <h4>Notifications</h4>
-            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-all-notifications-read">Mark all read</button>
-          </div>
-          <div class="workspace-task-summary">
-            <span class="workspace-task-summary-chip">Unread ${unreadNotifications.length}</span>
-            <span class="workspace-task-summary-chip">Total ${notifications.length}</span>
-          </div>
-          <div class="workspace-notification-list">
-            ${notifications.slice(0, 6).map((notification) => `
-              <article class="workspace-notification-item${notification.read ? "" : " is-unread"}${notification.category === "overdue" || notification.category === "due-soon" ? " workspace-notification-item-due" : ""}">
-                <div class="workspace-notification-copy">
-                  <strong>${escapeHtml(notification.title)}</strong>
-                  <span>${escapeHtml(notification.message || notification.actor || "Workspace update")}</span>
-                  <small>${escapeHtml(formatDateTime(notification.createdAt))}</small>
-                </div>
-                <div class="workspace-notification-actions">
-                  ${notification.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-notification" data-notification-id="${escapeHtml(notification.id)}" data-task-id="${escapeHtml(notification.taskId || "")}" data-task-project-id="${escapeHtml(notification.projectId)}">Open</button>` : ""}
-                  ${!notification.synthetic && !notification.read ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-notification-read" data-notification-id="${escapeHtml(notification.id)}">Read</button>` : ""}
-                </div>
-              </article>
-            `).join("") || '<p class="workspace-home-empty">No notifications yet.</p>'}
-          </div>
-        </section>
-        <section class="workspace-home-panel workspace-panel-completed">
-          <div class="workspace-home-panel-head">
-            <h4>Completed & Review</h4>
-            <span class="workspace-home-panel-meta">${inboxItems.length} item${inboxItems.length === 1 ? "" : "s"}</span>
-          </div>
-          <div class="workspace-inbox-list">
-            ${inboxItems.map((task) => `
-              <article class="workspace-inbox-item">
-                <div class="workspace-inbox-copy">
-                  <strong>${escapeHtml(task.title)}</strong>
-                  <span>${escapeHtml(task.aiState === "review" ? "Waiting for AI review" : task.aiState === "failed" ? "Needs retry" : "Completed task")}</span>
-                  <small>${escapeHtml(task.assignedLabel || "Workspace")}</small>
-                </div>
-                <div class="workspace-notification-actions">
-                  ${task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
-                  ${task.aiState === "failed" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">Retry</button>` : ""}
-                  ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
-                </div>
-              </article>
-            `).join("") || '<p class="workspace-home-empty">Completed work and AI review items will collect here.</p>'}
-          </div>
-        </section>
-        <section class="workspace-home-panel workspace-panel-story-links">
-          <div class="workspace-home-panel-head">
-            <h4>Story links</h4>
-            <span class="workspace-home-panel-meta">${storyMemoryLinks.length} memory links</span>
-          </div>
-          <div class="workspace-summary-list">
-            ${storyMemoryLinks.slice(0, 6).map((item) => `
-              <article class="workspace-summary-item workspace-summary-item-action">
+        ${buildWorkspaceFeedPanel({
+          panelClass: "workspace-panel-inbox",
+          title: "My Inbox",
+          meta: `${filteredInboxItems.length} active`,
+          filterAction: "set-inbox-filter",
+          filterLabel: "Filter inbox",
+          filterOptions: [
+            { value: "all", label: "All", selected: state.workspaceInboxFilter === "all" },
+            { value: "assigned", label: "Assigned", selected: state.workspaceInboxFilter === "assigned" },
+            { value: "mentions", label: "Mentions", selected: state.workspaceInboxFilter === "mentions" },
+            { value: "due", label: "Due", selected: state.workspaceInboxFilter === "due" },
+            { value: "overdue", label: "Overdue", selected: state.workspaceInboxFilter === "overdue" }
+          ],
+          summaryChips: [`Assigned ${inboxAssignedCount}`, `Mentions ${inboxMentionsCount}`],
+          listClass: "workspace-inbox-list",
+          bodyMarkup: filteredInboxItems.map((item) => `
+            <button class="workspace-inbox-item workspace-notification-item workspace-inbox-item-${escapeHtml(item.type)} workspace-notification-item-button${item.type === "due" || item.type === "overdue" ? " workspace-notification-item-due" : ""}" type="button" data-workspace-home-action="${item.type === "mention" ? "comment-task" : "open-task-project"}" data-task-id="${escapeHtml(item.task.id)}" data-task-project-id="${escapeHtml(item.task.projectId || "")}">
+              <div class="workspace-notification-copy workspace-inbox-copy">
+                <strong>${escapeHtml(item.label)}</strong>
+                <span>${escapeHtml(item.message)}</span>
+                <small>${escapeHtml(item.task.assignedLabel || "Workspace task")}</small>
+              </div>
+              <span class="workspace-inbox-row-meta">${escapeHtml(item.type === "mention" ? "Comment" : item.task.lineId ? "Line" : item.task.sceneId ? "Scene" : "Project")}</span>
+            </button>
+          `).join("") || '<p class="workspace-home-empty">No inbox items match this filter right now.</p>'
+        })}
+        ${buildWorkspaceFeedPanel({
+          panelClass: "workspace-panel-notifications",
+          title: "Notifications",
+          meta: `${filteredNotifications.length} shown`,
+          filterAction: "set-notification-filter",
+          filterLabel: "Filter notifications",
+          filterOptions: [
+            { value: "all", label: "All", selected: state.workspaceNotificationFilter === "all" },
+            { value: "read", label: "Read", selected: state.workspaceNotificationFilter === "read" },
+            { value: "unread", label: "Unread", selected: state.workspaceNotificationFilter === "unread" }
+          ],
+          summaryChips: [`Unread ${unreadNotifications.length}`, `Total ${notifications.length}`],
+          listClass: "workspace-notification-list",
+          bodyMarkup: filteredNotifications.slice(0, 6).map((notification) => `
+            <article class="workspace-notification-item${notification.read ? "" : " is-unread"}${notification.category === "overdue" || notification.category === "due-soon" ? " workspace-notification-item-due" : ""}">
+              <div class="workspace-notification-copy">
+                <strong>${escapeHtml(notification.title)}</strong>
+                <span>${escapeHtml(notification.message || notification.actor || "Workspace update")}</span>
+                <small>${escapeHtml(formatDateTime(notification.createdAt))}</small>
+              </div>
+              <div class="workspace-notification-actions">
+                ${notification.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-notification" data-notification-id="${escapeHtml(notification.id)}" data-task-id="${escapeHtml(notification.taskId || "")}" data-task-project-id="${escapeHtml(notification.projectId)}">Open</button>` : ""}
+                ${!notification.synthetic && !notification.read ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="mark-notification-read" data-notification-id="${escapeHtml(notification.id)}">Read</button>` : ""}
+              </div>
+            </article>
+          `).join("") || '<p class="workspace-home-empty">No notifications match this filter right now.</p>'
+        })}
+        ${buildWorkspaceFeedPanel({
+          panelClass: "workspace-panel-completed",
+          title: "Completed & Review",
+          meta: `${filteredCompletedReviewItems.length} item${filteredCompletedReviewItems.length === 1 ? "" : "s"}`,
+          filterAction: "set-completed-filter",
+          filterLabel: "Filter completed and review items",
+          filterOptions: [
+            { value: "all", label: "All", selected: state.workspaceCompletedFilter === "all" },
+            { value: "review", label: "Review", selected: state.workspaceCompletedFilter === "review" },
+            { value: "retry", label: "Retry", selected: state.workspaceCompletedFilter === "retry" },
+            { value: "completed", label: "Completed", selected: state.workspaceCompletedFilter === "completed" }
+          ],
+          summaryChips: [`Review ${reviewQueueCount}`, `Retry ${retryQueueCount}`, `Done ${completedCount}`],
+          listClass: "workspace-inbox-list",
+          bodyMarkup: filteredCompletedReviewItems.map((task) => `
+            <article class="workspace-inbox-item workspace-notification-item">
+              <div class="workspace-inbox-copy workspace-notification-copy">
+                <strong>${escapeHtml(task.title)}</strong>
+                <span>${escapeHtml(task.aiState === "review" ? "Waiting for AI review" : task.aiState === "failed" ? "Needs retry" : "Completed task")}</span>
+                <small>${escapeHtml(task.assignedLabel || "Workspace")}</small>
+              </div>
+              <div class="workspace-notification-actions">
+                ${task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
+                ${task.aiState === "failed" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">Retry</button>` : ""}
+                ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
+              </div>
+            </article>
+          `).join("") || '<p class="workspace-home-empty">Completed work and AI review items will collect here.</p>'
+        })}
+        ${buildWorkspaceFeedPanel({
+          panelClass: "workspace-panel-story-links",
+          title: "Story links",
+          meta: `${filteredStoryMemoryLinks.length} memory link${filteredStoryMemoryLinks.length === 1 ? "" : "s"}`,
+          filterAction: "set-story-memory-filter",
+          filterLabel: "Filter story memory",
+          filterOptions: [
+            { value: "all", label: "All", selected: state.workspaceStoryMemoryFilter === "all" },
+            ...storyMemoryBuckets.map((bucket) => ({
+              value: bucket,
+              label: bucket.replace(/^./, (value) => value.toUpperCase()),
+              selected: state.workspaceStoryMemoryFilter === bucket
+            }))
+          ],
+          summaryChips: [`Types ${storyMemoryBuckets.length}`, `Total ${storyMemoryLinks.length}`],
+          listClass: "workspace-notification-list workspace-story-link-list",
+          bodyMarkup: filteredStoryMemoryLinks.slice(0, 6).map((item) => `
+            <article class="workspace-notification-item workspace-story-link-item">
+              <div class="workspace-notification-copy">
                 <strong>${escapeHtml(item.name)}</strong>
                 <span>${escapeHtml(item.label)}</span>
+                <small>${escapeHtml(item.bucket.replace(/^./, (value) => value.toUpperCase()))}</small>
+              </div>
+              <div class="workspace-notification-actions">
                 <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-memory" data-memory-id="${escapeHtml(item.id)}" data-memory-project-id="${escapeHtml(item.projectId)}">Open Memory</button>
-              </article>
-            `).join("") || '<p class="workspace-home-empty">Add story memory to scripts and link tasks back to those elements.</p>'}
-          </div>
-        </section>
+              </div>
+            </article>
+          `).join("") || '<p class="workspace-home-empty">Add story memory to scripts and link tasks back to those elements.</p>'
+        })}
         <section class="workspace-home-panel workspace-home-panel-wide workspace-panel-tasks">
           <div class="workspace-home-panel-head workspace-task-board-head">
             <div>
               <h4>Tasks & Delegation</h4>
-              <span class="workspace-home-panel-meta">Create, assign, and open writing work from one place.</span>
-            </div>
-            <div class="workspace-task-board-actions">
-              <select class="comment-filter-select workspace-task-sort-select" data-workspace-home-action="set-task-sort" aria-label="Sort tasks">
-                <option value="latest" ${state.workspaceTaskSort === "latest" ? "selected" : ""}>Latest</option>
-                <option value="due" ${state.workspaceTaskSort === "due" ? "selected" : ""}>Due Date</option>
-                <option value="status" ${state.workspaceTaskSort === "status" ? "selected" : ""}>By Status</option>
-                <option value="comments" ${state.workspaceTaskSort === "comments" ? "selected" : ""}>Most Discussed</option>
-              </select>
-            </div>
-          </div>
-          <div class="workspace-task-command">
-            <div class="workspace-task-metrics" aria-label="Task summary">
-              <button class="workspace-task-metric ${state.workspaceTaskFilter === "open" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="open">
-                <span>Open</span>
-                <strong>${taskStatusSummary.openCount}</strong>
-              </button>
-              <button class="workspace-task-metric ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">
-                <span>Mine</span>
-                <strong>${myAssignedTasks.length}</strong>
-              </button>
-              <button class="workspace-task-metric ${state.workspaceTaskFilter === "due-soon" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="due-soon">
-                <span>Due soon</span>
-                <strong>${dueSoonCount}</strong>
-              </button>
-              <button class="workspace-task-metric ${state.workspaceTaskFilter === "overdue" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="overdue">
-                <span>Overdue</span>
-                <strong>${overdueCount}</strong>
-              </button>
-              <button class="workspace-task-metric ${state.workspaceTaskFilter === "done" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="done">
-                <span>Done</span>
-                <strong>${taskSummary.done}</strong>
-              </button>
-            </div>
-            <div class="workspace-task-filters" role="tablist" aria-label="Workspace tasks filter">
-              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "all" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="all">All Tasks</button>
-              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "open" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="open">Open</button>
-              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "mine" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="mine">Assigned to Me</button>
-              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "ai" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="ai">AI Tasks</button>
-              <button class="workspace-filter-chip ${state.workspaceTaskFilter === "done" ? "is-active" : ""}" type="button" data-workspace-home-action="set-task-filter" data-task-filter="done">Done</button>
+              <span class="workspace-home-panel-meta">Create and assign work here. New task activity appears in Notifications and My Inbox.</span>
             </div>
           </div>
           <div class="workspace-task-composer">
@@ -706,104 +909,52 @@ export function renderWorkspaceView() {
             <div class="workspace-task-form">
               <label class="workspace-task-field workspace-task-field-title">
                 <span>Task</span>
-                <input class="modal-input workspace-task-title-input" type="text" placeholder="e.g. tighten the opening scene" data-workspace-task-title>
+                <input class="modal-input workspace-task-title-input" type="text" placeholder="e.g. tighten the opening scene" value="${escapeHtml(draftTitle)}" data-workspace-task-title>
               </label>
               <label class="workspace-task-field">
                 <span>Assign to</span>
                 <select class="comment-filter-select" data-workspace-task-assignee>
-                  ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}">${escapeHtml(assignee.label)}</option>`).join("")}
+                  ${assignees.map((assignee) => `<option value="${escapeHtml(assignee.id)}"${assignee.id === draftAssignedTo ? " selected" : ""}>${escapeHtml(assignee.label)}</option>`).join("")}
                 </select>
               </label>
               <label class="workspace-task-field">
                 <span>Project</span>
                 <select class="comment-filter-select" data-workspace-task-project>
-                  ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
+                  ${projects.map((project) => `<option value="${escapeHtml(project.id)}"${project.id === draftProjectId ? " selected" : ""}>${escapeHtml(project.title)}</option>`).join("")}
                 </select>
               </label>
               <label class="workspace-task-field">
                 <span>Type</span>
                 <select class="comment-filter-select" data-workspace-task-template>
-                  ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.label)}</option>`).join("")}
+                  ${WORKSPACE_TASK_TEMPLATES.map((template) => `<option value="${escapeHtml(template.key)}"${template.key === draftTemplateKey ? " selected" : ""}>${escapeHtml(template.label)}</option>`).join("")}
                 </select>
               </label>
               <label class="workspace-task-field">
                 <span data-workspace-task-scene-label>Scene</span>
                 <select class="comment-filter-select" data-workspace-task-scene>
                   <option value="">General task</option>
-                  ${sceneOptions.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" data-scene-project-id="${escapeHtml(scene.projectId)}">${escapeHtml(scene.label)}</option>`).join("")}
+                  ${sceneOptions.map((scene) => `<option value="${escapeHtml(scene.sceneId)}" data-scene-project-id="${escapeHtml(scene.projectId)}"${scene.sceneId === draftSceneId ? " selected" : ""}>${escapeHtml(scene.label)}</option>`).join("")}
                 </select>
               </label>
               <label class="workspace-task-field" data-workspace-task-line-field>
                 <span>Line</span>
                 <select class="comment-filter-select" data-workspace-task-line>
                   <option value="">Scene level</option>
-                  ${lineOptions.map((line) => `<option value="${escapeHtml(line.lineId)}" data-line-project-id="${escapeHtml(line.projectId)}" data-line-scene-id="${escapeHtml(line.sceneId || "")}">${escapeHtml(line.label)}</option>`).join("")}
+                  ${lineOptions.map((line) => `<option value="${escapeHtml(line.lineId)}" data-line-project-id="${escapeHtml(line.projectId)}" data-line-scene-id="${escapeHtml(line.sceneId || "")}"${line.lineId === draftLineId ? " selected" : ""}>${escapeHtml(line.label)}</option>`).join("")}
                 </select>
               </label>
               <label class="workspace-task-field">
                 <span>AI start</span>
                 <select class="comment-filter-select" data-workspace-task-ai-start>
-                  <option value="now">Run now</option>
-                  <option value="in-3m">In 3 mins</option>
-                  <option value="in-10m">In 10 mins</option>
+                  <option value="now"${draftAiStart === "now" ? " selected" : ""}>Run now</option>
+                  <option value="in-3m"${draftAiStart === "in-3m" ? " selected" : ""}>In 3 mins</option>
+                  <option value="in-10m"${draftAiStart === "in-10m" ? " selected" : ""}>In 10 mins</option>
                 </select>
               </label>
-              <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description></textarea>
-              <p class="workspace-task-template-hint" data-workspace-task-template-hint>${escapeHtml(getWorkspaceTaskTemplate("custom").aiInstruction)}</p>
+              <textarea class="collab-textarea workspace-task-description" placeholder="Describe what needs to happen..." data-workspace-task-description>${escapeHtml(draftDescription)}</textarea>
               <button class="primary-button workspace-task-create-button" type="button" data-workspace-home-action="add-task">Create Task</button>
+              <p class="workspace-task-template-hint" data-workspace-task-template-hint>${escapeHtml(getWorkspaceTaskTemplate(draftTemplateKey).aiInstruction)}</p>
             </div>
-          </div>
-          <div class="workspace-task-list">
-            ${taskItems.length ? taskItems.map((task) => `
-                <article class="workspace-task-card ${task.assignedTo === currentUid ? "is-owned-by-you" : ""} ${task.assigneeType === "system" ? "is-ai-task" : ""} ${task.id === state.lastCreatedWorkspaceTaskId ? "is-new" : ""}" data-workspace-task-card-id="${escapeHtml(task.id)}">
-                  <div class="workspace-task-head">
-                    <div>
-                      <strong>${escapeHtml(task.title)}</strong>
-                      <span>${escapeHtml(getTaskTargetLabel(task))}</span>
-                    </div>
-                    <select class="comment-filter-select workspace-task-status-select" data-workspace-task-status="${escapeHtml(task.id)}">
-                      <option value="todo" ${task.status === "todo" ? "selected" : ""}>To Do</option>
-                      <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
-                      <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
-                    </select>
-                  </div>
-                  ${task.description ? `<p class="workspace-task-copy">${escapeHtml(task.description)}</p>` : ""}
-                  ${buildWorkspaceTaskAssigneeMarkup(task, currentUid)}
-                  <div class="workspace-task-chip-row">
-                    <span class="workspace-task-tag">${escapeHtml(getWorkspaceTaskTemplate(task.templateKey).label)}</span>
-                    ${task.id === state.lastCreatedWorkspaceTaskId ? '<span class="workspace-task-tag workspace-task-tag-new">New</span>' : ""}
-                    <span class="workspace-task-tag workspace-task-tag-priority workspace-task-tag-priority-${escapeHtml(task.priority || "normal")}">${escapeHtml((task.priority || "normal").replace(/^./, (value) => value.toUpperCase()))} Priority</span>
-                    ${task.assignedTo === currentUid ? '<span class="workspace-task-tag workspace-task-tag-focus">Assigned to you</span>' : ""}
-                    ${getTaskDueState(task) ? `<span class="workspace-task-tag workspace-task-tag-${escapeHtml(getTaskDueState(task))}">${escapeHtml(getTaskDueLabel(task))}</span>` : ""}
-                    <span class="workspace-task-tag">${escapeHtml(task.assignedLabel || "Unassigned")}</span>
-                    <span class="workspace-task-tag">${task.assigneeType === "system" ? "AI task" : "Human task"}</span>
-                    ${task.assigneeType === "system" ? `<span class="workspace-task-tag workspace-task-tag-ai">${escapeHtml(getAiTaskStateLabel(task))}</span>` : ""}
-                    ${task.projectId ? `<span class="workspace-task-tag">${escapeHtml(projects.find((project) => project.id === task.projectId)?.title || "Linked Project")}</span>` : ""}
-                    ${task.lineLabel ? `<span class="workspace-task-tag">${escapeHtml(task.lineLabel)}</span>` : ""}
-                    ${task.dueAt && !getTaskDueState(task) ? `<span class="workspace-task-tag">${escapeHtml(formatTaskDueLabel(task))}</span>` : ""}
-                    ${task.memoryLinkName ? `<span class="workspace-task-tag">${escapeHtml(task.memoryLinkName)}</span>` : ""}
-                    ${task.comments?.length ? `<span class="workspace-task-tag">${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}</span>` : ""}
-                  </div>
-                  ${task.aiResultText ? `<p class="workspace-task-comment-preview">AI suggestion ready. Review before applying it to the script.</p>` : ""}
-                  ${task.assigneeType === "system" && task.aiError ? `<p class="workspace-task-comment-preview">Last AI run: ${escapeHtml(task.aiError)}</p>` : ""}
-                  ${task.handoffNote ? `<p class="workspace-task-comment-preview">Handoff: ${escapeHtml(task.handoffNote)}</p>` : ""}
-                  ${task.comments?.length ? `<p class="workspace-task-comment-preview">Latest comment by ${escapeHtml(task.comments[task.comments.length - 1].author || "Workspace member")}: ${escapeHtml(task.comments[task.comments.length - 1].text)}</p>` : ""}
-                  <div class="workspace-task-meta">
-                    <span>${escapeHtml(formatDateTime(task.updatedAt || task.createdAt))}</span>
-                    <div class="workspace-task-actions">
-                      ${task.assigneeType === "system" && ["ready", "scheduled", "failed"].includes(task.aiState) ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="run-ai-task" data-task-id="${escapeHtml(task.id)}">${task.aiState === "failed" ? "Retry AI" : "Run AI"}</button>` : ""}
-                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="review-ai-task" data-task-id="${escapeHtml(task.id)}">Review</button>` : ""}
-                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="apply-ai-task" data-task-id="${escapeHtml(task.id)}">Apply</button>` : ""}
-                      ${task.assigneeType === "system" && task.aiState === "review" ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="dismiss-ai-task" data-task-id="${escapeHtml(task.id)}">Dismiss</button>` : ""}
-                      <button class="ghost-button btn-sm" type="button" data-workspace-home-action="edit-task" data-task-id="${escapeHtml(task.id)}">Edit</button>
-                      <button class="ghost-button btn-sm" type="button" data-workspace-home-action="comment-task" data-task-id="${escapeHtml(task.id)}">Comments ${task.comments?.length ? `(${task.comments.length})` : ""}</button>
-                      ${task.memoryLinkId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-memory" data-task-id="${escapeHtml(task.id)}" data-memory-id="${escapeHtml(task.memoryLinkId)}" data-memory-project-id="${escapeHtml(task.memoryProjectId || task.projectId)}">Open Memory</button>` : ""}
-                      <button class="ghost-button btn-sm" type="button" data-workspace-home-action="delete-task" data-task-id="${escapeHtml(task.id)}">Delete</button>
-                      ${task.projectId ? `<button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-task-project" data-task-id="${escapeHtml(task.id)}" data-task-project-id="${escapeHtml(task.projectId)}">${task.lineId ? "Open Line" : task.sceneId ? "Open Scene" : "Open Project"}</button>` : ""}
-                    </div>
-                  </div>
-                </article>
-              `).join("") : '<p class="workspace-home-empty">No matching tasks yet. Start with a rewrite, review, or delegated AI pass.</p>'}
           </div>
         </section>
       </div>
@@ -811,6 +962,24 @@ export function renderWorkspaceView() {
   `;
 
   applyTranslations();
+  const workspaceTaskForm = refs.workspaceDashboard.querySelector(".workspace-task-form");
+  if (workspaceTaskForm) {
+    workspaceTaskForm.dataset.workspaceTemplateApplied = draftTemplateKey;
+  }
+  const workspaceInsightSelect = refs.workspaceDashboard.querySelector("[data-workspace-insight-select]");
+  const workspaceInsightDisplay = refs.workspaceDashboard.querySelector("[data-workspace-insight-display]");
+  const renderWorkspaceInsight = (key) => {
+    const insight = workspaceInsightOptions.find((item) => item.key === key) || workspaceInsightDefault;
+    if (!workspaceInsightDisplay) return;
+    workspaceInsightDisplay.innerHTML = `
+      <span>${escapeHtml(insight.label)}</span>
+      <strong>${escapeHtml(insight.value)}</strong>
+      <small>${escapeHtml(insight.meta)}</small>
+      <p>${escapeHtml(insight.note)}</p>
+    `;
+  };
+  workspaceInsightSelect?.addEventListener("change", () => renderWorkspaceInsight(workspaceInsightSelect.value));
+  renderWorkspaceInboxPopup();
   renderWorkspaceProjectCards(projects, collaborationLabel);
 }
 
@@ -975,6 +1144,7 @@ export function renderHome() {
       refs.homeUserEmail.textContent = session.isDemoSession ? 'Demo mode' : (session.email || '');
     }
   } catch { /* ignore */ }
+  renderWorkspaceInboxPopup();
 
   refs.projectGrid.innerHTML = "";
   const template = document.querySelector("#projectCardTemplate");
@@ -1310,6 +1480,7 @@ export function renderStudioProjectContext() {
   if (refs.studioProjectMeta) {
     refs.studioProjectMeta.textContent = `${workspaceLabel} Â· ${project.scriptId || "Draft"} Â· ${collaborationLabel} Â· Last edited by ${lastEdited}`;
   }
+  renderWorkspaceInboxPopup();
 }
 
 export function renderSceneList() {

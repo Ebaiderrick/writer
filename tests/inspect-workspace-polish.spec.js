@@ -7,10 +7,9 @@ test('workspace dashboard renders with softer unified cards', async ({ page }) =
     const home = document.getElementById('homeView');
     const workspace = document.getElementById('workspaceView');
     const dashboard = document.getElementById('workspaceDashboard');
-    const projectGrid = document.getElementById('workspaceProjectGrid');
     const title = document.getElementById('workspaceViewTitle');
     const clock = document.getElementById('workspaceViewClock');
-    if (!workspace || !dashboard || !projectGrid || !title || !clock) throw new Error('Missing workspace nodes');
+    if (!workspace || !dashboard || !title || !clock) throw new Error('Missing workspace nodes');
     if (home) home.hidden = true;
     workspace.hidden = false;
     title.textContent = 'The Hill at First Light';
@@ -22,10 +21,20 @@ test('workspace dashboard renders with softer unified cards', async ({ page }) =
             <h3>The Hill at First Light</h3>
             <p>Shape scripts, story memory, comments, and teamwork from one shared writing space.</p>
           </div>
-          <div class="workspace-home-metric"><span>Projects</span><strong>1</strong></div>
-          <div class="workspace-home-metric"><span>Members</span><strong>3</strong></div>
-          <div class="workspace-home-metric"><span>Tasks</span><strong>7</strong></div>
-          <div class="workspace-home-metric"><span>Last activity</span><strong>May 26, 2026</strong></div>
+          <div class="workspace-home-hero-insight">
+            <div class="workspace-home-insight-head">
+              <span>Workspace insight</span>
+              <select class="comment-filter-select workspace-home-insight-select" aria-label="Choose workspace insight">
+                <option>Projects</option>
+              </select>
+            </div>
+            <article class="workspace-home-insight-display">
+              <span>Projects</span>
+              <strong>1</strong>
+              <small>7 tracked tasks</small>
+              <p>Scripts currently moving inside this workspace.</p>
+            </article>
+          </div>
         </section>
         <div class="workspace-home-grid">
           <section class="workspace-home-panel">
@@ -80,9 +89,6 @@ test('workspace dashboard renders with softer unified cards', async ({ page }) =
           </div>
         </section>
       </div>
-    `;
-    projectGrid.innerHTML = `
-      <article class="project-card"><div class="project-card-copy"><h3>Episode 1</h3><p>Shared workspace screenplay</p></div></article>
     `;
   });
   await expect(page.locator('#workspaceView')).toBeVisible();

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EyaWriter</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260608c">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
@@ -223,6 +223,12 @@
           </div>
         </div>
         <div class="home-topbar-user">
+          <button id="homeInboxBellBtn" class="home-inbox-trigger" type="button" aria-label="Notifications" title="Notifications">
+            <span class="tool-icon home-inbox-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 4a4 4 0 0 0-4 4v2.3c0 .7-.2 1.4-.6 2L6 15h12l-1.4-2.7c-.4-.6-.6-1.3-.6-2V8a4 4 0 0 0-4-4"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
+            </span>
+            <span id="homeInboxBellBadge" class="workspace-bell-badge home-inbox-badge" hidden></span>
+          </button>
           <button class="user-trigger open-profile-btn" aria-label="Open profile">
             <div class="user-avatar-circle">
               <img src="" alt="" class="user-avatar-img" hidden>
@@ -2009,6 +2015,25 @@
     </div>
   </div>
 
+  <div class="popup-overlay workspace-inbox-popup-overlay" id="workspace-inbox-popup">
+    <div class="popup-card workspace-inbox-popup-card">
+      <button class="popup-close" id="close-workspace-inbox" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+      <div class="workspace-inbox-popup-head">
+        <div>
+          <h2>Inbox</h2>
+          <p>New invites, tasks, and comments in one simple list.</p>
+        </div>
+      </div>
+      <div id="workspaceInboxPopupList" class="workspace-inbox-popup-list">
+        <p class="collab-empty">No incoming items right now.</p>
+      </div>
+    </div>
+  </div>
+
   <dialog id="privacyDialog" class="legal-dialog">
     <div class="legal-dialog-inner">
       <div class="legal-dialog-header">
@@ -2073,7 +2098,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="js/main.js"></script>
+<script type="module" src="js/main.js?v=20260608c"></script>
 </body>
 </html>
 

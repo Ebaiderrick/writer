@@ -32,7 +32,7 @@ import {
   renderLeftPaneLayout, toggleLeftPaneSection, setLeftPaneBlockVisibility, moveLeftPaneBlock,
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView, renderStudioProjectContext,
-  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow, showFilmProjectSetupFlow
+  showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow, showFilmProjectSetupFlow, renderWorkspaceInboxPopup
 } from './ui.js';
 import { AI } from './ai.js';
 import {
@@ -154,6 +154,31 @@ function openFileRecoveryDialog() {
 
 function closeFileRecoveryDialog() {
   document.getElementById("fileRecoveryDialog")?.close();
+}
+
+function openWorkspaceInboxPopup(trigger) {
+  const popup = document.getElementById("workspace-inbox-popup");
+  const card = popup?.querySelector(".popup-card");
+  if (!popup || !card || !trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  popup.classList.add("active");
+  const cardWidth = 360;
+  const viewportPadding = 12;
+  let left = rect.right - cardWidth;
+  if (left < viewportPadding) left = viewportPadding;
+  if (left + cardWidth > window.innerWidth - viewportPadding) {
+    left = Math.max(viewportPadding, window.innerWidth - cardWidth - viewportPadding);
+  }
+  const preferredTop = rect.bottom + 8;
+  const cardHeight = card.offsetHeight || 0;
+  const maxTop = Math.max(viewportPadding, window.innerHeight - cardHeight - viewportPadding);
+  const top = Math.min(preferredTop, maxTop);
+  card.style.top = `${top}px`;
+  card.style.left = `${left}px`;
+}
+
+function closeWorkspaceInboxPopup() {
+  document.getElementById("workspace-inbox-popup")?.classList.remove("active");
 }
 
 async function renderConversionJobsList() {
@@ -744,6 +769,7 @@ function applyWorkspaceTaskTemplateToForm(container, templateKey, { force = fals
   }
   updateWorkspaceTaskTypeFields(container, template.key);
   container.dataset.workspaceTemplateApplied = template.key;
+  syncWorkspaceTaskDraftFromContainer(container);
 }
 
 function ensureDefaultWorkspaceRoot() {
@@ -1003,6 +1029,55 @@ function getWorkspaceLeadProject(workspaceId = state.currentWorkspaceId) {
     || null;
 }
 
+function getWorkspaceTaskDraft(workspaceId = state.currentWorkspaceId) {
+  if (!workspaceId) return null;
+  const draft = state.workspaceTaskDraft;
+  if (!draft || draft.workspaceId !== workspaceId) return null;
+  return draft;
+}
+
+function syncWorkspaceTaskDraftFromContainer(container, workspaceId = state.currentWorkspaceId) {
+  if (!container || !workspaceId) return;
+  const titleInput = container.querySelector('[data-workspace-task-title]');
+  const descriptionInput = container.querySelector('[data-workspace-task-description]');
+  const projectSelect = container.querySelector('[data-workspace-task-project]');
+  const sceneSelect = container.querySelector('[data-workspace-task-scene]');
+  const lineSelect = container.querySelector('[data-workspace-task-line]');
+  const assigneeSelect = container.querySelector('[data-workspace-task-assignee]');
+  const templateSelect = container.querySelector('[data-workspace-task-template]');
+  const aiStartSelect = container.querySelector('[data-workspace-task-ai-start]');
+  state.workspaceTaskDraft = {
+    workspaceId,
+    title: titleInput?.value || "",
+    description: descriptionInput?.value || "",
+    projectId: projectSelect?.value || "",
+    sceneId: sceneSelect?.value || "",
+    lineId: lineSelect?.value || "",
+    assignedTo: assigneeSelect?.value || "",
+    templateKey: templateSelect?.value || "custom",
+    aiStart: aiStartSelect?.value || "now"
+  };
+}
+
+function clearWorkspaceTaskDraft(workspaceId = state.currentWorkspaceId) {
+  if (!workspaceId) {
+    state.workspaceTaskDraft = null;
+    return;
+  }
+  if (state.workspaceTaskDraft?.workspaceId === workspaceId) {
+    state.workspaceTaskDraft = null;
+  }
+}
+
+function flushPendingWorkspaceRefresh() {
+  if (!state.workspaceRefreshPending || !state.currentWorkspaceId) return;
+  const activeElement = document.activeElement;
+  const activeForm = activeElement?.closest?.(".workspace-task-form");
+  if (activeForm && refs.workspaceDashboard?.contains(activeForm)) return;
+  state.workspaceRefreshPending = false;
+  renderWorkspaceView();
+}
+
 function getWorkspaceTaskById(taskId) {
   return getWorkspaceLeadProject()?.workspace?.tasks?.find((task) => task.id === taskId) || null;
 }
@@ -1037,73 +1112,374 @@ function showWorkspaceReviewCenter() {
     { label: "Story memory is started", done: storyMemoryItems.length > 0 }
   ];
   const readinessScore = Math.round((readinessChecks.filter((item) => item.done).length / readinessChecks.length) * 100);
-  const reportTypes = {
-    stat: {
-      title: "Stat",
-      eyebrow: "Workspace numbers",
-      body: `
-        <div class="workspace-review-stat-grid">
-          <div><span>Scripts</span><strong>${projects.length}</strong></div>
-          <div><span>Open tasks</span><strong>${openTasks.length}</strong></div>
-          <div><span>Completed</span><strong>${completedTasks.length}</strong></div>
-          <div><span>Words</span><strong>${wordCount.toLocaleString()}</strong></div>
-          <div><span>Scenes</span><strong>${sceneCount}</strong></div>
-          <div><span>Comments</span><strong>${comments.length}</strong></div>
-          <div><span>Story memory</span><strong>${storyMemoryItems.length}</strong></div>
-          <div><span>Readiness</span><strong>${readinessScore}%</strong></div>
-        </div>
-      `
+  const readinessTone = readinessScore >= 80 ? "strong" : readinessScore >= 55 ? "steady" : "warning";
+  const readinessLabel = readinessScore >= 80 ? "Strong" : readinessScore >= 55 ? "Steady" : "Needs attention";
+  const nextFocus = aiFailedTasks.length
+    ? "Resolve failed AI tasks first so the workspace can trust its delegated work."
+    : unresolvedComments.length
+      ? "Resolve the outstanding comments so collaborators have a cleaner review trail."
+      : !tasks.length
+        ? "Start assigning tasks so the workspace becomes trackable, not just writable."
+        : !storyMemoryItems.length
+          ? "Add story memory links to strengthen continuity and team context."
+          : "The workspace is in a healthy place. Focus on moving the next open task forward.";
+  const readinessMarkup = readinessChecks.map((item) => `
+    <div class="workspace-review-check" data-check-state="${item.done ? "done" : "todo"}">
+      <span class="workspace-review-check-dot" aria-hidden="true"></span>
+      <strong>${escapeHtml(item.label)}</strong>
+      <small>${item.done ? "Ready" : "Pending"}</small>
+    </div>
+  `).join("");
+  const sceneHeadings = lines
+    .filter((line) => line.type === "scene" && line.text?.trim())
+    .map((line) => line.text.trim());
+  const dialogueLines = lines.filter((line) => line.type === "dialogue" && line.text?.trim());
+  const actionLines = lines.filter((line) => line.type === "action" && line.text?.trim());
+  const dialogueWordCount = dialogueLines.reduce((count, line) => count + String(line.text || "").trim().split(/\s+/).filter(Boolean).length, 0);
+  const actionWordCount = actionLines.reduce((count, line) => count + String(line.text || "").trim().split(/\s+/).filter(Boolean).length, 0);
+  const averageDialogueLength = dialogueLines.length ? Math.round(dialogueWordCount / dialogueLines.length) : 0;
+  const averageActionLength = actionLines.length ? Math.round(actionWordCount / actionLines.length) : 0;
+  const characterFrequency = Array.from(
+    lines
+      .filter((line) => line.type === "character" && line.text?.trim())
+      .reduce((map, line) => {
+        const key = normalizeLineText(line.text, line.type);
+        map.set(key, (map.get(key) || 0) + 1);
+        return map;
+      }, new Map())
+      .entries()
+  )
+    .sort((a, b) => b[1] - a[1]);
+  const characterSet = new Set(characterFrequency.map(([name]) => name.toLowerCase()));
+  const stopWords = new Set(["the", "and", "with", "from", "into", "that", "this", "there", "their", "about", "after", "before", "while", "where", "when", "have", "has", "were", "been", "will", "would", "could", "should", "then", "them", "they", "your", "ours", "through", "across", "scene", "interior", "exterior"]);
+  const recurringTerms = Array.from(
+    lines
+      .filter((line) => ["action", "dialogue", "note", "text"].includes(line.type) && line.text?.trim())
+      .flatMap((line) => String(line.text || "").match(/[A-Za-z][A-Za-z'-]{3,}/g) || [])
+      .reduce((map, word) => {
+        const normalized = word.toLowerCase();
+        if (stopWords.has(normalized) || characterSet.has(normalized)) return map;
+        map.set(normalized, (map.get(normalized) || 0) + 1);
+        return map;
+      }, new Map())
+      .entries()
+  )
+    .filter(([, count]) => count > 1)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([term]) => term.replace(/^./, (value) => value.toUpperCase()));
+  const reviewInsightOptions = [
+    {
+      key: "scripts",
+      label: "Scripts",
+      value: String(projects.length),
+      meta: `${sceneCount} scenes · ${characterCount} characters`,
+      note: "How much writing structure is already active inside this workspace."
     },
-    summary: {
-      title: "AI Summary",
-      eyebrow: "Generated workspace summary",
-      body: `
-        <p>AI summary: This workspace currently has ${projects.length} active script${projects.length === 1 ? "" : "s"}, ${openTasks.length} open task${openTasks.length === 1 ? "" : "s"}, and ${completedTasks.length} completed task${completedTasks.length === 1 ? "" : "s"}. The writing base includes ${wordCount.toLocaleString()} words across ${sceneCount} scene${sceneCount === 1 ? "" : "s"}, with ${characterCount} character${characterCount === 1 ? "" : "s"} detected.</p>
-        <p>${unresolvedComments.length ? `There are ${unresolvedComments.length} unresolved comment${unresolvedComments.length === 1 ? "" : "s"} that should be reviewed.` : "There are no unresolved comments in the current workspace data."} ${storyMemoryItems.length ? `Story memory has ${storyMemoryItems.length} linked element${storyMemoryItems.length === 1 ? "" : "s"} available for continuity checks.` : "Story memory has not been built yet, so continuity support is still light."}</p>
-      `
+    {
+      key: "tasks",
+      label: "Task load",
+      value: String(openTasks.length),
+      meta: `${completedTasks.length} completed · ${aiTasks.length} AI tasks`,
+      note: "The active load the team is carrying right now."
     },
-    progress: {
-      title: "AI Progress Report",
-      eyebrow: "Generated progress report",
-      body: `
-        <p>AI progress report: The workspace readiness score is ${readinessScore}%. ${tasks.length ? `Task tracking is active with ${openTasks.length} open and ${completedTasks.length} completed.` : "Task tracking has not started yet."} ${aiTasks.length ? `AI work includes ${aiTasks.length} task${aiTasks.length === 1 ? "" : "s"}, with ${aiReviewTasks.length} waiting for review and ${aiFailedTasks.length} failed.` : "No AI tasks are currently queued."}</p>
-        <p>Recommended next steps: ${openTasks.length ? "finish or reassign the open tasks" : "create the next task"}, ${storyMemoryItems.length ? "review story memory for completeness" : "add story memory elements"}, and ${unresolvedComments.length ? "resolve outstanding comments" : "keep collaboration comments clear"}.</p>
-      `
+    {
+      key: "queue",
+      label: "Review queue",
+      value: String(unresolvedComments.length + aiReviewTasks.length),
+      meta: `${unresolvedComments.length} comments · ${aiReviewTasks.length} AI reviews`,
+      note: "What still needs review before the workspace feels clear."
+    },
+    {
+      key: "checks",
+      label: "Readiness checks",
+      value: `${readinessChecks.filter((item) => item.done).length}/${readinessChecks.length}`,
+      meta: `${readinessLabel} at ${readinessScore}%`,
+      note: "A condensed view of the workspace trust checks.",
+      body: `<div class="workspace-review-check-list">${readinessMarkup}</div>`
     }
-  };
+  ];
+  const reviewInsightDefault = reviewInsightOptions[0];
+  const reportOptions = [
+    { key: "", label: "Choose one" },
+    { key: "storyline-theme", label: "Storyline & Theme" },
+    { key: "writing-style", label: "Writing Style" },
+    { key: "scenery-development", label: "Scenery Development" },
+    { key: "character-list", label: "Character List" },
+    { key: "props-details", label: "Props & Details" },
+    { key: "continuity-focus", label: "Continuity Focus" }
+  ];
+  const reportDefault = reportOptions[0];
+  function buildReport(type, customPrompt = "") {
+    const leadCharacters = characterFrequency.slice(0, 5);
+    const firstScene = sceneHeadings[0] || "No opening scene detected yet.";
+    const middleScene = sceneHeadings[Math.floor(sceneHeadings.length / 2)] || firstScene;
+    const lastScene = sceneHeadings[sceneHeadings.length - 1] || middleScene;
+    const motifCopy = recurringTerms.length ? recurringTerms.join(", ") : "No strong recurring motifs detected yet";
+    const continuityWarnings = [
+      !sceneHeadings.length ? "Add scene headings so place and time are easier to track." : "",
+      !characterFrequency.length ? "Character cues are still too light to build a cast report." : "",
+      !storyMemoryItems.length ? "Story memory has not been built yet, so continuity support is still shallow." : "",
+      aiFailedTasks.length ? `${aiFailedTasks.length} failed AI task${aiFailedTasks.length === 1 ? "" : "s"} could leave review gaps.` : ""
+    ].filter(Boolean);
+    const reportMap = {
+      "storyline-theme": {
+        eyebrow: "AI report",
+        title: "Storyline & Theme Report",
+        description: "A script-led reading of the story path, key motifs, and the emotional direction that is showing up on the page.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The script currently opens in <strong>${escapeHtml(firstScene)}</strong>, moves through <strong>${escapeHtml(middleScene)}</strong>, and most recently lands on <strong>${escapeHtml(lastScene)}</strong>.</p>
+            <p>The recurring thematic signals showing up most often are <strong>${escapeHtml(motifCopy)}</strong>. This suggests the draft is leaning on those images, ideas, or objects to hold the story together.</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${sceneCount ? `${sceneCount} scene${sceneCount === 1 ? "" : "s"} already give the story a visible progression path.` : "Scene structure is still too light to read a full storyline arc."}</li>
+              <li>${dialogueLines.length ? `Dialogue is present in ${dialogueLines.length} line${dialogueLines.length === 1 ? "" : "s"}, which means voice is already carrying part of the theme.` : "Dialogue is still sparse, so the thematic voice is mainly coming from description."}</li>
+              <li>${nextFocus}</li>
+            </ul>
+          </div>
+        `
+      },
+      "writing-style": {
+        eyebrow: "AI report",
+        title: "Writing Style Report",
+        description: "A style reading based on how the draft balances action, dialogue, pace, and visual density.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The script currently carries <strong>${dialogueLines.length}</strong> dialogue line${dialogueLines.length === 1 ? "" : "s"} and <strong>${actionLines.length}</strong> action line${actionLines.length === 1 ? "" : "s"}, which points to a ${dialogueLines.length > actionLines.length ? "voice-forward" : "visually-forward"} writing style.</p>
+            <p>Average dialogue length is about <strong>${averageDialogueLength || 0}</strong> words per line, while action averages around <strong>${averageActionLength || 0}</strong> words. That gives a sense of whether scenes feel clipped, spacious, or dense.</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${averageDialogueLength > 18 ? "Dialogue reads relatively full, which may give the script a more literary or conversational rhythm." : "Dialogue reads relatively lean, which helps the script move quickly."}</li>
+              <li>${averageActionLength > 22 ? "Action paragraphs are carrying a lot of image detail right now." : "Action writing is staying fairly tight and screen-oriented."}</li>
+              <li>${recurringTerms.length ? `Repeated language like ${escapeHtml(recurringTerms.slice(0, 4).join(", "))} is shaping the page voice.` : "The draft does not yet show many repeated stylistic anchors."}</li>
+            </ul>
+          </div>
+        `
+      },
+      "scenery-development": {
+        eyebrow: "AI report",
+        title: "Scenery Development Report",
+        description: "A look at how place, setting, and visual geography are being built across the draft.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The draft currently has <strong>${sceneCount}</strong> scene heading${sceneCount === 1 ? "" : "s"} anchoring place and time. The first visible location is <strong>${escapeHtml(firstScene)}</strong>.</p>
+            <p>${sceneHeadings.length > 2 ? `The scenery appears to move from ${escapeHtml(firstScene)} through ${escapeHtml(middleScene)} and toward ${escapeHtml(lastScene)}.` : "There are still too few scene anchors to judge how the world expands over time."}</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${actionLines.length ? "Action lines are present, so the script already has visual material to deepen place and atmosphere." : "Action description is still too light to build a strong scenic read."}</li>
+              <li>${sceneHeadings.filter((heading) => /^EXT\./i.test(heading)).length ? `${sceneHeadings.filter((heading) => /^EXT\./i.test(heading)).length} exterior scene${sceneHeadings.filter((heading) => /^EXT\./i.test(heading)).length === 1 ? "" : "s"} help open the world visually.` : "Most current scenes appear to stay indoors or without explicit exterior anchors."}</li>
+              <li>${recurringTerms.length ? `Repeated details such as ${escapeHtml(recurringTerms.slice(0, 3).join(", "))} may be helping location identity.` : "Location-specific detail is still light, so scenery identity may need more concrete objects or textures."}</li>
+            </ul>
+          </div>
+        `
+      },
+      "character-list": {
+        eyebrow: "AI report",
+        title: "Character List Report",
+        description: "A cast-focused read showing who is most active on the page and how strongly they are surfacing.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The script currently exposes <strong>${characterCount}</strong> character${characterCount === 1 ? "" : "s"} through character cues.</p>
+            ${leadCharacters.length ? `
+              <div class="workspace-review-stat-grid">
+                ${leadCharacters.map(([name, count]) => `<div><span>${escapeHtml(name)}</span><strong>${count}</strong></div>`).join("")}
+              </div>
+            ` : `<p>No strong cast list can be built yet because the draft has not surfaced clear character cues.</p>`}
+            <ul class="workspace-review-bullet-list">
+              <li>${leadCharacters[0] ? `${escapeHtml(leadCharacters[0][0])} is currently the strongest visible presence on the page.` : "No clear lead character presence is visible yet."}</li>
+              <li>${leadCharacters.length > 3 ? "The script already has a multi-character footprint, which helps team reviews think about role balance." : "The current cast footprint is still small, so role expansion may still be ahead."}</li>
+              <li>${dialogueLines.length ? "Dialogue is available to help judge who owns the emotional space of scenes." : "Without dialogue, character identity is still being carried mostly by description."}</li>
+            </ul>
+          </div>
+        `
+      },
+      "props-details": {
+        eyebrow: "AI report",
+        title: "Props & Details Report",
+        description: "A heuristic pass over the draft to surface recurring objects, details, and practical story anchors.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>${recurringTerms.length ? `The draft is currently repeating details such as <strong>${escapeHtml(recurringTerms.join(", "))}</strong>. These may be props, motifs, or repeated environmental anchors.` : "The draft does not yet surface enough repeated concrete terms to build a strong prop report."}</p>
+            <p>${actionLines.length ? "Most of the prop and detail signal is coming from action writing, where physical world-building tends to appear first." : "Because action writing is light, the script is not yet surfacing many physical anchors."}</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${recurringTerms.length ? "These repeated terms are the best candidates for deliberate prop tracking or continuity checks." : "Try strengthening physical details in action lines if prop tracking matters for this draft."}</li>
+              <li>${storyMemoryItems.length ? "Story memory is available, so important props can be linked back into continuity once chosen." : "Story memory is not active yet, so recurring props are not being formally tracked."}</li>
+            </ul>
+          </div>
+        `
+      },
+      "continuity-focus": {
+        eyebrow: "AI report",
+        title: "Continuity Focus Report",
+        description: "A trust-oriented pass over the draft, aimed at what could break continuity or make collaboration harder.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>The workspace is sitting at <strong>${readinessScore}%</strong> readiness, with the next focus being: <strong>${escapeHtml(nextFocus)}</strong></p>
+            <ul class="workspace-review-bullet-list">
+              ${continuityWarnings.length ? continuityWarnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("") : "<li>No major continuity warnings are visible in the current draft structure.</li>"}
+            </ul>
+            <p>${unresolvedComments.length ? `${unresolvedComments.length} unresolved comment${unresolvedComments.length === 1 ? "" : "s"} may still be carrying decisions that are not yet reflected in the script.` : "Comment decisions look clear right now."}</p>
+          </div>
+        `
+      }
+    };
+    const promptLower = customPrompt.trim().toLowerCase();
+    const keywordMatches = [
+      ["theme", "storyline-theme"],
+      ["story", "storyline-theme"],
+      ["style", "writing-style"],
+      ["voice", "writing-style"],
+      ["scene", "scenery-development"],
+      ["scenery", "scenery-development"],
+      ["setting", "scenery-development"],
+      ["character", "character-list"],
+      ["cast", "character-list"],
+      ["prop", "props-details"],
+      ["detail", "props-details"],
+      ["continuity", "continuity-focus"]
+    ];
+    const matchedKey = keywordMatches.find(([keyword]) => promptLower.includes(keyword))?.[1];
+    if (customPrompt.trim() && !type && matchedKey && reportMap[matchedKey]) {
+      const matched = reportMap[matchedKey];
+      return {
+        ...matched,
+        eyebrow: "Custom report",
+        description: `Prompt: ${customPrompt.trim()}`
+      };
+    }
+    if (customPrompt.trim() && !type) {
+      return {
+        eyebrow: "Custom report",
+        title: "Prompt-guided Report",
+        description: `Prompt: ${customPrompt.trim()}`,
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>This report is grounded in the current script content: <strong>${wordCount.toLocaleString()}</strong> words, <strong>${sceneCount}</strong> scene${sceneCount === 1 ? "" : "s"}, and <strong>${characterCount}</strong> detected character${characterCount === 1 ? "" : "s"}.</p>
+            <p>The strongest currently visible anchors are <strong>${escapeHtml(motifCopy)}</strong>, with the draft opening in <strong>${escapeHtml(firstScene)}</strong> and currently leading toward <strong>${escapeHtml(lastScene)}</strong>.</p>
+            <ul class="workspace-review-bullet-list">
+              <li>${nextFocus}</li>
+              <li>${dialogueLines.length ? `Dialogue-heavy material is available for a deeper prompt follow-up.` : "Dialogue signal is still light, so interpretation will lean more on description and structure."}</li>
+              <li>${storyMemoryItems.length ? "Story memory exists and can support a more focused continuity or theme pass." : "Story memory is not yet populated, so deeper relationship tracking is still limited."}</li>
+            </ul>
+          </div>
+        `
+      };
+    }
+    if (!type) {
+      return {
+        eyebrow: "Report guide",
+        title: "Choose a report or write a prompt",
+        description: "Pick a report type, write your own prompt, or combine both to shape the report from the current script.",
+        body: `
+          <div class="workspace-review-report-stack">
+            <p>This report center reads the writer's current draft, including scenes, dialogue, characters, and recurring details already on the page.</p>
+            <ul class="workspace-review-bullet-list">
+              <li>Choose a report type for a guided reading.</li>
+              <li>Leave the selector on <strong>Choose one</strong> if you want the prompt alone to drive the report.</li>
+              <li>Add a custom prompt after selecting a report type if you want a more specific angle on that report.</li>
+            </ul>
+          </div>
+        `
+      };
+    }
+    const selected = reportMap[type] || reportMap["storyline-theme"];
+    if (customPrompt.trim()) {
+      return {
+        ...selected,
+        description: `${selected.description} Focus prompt: ${customPrompt.trim()}`
+      };
+    }
+    return selected;
+  }
   const container = document.createElement("div");
   container.className = "workspace-review-center";
   container.innerHTML = `
     <div class="workspace-review-center-head">
-      <strong>${escapeHtml(workspaceProject.workspace?.name || workspaceProject.title || "Workspace")}</strong>
-      <span>Choose a report type to generate from current workspace activity.</span>
+      <div class="workspace-review-center-head-copy">
+        <strong>${escapeHtml(workspaceProject.workspace?.name || workspaceProject.title || "Workspace")}</strong>
+        <span>Review the health of the workspace, see what is blocked, and keep the team pointed at the next useful move.</span>
+      </div>
+      <div class="workspace-review-center-head-actions">
+      </div>
     </div>
-    <div class="workspace-review-report-tabs">
-      <button class="workspace-review-report-tab is-active" type="button" data-review-report="stat">Stat</button>
-      <button class="workspace-review-report-tab" type="button" data-review-report="summary">AI Summary</button>
-      <button class="workspace-review-report-tab" type="button" data-review-report="progress">AI Progress Report</button>
-    </div>
-    <article class="workspace-review-report-output" data-review-report-output>
-      <span>${escapeHtml(reportTypes.stat.eyebrow)}</span>
-      <strong>${escapeHtml(reportTypes.stat.title)}</strong>
-      ${reportTypes.stat.body}
-    </article>
+    <section class="workspace-review-overview">
+      <div class="workspace-review-hero" data-review-tone="${readinessTone}">
+        <span class="workspace-review-hero-label">Readiness</span>
+        <strong>${readinessScore}%</strong>
+        <p>${readinessLabel} workspace momentum across scripts, tasks, and collaboration checks.</p>
+      </div>
+      <section class="workspace-review-insight-panel">
+        <div class="workspace-review-insight-head">
+          <span>Workspace insight</span>
+          <select class="comment-filter-select workspace-review-insight-select" data-review-insight-select aria-label="Choose workspace insight">
+            ${reviewInsightOptions.map((item) => `<option value="${escapeHtml(item.key)}"${item.key === reviewInsightDefault.key ? " selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+          </select>
+        </div>
+        <article class="workspace-review-insight-display" data-review-insight-display>
+          <span>${escapeHtml(reviewInsightDefault.label)}</span>
+          <strong>${escapeHtml(reviewInsightDefault.value)}</strong>
+          <small>${escapeHtml(reviewInsightDefault.meta)}</small>
+          <p>${escapeHtml(reviewInsightDefault.note)}</p>
+        </article>
+      </section>
+    </section>
+    <section class="workspace-review-report-builder">
+      <div class="workspace-review-report-controls">
+        <label class="workspace-review-report-control">
+          <span>Report type</span>
+          <select class="comment-filter-select workspace-review-report-select" data-review-report-select aria-label="Choose report type">
+            ${reportOptions.map((item) => `<option value="${escapeHtml(item.key)}"${item.key === reportDefault.key ? " selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+          </select>
+        </label>
+        <label class="workspace-review-report-prompt">
+          <span>Custom report prompt</span>
+          <textarea class="collab-textarea workspace-review-report-prompt-input" data-review-report-prompt placeholder="Optional: ask for a more specific angle, like emotional arc, scenery clarity, or dialogue sharpness."></textarea>
+        </label>
+        <button class="primary-button btn-sm workspace-review-run-report" type="button" data-review-run-report>Report</button>
+      </div>
+      <p>Reports are built from what the writer has already written in the current script, not from generic templates.</p>
+    </section>
+    <section class="workspace-review-report-shell">
+      <div class="workspace-review-report-head" data-review-report-head>
+        <span>Report guide</span>
+        <strong>Choose a report or write a prompt</strong>
+        <p>Pick a report type, write your own prompt, or combine both to shape the report from the current script.</p>
+      </div>
+      <article class="workspace-review-report-output" data-review-report-output>
+        ${buildReport(reportDefault.key).body}
+      </article>
+    </section>
   `;
-  container.querySelectorAll("[data-review-report]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const report = reportTypes[button.dataset.reviewReport] || reportTypes.stat;
-      container.querySelectorAll("[data-review-report]").forEach((item) => {
-        item.classList.toggle("is-active", item === button);
-      });
-      const output = container.querySelector("[data-review-report-output]");
-      if (!output) return;
-      output.innerHTML = `
+  const reviewInsightSelect = container.querySelector("[data-review-insight-select]");
+  const reviewInsightDisplay = container.querySelector("[data-review-insight-display]");
+  const renderReviewInsight = (key) => {
+    const insight = reviewInsightOptions.find((item) => item.key === key) || reviewInsightDefault;
+    if (!reviewInsightDisplay) return;
+    reviewInsightDisplay.innerHTML = `
+      <span>${escapeHtml(insight.label)}</span>
+      <strong>${escapeHtml(insight.value)}</strong>
+      <small>${escapeHtml(insight.meta)}</small>
+      <p>${escapeHtml(insight.note)}</p>
+      ${insight.body || ""}
+    `;
+  };
+  reviewInsightSelect?.addEventListener("change", () => renderReviewInsight(reviewInsightSelect.value));
+  const reportSelect = container.querySelector("[data-review-report-select]");
+  const reportPrompt = container.querySelector("[data-review-report-prompt]");
+  const reportHead = container.querySelector("[data-review-report-head]");
+  const reportOutput = container.querySelector("[data-review-report-output]");
+  const renderWorkspaceReport = () => {
+    const report = buildReport(reportSelect?.value || reportDefault.key, reportPrompt?.value || "");
+    if (reportHead) {
+      reportHead.innerHTML = `
         <span>${escapeHtml(report.eyebrow)}</span>
         <strong>${escapeHtml(report.title)}</strong>
-        ${report.body}
+        <p>${escapeHtml(report.description)}</p>
       `;
-    });
-  });
+    }
+    if (reportOutput) {
+      reportOutput.innerHTML = report.body;
+    }
+  };
+  container.querySelector("[data-review-run-report]")?.addEventListener("click", renderWorkspaceReport);
   showModal({
     title: "Review Center",
     message: container,
@@ -1407,6 +1783,8 @@ function addWorkspaceTaskFromDashboard(trigger = null) {
     message: `${nextTask.title} ${assignee?.assigneeType === "system" ? `was assigned to ${nextTask.assignedLabel}.` : `was assigned to ${nextTask.assignedLabel || "the workspace"}.`}`,
     actor: auth.currentUser?.displayName || auth.currentUser?.email || "Workspace member"
   });
+  clearWorkspaceTaskDraft();
+  state.workspaceRefreshPending = false;
   state.lastCreatedWorkspaceTaskId = nextTask.id;
   persistProjects(true, { syncInputs: false });
   scheduleAiTaskRun(nextTask);
@@ -2273,10 +2651,6 @@ export function bindEvents() {
       addWorkspaceTaskFromDashboard(event.target);
       return;
     }
-    if (action === "mark-all-notifications-read") {
-      markAllWorkspaceNotificationsRead();
-      return;
-    }
     if (action === "mark-notification-read") {
       const notificationId = event.target.closest("[data-notification-id]")?.dataset.notificationId;
       if (notificationId) markWorkspaceNotificationRead(notificationId, true);
@@ -2358,6 +2732,80 @@ export function bindEvents() {
     }
   });
 
+  document.getElementById("studioInboxBellBtn")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    const popup = document.getElementById("workspace-inbox-popup");
+    if (popup?.classList.contains("active")) {
+      closeWorkspaceInboxPopup();
+      return;
+    }
+    openWorkspaceInboxPopup(event.currentTarget);
+  });
+
+  document.getElementById("homeInboxBellBtn")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    const popup = document.getElementById("workspace-inbox-popup");
+    if (popup?.classList.contains("active")) {
+      closeWorkspaceInboxPopup();
+      return;
+    }
+    openWorkspaceInboxPopup(event.currentTarget);
+  });
+
+  document.getElementById("close-workspace-inbox")?.addEventListener("click", () => {
+    closeWorkspaceInboxPopup();
+  });
+
+  document.getElementById("workspace-inbox-popup")?.addEventListener("click", (event) => {
+    const inboxAction = event.target.closest("[data-workspace-inbox-action]")?.dataset.workspaceInboxAction;
+    if (!inboxAction) return;
+    if (inboxAction === "open-invites") {
+      closeWorkspaceInboxPopup();
+      showHome();
+      renderHome();
+      closeMenus();
+      const trigger = document.querySelector('[data-menu-trigger="homeCollabMenu"]');
+      const menu = document.getElementById("homeCollabMenu");
+      trigger?.classList.add("is-open");
+      if (menu) menu.hidden = false;
+      return;
+    }
+    if (inboxAction === "open-comment") {
+      const taskId = event.target.closest("[data-task-id]")?.dataset.taskId;
+      if (taskId) {
+        closeWorkspaceInboxPopup();
+        const trigger = event.target.closest("[data-task-project-id]");
+        const projectId = trigger?.dataset.taskProjectId;
+        const task = taskId ? getWorkspaceTaskById(taskId) : null;
+        const opened = openProjectOrNotify(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+        if (opened) {
+          setTimeout(() => {
+            commentOnWorkspaceTask(taskId);
+          }, 90);
+        }
+      }
+      return;
+    }
+    if (inboxAction === "open-task") {
+      const trigger = event.target.closest("[data-task-project-id]");
+      const projectId = trigger?.dataset.taskProjectId;
+      const taskId = trigger?.dataset.taskId;
+      const task = taskId ? getWorkspaceTaskById(taskId) : null;
+      closeWorkspaceInboxPopup();
+      openProjectOrNotify(projectId, { focusLineId: task?.lineId || task?.sceneId || "" });
+      return;
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    const popup = document.getElementById("workspace-inbox-popup");
+    if (!popup?.classList.contains("active")) return;
+    const clickedBell = event.target.closest("#homeInboxBellBtn");
+    const clickedPopup = event.target.closest(".workspace-inbox-popup-card");
+    if (clickedBell || clickedPopup) return;
+    closeWorkspaceInboxPopup();
+  });
+
   document.addEventListener("click", (event) => {
     const trigger = event.target.closest("[data-workspace-home-action='add-task']");
     if (!trigger) return;
@@ -2366,6 +2814,37 @@ export function bindEvents() {
   });
 
   refs.workspaceDashboard?.addEventListener("change", (event) => {
+    const taskFormField = event.target.closest("[data-workspace-task-project], [data-workspace-task-scene], [data-workspace-task-line], [data-workspace-task-assignee], [data-workspace-task-template], [data-workspace-task-ai-start]");
+    if (taskFormField) {
+      const taskForm = taskFormField.closest(".workspace-task-form");
+      if (taskForm) {
+        syncWorkspaceTaskDraftFromContainer(taskForm);
+      }
+    }
+    const inboxFilterSelect = event.target.closest("[data-workspace-home-action='set-inbox-filter']");
+    if (inboxFilterSelect) {
+      state.workspaceInboxFilter = inboxFilterSelect.value || "all";
+      renderWorkspaceView();
+      return;
+    }
+    const notificationFilterSelect = event.target.closest("[data-workspace-home-action='set-notification-filter']");
+    if (notificationFilterSelect) {
+      state.workspaceNotificationFilter = notificationFilterSelect.value || "all";
+      renderWorkspaceView();
+      return;
+    }
+    const storyMemoryFilterSelect = event.target.closest("[data-workspace-home-action='set-story-memory-filter']");
+    if (storyMemoryFilterSelect) {
+      state.workspaceStoryMemoryFilter = storyMemoryFilterSelect.value || "all";
+      renderWorkspaceView();
+      return;
+    }
+    const completedFilterSelect = event.target.closest("[data-workspace-home-action='set-completed-filter']");
+    if (completedFilterSelect) {
+      state.workspaceCompletedFilter = completedFilterSelect.value || "all";
+      renderWorkspaceView();
+      return;
+    }
     const templateSelect = event.target.closest("[data-workspace-task-template]");
     if (templateSelect) {
       applyWorkspaceTaskTemplateToForm(templateSelect.closest(".workspace-task-composer, .workspace-home-panel, .workspace-task-form") || refs.workspaceDashboard, templateSelect.value);
@@ -2381,6 +2860,20 @@ export function bindEvents() {
     if (statusSelect) {
       updateWorkspaceTask(statusSelect.dataset.workspaceTaskStatus, { status: statusSelect.value });
     }
+  });
+
+  refs.workspaceDashboard?.addEventListener("input", (event) => {
+    const taskFormField = event.target.closest("[data-workspace-task-title], [data-workspace-task-description], [data-workspace-task-project], [data-workspace-task-scene], [data-workspace-task-line], [data-workspace-task-assignee], [data-workspace-task-template], [data-workspace-task-ai-start]");
+    if (!taskFormField) return;
+    const taskForm = taskFormField.closest(".workspace-task-form");
+    if (!taskForm) return;
+    syncWorkspaceTaskDraftFromContainer(taskForm);
+  });
+
+  refs.workspaceDashboard?.addEventListener("focusout", () => {
+    window.setTimeout(() => {
+      flushPendingWorkspaceRefresh();
+    }, 0);
   });
 
   refs.goHomeBtn.addEventListener("click", () => {
@@ -2404,6 +2897,11 @@ export function bindEvents() {
   });
   window.addEventListener("resize", hideSelectionToolbar);
   refs.screenplayEditor?.addEventListener("scroll", hideSelectionToolbar);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeWorkspaceInboxPopup();
+    }
+  });
 
   // Meta Inputs
   [refs.titleInput, refs.authorInput, refs.contactInput, refs.companyInput, refs.detailsInput, refs.loglineInput]

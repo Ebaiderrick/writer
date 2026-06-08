@@ -7,7 +7,7 @@ import { state } from './config.js';
 import { logActivity } from './activity.js';
 import { getCurrentProject, sanitizeProject, upsertProject, persistProjects, deleteProjectFromCloud } from './project.js';
 import { uid as makeId } from './utils.js';
-import { customAlert, customConfirm, showHome, renderHome, renderWorkspaceView } from './ui.js';
+import { customAlert, customConfirm, showHome, renderHome, renderWorkspaceView, renderWorkspaceInboxPopup, showToast } from './ui.js';
 
 // Comment filter state
 let commentFilter = { user: 'all', sort: 'line', status: 'all' };
@@ -17,6 +17,11 @@ const MAX_COLLABORATORS = 5;
 const INVITE_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_PROFILE_INVITE_HISTORY = 6;
 const PRESENCE_STALE_MS = 20 * 1000;
+function shouldDeferWorkspaceRender(workspaceId) {
+  if (!workspaceId || state.currentWorkspaceId !== workspaceId) return false;
+  const activeForm = document.activeElement?.closest?.(".workspace-task-form");
+  return Boolean(activeForm && document.getElementById("workspaceDashboard")?.contains(activeForm));
+}
 export const WORKSPACE_ROLES = {
   owner: 'owner',
   admin: 'admin',
@@ -327,8 +332,10 @@ export function initCollaboration() {
   unsubInvites = onSnapshot(qRec, snap => {
     const invitations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     invitations.forEach(invite => { expireInvitationIfNeeded(invite).catch(() => {}); });
+    state.pendingInvitations = invitations;
     updateCollabBadge(invitations.length);
     renderCollabRequests(invitations);
+    renderWorkspaceInboxPopup();
   });
 
   // Sent Invites
@@ -352,6 +359,7 @@ export function cleanupCollaboration() {
   sharedProjectWatchers.forEach(fn => fn?.());
   sharedProjectWatchers.clear();
   realtimePresenceByProject.clear();
+  state.pendingInvitations = [];
   clearRealtimePresence().catch(() => {});
 }
 
@@ -588,6 +596,18 @@ export async function inviteCollaborator(email, role = WORKSPACE_ROLES.editor) {
       expiresAt: getInviteExpiryTimestamp()
     };
 
+    await updateDoc(doc(db, 'sharedProjects', project.id), {
+      [`collaborators.${inviteData.toUid}`]: {
+        name: inviteData.toName,
+        email: normalizedEmail,
+        photoURL: userSnap.data().photoURL || '',
+        addedAt: inviteData.createdAt,
+        role: inviteRole,
+        status: WORKSPACE_MEMBER_STATUSES.pending
+      },
+      updatedBy: user.uid
+    });
+
     await setDoc(doc(db, 'invitations', inviteId), inviteData);
     await upsertWorkspaceMemberRecord({
       userId: inviteData.toUid,
@@ -685,88 +705,140 @@ async function ensureSharedProject(project, user) {
 // ── Accept / Decline ──────────────────────────────────────────
 
 export async function acceptInvitation(inviteId) {
-  const user = auth.currentUser;
-  if (!user) return;
+  try {
+    const user = auth.currentUser;
+    if (!user) return false;
 
-  const invSnap = await getDoc(doc(db, 'invitations', inviteId));
-  if (!invSnap.exists()) return;
-  const inv = invSnap.data();
-  if (isInvitationExpired(inv)) {
-    await expireInvitationIfNeeded({ id: inviteId, ...inv });
-    await customAlert('This invitation has expired. Ask the workspace owner or admin to resend it.', 'Invitation Expired');
-    return;
+    const invSnap = await getDoc(doc(db, 'invitations', inviteId));
+    if (!invSnap.exists()) return false;
+    const inv = invSnap.data();
+    if (isInvitationExpired(inv)) {
+      await expireInvitationIfNeeded({ id: inviteId, ...inv });
+      await customAlert('This invitation has expired. Ask the workspace owner or admin to resend it.', 'Invitation Expired');
+      return false;
+    }
+    if (inv.status !== INVITATION_STATUSES.pending) {
+      await customAlert('This invitation is no longer active.', 'Invitation');
+      return false;
+    }
+
+    const acceptedAt = new Date().toISOString();
+    const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
+    const profileData = profileSnap.exists() ? profileSnap.data() : {};
+    const sharedRef = doc(db, 'sharedProjects', inv.projectId);
+    let existingCollaborator = null;
+    try {
+      const sharedSnap = await getDoc(sharedRef);
+      existingCollaborator = sharedSnap.exists()
+        ? sharedSnap.data()?.collaborators?.[user.uid] || null
+        : null;
+    } catch (sharedReadError) {
+      console.warn('acceptInvitation shared project pre-read skipped:', sharedReadError);
+    }
+    const canReusePendingCollaborator = Boolean(
+      existingCollaborator &&
+      String(existingCollaborator.email || '').toLowerCase() === String(user.email || '').toLowerCase()
+    );
+
+    if (!canReusePendingCollaborator) {
+      try {
+        await updateDoc(sharedRef, {
+          [`collaborators.${user.uid}.name`]: user.displayName || user.email,
+          [`collaborators.${user.uid}.email`]: user.email,
+          [`collaborators.${user.uid}.photoURL`]: profileData.photoURL || user.photoURL || '',
+          [`collaborators.${user.uid}.addedAt`]: acceptedAt,
+          [`collaborators.${user.uid}.role`]: normalizeWorkspaceRole(inv.role),
+          [`collaborators.${user.uid}.status`]: WORKSPACE_MEMBER_STATUSES.active,
+          updatedBy: user.uid,
+          lastEditorName: user.displayName || user.email || 'Workspace member',
+          pendingInviteId: inviteId
+        });
+      } catch (sharedProjectJoinError) {
+        console.error('acceptInvitation shared project join failed:', sharedProjectJoinError);
+        await customAlert(`Could not join workspace: ${sharedProjectJoinError?.message || 'Missing or insufficient permissions.'}`, 'Invitation');
+        return false;
+      }
+    }
+
+    try {
+      await updateDoc(doc(db, 'invitations', inviteId), {
+        status: INVITATION_STATUSES.accepted,
+        respondedAt: acceptedAt,
+        updatedAt: acceptedAt
+      });
+    } catch (inviteStatusError) {
+      console.error('acceptInvitation invite status update failed:', inviteStatusError);
+      await customAlert(`Joined workspace, but could not finish invitation update: ${inviteStatusError?.message || 'Missing or insufficient permissions.'}`, 'Invitation');
+      return false;
+    }
+
+    try {
+      await upsertWorkspaceMemberRecord({
+        userId: user.uid,
+        workspaceId: inv.workspaceId || inv.projectId,
+        role: normalizeWorkspaceRole(inv.role),
+        invitedBy: inv.invitedBy || inv.fromUid,
+        joinedAt: acceptedAt,
+        status: WORKSPACE_MEMBER_STATUSES.active,
+        name: user.displayName || user.email,
+        email: user.email,
+        photoURL: profileData.photoURL || user.photoURL || ''
+      });
+    } catch (membershipError) {
+      console.warn('acceptInvitation workspace member sync failed:', membershipError);
+    }
+
+    try {
+      await logActivity(inv.projectId, `Joined project as ${normalizeWorkspaceRole(inv.role).replace(/^./, (char) => char.toUpperCase())}.`, {
+        action: 'invite.accepted',
+        workspaceId: inv.workspaceId || inv.projectId
+      });
+    } catch (activityError) {
+      console.warn('acceptInvitation activity log failed:', activityError);
+    }
+
+    if (canReusePendingCollaborator) {
+      try {
+        await updateDoc(sharedRef, {
+          [`collaborators.${user.uid}.status`]: WORKSPACE_MEMBER_STATUSES.active,
+          [`collaborators.${user.uid}.photoURL`]: profileData.photoURL || user.photoURL || '',
+          updatedBy: user.uid
+        });
+      } catch (sharedStatusError) {
+        console.warn('acceptInvitation pending collaborator status sync failed:', sharedStatusError);
+      }
+    }
+
+    const projSnap = await getDoc(sharedRef);
+    if (!projSnap.exists()) return true;
+    const sharedProject = projSnap.data();
+    const projectForUser = sanitizeProject(sharedProject);
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'projects', inv.projectId), {
+        ...projectForUser,
+        syncedAt: new Date().toISOString()
+      });
+    } catch (userProjectError) {
+      console.warn('acceptInvitation personal project sync failed:', userProjectError);
+    }
+
+    upsertProject(projectForUser);
+    persistProjects(false);
+    renderHome();
+    syncSharedProjectWatchers();
+    subscribeToSharedProject(inv.projectId);
+    return true;
+  } catch (error) {
+    console.error('acceptInvitation error:', error);
+    await customAlert(error?.message || 'We could not accept this invitation right now.', 'Invitation');
+    return false;
   }
-  if (inv.status !== INVITATION_STATUSES.pending) {
-    await customAlert('This invitation is no longer active.', 'Invitation');
-    return;
-  }
-
-  const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
-  const profileData = profileSnap.exists() ? profileSnap.data() : {};
-
-  const sharedRef = doc(db, 'sharedProjects', inv.projectId);
-
-  // Step 1: Add self to collaborators using dot-notation.
-  // Set updatedBy to the collaborator's uid so the owner's onSnapshot listener
-  // does NOT skip this update (it skips when updatedBy === own uid).
-  await updateDoc(sharedRef, {
-    [`collaborators.${user.uid}`]: {
-      name: user.displayName || user.email,
-      email: user.email,
-      photoURL: profileData.photoURL || user.photoURL || '',
-      addedAt: new Date().toISOString(),
-      role: normalizeWorkspaceRole(inv.role)
-    },
-    updatedBy: user.uid
-  });
-
-  // Step 2: Mark invitation accepted (recipient can always update their own invite).
-  const acceptedAt = new Date().toISOString();
-  await updateDoc(doc(db, 'invitations', inviteId), {
-    status: INVITATION_STATUSES.accepted,
-    respondedAt: acceptedAt,
-    updatedAt: acceptedAt
-  });
-  await upsertWorkspaceMemberRecord({
-    userId: user.uid,
-    workspaceId: inv.workspaceId || inv.projectId,
-    role: normalizeWorkspaceRole(inv.role),
-    invitedBy: inv.invitedBy || inv.fromUid,
-    joinedAt: acceptedAt,
-    status: WORKSPACE_MEMBER_STATUSES.active,
-    name: user.displayName || user.email,
-    email: user.email,
-    photoURL: profileData.photoURL || user.photoURL || ''
-  });
-
-  await logActivity(inv.projectId, `Joined project as ${normalizeWorkspaceRole(inv.role).replace(/^./, (char) => char.toUpperCase())}.`, {
-    action: 'invite.accepted',
-    workspaceId: inv.workspaceId || inv.projectId
-  });
-
-  // Step 3: Now read the shared project — user is a collaborator so read is allowed.
-  const projSnap = await getDoc(sharedRef);
-  if (!projSnap.exists()) return;
-  const sharedProject = projSnap.data();
-
-  // Step 4: Copy project into the recipient's personal projects.
-  const projectForUser = sanitizeProject(sharedProject);
-  await setDoc(doc(db, 'users', user.uid, 'projects', inv.projectId), {
-    ...projectForUser,
-    syncedAt: new Date().toISOString()
-  });
-
-  upsertProject(projectForUser);
-  persistProjects(false);
-  renderHome();
-  syncSharedProjectWatchers();
-  subscribeToSharedProject(inv.projectId);
 }
 
 export async function declineInvitation(inviteId) {
   const inviteRef = doc(db, 'invitations', inviteId);
   const inviteSnap = await getDoc(inviteRef);
-  if (!inviteSnap.exists()) return;
+  if (!inviteSnap.exists()) return false;
   const invite = inviteSnap.data();
   const revokedAt = new Date().toISOString();
   await updateDoc(inviteRef, {
@@ -788,6 +860,7 @@ export async function declineInvitation(inviteId) {
       email: invite.toEmail || ''
     });
   }
+  return true;
 }
 
 // ── Kick ──────────────────────────────────────────────────────
@@ -1253,7 +1326,12 @@ export function subscribeToSharedProject(projectId) {
       renderCollaboratorList();
       renderHome();
       if (state.currentWorkspaceId === updated.workspace?.id) {
-        renderWorkspaceView();
+        if (shouldDeferWorkspaceRender(updated.workspace?.id)) {
+          state.workspaceRefreshPending = true;
+        } else {
+          state.workspaceRefreshPending = false;
+          renderWorkspaceView();
+        }
       }
       syncSharedProjectWatchers();
       if (state.currentProjectId === projectId) {
@@ -1262,7 +1340,7 @@ export function subscribeToSharedProject(projectId) {
     },
     err => {
       if (err.code === 'permission-denied') {
-        handleSharedProjectRemoved(projectId);
+        handleSharedProjectPermissionIssue(projectId);
       }
     }
   );
@@ -1306,7 +1384,12 @@ function syncSharedProjectWatchers() {
         persistProjects(false);
         renderHome();
         if (state.currentWorkspaceId === sharedProject.workspace?.id) {
-          renderWorkspaceView();
+          if (shouldDeferWorkspaceRender(sharedProject.workspace?.id)) {
+            state.workspaceRefreshPending = true;
+          } else {
+            state.workspaceRefreshPending = false;
+            renderWorkspaceView();
+          }
         }
         if (state.currentProjectId === projectId) {
           renderCollaboratorList();
@@ -1314,7 +1397,7 @@ function syncSharedProjectWatchers() {
         }
       },
       err => {
-        if (err.code === 'permission-denied') handleSharedProjectRemoved(projectId);
+        if (err.code === 'permission-denied') handleSharedProjectPermissionIssue(projectId);
       }
     );
     sharedProjectWatchers.set(projectId, unsubscribe);
@@ -1338,6 +1421,22 @@ function handleSharedProjectRemoved(projectId) {
   persistProjects(false, { syncInputs: false });
   deleteProjectFromCloud(projectId);
   renderHome();
+  syncSharedProjectWatchers();
+}
+
+function handleSharedProjectPermissionIssue(projectId) {
+  const watcher = sharedProjectWatchers.get(projectId);
+  watcher?.();
+  sharedProjectWatchers.delete(projectId);
+  if (unsubSharedProject) {
+    unsubSharedProject();
+    unsubSharedProject = null;
+  }
+
+  if (state.currentProjectId === projectId || state.projects.some((project) => project.id === projectId)) {
+    renderHome();
+    showToast("We temporarily lost permission to this shared workspace. Your local copy is still here while access is restored.", "error", { duration: 5200 });
+  }
   syncSharedProjectWatchers();
 }
 
@@ -1675,13 +1774,15 @@ function renderCollabRequests(invitations) {
   ['homeCollabRequests', 'studioCollabRequests'].forEach(id => {
     const list = document.getElementById(id);
     if (!list) return;
+    let visibleInvitations = [...invitations];
 
-    if (!invitations.length) {
-      list.innerHTML = '<p class="collab-empty">No pending requests.</p>';
-      return;
-    }
+    const renderVisibleInvitations = () => {
+      if (!visibleInvitations.length) {
+        list.innerHTML = '<p class="collab-empty">No pending requests.</p>';
+        return;
+      }
 
-    list.innerHTML = invitations.map(inv => `
+      list.innerHTML = visibleInvitations.map(inv => `
       <div class="collab-request-item">
         <div class="collab-request-info">
           <span class="collab-request-from">${esc(inv.fromName)}</span>
@@ -1693,14 +1794,62 @@ function renderCollabRequests(invitations) {
           <button class="ghost-button collab-decline-btn" data-invite-id="${inv.id}">Decline</button>
         </div>
       </div>
-    `).join('');
+      `).join('');
 
-    list.querySelectorAll('.collab-accept-btn').forEach(btn => {
-      btn.addEventListener('click', () => acceptInvitation(btn.dataset.inviteId));
-    });
-    list.querySelectorAll('.collab-decline-btn').forEach(btn => {
-      btn.addEventListener('click', () => declineInvitation(btn.dataset.inviteId));
-    });
+      list.querySelectorAll('.collab-accept-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const inviteId = btn.dataset.inviteId;
+          const actionRow = btn.closest('.collab-request-actions');
+          if (actionRow) {
+            actionRow.querySelectorAll('button').forEach((item) => { item.disabled = true; });
+          }
+          btn.textContent = 'Accepting...';
+          try {
+            const ok = await acceptInvitation(inviteId);
+            if (ok) {
+              visibleInvitations = visibleInvitations.filter((invite) => invite.id !== inviteId);
+              renderVisibleInvitations();
+            } else if (actionRow) {
+              actionRow.querySelectorAll('button').forEach((item) => { item.disabled = false; });
+              btn.textContent = 'Accept';
+            }
+          } catch (error) {
+            console.error('Failed to accept invitation:', error);
+            if (actionRow) {
+              actionRow.querySelectorAll('button').forEach((item) => { item.disabled = false; });
+            }
+            btn.textContent = 'Accept';
+          }
+        });
+      });
+      list.querySelectorAll('.collab-decline-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const inviteId = btn.dataset.inviteId;
+          const actionRow = btn.closest('.collab-request-actions');
+          if (actionRow) {
+            actionRow.querySelectorAll('button').forEach((item) => { item.disabled = true; });
+          }
+          btn.textContent = 'Declining...';
+          try {
+            const ok = await declineInvitation(inviteId);
+            if (ok) {
+              visibleInvitations = visibleInvitations.filter((invite) => invite.id !== inviteId);
+              renderVisibleInvitations();
+            } else if (actionRow) {
+              actionRow.querySelectorAll('button').forEach((item) => { item.disabled = false; });
+              btn.textContent = 'Decline';
+            }
+          } catch (error) {
+            console.error('Failed to decline invitation:', error);
+            if (actionRow) {
+              actionRow.querySelectorAll('button').forEach((item) => { item.disabled = false; });
+            }
+            btn.textContent = 'Decline';
+          }
+        });
+      });
+    };
+    renderVisibleInvitations();
   });
 }
 
