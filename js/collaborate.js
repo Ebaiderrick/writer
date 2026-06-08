@@ -252,18 +252,36 @@ export async function inviteCollaborator(email, role = EDITOR_ROLES.editor) {
     await ensureSharedProject(project, user);
 
     const inviteId = makeId('inv');
+    const inviteRole = role === EDITOR_ROLES.viewer ? EDITOR_ROLES.viewer : EDITOR_ROLES.editor;
     const inviteData = {
       id: inviteId,
       fromUid: user.uid,
       fromName: user.displayName || user.email,
       fromEmail: user.email,
+      invitedBy: user.uid,
+      workspaceId: project.editor?.id || project.id,
       toEmail: normalizedEmail,
-      role: role === EDITOR_ROLES.viewer ? EDITOR_ROLES.viewer : EDITOR_ROLES.editor,
+      toUid: userSnap.data().uid || '',
+      toName: userSnap.data().name || normalizedEmail,
+      role: inviteRole,
       projectId: project.id,
       projectTitle: project.title,
       status: 'pending',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      lastSentAt: new Date().toISOString()
     };
+
+    await updateDoc(doc(db, 'sharedProjects', project.id), {
+      [`collaborators.${inviteData.toUid}`]: {
+        name: inviteData.toName,
+        email: normalizedEmail,
+        photoURL: userSnap.data().photoURL || '',
+        addedAt: inviteData.createdAt,
+        role: inviteRole,
+        status: 'pending'
+      },
+      updatedBy: user.uid
+    });
 
     await setDoc(doc(db, 'invitations', inviteId), inviteData);
     await logActivity(project.id, `Invited ${normalizedEmail} as ${inviteData.role}.`, { category: ACTIVITY_CATEGORIES.invite });
@@ -402,7 +420,10 @@ async function _acceptInvitationClientSide(inviteId) {
     const inv = invSnap.data();
 
     if (inv.status !== 'pending') return;
-    if (inv.toEmail.toLowerCase() !== user.email.toLowerCase()) return;
+    if (
+      inv.toEmail.toLowerCase() !== user.email.toLowerCase() &&
+      String(inv.toUid || '') !== user.uid
+    ) return;
 
     const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
     const profileData = profileSnap.exists() ? profileSnap.data() : {};
@@ -414,19 +435,26 @@ async function _acceptInvitationClientSide(inviteId) {
       return;
     }
 
-    // Uses the Firestore self-add rule (allowed in dev environments).
+    const acceptedAt = new Date().toISOString();
+
+    // Uses the Firestore self-add rule, including the invitation id the ruleset now expects.
     await updateDoc(sharedRef, {
-      [`collaborators.${user.uid}`]: {
-        name: user.displayName || user.email,
-        email: user.email,
-        photoURL: profileData.photoURL || user.photoURL || '',
-        addedAt: new Date().toISOString(),
-        role: inv.role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor
-      },
-      updatedBy: user.uid
+      [`collaborators.${user.uid}.name`]: user.displayName || user.email,
+      [`collaborators.${user.uid}.email`]: user.email,
+      [`collaborators.${user.uid}.photoURL`]: profileData.photoURL || user.photoURL || '',
+      [`collaborators.${user.uid}.addedAt`]: acceptedAt,
+      [`collaborators.${user.uid}.role`]: inv.role === WORKSPACE_ROLES.viewer ? WORKSPACE_ROLES.viewer : WORKSPACE_ROLES.editor,
+      [`collaborators.${user.uid}.status`]: 'active',
+      updatedBy: user.uid,
+      lastEditorName: user.displayName || user.email || 'Workspace member',
+      pendingInviteId: inviteId
     });
 
-    await updateDoc(doc(db, 'invitations', inviteId), { status: 'accepted' });
+    await updateDoc(doc(db, 'invitations', inviteId), {
+      status: 'accepted',
+      respondedAt: acceptedAt,
+      updatedAt: acceptedAt
+    });
     await logActivity(inv.projectId, `Joined project as ${inv.role === WORKSPACE_ROLES.viewer ? 'Viewer' : 'Editor'}.`, { category: ACTIVITY_CATEGORIES.member });
 
     const projSnap = await getDoc(sharedRef);
