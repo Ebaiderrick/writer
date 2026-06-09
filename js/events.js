@@ -17,7 +17,9 @@ import {
   getSceneIdForIndex
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
-import { buildWordDocxBlob, DOCX_MIME_TYPE } from './docxExport.js';
+import { DOCX_MIME_TYPE } from './docxExport.js';
+import { ExportService } from './exportService.js';
+import { buildFullScriptExportDocument, getDefaultExportOptions } from './exportModel.js';
 import { paginateScriptLines } from './pagination.js';
 import { auth } from './firebase.js';
 import { EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -85,6 +87,7 @@ let activeConversionLiveJobId = "";
 let activeConversionLiveProjectId = "";
 const conversionWorkspaceOverrides = new Map();
 const aiTaskTimers = new Map();
+let exportDialogPrefill = { format: "pdf", exportType: "full" };
 const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
 const PROJECT_CARD_CLICK_SUPPRESSION_MS = 750;
 let projectCardTouchState = null;
@@ -3218,12 +3221,40 @@ export function bindEvents() {
 
   // Project Actions
   refs.saveBtn.addEventListener("click", () => persistProjects(true));
+  refs.exportScreenplayBtn.addEventListener("click", () => openExportDialog({ format: "pdf", exportType: "full" }));
   refs.exportTxtBtn.addEventListener("click", exportTxt);
   refs.exportJsonBtn.addEventListener("click", exportJson);
-  refs.exportWordBtn.addEventListener("click", exportWord);
-  refs.exportPdfBtn.addEventListener("click", exportPdf);
   refs.fileInput.addEventListener("change", importFile);
   refs.convertImportInput?.addEventListener("change", convertImportFile);
+  document.getElementById("exportDialogCloseBtn")?.addEventListener("click", closeExportDialog);
+  document.getElementById("exportDialogGenerateBtn")?.addEventListener("click", () => {
+    void generateExportFromDialog();
+  });
+  document.getElementById("exportDialog")?.addEventListener("click", (event) => {
+    if (event.target?.id === "exportDialog") {
+      closeExportDialog();
+    }
+  });
+  document.getElementById("exportDialog")?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.matches("input[name='exportType'], input[name='exportFormat'], input[name='exportCharacterName'], input[name='exportSceneId'], #exportIncludeNotes, #exportIncludeComments, #exportIncludeSceneNumbers, #exportIncludeMetadata, #exportIncludeSurroundingAction, #exportIncludeSceneDescriptions")) {
+      updateExportDialogState();
+    }
+  });
+  document.getElementById("exportDialog")?.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.matches("#exportSceneRangeStart, #exportSceneRangeEnd")) {
+      updateExportDialogState();
+    }
+  });
+  document.querySelectorAll("input[name='exportType'], input[name='exportFormat'], input[name='exportCharacterName'], input[name='exportSceneId'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeSceneNumbers, #exportIncludeMetadata, #exportIncludeSurroundingAction, #exportIncludeSceneDescriptions").forEach((element) => {
+    element.addEventListener("change", updateExportDialogState);
+    if (element instanceof HTMLInputElement && element.type === "number") {
+      element.addEventListener("input", updateExportDialogState);
+    }
+  });
 
   refs.autoNumberToggle.addEventListener("change", () => {
     state.autoNumberScenes = refs.autoNumberToggle.checked;
@@ -4490,14 +4521,11 @@ function handleMenuAction(action) {
     case "export-txt":
       exportTxt();
       break;
+    case "export-screenplay":
+      openExportDialog({ format: "pdf", exportType: "full" });
+      break;
     case "export-json":
       exportJson();
-      break;
-    case "export-word":
-      exportWord();
-      break;
-    case "export-pdf":
-      exportPdf();
       break;
     case "preview-new-tab":
       openPreviewWindow(false);
@@ -5362,25 +5390,251 @@ function exportJson() {
     showToast("Export complete.", "success");
 }
 
-async function exportWord() {
-      const project = syncProjectFromInputs() || getCurrentProject();
-      if (!project) return;
-      const exportToast = showToast("Preparing Word export...", "loading", { duration: 0 });
+function openExportDialog(prefill = {}) {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project) return;
 
-      try {
-        const blob = await buildWordDocxBlob(project);
-        downloadFile(`${slugify(project.title)}.docx`, blob, DOCX_MIME_TYPE);
-        logActivity(project.id, "Exported the project as Word.", { action: "export.word", workspaceId: project.workspace?.id || project.id }).catch(() => {});
-        updateToast(exportToast, "Export complete.", "success");
-      } catch (error) {
-        console.error("DOCX export failed", error);
-        updateToast(exportToast, "Word export failed.", "error", { duration: 4200 });
-        customAlert("Word export could not be created. Please try again after the DOCX engine finishes loading.", "Word Export");
-      }
+  const dialog = document.getElementById("exportDialog");
+  if (!dialog) return;
+
+  exportDialogPrefill = {
+    format: String(prefill.format || exportDialogPrefill.format || "pdf"),
+    exportType: String(prefill.exportType || exportDialogPrefill.exportType || "full")
+  };
+
+  const defaults = getDefaultExportOptions();
+  const exportDocument = buildFullScriptExportDocument(project, {
+    includeNotes: true,
+    includeComments: true,
+    includeSceneNumbers: state.autoNumberScenes,
+    includeMetadata: true,
+    includeTitlePage: true
+  });
+
+  const characterList = document.getElementById("exportCharacterList");
+  const sceneList = document.getElementById("exportSceneList");
+  const characterMeta = document.getElementById("exportCharacterMeta");
+  const sceneMeta = document.getElementById("exportSceneMeta");
+  if (characterList) {
+    characterList.innerHTML = exportDocument.characters.length
+      ? exportDocument.characters.map((character) => `
+        <label class="export-checklist-item">
+          <input type="checkbox" name="exportCharacterName" value="${escapeHtml(character.name)}">
+          <div class="export-checklist-copy">
+            <strong>${escapeHtml(character.name)}</strong>
+            <span>Include dialogue and parentheticals for this character with scene heading context.</span>
+          </div>
+        </label>
+      `).join("")
+      : `<div class="export-checklist-item"><div class="export-checklist-copy"><strong>No characters found yet</strong><span>Add character cues and dialogue blocks in the screenplay first.</span></div></div>`;
+  }
+  if (characterMeta) {
+    characterMeta.textContent = exportDocument.characters.length
+      ? `${exportDocument.characters.length} character${exportDocument.characters.length === 1 ? "" : "s"} available for actor-friendly export.`
+      : "No character cues were found yet. Add character names and dialogue first.";
+  }
+
+  if (sceneList) {
+    sceneList.innerHTML = exportDocument.scenes.length
+      ? exportDocument.scenes.map((scene) => `
+        <label class="export-checklist-item">
+          <input type="checkbox" name="exportSceneId" value="${escapeHtml(scene.id)}">
+          <div class="export-checklist-copy">
+            <strong>${escapeHtml(`${scene.number}. ${scene.heading}`)}</strong>
+            <span>${escapeHtml(scene.description[0] || "No scene description yet.")}</span>
+          </div>
+        </label>
+      `).join("")
+      : `<div class="export-checklist-item"><div class="export-checklist-copy"><strong>No scenes found yet</strong><span>Add at least one scene heading before exporting selected scenes.</span></div></div>`;
+  }
+  if (sceneMeta) {
+    sceneMeta.textContent = exportDocument.scenes.length
+      ? `${exportDocument.scenes.length} scene${exportDocument.scenes.length === 1 ? "" : "s"} ready for selective export.`
+      : "No scene headings were found yet. Add scenes before using scene export.";
+  }
+
+  document.querySelectorAll("input[name='exportType']").forEach((input) => {
+    input.checked = input.value === exportDialogPrefill.exportType;
+  });
+  document.querySelectorAll("input[name='exportFormat']").forEach((input) => {
+    input.checked = input.value === exportDialogPrefill.format;
+  });
+
+  const includeNotes = document.getElementById("exportIncludeNotes");
+  const includeComments = document.getElementById("exportIncludeComments");
+  const includeSceneNumbers = document.getElementById("exportIncludeSceneNumbers");
+  const includeMetadata = document.getElementById("exportIncludeMetadata");
+  const includeSurroundingAction = document.getElementById("exportIncludeSurroundingAction");
+  const includeSceneDescriptions = document.getElementById("exportIncludeSceneDescriptions");
+  const rangeStart = document.getElementById("exportSceneRangeStart");
+  const rangeEnd = document.getElementById("exportSceneRangeEnd");
+
+  if (includeNotes) includeNotes.checked = defaults.includeNotes;
+  if (includeComments) includeComments.checked = defaults.includeComments;
+  if (includeSceneNumbers) includeSceneNumbers.checked = state.autoNumberScenes;
+  if (includeMetadata) includeMetadata.checked = defaults.includeMetadata;
+  if (includeSurroundingAction) includeSurroundingAction.checked = defaults.includeSurroundingAction;
+  if (includeSceneDescriptions) includeSceneDescriptions.checked = defaults.includeSceneDescriptions;
+  if (rangeStart) rangeStart.value = "";
+  if (rangeEnd) rangeEnd.value = "";
+  updateExportDialogState();
+
+  if (!dialog.open) {
+    dialog.showModal();
+  }
 }
 
-function exportPdf() {
-  printWithHiddenFrame();
+function closeExportDialog() {
+  document.getElementById("exportDialog")?.close();
+}
+
+function updateExportDialogState() {
+  const exportType = document.querySelector("input[name='exportType']:checked")?.value || "full";
+  const format = document.querySelector("input[name='exportFormat']:checked")?.value || "pdf";
+  const generateBtn = document.getElementById("exportDialogGenerateBtn");
+  const validationNote = document.getElementById("exportValidationNote");
+  const characterPanel = document.getElementById("exportCharacterPanel");
+  const scenePanel = document.getElementById("exportScenePanel");
+  if (characterPanel) characterPanel.hidden = exportType !== "character";
+  if (scenePanel) scenePanel.hidden = exportType !== "scene";
+
+  const selectedCharacters = document.querySelectorAll("input[name='exportCharacterName']:checked").length;
+  const selectedScenes = document.querySelectorAll("input[name='exportSceneId']:checked").length;
+  const includeMetadata = document.getElementById("exportIncludeMetadata")?.checked;
+  const includeSceneNumbers = document.getElementById("exportIncludeSceneNumbers")?.checked;
+  const rangeStart = Number(document.getElementById("exportSceneRangeStart")?.value || 0);
+  const rangeEnd = Number(document.getElementById("exportSceneRangeEnd")?.value || 0);
+  const hasSceneRange = rangeStart > 0 && rangeEnd > 0;
+  let validationMessage = "";
+
+  if (exportType === "character" && selectedCharacters === 0) {
+    validationMessage = "Select at least one character before generating a character export.";
+  }
+  if (exportType === "scene" && selectedScenes === 0 && !hasSceneRange) {
+    validationMessage = "Select scenes or enter a scene range before generating a scene export.";
+  }
+  if (exportType === "scene" && ((rangeStart > 0 && rangeEnd === 0) || (rangeStart === 0 && rangeEnd > 0))) {
+    validationMessage = "Enter both range values if you want to export a scene range.";
+  }
+
+  const typeLabel = exportType === "character"
+    ? `${selectedCharacters || 0} character${selectedCharacters === 1 ? "" : "s"}`
+    : exportType === "scene"
+      ? selectedScenes
+        ? `${selectedScenes} selected scene${selectedScenes === 1 ? "" : "s"}`
+        : (hasSceneRange ? `scene range ${Math.min(rangeStart, rangeEnd)}-${Math.max(rangeStart, rangeEnd)}` : "selected scenes")
+      : "full screenplay";
+  const formatLabel = format.toUpperCase();
+  const metadataLabel = includeMetadata ? "with metadata" : "without metadata";
+  const sceneNumberLabel = includeSceneNumbers ? "scene numbers on" : "scene numbers off";
+
+  const summaryText = document.getElementById("exportSummaryText");
+  const summaryMeta = document.getElementById("exportSummaryMeta");
+  const summaryTitle = document.getElementById("exportSummaryTitle");
+  if (summaryText) {
+    summaryText.textContent = `Export ${typeLabel} as ${formatLabel}, ${metadataLabel}, and ${sceneNumberLabel}.`;
+  }
+  if (summaryTitle) {
+    summaryTitle.textContent = exportType === "full"
+      ? "Ready to export the whole screenplay"
+      : exportType === "character"
+        ? "Ready to export character pages"
+        : "Ready to export selected scenes";
+  }
+  if (summaryMeta) {
+    summaryMeta.textContent = format === "fountain"
+      ? "Fountain will be generated as a plain-text screenplay file compatible with major screenwriting tools."
+      : format === "docx"
+        ? "DOCX will be built through the screenplay export service and downloaded as a Word document."
+        : "PDF export opens the print-ready screenplay document from the export service for saving as PDF.";
+  }
+  if (generateBtn) {
+    generateBtn.textContent = format === "pdf"
+      ? "Generate PDF"
+      : format === "docx"
+        ? "Generate DOCX"
+        : "Generate Fountain";
+    generateBtn.disabled = Boolean(validationMessage);
+  }
+  if (validationNote) {
+    validationNote.hidden = !validationMessage;
+    validationNote.textContent = validationMessage;
+  }
+}
+
+async function runExportResult(result, project, actionLabel) {
+  if (result.transport === "print-html") {
+    await openPrintExportHtml(result.content, project, actionLabel);
+    return;
+  }
+  downloadFile(result.filename, result.content, result.mimeType || DOCX_MIME_TYPE);
+}
+
+async function generateExportFromDialog() {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project) return;
+
+  const exportType = document.querySelector("input[name='exportType']:checked")?.value || "full";
+  const format = document.querySelector("input[name='exportFormat']:checked")?.value || "pdf";
+  const generateBtn = document.getElementById("exportDialogGenerateBtn");
+  const options = {
+    includeNotes: Boolean(document.getElementById("exportIncludeNotes")?.checked),
+    includeComments: Boolean(document.getElementById("exportIncludeComments")?.checked),
+    includeSceneNumbers: Boolean(document.getElementById("exportIncludeSceneNumbers")?.checked),
+    includeMetadata: Boolean(document.getElementById("exportIncludeMetadata")?.checked),
+    includeTitlePage: true,
+    includePageNumbers: state.viewOptions.pageNumbers,
+    includeSurroundingAction: Boolean(document.getElementById("exportIncludeSurroundingAction")?.checked),
+    includeSceneDescriptions: Boolean(document.getElementById("exportIncludeSceneDescriptions")?.checked)
+  };
+
+  const exportToast = showToast("Preparing screenplay export...", "loading", { duration: 0 });
+  try {
+    if (generateBtn) generateBtn.disabled = true;
+    let result;
+    let action = "export.pdf";
+    let message = "Opened the screenplay export.";
+
+    if (exportType === "character") {
+      const characters = [...document.querySelectorAll("input[name='exportCharacterName']:checked")].map((input) => input.value);
+      if (!characters.length) {
+        updateToast(exportToast, "Choose at least one character.", "error", { duration: 3600 });
+        await customAlert("Select one or more characters before generating a character export.", "Character Export");
+        return;
+      }
+      result = await ExportService.exportCharacter(project, { format, characters, options });
+      action = `export.character.${format}`;
+      message = `Exported character pages as ${format.toUpperCase()}.`;
+    } else if (exportType === "scene") {
+      const sceneIds = [...document.querySelectorAll("input[name='exportSceneId']:checked")].map((input) => input.value);
+      const rangeStart = Number(document.getElementById("exportSceneRangeStart")?.value || 0);
+      const rangeEnd = Number(document.getElementById("exportSceneRangeEnd")?.value || 0);
+      const sceneRange = rangeStart && rangeEnd ? { start: Math.min(rangeStart, rangeEnd), end: Math.max(rangeStart, rangeEnd) } : null;
+      if (!sceneIds.length && !sceneRange) {
+        updateToast(exportToast, "Choose scenes or a scene range.", "error", { duration: 3600 });
+        await customAlert("Select at least one scene or enter a valid scene range before generating a scene export.", "Scene Export");
+        return;
+      }
+      result = await ExportService.exportScenes(project, { format, sceneIds, sceneRange, options });
+      action = `export.scene.${format}`;
+      message = `Exported selected scenes as ${format.toUpperCase()}.`;
+    } else {
+      result = await ExportService.exportFullScript(project, { format, options });
+      action = `export.full.${format}`;
+      message = `Exported the full screenplay as ${format.toUpperCase()}.`;
+    }
+
+    await runExportResult(result, project, message);
+    logActivity(project.id, message, { action, workspaceId: project.workspace?.id || project.id }).catch(() => {});
+    updateToast(exportToast, format === "pdf" ? "Print dialog opened." : "Export complete.", "success");
+    closeExportDialog();
+  } catch (error) {
+    console.error("Screenplay export failed", error);
+    updateToast(exportToast, "Screenplay export failed.", "error", { duration: 4200 });
+    await customAlert("The screenplay export could not be generated. Please try again after the export engine finishes loading.", "Screenplay Export");
+  } finally {
+    updateExportDialogState();
+  }
 }
 
 function openPreviewWindow(autoPrint) {
@@ -5397,11 +5651,7 @@ function openPreviewWindow(autoPrint) {
   previewWindow.focus();
 }
 
-function printWithHiddenFrame() {
-  const project = syncProjectFromInputs() || getCurrentProject();
-  if (!project) return;
-  const exportToast = showToast("Preparing PDF export...", "loading", { duration: 0 });
-
+async function openPrintExportHtml(html, project, activityMessage = "Opened the project print flow for PDF export.") {
   const existingFrame = document.querySelector("#printExportFrame");
   if (existingFrame) {
     existingFrame.remove();
@@ -5423,7 +5673,6 @@ function printWithHiddenFrame() {
     const frameWindow = frame.contentWindow;
       if (!frameWindow) {
         cleanup();
-        updateToast(exportToast, "PDF export failed.", "error", { duration: 4200 });
         customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
         return;
       }
@@ -5432,19 +5681,41 @@ function printWithHiddenFrame() {
       window.setTimeout(() => {
         try {
           frameWindow.print();
-          logActivity(project.id, "Opened the project print flow for PDF export.", { action: "export.pdf", workspaceId: project.workspace?.id || project.id }).catch(() => {});
-          updateToast(exportToast, "Print dialog opened.", "success", { duration: 2400 });
+          logActivity(project.id, activityMessage, { action: "export.pdf", workspaceId: project.workspace?.id || project.id }).catch(() => {});
         } catch (error) {
           console.error("Unable to start PDF print flow", error);
-          updateToast(exportToast, "PDF export failed.", "error", { duration: 4200 });
           customAlert("PDF export could not open the print dialog. Try again or use Print from the output menu.", "PDF Export");
         } finally {
           cleanup();
       }
     }, 350);
   };
+  frame.srcdoc = String(html || buildPrintableDocument(project, false));
+}
 
-  frame.srcdoc = buildPrintableDocument(project, false);
+async function printWithHiddenFrame() {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project) return;
+  const exportToast = showToast("Preparing PDF export...", "loading", { duration: 0 });
+  try {
+    const result = await ExportService.exportFullScript(project, {
+      format: "pdf",
+      options: {
+        includeNotes: false,
+        includeComments: false,
+        includeSceneNumbers: state.autoNumberScenes,
+        includeMetadata: true,
+        includeTitlePage: true,
+        includePageNumbers: state.viewOptions.pageNumbers
+      }
+    });
+    await openPrintExportHtml(result.content, project);
+    updateToast(exportToast, "Print dialog opened.", "success", { duration: 2400 });
+  } catch (error) {
+    console.error("Unable to build PDF export", error);
+    updateToast(exportToast, "PDF export failed.", "error", { duration: 4200 });
+    customAlert("PDF export could not be prepared. Try again after the export engine finishes loading.", "PDF Export");
+  }
 }
 
 function buildPreparedExportLines(project) {

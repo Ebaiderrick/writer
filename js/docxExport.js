@@ -1,6 +1,7 @@
 import { state } from './config.js';
 import { formatLineText } from './utils.js';
 import { t } from './i18n.js';
+import { buildFullScriptExportDocument } from './exportModel.js';
 
 const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const LINE_SPACING = 360;
@@ -355,12 +356,81 @@ function buildScriptSection(docxLib, project) {
   };
 }
 
-export async function buildWordDocxBlob(project) {
+function buildCoverSectionFromExportDocument(docxLib, exportDocument) {
+  return buildCoverSection(docxLib, exportDocument?.metadata || {});
+}
+
+function buildScriptSectionFromExportDocument(docxLib, exportDocument) {
+  const { Header, Paragraph, AlignmentType, PageNumber, TextRun } = docxLib;
+  const lines = Array.isArray(exportDocument?.lines) ? exportDocument.lines : [];
+  const pageNumbersEnabled = exportDocument?.options?.includePageNumbers ?? state.viewOptions.pageNumbers;
+  const header = pageNumbersEnabled
+    ? new Header({
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          spacing: { after: 0, line: LINE_SPACING },
+          children: [PageNumber.CURRENT]
+        })
+      ]
+    })
+    : undefined;
+
+  const children = [];
+  lines.forEach((line) => {
+    if (line.secondary) {
+      children.push(createDualDialogueTable(docxLib, line));
+      return;
+    }
+    children.push(createParagraph(docxLib, line.displayText, line.type));
+  });
+
+  if (!children.length) {
+    children.push(new Paragraph({
+      spacing: { line: LINE_SPACING, after: PARAGRAPH_AFTER },
+      children: [new TextRun({ text: " ", font: "Courier New", size: 24 })]
+    }));
+  }
+
+  return {
+    properties: {
+      page: {
+        size: {
+          width: LETTER_WIDTH,
+          height: LETTER_HEIGHT
+        },
+        margin: {
+          top: PAGE_MARGIN_TOP_BOTTOM,
+          right: PAGE_MARGIN_LEFT_RIGHT,
+          bottom: PAGE_MARGIN_TOP_BOTTOM,
+          left: PAGE_MARGIN_LEFT_RIGHT,
+          header: centimeters(0.9),
+          footer: centimeters(0.9)
+        },
+        pageNumbers: {
+          start: 1
+        }
+      }
+    },
+    headers: header ? { default: header } : undefined,
+    children
+  };
+}
+
+export async function buildWordDocxBlobFromExportDocument(exportDocument) {
   const docxLib = getDocxLibrary();
   const { Document, Packer } = docxLib;
+  const metadata = exportDocument?.metadata || {};
+  const sections = [];
+
+  if (exportDocument?.options?.includeTitlePage !== false) {
+    sections.push(buildCoverSectionFromExportDocument(docxLib, exportDocument));
+  }
+  sections.push(buildScriptSectionFromExportDocument(docxLib, exportDocument));
+
   const document = new Document({
     creator: "EyaWriter",
-    title: project.title || "Untitled",
+    title: metadata.title || "Untitled",
     description: "Industry-style screenplay export",
     styles: {
       default: {
@@ -379,13 +449,20 @@ export async function buildWordDocxBlob(project) {
         }
       }
     },
-    sections: [
-      buildCoverSection(docxLib, project),
-      buildScriptSection(docxLib, project)
-    ]
+    sections
   });
 
   return Packer.toBlob(document);
+}
+
+export async function buildWordDocxBlob(project) {
+  const exportDocument = buildFullScriptExportDocument(project, {
+    includeSceneNumbers: state.autoNumberScenes,
+    includeMetadata: true,
+    includeTitlePage: true,
+    includePageNumbers: state.viewOptions.pageNumbers
+  });
+  return buildWordDocxBlobFromExportDocument(exportDocument);
 }
 
 export { DOCX_MIME_TYPE };

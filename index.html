@@ -790,9 +790,8 @@
               <details class="menu-group">
               <summary class="menu-group-summary">Import &amp; Export</summary>
               <div class="menu-group-body">
+                <button class="nav-menu-button" type="button" data-menu-action="export-screenplay">Screenplay Export</button>
                 <button class="nav-menu-button" type="button" data-menu-action="export-txt">Export as TXT</button>
-                <button class="nav-menu-button" type="button" data-menu-action="export-word">Export as Word</button>
-                <button class="nav-menu-button" type="button" data-menu-action="export-pdf">Export as PDF</button>
                 <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
               </div>
             </details>
@@ -1268,10 +1267,9 @@
                   </label>
                   <input id="convertImportInput" type="file" accept=".txt,.fountain,.md,.doc,.docx,.pdf" hidden>
                   <button id="saveBtn" class="ghost-button project-tool-button" type="button">Save</button>
+                  <button id="exportScreenplayBtn" class="ghost-button project-tool-button" type="button">Screenplay Export</button>
                   <button id="exportTxtBtn" class="ghost-button project-tool-button" type="button">Export TXT</button>
                   <button id="exportJsonBtn" class="ghost-button project-tool-button" type="button">Export JSON</button>
-                  <button id="exportWordBtn" class="ghost-button project-tool-button" type="button">Export Word</button>
-                  <button id="exportPdfBtn" class="ghost-button project-tool-button" type="button">Export PDF</button>
                 </div>
                 <div class="project-tools-subactions">
                   <button id="duplicateProjectBtn" class="ghost-button" type="button">Duplicate</button>
@@ -1729,6 +1727,158 @@
         <p>Deleted scripts will stay here until they are permanently removed, so you can restore them when needed.</p>
       </div>
       <div id="fileRecoveryList" class="file-recovery-list" hidden></div>
+    </div>
+  </dialog>
+
+  <dialog id="exportDialog" class="export-dialog">
+    <div class="export-sheet">
+      <div class="export-head">
+        <div>
+          <h3>Screenplay Export</h3>
+          <p>Choose what to export, pick the format, then generate a screenplay-ready package without leaving the editor.</p>
+        </div>
+        <div class="export-head-actions">
+          <button id="exportDialogCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+          <button id="exportDialogGenerateBtn" class="primary-button btn-sm" type="button">Generate Export</button>
+        </div>
+      </div>
+
+      <div class="export-grid">
+        <section class="export-panel">
+          <div class="export-panel-head">
+            <span class="export-step-badge">Step 1</span>
+            <div>
+              <h4>Choose Export Type</h4>
+              <p>Full screenplay, selected character sides, or selected scenes.</p>
+            </div>
+          </div>
+          <div class="export-choice-grid" id="exportTypeChoices">
+            <label class="export-choice-card">
+              <input type="radio" name="exportType" value="full" checked>
+              <strong>Full Script</strong>
+              <small>Title page, metadata, scenes, dialogue, transitions, and optional notes/comments.</small>
+            </label>
+            <label class="export-choice-card">
+              <input type="radio" name="exportType" value="character">
+              <strong>Character Export</strong>
+              <small>Actor-friendly pages with chosen character dialogue plus scene context.</small>
+            </label>
+            <label class="export-choice-card">
+              <input type="radio" name="exportType" value="scene">
+              <strong>Scene Export</strong>
+              <small>Single scenes, multi-scene selections, or a scene-number range.</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="export-panel">
+          <div class="export-panel-head">
+            <span class="export-step-badge">Step 2</span>
+            <div>
+              <h4>Choose Format</h4>
+              <p>PDF, DOCX, or Fountain from the same service layer.</p>
+            </div>
+          </div>
+          <div class="export-format-row" id="exportFormatChoices">
+            <label class="export-pill">
+              <input type="radio" name="exportFormat" value="pdf" checked>
+              <span>PDF</span>
+            </label>
+            <label class="export-pill">
+              <input type="radio" name="exportFormat" value="docx">
+              <span>DOCX</span>
+            </label>
+            <label class="export-pill">
+              <input type="radio" name="exportFormat" value="fountain">
+              <span>Fountain</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="export-panel export-panel-span-2">
+          <div class="export-panel-head">
+            <span class="export-step-badge">Step 3</span>
+            <div>
+              <h4>Configure Options</h4>
+              <p>Set what is included before the export is generated.</p>
+            </div>
+          </div>
+
+          <div class="export-options-grid">
+            <label class="export-toggle">
+              <input id="exportIncludeNotes" type="checkbox">
+              <span>Include Notes</span>
+            </label>
+            <label class="export-toggle">
+              <input id="exportIncludeComments" type="checkbox">
+              <span>Include Comments</span>
+            </label>
+            <label class="export-toggle">
+              <input id="exportIncludeSceneNumbers" type="checkbox">
+              <span>Include Scene Numbers</span>
+            </label>
+            <label class="export-toggle">
+              <input id="exportIncludeMetadata" type="checkbox" checked>
+              <span>Include Metadata</span>
+            </label>
+          </div>
+
+          <div id="exportCharacterPanel" class="export-detail-panel" hidden>
+            <div class="export-detail-head">
+              <div>
+                <h5>Character Selection</h5>
+                <p id="exportCharacterMeta">Pick one or more characters for an actor-friendly export.</p>
+              </div>
+              <div class="export-detail-toggles">
+                <label class="export-toggle export-toggle-compact">
+                  <input id="exportIncludeSurroundingAction" type="checkbox">
+                  <span>Include surrounding action</span>
+                </label>
+                <label class="export-toggle export-toggle-compact">
+                  <input id="exportIncludeSceneDescriptions" type="checkbox" checked>
+                  <span>Include scene descriptions</span>
+                </label>
+              </div>
+            </div>
+            <div id="exportCharacterList" class="export-checklist"></div>
+          </div>
+
+          <div id="exportScenePanel" class="export-detail-panel" hidden>
+            <div class="export-detail-head">
+              <div>
+                <h5>Scene Selection</h5>
+                <p id="exportSceneMeta">Select individual scenes or set a number range.</p>
+              </div>
+            </div>
+            <div class="export-scene-range">
+              <label class="field">
+                <span>Scene Range Start</span>
+                <input id="exportSceneRangeStart" class="modal-input" type="number" min="1" step="1" placeholder="e.g. 3">
+              </label>
+              <label class="field">
+                <span>Scene Range End</span>
+                <input id="exportSceneRangeEnd" class="modal-input" type="number" min="1" step="1" placeholder="e.g. 8">
+              </label>
+            </div>
+            <div id="exportSceneList" class="export-checklist"></div>
+          </div>
+        </section>
+
+        <section class="export-panel export-panel-span-2">
+          <div class="export-panel-head">
+            <span class="export-step-badge">Step 4</span>
+            <div>
+              <h4>Generate Export</h4>
+              <p id="exportSummaryText">Export the full screenplay as PDF with metadata included.</p>
+            </div>
+          </div>
+          <div class="export-summary-card">
+            <strong id="exportSummaryTitle">Ready to export</strong>
+            <p id="exportSummaryMeta">Your screenplay export will be generated from structured script data, not from the editor DOM.</p>
+          </div>
+          <p id="exportValidationNote" class="export-validation-note" hidden></p>
+        </section>
+      </div>
     </div>
   </dialog>
 

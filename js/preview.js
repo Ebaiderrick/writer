@@ -4,6 +4,7 @@ import { getCurrentProject, syncProjectFromInputs } from './project.js';
 import { paginateScriptLines } from './pagination.js';
 import { escapeHtml, createTextNode, formatLineText } from './utils.js';
 import { t } from './i18n.js';
+import { buildFullScriptExportDocument } from './exportModel.js';
 
 export function renderCoverPreview() {
   const project = syncProjectFromInputs() || getCurrentProject();
@@ -106,6 +107,15 @@ export function buildPreviewData(project) {
   };
 }
 
+export function buildPreviewDataFromExportDocument(exportDocument) {
+  return {
+    scriptPages: paginateScriptLines((exportDocument?.lines || []).map((line) => ({
+      ...line,
+      secondary: line.secondary || undefined
+    })))
+  };
+}
+
 function buildPageNumberLabel(pageNumber, totalPages) {
   return t("preview.pageNumber", { page: pageNumber, total: totalPages });
 }
@@ -115,19 +125,29 @@ function buildExportPageNumberLabel(pageNumber) {
 }
 
 export function buildPrintableDocument(project, autoPrint = false) {
-  const previewData = buildPreviewData(project);
-  const coverMarkup = `
+  const exportDocument = buildFullScriptExportDocument(project, {
+    includeSceneNumbers: state.autoNumberScenes,
+    includeMetadata: true,
+    includeTitlePage: true
+  });
+  return buildPrintableDocumentFromExportDocument(exportDocument, autoPrint);
+}
+
+export function buildPrintableDocumentFromExportDocument(exportDocument, autoPrint = false) {
+  const previewData = buildPreviewDataFromExportDocument(exportDocument);
+  const metadata = exportDocument?.metadata || {};
+  const coverMarkup = exportDocument?.options?.includeTitlePage === false ? '' : `
     <section class="print-page cover-page">
       <div class="print-cover-stack">
-        <p class="print-cover-title">${escapeHtml(project.title)}</p>
+        <p class="print-cover-title">${escapeHtml(metadata.title || 'Untitled Script')}</p>
         <p class="print-cover-byline">${escapeHtml(t("cover.by"))}</p>
-        <p class="print-cover-author">${escapeHtml(project.author || t("cover.authorFallback"))}</p>
+        <p class="print-cover-author">${escapeHtml(metadata.author || t("cover.authorFallback"))}</p>
         <div class="print-cover-meta">
-          ${project.contact ? `<p>${escapeHtml(project.contact)}</p>` : ""}
-          ${project.company ? `<p>${escapeHtml(project.company)}</p>` : ""}
-          ${project.details ? `<p>${escapeHtml(project.details)}</p>` : ""}
+          ${metadata.contact ? `<p>${escapeHtml(metadata.contact)}</p>` : ""}
+          ${metadata.company ? `<p>${escapeHtml(metadata.company)}</p>` : ""}
+          ${metadata.details ? `<p>${escapeHtml(metadata.details)}</p>` : ""}
         </div>
-        ${project.logline ? `<p class="print-cover-logline">${escapeHtml(project.logline)}</p>` : ""}
+        ${metadata.logline ? `<p class="print-cover-logline">${escapeHtml(metadata.logline)}</p>` : ""}
       </div>
     </section>
   `;
@@ -155,7 +175,7 @@ export function buildPrintableDocument(project, autoPrint = false) {
 <html lang="${escapeHtml(state.language)}">
 <head>
   <meta charset="UTF-8">
-  <title>${escapeHtml(project.title)}</title>
+  <title>${escapeHtml(metadata.title || 'Untitled Script')}</title>
   <style>${getPrintableStyles()}</style>
 </head>
   <body data-theme="${escapeHtml(state.theme)}">
