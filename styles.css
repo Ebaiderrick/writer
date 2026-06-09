@@ -5487,9 +5487,11 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .export-sheet {
   width: min(980px, calc(100vw - 28px));
   max-height: min(86vh, 900px);
+  box-sizing: border-box;
   display: grid;
-  gap: 0.95rem;
+  gap: 0.72rem;
   overflow: auto;
+  scrollbar-gutter: stable;
   padding: 0 var(--workspace-sheet-pad) var(--workspace-sheet-pad);
   border-radius: var(--workspace-sheet-radius);
   background: var(--panel);
@@ -5538,7 +5540,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .export-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
+  gap: 0.65rem;
 }
 
 .export-panel,
@@ -5551,8 +5553,8 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .export-panel {
   display: grid;
-  gap: 0.8rem;
-  padding: 0.9rem 1rem 1rem;
+  gap: 0.55rem;
+  padding: 0.78rem 0.9rem 0.82rem;
 }
 
 .export-panel-span-2 {
@@ -5562,9 +5564,13 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .export-panel-head,
 .export-detail-head {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: flex-start;
-  gap: 0.85rem;
+  gap: 0.65rem;
+}
+
+.export-detail-head {
+  justify-content: space-between;
 }
 
 .export-step-badge {
@@ -5580,25 +5586,6 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-.export-choice-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.7rem;
-}
-
-.export-choice-card {
-  display: grid;
-  gap: 0.38rem;
-  min-height: 112px;
-  align-content: start;
-  padding: 0.78rem 0.86rem 0.84rem;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent) 14%);
-  background: color-mix(in srgb, var(--panel) 72%, white 28%);
-  cursor: pointer;
-}
-
-.export-choice-card input,
 .export-pill input,
 .export-toggle input,
 .export-checklist-item input {
@@ -5606,29 +5593,28 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   accent-color: var(--accent);
 }
 
-.export-choice-card:has(input:checked),
-.export-pill:has(input:checked) {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent) inset;
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface-strong));
+.export-select-field {
+  display: grid;
+  gap: 0.32rem;
 }
 
-.export-choice-card strong,
-.export-summary-card strong {
-  font-size: 0.92rem;
+.export-select-field .comment-filter-select,
+.export-scene-range .modal-input {
+  font-size: 12px;
 }
 
-.export-choice-card small {
-  color: var(--muted);
-  line-height: 1.42;
-}
-
-.export-format-row,
-.export-options-grid,
-.export-detail-toggles {
+.export-options-grid {
   display: flex;
-  gap: 0.65rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.export-inline-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.42;
 }
 
 .export-pill,
@@ -5636,71 +5622,160 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  min-height: 40px;
-  padding: 0.56rem 0.8rem;
+  min-height: 24px;
+  padding: 0.18rem 0.62rem;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent) 12%);
   background: color-mix(in srgb, var(--panel) 76%, white 24%);
   cursor: pointer;
   color: var(--ink);
-}
-
-.export-toggle-compact {
-  min-height: 36px;
-  padding: 0.42rem 0.68rem;
+  font-size: 12px;
 }
 
 .export-detail-panel {
   display: grid;
-  gap: 0.8rem;
-  padding: 0.85rem 0.92rem 0.92rem;
+  gap: 0.6rem;
+  padding: 0.74rem 0.8rem 0.8rem;
 }
 
-.export-checklist {
+.export-inline-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.34rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.export-inline-heading h5,
+.export-inline-heading strong,
+.export-inline-heading p {
+  margin: 0;
+}
+
+.export-inline-heading h5,
+.export-inline-heading strong {
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.export-inline-heading p {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.export-chip-list {
   display: grid;
-  gap: 0.55rem;
-  max-height: 240px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.42rem 0.55rem;
+  align-content: start;
+  min-height: 136px;
+  max-height: 136px;
   overflow: auto;
   padding-right: 0.2rem;
 }
 
-.export-checklist-item {
+.export-chip-item {
   display: flex;
-  align-items: flex-start;
-  gap: 0.65rem;
-  padding: 0.7rem 0.76rem;
-  border-radius: 14px;
+  align-items: center;
+  gap: 0.42rem;
+  min-height: 24px;
+  max-height: 24px;
+  padding: 0.14rem 0.56rem;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 16%);
   background: color-mix(in srgb, var(--panel) 76%, white 24%);
-}
-
-.export-checklist-copy {
-  display: grid;
-  gap: 0.16rem;
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
   min-width: 0;
 }
 
-.export-checklist-copy strong,
-.export-checklist-copy span {
-  min-width: 0;
+.export-chip-item input {
+  margin: 0;
+  accent-color: var(--accent);
 }
 
-.export-checklist-copy span {
+.export-chip-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-chip-item:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent) inset;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-strong));
+}
+
+.export-scene-range-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.38rem;
+  margin-left: auto;
+}
+
+.export-range-input {
+  width: 76px;
+  min-height: 24px;
+  height: 24px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.export-range-separator {
   color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.4;
-}
-
-.export-scene-range {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem;
+  font-size: 12px;
 }
 
 .export-summary-card {
   display: grid;
-  gap: 0.3rem;
-  padding: 0.9rem 1rem;
+  gap: 0.24rem;
+  padding: 0.78rem 0.9rem;
+}
+
+.export-summary-inline {
+  align-items: baseline;
+}
+
+.export-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.18rem;
+}
+
+.export-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0.12rem 0.56rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 16%);
+  background: color-mix(in srgb, var(--panel) 78%, white 22%);
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
+  font-size: 0.76rem;
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+.export-summary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-top: 0.16rem;
+}
+
+.export-summary-hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-style: italic;
+  line-height: 1.4;
 }
 
 .export-validation-note {
@@ -5716,9 +5791,13 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 @media (max-width: 860px) {
   .export-grid,
-  .export-choice-grid,
-  .export-scene-range {
+  .export-choice-grid {
     grid-template-columns: 1fr;
+  }
+
+  .export-chip-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 136px;
   }
 
   .export-head,
@@ -5730,6 +5809,11 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
   .export-head-actions {
     justify-content: flex-start;
+  }
+
+  .export-summary-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

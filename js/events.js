@@ -88,6 +88,18 @@ let activeConversionLiveProjectId = "";
 const conversionWorkspaceOverrides = new Map();
 const aiTaskTimers = new Map();
 let exportDialogPrefill = { format: "pdf", exportType: "full" };
+
+const EXPORT_TYPE_DETAILS = {
+  full: "Title page, metadata, scenes, dialogue, transitions, and optional notes/comments.",
+  character: "Actor-friendly pages with chosen character dialogue plus scene heading context.",
+  scene: "Single scenes, multi-scene selections, or a scene-number range."
+};
+
+const EXPORT_FORMAT_DETAILS = {
+  pdf: "PDF opens a print-ready screenplay document for saving as PDF.",
+  docx: "DOCX downloads a Word-compatible screenplay document built from the same export service.",
+  fountain: "Fountain downloads a plain-text screenplay file compatible with major screenwriting tools."
+};
 const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
 const PROJECT_CARD_CLICK_SUPPRESSION_MS = 750;
 let projectCardTouchState = null;
@@ -3238,7 +3250,7 @@ export function bindEvents() {
   document.getElementById("exportDialog")?.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.matches("input[name='exportType'], input[name='exportFormat'], input[name='exportCharacterName'], input[name='exportSceneId'], #exportIncludeNotes, #exportIncludeComments, #exportIncludeSceneNumbers, #exportIncludeMetadata, #exportIncludeSurroundingAction, #exportIncludeSceneDescriptions")) {
+    if (target.matches("#exportTypeSelect, #exportFormatSelect, input[name='exportCharacterName'], input[name='exportSceneId'], #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeSurroundingAction, #exportIncludeSceneDescriptions")) {
       updateExportDialogState();
     }
   });
@@ -3249,7 +3261,7 @@ export function bindEvents() {
       updateExportDialogState();
     }
   });
-  document.querySelectorAll("input[name='exportType'], input[name='exportFormat'], input[name='exportCharacterName'], input[name='exportSceneId'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeSceneNumbers, #exportIncludeMetadata, #exportIncludeSurroundingAction, #exportIncludeSceneDescriptions").forEach((element) => {
+  document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, input[name='exportCharacterName'], input[name='exportSceneId'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeSurroundingAction, #exportIncludeSceneDescriptions").forEach((element) => {
     element.addEventListener("change", updateExportDialogState);
     if (element instanceof HTMLInputElement && element.type === "number") {
       element.addEventListener("input", updateExportDialogState);
@@ -5402,6 +5414,12 @@ function openExportDialog(prefill = {}) {
     exportType: String(prefill.exportType || exportDialogPrefill.exportType || "full")
   };
 
+  const projectMeta = document.getElementById("exportDialogProjectMeta");
+  if (projectMeta) {
+    const sceneCount = (project.lines || []).filter((line) => line.type === "scene" && String(line.text || "").trim()).length;
+    projectMeta.textContent = `${project.title || "Untitled Script"} · ${sceneCount} scene${sceneCount === 1 ? "" : "s"}`;
+  }
+
   const defaults = getDefaultExportOptions();
   const exportDocument = buildFullScriptExportDocument(project, {
     includeNotes: true,
@@ -5415,18 +5433,16 @@ function openExportDialog(prefill = {}) {
   const sceneList = document.getElementById("exportSceneList");
   const characterMeta = document.getElementById("exportCharacterMeta");
   const sceneMeta = document.getElementById("exportSceneMeta");
+  const sceneCount = exportDocument.scenes.length;
   if (characterList) {
     characterList.innerHTML = exportDocument.characters.length
       ? exportDocument.characters.map((character) => `
-        <label class="export-checklist-item">
+        <label class="export-chip-item">
           <input type="checkbox" name="exportCharacterName" value="${escapeHtml(character.name)}">
-          <div class="export-checklist-copy">
-            <strong>${escapeHtml(character.name)}</strong>
-            <span>Include dialogue and parentheticals for this character with scene heading context.</span>
-          </div>
+          <span>${escapeHtml(character.name)}</span>
         </label>
       `).join("")
-      : `<div class="export-checklist-item"><div class="export-checklist-copy"><strong>No characters found yet</strong><span>Add character cues and dialogue blocks in the screenplay first.</span></div></div>`;
+      : `<div class="export-inline-description">No characters found yet.</div>`;
   }
   if (characterMeta) {
     characterMeta.textContent = exportDocument.characters.length
@@ -5437,15 +5453,12 @@ function openExportDialog(prefill = {}) {
   if (sceneList) {
     sceneList.innerHTML = exportDocument.scenes.length
       ? exportDocument.scenes.map((scene) => `
-        <label class="export-checklist-item">
+        <label class="export-chip-item">
           <input type="checkbox" name="exportSceneId" value="${escapeHtml(scene.id)}">
-          <div class="export-checklist-copy">
-            <strong>${escapeHtml(`${scene.number}. ${scene.heading}`)}</strong>
-            <span>${escapeHtml(scene.description[0] || "No scene description yet.")}</span>
-          </div>
+          <span>${escapeHtml(`${scene.number}. ${scene.heading}`)}</span>
         </label>
       `).join("")
-      : `<div class="export-checklist-item"><div class="export-checklist-copy"><strong>No scenes found yet</strong><span>Add at least one scene heading before exporting selected scenes.</span></div></div>`;
+      : `<div class="export-inline-description">No scenes found yet.</div>`;
   }
   if (sceneMeta) {
     sceneMeta.textContent = exportDocument.scenes.length
@@ -5453,30 +5466,30 @@ function openExportDialog(prefill = {}) {
       : "No scene headings were found yet. Add scenes before using scene export.";
   }
 
-  document.querySelectorAll("input[name='exportType']").forEach((input) => {
-    input.checked = input.value === exportDialogPrefill.exportType;
-  });
-  document.querySelectorAll("input[name='exportFormat']").forEach((input) => {
-    input.checked = input.value === exportDialogPrefill.format;
-  });
+  const exportTypeSelect = document.getElementById("exportTypeSelect");
+  const exportFormatSelect = document.getElementById("exportFormatSelect");
+  if (exportTypeSelect) exportTypeSelect.value = exportDialogPrefill.exportType;
+  if (exportFormatSelect) exportFormatSelect.value = exportDialogPrefill.format;
 
   const includeNotes = document.getElementById("exportIncludeNotes");
   const includeComments = document.getElementById("exportIncludeComments");
-  const includeSceneNumbers = document.getElementById("exportIncludeSceneNumbers");
   const includeMetadata = document.getElementById("exportIncludeMetadata");
-  const includeSurroundingAction = document.getElementById("exportIncludeSurroundingAction");
-  const includeSceneDescriptions = document.getElementById("exportIncludeSceneDescriptions");
   const rangeStart = document.getElementById("exportSceneRangeStart");
   const rangeEnd = document.getElementById("exportSceneRangeEnd");
 
   if (includeNotes) includeNotes.checked = defaults.includeNotes;
   if (includeComments) includeComments.checked = defaults.includeComments;
-  if (includeSceneNumbers) includeSceneNumbers.checked = state.autoNumberScenes;
   if (includeMetadata) includeMetadata.checked = defaults.includeMetadata;
-  if (includeSurroundingAction) includeSurroundingAction.checked = defaults.includeSurroundingAction;
-  if (includeSceneDescriptions) includeSceneDescriptions.checked = defaults.includeSceneDescriptions;
-  if (rangeStart) rangeStart.value = "";
-  if (rangeEnd) rangeEnd.value = "";
+  if (rangeStart) {
+    rangeStart.value = "";
+    rangeStart.min = sceneCount ? "1" : "0";
+    rangeStart.max = String(sceneCount);
+  }
+  if (rangeEnd) {
+    rangeEnd.value = "";
+    rangeEnd.min = sceneCount ? "1" : "0";
+    rangeEnd.max = String(sceneCount);
+  }
   updateExportDialogState();
 
   if (!dialog.open) {
@@ -5489,21 +5502,33 @@ function closeExportDialog() {
 }
 
 function updateExportDialogState() {
-  const exportType = document.querySelector("input[name='exportType']:checked")?.value || "full";
-  const format = document.querySelector("input[name='exportFormat']:checked")?.value || "pdf";
+  const exportType = document.getElementById("exportTypeSelect")?.value || "full";
+  const format = document.getElementById("exportFormatSelect")?.value || "pdf";
   const generateBtn = document.getElementById("exportDialogGenerateBtn");
   const validationNote = document.getElementById("exportValidationNote");
   const characterPanel = document.getElementById("exportCharacterPanel");
   const scenePanel = document.getElementById("exportScenePanel");
-  if (characterPanel) characterPanel.hidden = exportType !== "character";
-  if (scenePanel) scenePanel.hidden = exportType !== "scene";
+  const exportTypeDescription = document.getElementById("exportTypeDescription");
+  const exportFormatDescription = document.getElementById("exportFormatDescription");
+  if (characterPanel) {
+    const showCharacterPanel = exportType === "character";
+    characterPanel.hidden = !showCharacterPanel;
+    characterPanel.style.display = showCharacterPanel ? "grid" : "none";
+  }
+  if (scenePanel) {
+    const showScenePanel = exportType === "scene";
+    scenePanel.hidden = !showScenePanel;
+    scenePanel.style.display = showScenePanel ? "grid" : "none";
+  }
+  if (exportTypeDescription) exportTypeDescription.textContent = EXPORT_TYPE_DETAILS[exportType] || EXPORT_TYPE_DETAILS.full;
+  if (exportFormatDescription) exportFormatDescription.textContent = EXPORT_FORMAT_DETAILS[format] || EXPORT_FORMAT_DETAILS.pdf;
 
   const selectedCharacters = document.querySelectorAll("input[name='exportCharacterName']:checked").length;
   const selectedScenes = document.querySelectorAll("input[name='exportSceneId']:checked").length;
   const includeMetadata = document.getElementById("exportIncludeMetadata")?.checked;
-  const includeSceneNumbers = document.getElementById("exportIncludeSceneNumbers")?.checked;
   const rangeStart = Number(document.getElementById("exportSceneRangeStart")?.value || 0);
   const rangeEnd = Number(document.getElementById("exportSceneRangeEnd")?.value || 0);
+  const maxSceneCount = Number(document.getElementById("exportSceneRangeEnd")?.max || document.getElementById("exportSceneRangeStart")?.max || 0);
   const hasSceneRange = rangeStart > 0 && rangeEnd > 0;
   let validationMessage = "";
 
@@ -5516,44 +5541,61 @@ function updateExportDialogState() {
   if (exportType === "scene" && ((rangeStart > 0 && rangeEnd === 0) || (rangeStart === 0 && rangeEnd > 0))) {
     validationMessage = "Enter both range values if you want to export a scene range.";
   }
+  if (exportType === "scene" && hasSceneRange && maxSceneCount && (rangeStart > maxSceneCount || rangeEnd > maxSceneCount)) {
+    validationMessage = `Scene range must stay within 1 and ${maxSceneCount}.`;
+  }
 
   const typeLabel = exportType === "character"
     ? `${selectedCharacters || 0} character${selectedCharacters === 1 ? "" : "s"}`
     : exportType === "scene"
       ? selectedScenes
         ? `${selectedScenes} selected scene${selectedScenes === 1 ? "" : "s"}`
-        : (hasSceneRange ? `scene range ${Math.min(rangeStart, rangeEnd)}-${Math.max(rangeStart, rangeEnd)}` : "selected scenes")
+      : (hasSceneRange ? `scene range ${Math.min(rangeStart, rangeEnd)}-${Math.max(rangeStart, rangeEnd)}` : "selected scenes")
       : "full screenplay";
   const formatLabel = format.toUpperCase();
   const metadataLabel = includeMetadata ? "with metadata" : "without metadata";
-  const sceneNumberLabel = includeSceneNumbers ? "scene numbers on" : "scene numbers off";
 
   const summaryText = document.getElementById("exportSummaryText");
-  const summaryMeta = document.getElementById("exportSummaryMeta");
   const summaryTitle = document.getElementById("exportSummaryTitle");
+  const summaryChips = document.getElementById("exportSummaryChips");
+  const summaryHint = document.getElementById("exportSummaryHint");
   if (summaryText) {
-    summaryText.textContent = `Export ${typeLabel} as ${formatLabel}, ${metadataLabel}, and ${sceneNumberLabel}.`;
+    summaryText.textContent = `Export ${typeLabel} as ${formatLabel}, ${metadataLabel}.`;
   }
   if (summaryTitle) {
     summaryTitle.textContent = exportType === "full"
-      ? "Ready to export the whole screenplay"
+      ? "Ready to export the whole screenplay:"
       : exportType === "character"
-        ? "Ready to export character pages"
-        : "Ready to export selected scenes";
+        ? "Ready to export character pages:"
+        : "Ready to export selected scenes:";
   }
-  if (summaryMeta) {
-    summaryMeta.textContent = format === "fountain"
-      ? "Fountain will be generated as a plain-text screenplay file compatible with major screenwriting tools."
-      : format === "docx"
-        ? "DOCX will be built through the screenplay export service and downloaded as a Word document."
-        : "PDF export opens the print-ready screenplay document from the export service for saving as PDF.";
+  if (summaryChips) {
+    const chips = [
+      exportType === "full" ? "Full Script" : exportType === "character" ? "Character Export" : "Scene Export",
+      format.toUpperCase(),
+      includeMetadata ? "Metadata on" : "Metadata off"
+    ];
+    if (exportType === "character") {
+      chips.push(`${selectedCharacters || 0} selected`);
+    }
+    if (exportType === "scene") {
+      chips.push(selectedScenes ? `${selectedScenes} selected` : hasSceneRange ? `Range ${Math.min(rangeStart, rangeEnd)}-${Math.max(rangeStart, rangeEnd)}` : "Selection needed");
+    }
+    summaryChips.innerHTML = chips.map((chip) => `<span class="export-summary-chip">${escapeHtml(chip)}</span>`).join("");
+  }
+  if (summaryHint) {
+    summaryHint.textContent = exportType === "character"
+      ? "Character exports keep scene-heading context from the structured screenplay."
+      : exportType === "scene"
+        ? "Scene exports can be built from checked scenes or a scene-number range."
+        : "Full script exports include the whole screenplay package in the chosen format.";
   }
   if (generateBtn) {
     generateBtn.textContent = format === "pdf"
-      ? "Generate PDF"
+      ? "Open PDF Export"
       : format === "docx"
-        ? "Generate DOCX"
-        : "Generate Fountain";
+        ? "Download DOCX"
+        : "Download Fountain";
     generateBtn.disabled = Boolean(validationMessage);
   }
   if (validationNote) {
@@ -5574,18 +5616,16 @@ async function generateExportFromDialog() {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
 
-  const exportType = document.querySelector("input[name='exportType']:checked")?.value || "full";
-  const format = document.querySelector("input[name='exportFormat']:checked")?.value || "pdf";
+  const exportType = document.getElementById("exportTypeSelect")?.value || "full";
+  const format = document.getElementById("exportFormatSelect")?.value || "pdf";
   const generateBtn = document.getElementById("exportDialogGenerateBtn");
   const options = {
     includeNotes: Boolean(document.getElementById("exportIncludeNotes")?.checked),
     includeComments: Boolean(document.getElementById("exportIncludeComments")?.checked),
-    includeSceneNumbers: Boolean(document.getElementById("exportIncludeSceneNumbers")?.checked),
+    includeSceneNumbers: state.autoNumberScenes,
     includeMetadata: Boolean(document.getElementById("exportIncludeMetadata")?.checked),
     includeTitlePage: true,
-    includePageNumbers: state.viewOptions.pageNumbers,
-    includeSurroundingAction: Boolean(document.getElementById("exportIncludeSurroundingAction")?.checked),
-    includeSceneDescriptions: Boolean(document.getElementById("exportIncludeSceneDescriptions")?.checked)
+    includePageNumbers: state.viewOptions.pageNumbers
   };
 
   const exportToast = showToast("Preparing screenplay export...", "loading", { duration: 0 });
