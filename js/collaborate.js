@@ -517,12 +517,21 @@ function updateCollabBadge(count) {
 
 // ── Invite ────────────────────────────────────────────────────
 
-export async function inviteCollaborator(email, role = WORKSPACE_ROLES.editor) {
+export async function inviteCollaborator(email, role = WORKSPACE_ROLES.editor, projectId = "") {
   try {
     const user = auth.currentUser;
     if (!user) return { ok: false, reason: 'Not signed in.' };
 
-    const project = getCurrentProject();
+    const activeProject = getCurrentProject();
+    const workspaceId = state.currentWorkspaceId || activeProject?.workspace?.id || "";
+    const project = (projectId
+      ? state.projects.find((item) => item.id === projectId)
+      : null)
+      || (workspaceId
+        ? state.projects.find((item) => item.workspace?.id === workspaceId && item.isWorkspaceRoot)
+          || state.projects.find((item) => item.workspace?.id === workspaceId)
+        : null)
+      || activeProject;
     if (!project) return { ok: false, reason: 'No project open. Open a project first.' };
     if (!canInviteToWorkspace(project, user)) {
       return { ok: false, reason: 'Only workspace owners and admins can invite teammates.' };
@@ -1645,17 +1654,31 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
   const nameEl = document.getElementById('collab-profile-name');
   const emailEl = document.getElementById('collab-profile-email');
   const bioEl = document.getElementById('collab-profile-bio');
+  const actionsEl = document.getElementById('collab-profile-actions');
+  const kickBtn = document.getElementById('collab-profile-kickout');
   const closeBtn = document.getElementById('close-collab-profile');
   if (!popup) return;
 
+  const project = getCurrentProject();
   const displayName = name || email || 'User';
   nameEl.textContent = formatCollaboratorHandle(displayName);
   if (emailEl) {
-    emailEl.textContent = '';
-    emailEl.hidden = true;
+    emailEl.textContent = email || '';
+    emailEl.hidden = !email;
   }
   bioEl.textContent = '—';
   imgEl.src = photoURL || generateCollabAvatar(displayName);
+  const canKick = Boolean(
+    uid
+    && project
+    && uid !== project.ownerId
+    && canRemoveCollaborator(project, auth.currentUser, uid)
+  );
+  if (actionsEl) actionsEl.hidden = !canKick;
+  if (kickBtn) {
+    kickBtn.hidden = !canKick;
+    kickBtn.onclick = null;
+  }
 
   popup.classList.add('active');
 
@@ -1671,17 +1694,60 @@ export async function showCollabProfile({ uid, name, email, photoURL }) {
   popup.addEventListener('click', onOverlayClick);
   document.addEventListener('keydown', onEsc);
 
+  if (kickBtn && canKick) {
+    kickBtn.onclick = async () => {
+      const confirmed = await customConfirm(
+        `Kick out ${name || email || 'this member'} from "${project?.title || 'this workspace'}"?`,
+        'Kick out member'
+      );
+      if (!confirmed) return;
+      const result = await kickCollaborator(project.id, uid);
+      if (result.ok) {
+        showToast(`${name || email || 'Member'} was removed from the workspace.`, 'success');
+        closePopup();
+        renderCollaboratorList();
+        if (!refs.workspaceView?.hidden && state.currentWorkspaceId) {
+          renderWorkspaceView();
+        }
+      } else {
+        await customAlert(result.reason || 'Could not remove this member.', 'Kick out member');
+      }
+    };
+  }
+
   if (uid) {
     try {
+      const collaboratorRecord = project?.ownerId === uid
+        ? {
+            name: project.ownerName || '',
+            email: project.ownerEmail || '',
+            photoURL: project.ownerPhotoURL || ''
+          }
+        : (project?.collaborators?.[uid] || null);
+      const fallbackName = collaboratorRecord?.name || name || email || 'User';
+      const fallbackEmail = collaboratorRecord?.email || email || '';
+      const fallbackPhoto = collaboratorRecord?.photoURL || photoURL || '';
+      nameEl.textContent = formatCollaboratorHandle(fallbackName);
+      if (emailEl) {
+        emailEl.textContent = fallbackEmail;
+        emailEl.hidden = !fallbackEmail;
+      }
+      imgEl.src = fallbackPhoto || generateCollabAvatar(fallbackName);
+
       const snap = await getDoc(doc(db, 'users', uid, 'profile', 'data'));
       if (snap.exists()) {
         const data = snap.data();
-        const fullName = data.name || name || email || 'User';
+        const fullName = data.name || fallbackName || 'User';
         nameEl.textContent = formatCollaboratorHandle(fullName);
+        if (emailEl) {
+          const latestEmail = data.email || fallbackEmail || '';
+          emailEl.textContent = latestEmail;
+          emailEl.hidden = !latestEmail;
+        }
         if (data.bio) bioEl.textContent = data.bio;
-        if (data.photoURL) {
-          imgEl.src = data.photoURL;
-          imgEl.onerror = () => { imgEl.src = generateCollabAvatar(displayName); imgEl.onerror = null; };
+        if (data.photoURL || fallbackPhoto) {
+          imgEl.src = data.photoURL || fallbackPhoto;
+          imgEl.onerror = () => { imgEl.src = generateCollabAvatar(fullName); imgEl.onerror = null; };
         }
       }
     } catch (err) {

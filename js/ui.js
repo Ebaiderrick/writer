@@ -1,6 +1,6 @@
 ﻿import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
-import { getCurrentProject, persistProjects, serializeScript } from './project.js';
+import { getCurrentProject, getWorkspaceRootProject, persistProjects, serializeScript } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode, uid } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
@@ -47,6 +47,21 @@ function getUserHandle(value, fallback = "user") {
   return raw || fallback;
 }
 
+function getWorkspaceOwnerDisplay(project, fallback = "Workspace Owner") {
+  const ownerName = String(project?.ownerName || "").trim();
+  const ownerEmail = String(project?.ownerEmail || "").trim();
+  const author = String(project?.author || "").trim();
+  const currentUser = auth.currentUser;
+  const currentName = String(currentUser?.displayName || "").trim();
+  const currentEmail = String(currentUser?.email || "").trim();
+  if (ownerName) return ownerName;
+  if (ownerEmail) return ownerEmail;
+  if (currentUser && (!project?.ownerId || project.ownerId === currentUser.uid)) {
+    return currentName || currentEmail || author || fallback;
+  }
+  return author || fallback;
+}
+
 function buildWorkspaceFeedPanel({
   panelClass = "",
   title = "",
@@ -83,14 +98,14 @@ function getMemberDisplayName(member = {}, fallback = "Collaborator") {
   return member.name || member.email || fallback;
 }
 
-function buildProfileTriggerMarkup({ uid = "", name = "", photoURL = "", className = "" } = {}) {
+function buildProfileTriggerMarkup({ uid = "", name = "", email = "", photoURL = "", className = "" } = {}) {
   const classes = ["workspace-profile-trigger", className].filter(Boolean).join(" ");
-  return `<button class="${escapeHtml(classes)}" type="button" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(photoURL)}">${escapeHtml(getUserHandle(name, "user"))}</button>`;
+  return `<button class="${escapeHtml(classes)}" type="button" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-email="${escapeHtml(email)}" data-profile-photourl="${escapeHtml(photoURL)}">${escapeHtml(getUserHandle(name || email, "user"))}</button>`;
 }
 
-function buildProfileAvatarMarkup({ uid = "", name = "", photoURL = "", className = "" } = {}) {
+function buildProfileAvatarMarkup({ uid = "", name = "", email = "", photoURL = "", className = "" } = {}) {
   const classes = ["workspace-profile-trigger", "workspace-profile-avatar", className].filter(Boolean).join(" ");
-  const source = String(name || "").trim().replace(/^@/, "");
+  const source = String(name || email || "").trim().replace(/^@/, "");
   const initials = source
     .split(/\s+/)
     .filter(Boolean)
@@ -98,10 +113,10 @@ function buildProfileAvatarMarkup({ uid = "", name = "", photoURL = "", classNam
     .map((part) => part[0])
     .join("")
     .toUpperCase() || "W";
-  const label = getUserHandle(name, "user");
+  const label = getUserHandle(name || email, "user");
   const normalizedPhotoURL = String(photoURL || "").trim();
   const hasPhoto = Boolean(normalizedPhotoURL);
-  return `<button class="${escapeHtml(classes)}${hasPhoto ? " has-photo" : ""}" type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-photourl="${escapeHtml(normalizedPhotoURL)}"><span class="workspace-profile-avatar-fallback" aria-hidden="true">${escapeHtml(initials)}</span>${hasPhoto ? `<img class="workspace-profile-avatar-image" src="${escapeHtml(normalizedPhotoURL)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ""}</button>`;
+  return `<button class="${escapeHtml(classes)}${hasPhoto ? " has-photo" : ""}" type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-profile-uid="${escapeHtml(uid)}" data-profile-name="${escapeHtml(name)}" data-profile-email="${escapeHtml(email)}" data-profile-photourl="${escapeHtml(normalizedPhotoURL)}"><span class="workspace-profile-avatar-fallback" aria-hidden="true">${escapeHtml(initials)}</span>${hasPhoto ? `<img class="workspace-profile-avatar-image" src="${escapeHtml(normalizedPhotoURL)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ""}</button>`;
 }
 
 function buildWorkspaceTaskAssigneeMarkup(task, currentUid) {
@@ -541,7 +556,7 @@ export function renderWorkspaceView() {
 
   const collaborationLabel = getProjectCollaborationLabel(workspaceLead);
   const projects = allProjects.filter((project) => project.workspace?.id === workspaceId && !project.isWorkspaceRoot);
-  const ownerLabel = getMemberDisplayName({ name: workspaceLead.ownerName, email: workspaceLead.ownerEmail }, "Workspace Owner");
+  const ownerLabel = getWorkspaceOwnerDisplay(workspaceLead, "Workspace Owner");
   const memberEntries = [
     ownerLabel,
     ...Object.values(workspaceLead.collaborators || {}).map((member) => getMemberDisplayName(member))
@@ -768,14 +783,15 @@ export function renderWorkspaceView() {
         <section class="workspace-home-panel workspace-panel-members">
           <div class="workspace-home-panel-head">
             <h4>Members</h4>
-            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Team Assembly</button>
           </div>
           <div class="workspace-home-members">
             ${[
-              buildProfileAvatarMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
+              buildProfileAvatarMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, email: workspaceLead.ownerEmail || "", photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
               ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => buildProfileAvatarMarkup({
                 uid,
                 name: getMemberDisplayName(person),
+                email: person.email || "",
                 photoURL: person.photoURL || "",
                 className: "workspace-home-member-pill"
               }))
@@ -1204,7 +1220,7 @@ export function renderHome() {
   }
 
   if (state.currentWorkspaceId && workspaceLead) {
-    const ownerLabel = getMemberDisplayName({ name: workspaceLead.ownerName, email: workspaceLead.ownerEmail }, "Workspace Owner");
+    const ownerLabel = getWorkspaceOwnerDisplay(workspaceLead, "Workspace Owner");
     const memberEntries = [
       ownerLabel,
       ...Object.values(workspaceLead.collaborators || {}).map((member) => getMemberDisplayName(member))
@@ -1280,14 +1296,15 @@ export function renderHome() {
         <section class="workspace-home-panel workspace-panel-completed">
             <div class="workspace-home-panel-head">
               <h4>Members</h4>
-              <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Workspace</button>
+              <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Team Assembly</button>
             </div>
             <div class="workspace-home-members">
               ${[
-                buildProfileAvatarMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
+                buildProfileAvatarMarkup({ uid: workspaceLead.ownerId || "", name: ownerLabel, email: workspaceLead.ownerEmail || "", photoURL: workspaceLead.ownerPhotoURL || "", className: "workspace-home-member-pill" }),
                 ...Object.entries(workspaceLead.collaborators || {}).map(([uid, person]) => buildProfileAvatarMarkup({
                   uid,
                   name: getMemberDisplayName(person),
+                  email: person.email || "",
                   photoURL: person.photoURL || "",
                   className: "workspace-home-member-pill"
                 }))
@@ -2592,45 +2609,40 @@ function canWorkspacePopupRemoveMember(project, collaboratorUid) {
 }
 
 export async function showWorkspacePopup() {
-  const project = getCurrentProject();
+  const activeProject = getCurrentProject();
+  const workspaceId = state.currentWorkspaceId || activeProject?.workspace?.id || "";
+  const project = (workspaceId ? getWorkspaceRootProject(workspaceId) : null) || activeProject;
   if (!project) {
     return;
   }
 
-  const ownerLabel = getMemberDisplayName({ name: project.ownerName, email: project.ownerEmail }, "Workspace owner");
+  const ownerLabel = getWorkspaceOwnerDisplay(project, "Workspace owner");
   const collaborators = Object.entries(project.collaborators || {});
-  const activeUsers = [ownerLabel, ...collaborators.map(([, person]) => getMemberDisplayName(person))].filter(Boolean);
   const inviteLink = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(project.id)}&script=${encodeURIComponent(project.scriptId || "")}`;
-  const lastEditedBy = project.lastEditorName || ownerLabel;
   const workspace = project.workspace || { name: project.title || "Team Assembly", reminders: [] };
-  const reminders = workspace.reminders || [];
-  const activity = [...(project.activityLog || [])].slice(-5).reverse();
   const permissions = getWorkspacePopupPermissions(project);
   const inviteRoleOptions = getWorkspacePopupAssignableRoles(project);
-  const lastActivity = project.lastActivityAt || project.updatedAt;
 
   const container = document.createElement("div");
   container.className = "workspace-popup";
   container.innerHTML = `
-    <section class="workspace-popup-section">
-      <h4>Team Assembly</h4>
-      <p>Create shared writing spaces where projects belong to the workspace, not just one user.</p>
+    <section class="workspace-popup-section workspace-popup-hero">
+      <div class="workspace-popup-hero-copy">
+        <span class="workspace-popup-kicker">Team Assembly</span>
+        <p>Keep naming, invites, and shared access together in one focused writing surface.</p>
+      </div>
       <div class="workspace-title-row">
         <input id="workspaceNameInput" class="modal-input" type="text" value="${escapeHtml(workspace.name || project.title || 'Team Assembly')}" ${permissions.canManageSettings ? '' : 'readonly'}>
-        ${permissions.canManageSettings ? '<button class="ghost-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
-      </div>
-      <div class="workspace-metric-columns">
-        <div class="workspace-metric-row"><span>Owner</span><strong>${escapeHtml(getUserHandle(ownerLabel, "owner"))}</strong></div>
-        <div class="workspace-metric-row"><span>Members</span><strong>${collaborators.length}</strong></div>
-        <div class="workspace-metric-row"><span>Active Viewers</span><strong>${activeUsers.length}</strong></div>
-        <div class="workspace-metric-row"><span>Last Edited By</span><strong>${escapeHtml(getUserHandle(lastEditedBy, "editor"))}</strong></div>
-        <div class="workspace-metric-row"><span>Last Activity</span><strong>${escapeHtml(formatDateTime(lastActivity))}</strong></div>
-        <div class="workspace-metric-row"><span>Workspace Code</span><strong>${escapeHtml(workspace.inviteCode || project.scriptId || "")}</strong></div>
+        ${permissions.canManageSettings ? '<button class="ghost-button workspace-inline-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
       </div>
     </section>
-    <section class="workspace-popup-section">
-      <h4>Sharing</h4>
-      <p>Invite collaborators by email or share a workspace link, then assign the right workspace role.</p>
+    <section class="workspace-popup-section workspace-popup-section-sharing">
+      <div class="workspace-popup-section-head">
+        <div>
+          <h4>Sharing</h4>
+          <p>Send invites or copy the workspace link without leaving this surface.</p>
+        </div>
+      </div>
       <div class="workspace-share-row">
         <input class="modal-input workspace-link-input" type="text" value="${escapeHtml(inviteLink)}" readonly>
         <button class="ghost-button workspace-inline-button" type="button" data-workspace-action="copy-link">Copy Link</button>
@@ -2645,14 +2657,19 @@ export async function showWorkspacePopup() {
       ${permissions.canInvite ? '' : '<p class="collab-empty">Only owners and admins can send workspace invites.</p>'}
       <p class="collab-status-msg" data-workspace-status></p>
     </section>
-    <section class="workspace-popup-section">
-      <h4>Roles</h4>
+    <section class="workspace-popup-section workspace-popup-section-roles">
+      <div class="workspace-popup-section-head">
+        <div>
+          <h4>Roles</h4>
+          <p>See who is in the workspace and adjust access without digging through menus.</p>
+        </div>
+      </div>
         <div class="list-stack">
           <div class="list-item workspace-member-row">
             <div class="workspace-member-copy">
               <span class="list-item-title">Owner</span>
               <div class="workspace-member-meta-row">
-                ${buildProfileTriggerMarkup({ uid: project.ownerId || "", name: ownerLabel, photoURL: project.ownerPhotoURL || "", className: "workspace-member-button" })}
+                ${buildProfileTriggerMarkup({ uid: project.ownerId || "", name: ownerLabel, email: project.ownerEmail || "", photoURL: project.ownerPhotoURL || "", className: "workspace-member-button" })}
                 <span class="role-badge">Owner</span>
               </div>
             </div>
@@ -2665,7 +2682,7 @@ export async function showWorkspacePopup() {
               <div class="workspace-member-copy">
                 <span class="list-item-title">${escapeHtml(getUserHandle(getMemberDisplayName(person), "user"))}</span>
                 <div class="workspace-member-meta-row">
-                  ${buildProfileTriggerMarkup({ uid, name: getMemberDisplayName(person), photoURL: person.photoURL || "", className: "workspace-member-button" })}
+                  ${buildProfileTriggerMarkup({ uid, name: getMemberDisplayName(person), email: person.email || "", photoURL: person.photoURL || "", className: "workspace-member-button" })}
                   ${roleOptions.length ? `
                     <select class="comment-filter-select workspace-role-select" data-member-role="${escapeHtml(uid)}">
                       ${roleOptions.map((role) => `<option value="${escapeHtml(role)}" ${memberRole === role ? 'selected' : ''}>${escapeHtml(WORKSPACE_POPUP_ROLE_LABELS[role])}</option>`).join("")}
@@ -2678,42 +2695,6 @@ export async function showWorkspacePopup() {
           `;
           }).join("") || '<p class="collab-empty">No collaborators added yet.</p>'}
         </div>
-    </section>
-    <section class="workspace-popup-section">
-      <h4>Reminders</h4>
-      <div class="workspace-share-row">
-        <input id="workspaceReminderText" class="modal-input" type="text" placeholder="Prepare scene board, review act two, share draft...">
-        <input id="workspaceReminderDue" class="modal-input" type="datetime-local">
-        <button class="ghost-button" type="button" data-workspace-action="add-reminder">Add Reminder</button>
-      </div>
-      <div class="list-stack">
-        ${reminders.map((reminder) => `
-          <div class="list-item workspace-reminder-item${reminder.completed ? ' is-complete' : ''}">
-            <label class="workspace-reminder-main">
-              <input type="checkbox" data-workspace-reminder-toggle="${escapeHtml(reminder.id)}" ${reminder.completed ? 'checked' : ''}>
-              <span>
-                <span class="list-item-title">${escapeHtml(reminder.text)}</span>
-                <span class="list-item-meta">${escapeHtml(reminder.dueAt ? `Due ${formatDateTime(reminder.dueAt)}` : `Added by ${reminder.createdByName || 'team member'}`)}</span>
-              </span>
-            </label>
-            <button class="ghost-button btn-sm danger-text" type="button" data-workspace-reminder-delete="${escapeHtml(reminder.id)}">Delete</button>
-          </div>
-        `).join("") || '<p class="collab-empty">No reminders yet.</p>'}
-      </div>
-    </section>
-    <section class="workspace-popup-section">
-      <h4>Recent Activity</h4>
-      <div class="list-stack">
-        ${activity.map((entry) => `
-          <div class="list-item workspace-activity-item">
-            <span class="list-item-title">${escapeHtml(entry.user)}</span>
-            <span class="list-item-meta">${escapeHtml(entry.message)} - ${escapeHtml(formatDateTime(entry.timestamp))}</span>
-          </div>
-        `).join("") || '<p class="collab-empty">No activity recorded yet.</p>'}
-      </div>
-      <div class="workspace-action-row">
-        <button class="ghost-button" type="button" data-workspace-action="comments">Open Comments</button>
-      </div>
     </section>
   `;
 
@@ -2768,7 +2749,7 @@ export async function showWorkspacePopup() {
         return;
       }
       if (status) status.textContent = "Sending invite...";
-      window.dispatchEvent(new CustomEvent("workspaceInviteRequested", { detail: { email, role } }));
+      window.dispatchEvent(new CustomEvent("workspaceInviteRequested", { detail: { projectId: project.id, email, role } }));
       return;
     }
 
@@ -2837,7 +2818,7 @@ export async function showWorkspacePopup() {
   window.addEventListener("workspaceMutationResult", handleMutationResult);
 
   await showModal({
-    title: "Workspace",
+    title: "Team Assembly",
     message: container,
     contentClass: "modal-content-wide modal-content-workspace",
     showConfirm: false,

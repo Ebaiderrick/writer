@@ -955,7 +955,13 @@ async function discardUntitledDraftIfNeeded() {
 
 function getWorkspaceTaskAssignees(workspaceProject) {
   const ownerUid = workspaceProject.ownerId || "workspace_owner";
-  const ownerLabel = workspaceProject.ownerName || workspaceProject.ownerEmail || workspaceProject.author || "Workspace Owner";
+  const currentName = String(auth.currentUser?.displayName || "").trim();
+  const currentEmail = String(auth.currentUser?.email || "").trim();
+  const ownerLabel = workspaceProject.ownerName
+    || workspaceProject.ownerEmail
+    || ((auth.currentUser && (!workspaceProject.ownerId || workspaceProject.ownerId === auth.currentUser.uid))
+      ? (currentName || currentEmail || workspaceProject.author || "Workspace Owner")
+      : (workspaceProject.author || "Workspace Owner"));
   const collaboratorEntries = Object.entries(workspaceProject.collaborators || {}).map(([uid, person]) => ({
     id: uid,
     label: person.name || person.email || "Collaborator",
@@ -3350,12 +3356,13 @@ export function bindEvents() {
   });
 
   window.addEventListener("workspaceInviteRequested", async (event) => {
+    const projectId = event.detail?.projectId || "";
     const email = event.detail?.email;
     const role = event.detail?.role || "editor";
     if (!email) {
       return;
     }
-    const result = await inviteCollaborator(email, role);
+    const result = await inviteCollaborator(email, role, projectId);
     window.dispatchEvent(new CustomEvent("workspaceInviteResult", { detail: result }));
     if (result?.ok) {
       showToast("Workspace invite sent.", "success");
@@ -3432,6 +3439,7 @@ export function bindEvents() {
     showCollabProfile({
       uid: event.detail?.uid || "",
       name: event.detail?.name || "",
+      email: event.detail?.email || "",
       photoURL: event.detail?.photoURL || ""
     });
   });
