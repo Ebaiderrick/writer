@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EyaWriter</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
-  <link rel="stylesheet" href="styles.css?v=20260608c">
+  <link rel="stylesheet" href="styles.css?v=20260615f">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
@@ -1754,7 +1754,12 @@
             <select id="exportTypeSelect" class="comment-filter-select">
               <option value="full">Full Script</option>
               <option value="character">Character Export</option>
+              <option value="character-packet">Character Packet Export</option>
               <option value="scene">Scene Export</option>
+              <option value="location">Location Export</option>
+              <option value="revision">Revision Export</option>
+              <option value="production">Production Export</option>
+              <option value="shooting">Shooting Script</option>
             </select>
           </label>
           <p id="exportTypeDescription" class="export-inline-description">Title page, metadata, scenes, dialogue, transitions, and optional notes/comments.</p>
@@ -1772,6 +1777,7 @@
               <option value="pdf">PDF</option>
               <option value="docx">DOCX</option>
               <option value="fountain">Fountain</option>
+              <option value="fdx">Final Draft (.fdx)</option>
             </select>
           </label>
           <p id="exportFormatDescription" class="export-inline-description">PDF opens a print-ready screenplay document for saving as PDF.</p>
@@ -1798,6 +1804,56 @@
               <input id="exportIncludeMetadata" type="checkbox" checked>
               <span>Include Metadata</span>
             </label>
+            <label class="export-toggle">
+              <input id="exportIncludePageNumbers" type="checkbox" checked>
+              <span>Include Page Numbers</span>
+            </label>
+            <label class="export-toggle">
+              <input id="exportEnableWatermarkSettings" type="checkbox">
+              <span>Watermark</span>
+            </label>
+            <label id="exportIncludeRevisionsToggle" class="export-toggle" hidden>
+              <input id="exportIncludeRevisions" type="checkbox">
+              <span>Include Revisions</span>
+            </label>
+          </div>
+
+          <div id="exportWatermarkPanel" class="export-detail-panel" hidden>
+            <div class="export-detail-head">
+              <div class="export-inline-heading">
+                <h5>Watermark Settings:</h5>
+                <p id="exportWatermarkMeta">Choose a preset or enter custom text, then place the watermark on the script pages.</p>
+              </div>
+            </div>
+            <div class="export-production-grid export-watermark-grid">
+              <label class="field export-select-field">
+                <select id="exportWatermarkPreset" class="comment-filter-select">
+                  <option value="">Choose preset</option>
+                  <option value="DRAFT">Draft</option>
+                  <option value="CONFIDENTIAL">Confidential</option>
+                  <option value="INTERNAL REVIEW">Internal Review</option>
+                  <option value="PRODUCER COPY">Producer Copy</option>
+                </select>
+              </label>
+              <label class="field export-select-field">
+                <select id="exportWatermarkPosition" class="comment-filter-select">
+                  <option value="diagonal">Diagonal</option>
+                  <option value="header">Header</option>
+                  <option value="footer">Footer</option>
+                </select>
+              </label>
+              <label class="field export-select-field">
+                <select id="exportWatermarkOpacity" class="comment-filter-select">
+                  <option value="0.08">8% opacity</option>
+                  <option value="0.12" selected>12% opacity</option>
+                  <option value="0.18">18% opacity</option>
+                  <option value="0.24">24% opacity</option>
+                </select>
+              </label>
+              <label class="field export-select-field export-watermark-text-field">
+                <input id="exportWatermarkText" class="modal-input" type="text" maxlength="60" placeholder="Optional custom watermark text">
+              </label>
+            </div>
           </div>
 
           <div id="exportCharacterPanel" class="export-detail-panel" hidden>
@@ -1806,6 +1862,12 @@
                 <h5>Character Selection:</h5>
                 <p id="exportCharacterMeta">Pick one or more characters for an actor-friendly export.</p>
               </div>
+            </div>
+            <div id="exportCharacterPacketOptions" class="export-options-grid" hidden>
+              <label class="export-toggle">
+                <input id="exportIncludeSceneDescriptions" type="checkbox" checked>
+                <span>Include Scene Descriptions</span>
+              </label>
             </div>
             <div id="exportCharacterList" class="export-chip-list"></div>
           </div>
@@ -1824,6 +1886,74 @@
             </div>
             <div id="exportSceneList" class="export-chip-list"></div>
           </div>
+
+          <div id="exportLocationPanel" class="export-detail-panel" hidden>
+            <div class="export-detail-head">
+              <div class="export-inline-heading">
+                <h5>Location Selection:</h5>
+                <p id="exportLocationMeta">Choose a location to collect every matching scene into one packet.</p>
+              </div>
+            </div>
+            <div class="export-production-grid export-location-grid">
+              <label class="field export-select-field export-location-field">
+                <select id="exportLocationSelect" class="comment-filter-select">
+                  <option value="">Choose location</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div id="exportRevisionPanel" class="export-detail-panel" hidden>
+            <div class="export-detail-head">
+              <div class="export-inline-heading">
+                <h5>Revision Compare:</h5>
+                <p id="exportRevisionMeta">Choose two available versions to generate a revision report.</p>
+              </div>
+            </div>
+            <div class="export-production-grid export-revision-grid">
+              <label class="field export-select-field">
+                <select id="exportRevisionVersionA" class="comment-filter-select">
+                  <option value="">Version A</option>
+                </select>
+              </label>
+              <label class="field export-select-field">
+                <select id="exportRevisionVersionB" class="comment-filter-select">
+                  <option value="">Version B</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div id="exportProductionPanel" class="export-detail-panel" hidden>
+            <div class="export-detail-head">
+              <div class="export-inline-heading">
+                <h5>Production Filters:</h5>
+                <p id="exportProductionMeta">Filter scenes by location, time of day, range, and character presence.</p>
+              </div>
+            </div>
+            <div class="export-production-grid">
+              <label class="field export-select-field">
+                <select id="exportProductionLocationSelect" class="comment-filter-select">
+                  <option value="">All locations</option>
+                </select>
+              </label>
+              <label class="field export-select-field">
+                <select id="exportProductionTimeSelect" class="comment-filter-select">
+                  <option value="">All times of day</option>
+                </select>
+              </label>
+              <div class="export-scene-range-row export-production-range-row">
+                <input id="exportProductionRangeStart" class="modal-input export-range-input" type="number" min="1" step="1" placeholder="From">
+                <span class="export-range-separator">to</span>
+                <input id="exportProductionRangeEnd" class="modal-input export-range-input" type="number" min="1" step="1" placeholder="To">
+              </div>
+            </div>
+            <div class="export-inline-heading">
+              <h5>Character Presence:</h5>
+              <p id="exportProductionCharacterMeta">Choose one or more characters to keep only scenes where they appear.</p>
+            </div>
+            <div id="exportProductionCharacterList" class="export-chip-list"></div>
+          </div>
         </section>
 
         <section class="export-panel export-panel-span-2">
@@ -1839,12 +1969,51 @@
               <p id="exportSummaryText">Export the full screenplay as PDF with metadata included.</p>
             </div>
             <div id="exportSummaryChips" class="export-summary-chips"></div>
+            <div id="exportPreviewGrid" class="export-preview-grid">
+              <div class="export-preview-item">
+                <span class="export-preview-label">Scenes</span>
+                <strong id="exportPreviewScenes">0</strong>
+              </div>
+              <div class="export-preview-item">
+                <span class="export-preview-label">Characters</span>
+                <strong id="exportPreviewCharacters">0</strong>
+              </div>
+              <div class="export-preview-item">
+                <span class="export-preview-label">Estimated Pages</span>
+                <strong id="exportPreviewPages">0</strong>
+              </div>
+              <div class="export-preview-item">
+                <span class="export-preview-label">File Size</span>
+                <strong id="exportPreviewSize">0 KB</strong>
+              </div>
+            </div>
+            <div id="exportProgressCard" class="export-progress-card" hidden>
+              <div class="export-progress-head">
+                <strong id="exportProgressLabel">Preparing export...</strong>
+                <span id="exportProgressPercent">0%</span>
+              </div>
+              <div class="export-progress-track">
+                <span id="exportProgressFill" class="export-progress-fill" style="width:0%"></span>
+              </div>
+              <p id="exportProgressDetail" class="export-progress-detail">Reviewing your export settings.</p>
+            </div>
             <div class="export-summary-actions">
               <button id="exportDialogGenerateBtn" class="primary-button btn-sm" type="button">Generate Export</button>
               <span id="exportSummaryHint" class="export-summary-hint">This export is prepared from structured screenplay data.</span>
             </div>
           </div>
           <p id="exportValidationNote" class="export-validation-note" hidden></p>
+        </section>
+
+        <section class="export-panel export-panel-span-2">
+          <div class="export-panel-head">
+            <span class="export-step-badge">History</span>
+            <div>
+              <h4>Export History</h4>
+            </div>
+          </div>
+          <div id="exportHistoryEmpty" class="export-history-empty">No exports recorded for this script yet.</div>
+          <div id="exportHistoryList" class="export-history-list" hidden></div>
         </section>
       </div>
     </div>
@@ -2220,7 +2389,7 @@
     </div>
   </dialog>
 
-<script type="module" src="js/main.js?v=20260608c"></script>
+<script type="module" src="js/main.js?v=20260615f"></script>
 </body>
 </html>
 

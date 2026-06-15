@@ -5606,7 +5606,9 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .export-options-grid {
   display: flex;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
+  overflow-x: auto;
 }
 
 .export-inline-description {
@@ -5630,12 +5632,20 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   cursor: pointer;
   color: var(--ink);
   font-size: 12px;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .export-detail-panel {
   display: grid;
   gap: 0.6rem;
   padding: 0.74rem 0.8rem 0.8rem;
+}
+
+.export-options-grid[hidden],
+.export-detail-panel[hidden],
+.export-toggle[hidden] {
+  display: none !important;
 }
 
 .export-inline-heading {
@@ -5663,6 +5673,28 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   font-size: 12px;
   font-style: italic;
   line-height: 1.35;
+}
+
+.export-watermark-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.export-watermark-grid .export-select-field {
+  min-width: 0;
+}
+
+.export-watermark-grid .comment-filter-select,
+.export-watermark-grid .modal-input {
+  min-height: 35px;
+  height: 35px;
+  font-size: 12px;
+}
+
+.export-watermark-text-field {
+  align-self: stretch;
 }
 
 .export-chip-list {
@@ -5711,6 +5743,25 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   background: color-mix(in srgb, var(--accent) 8%, var(--surface-strong));
 }
 
+.export-production-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.export-location-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.export-location-field {
+  max-width: 320px;
+}
+
+.export-revision-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .export-scene-range-row {
   display: inline-flex;
   align-items: center;
@@ -5747,6 +5798,89 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   flex-wrap: wrap;
   gap: 0.45rem;
   margin-top: 0.18rem;
+}
+
+.export-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.22rem;
+}
+
+.export-preview-item {
+  display: grid;
+  gap: 0.16rem;
+  min-height: 52px;
+  padding: 0.45rem 0.55rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 14%);
+  background: color-mix(in srgb, var(--panel) 78%, white 22%);
+}
+
+.export-preview-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.2;
+}
+
+.export-preview-item strong {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.export-progress-card {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: 0.26rem;
+  padding: 0.56rem 0.66rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 16%);
+  background: color-mix(in srgb, var(--panel) 80%, white 20%);
+}
+
+.export-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.export-progress-head strong,
+.export-progress-head span {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.export-progress-head span {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.export-progress-track {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 80%, transparent);
+  overflow: hidden;
+}
+
+.export-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 72%, white 28%), color-mix(in srgb, var(--accent) 48%, white 52%));
+  transition: width 180ms ease;
+}
+
+.export-progress-detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.35;
 }
 
 .export-summary-chip {
@@ -5789,6 +5923,61 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   line-height: 1.42;
 }
 
+.export-history-empty {
+  padding: 0.3rem 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.export-history-list {
+  display: grid;
+  gap: 0.46rem;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 0.18rem;
+}
+
+.export-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.58rem 0.68rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent) 14%);
+  background: color-mix(in srgb, var(--panel) 78%, white 22%);
+}
+
+.export-history-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.14rem;
+}
+
+.export-history-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.export-history-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.export-history-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 @media (max-width: 860px) {
   .export-grid,
   .export-choice-grid {
@@ -5798,6 +5987,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   .export-chip-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     max-height: 136px;
+  }
+
+  .export-production-grid {
+    grid-template-columns: 1fr;
   }
 
   .export-head,
@@ -5814,6 +6007,18 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   .export-summary-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .export-history-item {
+    grid-template-columns: 1fr;
+  }
+
+  .export-history-actions {
+    justify-content: flex-start;
+  }
+
+  .export-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

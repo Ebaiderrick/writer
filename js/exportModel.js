@@ -7,11 +7,21 @@ const DEFAULT_OPTIONS = {
   includeMetadata: true,
   includeTitlePage: true,
   includeSurroundingAction: false,
-  includeSceneDescriptions: true
+  includeSceneDescriptions: true,
+  includeRevisions: false,
+  includePageNumbers: true,
+  watermarkText: '',
+  watermarkPreset: '',
+  watermarkPosition: 'diagonal',
+  watermarkOpacity: 0.12
 };
 
 function toArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function normalizeToken(value) {
+  return String(value || '').trim().toUpperCase();
 }
 
 function normalizeMetadata(project = {}) {
@@ -140,7 +150,7 @@ function buildScenes(lines) {
 
   lines.forEach((line) => {
     if (line.type === 'scene') {
-      const parts = parseSceneHeadingParts(line.displayText);
+      const parts = parseSceneHeadingParts(line.text || line.displayText);
       currentScene = {
         id: line.id,
         number: Number(line.sceneNumber || scenes.length + 1),
@@ -287,6 +297,52 @@ function sceneMatchesSelection(scene, selectedSceneIds, selectedSceneNumbers, ra
   return !selectedSceneIds.size && !selectedSceneNumbers.size && !range;
 }
 
+function sceneMatchesProductionFilters(scene, filters = {}) {
+  const selectedLocations = new Set(toArray(filters.locations).map(normalizeToken).filter(Boolean));
+  const selectedTimes = new Set(toArray(filters.timeOfDay).map(normalizeToken).filter(Boolean));
+  const selectedCharacters = new Set(toArray(filters.characters).map(normalizeToken).filter(Boolean));
+  const range = filters.sceneRange && Number.isFinite(Number(filters.sceneRange.start)) && Number.isFinite(Number(filters.sceneRange.end))
+    ? {
+      start: Math.min(Number(filters.sceneRange.start), Number(filters.sceneRange.end)),
+      end: Math.max(Number(filters.sceneRange.start), Number(filters.sceneRange.end))
+    }
+    : null;
+
+  if (selectedLocations.size && !selectedLocations.has(normalizeToken(scene.location))) {
+    return false;
+  }
+  if (selectedTimes.size && !selectedTimes.has(normalizeToken(scene.timeOfDay))) {
+    return false;
+  }
+  if (selectedCharacters.size) {
+    const sceneCharacters = new Set(toArray(scene.characters).map(normalizeToken).filter(Boolean));
+    const hasCharacterMatch = [...selectedCharacters].some((character) => sceneCharacters.has(character));
+    if (!hasCharacterMatch) {
+      return false;
+    }
+  }
+  if (range && (scene.number < range.start || scene.number > range.end)) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildSceneLineIndexSet(scenes) {
+  const indexes = new Set();
+  toArray(scenes).forEach((scene) => {
+    const start = Number(scene?.startLineIndex);
+    const end = Number(scene?.endLineIndex);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      return;
+    }
+    for (let index = start; index <= end; index += 1) {
+      indexes.add(index);
+    }
+  });
+  return indexes;
+}
+
 function buildSceneSelectionDocument(baseDocument, request) {
   const selectedSceneIds = new Set(toArray(request.sceneIds).map((value) => String(value || '')));
   const selectedSceneNumbers = new Set(toArray(request.sceneNumbers).map((value) => Number(value)).filter(Number.isFinite));
@@ -296,7 +352,8 @@ function buildSceneSelectionDocument(baseDocument, request) {
 
   const selectedScenes = baseDocument.scenes.filter((scene) => sceneMatchesSelection(scene, selectedSceneIds, selectedSceneNumbers, range));
   const selectedSceneIdSet = new Set(selectedScenes.map((scene) => scene.id));
-  let lines = baseDocument.lines.filter((line) => selectedSceneIdSet.has(line.id) || selectedScenes.some((scene) => line.index >= scene.startLineIndex && line.index <= scene.endLineIndex));
+  const selectedLineIndexes = buildSceneLineIndexSet(selectedScenes);
+  let lines = baseDocument.lines.filter((line) => selectedSceneIdSet.has(line.id) || selectedLineIndexes.has(line.index));
 
   if (baseDocument.options.includeComments) {
     const comments = baseDocument.comments.filter((comment) => !comment.sceneId || selectedSceneIdSet.has(comment.sceneId));
@@ -420,6 +477,355 @@ function buildCharacterSelectionDocument(baseDocument, request) {
   };
 }
 
+function buildCharacterPacketSelectionDocument(baseDocument, request) {
+  const selectedNames = [...new Set(toArray(request.characters).map((value) => String(value || '').trim()).filter(Boolean))];
+  const selectedNormalizedNames = new Set(selectedNames.map((value) => value.toUpperCase()));
+  const characterDocument = buildCharacterSelectionDocument(baseDocument, {
+    ...request,
+    characters: selectedNames
+  });
+
+  const stats = selectedNames.map((name) => {
+    const normalizedName = name.toUpperCase();
+    const matchedScenes = characterDocument.scenes.filter((scene) => toArray(scene.characters).some((character) => String(character || '').trim().toUpperCase() === normalizedName));
+    const lineCount = characterDocument.lines.filter((line) => ['character', 'dual'].includes(line.type)
+      && String(line.displayText || '').replace(/\s*\(CONT'D\)\s*$/i, '').trim().toUpperCase() === normalizedName).length;
+    return {
+      name,
+      sceneCount: matchedScenes.length,
+      lineCount,
+      firstAppearance: matchedScenes[0]?.heading || '',
+      lastAppearance: matchedScenes[matchedScenes.length - 1]?.heading || ''
+    };
+  });
+
+  const introLines = [
+    {
+      id: 'character-packet-heading',
+      type: 'scene',
+      text: 'CHARACTER PACKET',
+      displayText: 'CHARACTER PACKET',
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER
+    }
+  ];
+
+  stats.forEach((entry, index) => {
+    introLines.push({
+      id: `character-packet-stat-${index}-name`,
+      type: 'action',
+      text: `${entry.name}`,
+      displayText: `${entry.name}`,
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER + index + 1
+    });
+    introLines.push({
+      id: `character-packet-stat-${index}-details`,
+      type: 'note',
+      text: `Scenes: ${entry.sceneCount} | Lines: ${entry.lineCount} | First appearance: ${entry.firstAppearance || 'Not found'} | Last appearance: ${entry.lastAppearance || 'Not found'}`,
+      displayText: `[Scenes: ${entry.sceneCount} | Lines: ${entry.lineCount} | First appearance: ${entry.firstAppearance || 'Not found'} | Last appearance: ${entry.lastAppearance || 'Not found'}]`,
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER + index + 101
+    });
+  });
+
+  return {
+    ...characterDocument,
+    exportType: 'character-packet',
+    selection: {
+      characters: [...selectedNormalizedNames]
+    },
+    lines: [...introLines, ...characterDocument.lines.map(cloneLine)],
+    characterPacketSummary: stats
+  };
+}
+
+function buildProductionSelectionDocument(baseDocument, request) {
+  const selectedScenes = baseDocument.scenes.filter((scene) => sceneMatchesProductionFilters(scene, request));
+  const selectedSceneIdSet = new Set(selectedScenes.map((scene) => scene.id));
+  const selectedLineIndexes = buildSceneLineIndexSet(selectedScenes);
+  let lines = baseDocument.lines.filter((line) => selectedSceneIdSet.has(line.id)
+    || selectedLineIndexes.has(line.index));
+
+  if (baseDocument.options.includeComments) {
+    const comments = baseDocument.comments.filter((comment) => !comment.sceneId || selectedSceneIdSet.has(comment.sceneId));
+    lines = appendCommentsAsNotes(lines, comments);
+  }
+
+  const selectedLocations = [...new Set(selectedScenes.map((scene) => scene.location).filter(Boolean))];
+  const selectedTimes = [...new Set(selectedScenes.map((scene) => scene.timeOfDay).filter(Boolean))];
+  const selectedCharacters = [...new Set(selectedScenes.flatMap((scene) => toArray(scene.characters)).filter(Boolean))];
+  const range = request.sceneRange && Number.isFinite(Number(request.sceneRange.start)) && Number.isFinite(Number(request.sceneRange.end))
+    ? {
+      start: Math.min(Number(request.sceneRange.start), Number(request.sceneRange.end)),
+      end: Math.max(Number(request.sceneRange.start), Number(request.sceneRange.end))
+    }
+    : null;
+
+  return {
+    ...baseDocument,
+    exportType: 'production',
+    selection: {
+      locations: toArray(request.locations).filter(Boolean),
+      timeOfDay: toArray(request.timeOfDay).filter(Boolean),
+      characters: toArray(request.characters).filter(Boolean),
+      sceneRange: range
+    },
+    scenes: selectedScenes,
+    lines,
+    characters: extractCharactersFromLines(lines),
+    productionSummary: {
+      sceneCount: selectedScenes.length,
+      locations: selectedLocations,
+      timeOfDay: selectedTimes,
+      characters: selectedCharacters
+    }
+  };
+}
+
+function buildLocationSelectionDocument(baseDocument, request) {
+  const selectedLocation = String(request.location || toArray(request.locations)[0] || '').trim();
+  const normalizedLocation = normalizeToken(selectedLocation);
+  const selectedScenes = normalizedLocation
+    ? baseDocument.scenes.filter((scene) => normalizeToken(scene.location) === normalizedLocation)
+    : [];
+  const selectedSceneIdSet = new Set(selectedScenes.map((scene) => scene.id));
+  const selectedLineIndexes = buildSceneLineIndexSet(selectedScenes);
+  let lines = baseDocument.lines.filter((line) => selectedSceneIdSet.has(line.id)
+    || selectedLineIndexes.has(line.index));
+
+  if (baseDocument.options.includeComments) {
+    const comments = baseDocument.comments.filter((comment) => !comment.sceneId || selectedSceneIdSet.has(comment.sceneId));
+    lines = appendCommentsAsNotes(lines, comments);
+  }
+
+  const selectedCharacters = [...new Set(selectedScenes.flatMap((scene) => toArray(scene.characters)).filter(Boolean))];
+  const selectedTimes = [...new Set(selectedScenes.map((scene) => scene.timeOfDay).filter(Boolean))];
+
+  return {
+    ...baseDocument,
+    exportType: 'location',
+    selection: {
+      location: selectedLocation
+    },
+    scenes: selectedScenes,
+    lines,
+    characters: extractCharactersFromLines(lines),
+    locationSummary: {
+      location: selectedLocation,
+      sceneCount: selectedScenes.length,
+      characters: selectedCharacters,
+      timeOfDay: selectedTimes
+    }
+  };
+}
+
+function buildPreparedLinesFromSnapshot(lines, options) {
+  return buildPreparedLines({ lines: toArray(lines) }, options);
+}
+
+function buildRevisionSnapshot(lines, options) {
+  const preparedLines = buildPreparedLinesFromSnapshot(lines, options);
+  return {
+    lines: preparedLines,
+    scenes: buildScenes(preparedLines)
+  };
+}
+
+function buildRevisionEntryIndex(preparedLines) {
+  return preparedLines
+    .filter((line) => ['dialogue', 'action', 'shot', 'text'].includes(line.type))
+    .map((line) => ({
+      type: line.type,
+      text: line.displayText,
+      sceneNumber: line.sceneNumber
+    }));
+}
+
+function buildRevisionReportDocument(baseDocument, request) {
+  const versionA = request.versionA || {};
+  const versionB = request.versionB || {};
+  const snapshotA = buildRevisionSnapshot(versionA.lines || [], baseDocument.options);
+  const snapshotB = buildRevisionSnapshot(versionB.lines || [], baseDocument.options);
+
+  const sceneMapA = new Map(snapshotA.scenes.map((scene) => [normalizeToken(scene.heading), scene]));
+  const sceneMapB = new Map(snapshotB.scenes.map((scene) => [normalizeToken(scene.heading), scene]));
+
+  const addedScenes = snapshotB.scenes.filter((scene) => !sceneMapA.has(normalizeToken(scene.heading)));
+  const removedScenes = snapshotA.scenes.filter((scene) => !sceneMapB.has(normalizeToken(scene.heading)));
+
+  const entriesA = buildRevisionEntryIndex(snapshotA.lines);
+  const entriesB = buildRevisionEntryIndex(snapshotB.lines);
+  const modifiedDialogue = [];
+  const modifiedDescriptions = [];
+  const maxLength = Math.max(entriesA.length, entriesB.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    const left = entriesA[index];
+    const right = entriesB[index];
+    if (!left || !right || left.type !== right.type || left.text === right.text) {
+      continue;
+    }
+    if (left.type === 'dialogue') {
+      modifiedDialogue.push({
+        before: left.text,
+        after: right.text,
+        sceneNumber: right.sceneNumber || left.sceneNumber || 0
+      });
+    }
+    if (['action', 'shot', 'text'].includes(left.type)) {
+      modifiedDescriptions.push({
+        before: left.text,
+        after: right.text,
+        sceneNumber: right.sceneNumber || left.sceneNumber || 0
+      });
+    }
+  }
+
+  const reportLines = [
+    {
+      id: 'revision-report-heading',
+      type: 'scene',
+      text: 'REVISION REPORT',
+      displayText: 'REVISION REPORT',
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER
+    },
+    {
+      id: 'revision-report-summary',
+      type: 'note',
+      text: `Comparing ${versionA.label || 'Version A'} against ${versionB.label || 'Version B'}.`,
+      displayText: `[Comparing ${versionA.label || 'Version A'} against ${versionB.label || 'Version B'}.]`,
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER + 1
+    }
+  ];
+
+  const pushSection = (heading, rows) => {
+    reportLines.push({
+      id: `revision-section-${heading}`,
+      type: 'action',
+      text: heading,
+      displayText: heading,
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER + reportLines.length + 1
+    });
+    if (!rows.length) {
+      reportLines.push({
+        id: `revision-empty-${heading}`,
+        type: 'note',
+        text: 'No changes found.',
+        displayText: '[No changes found.]',
+        secondary: '',
+        sceneNumber: 0,
+        index: Number.MIN_SAFE_INTEGER + reportLines.length + 1
+      });
+      return;
+    }
+    rows.forEach((row) => {
+      reportLines.push({
+        id: uidLineId(`revision-row-${heading}`),
+        type: 'note',
+        text: row,
+        displayText: `[${row}]`,
+        secondary: '',
+        sceneNumber: 0,
+        index: Number.MIN_SAFE_INTEGER + reportLines.length + 1
+      });
+    });
+  };
+
+  pushSection('Added Scenes', addedScenes.map((scene) => scene.heading));
+  pushSection('Removed Scenes', removedScenes.map((scene) => scene.heading));
+  pushSection('Modified Dialogue', modifiedDialogue.map((entry) => `Scene ${entry.sceneNumber || '?' }: ${entry.before} -> ${entry.after}`));
+  pushSection('Modified Descriptions', modifiedDescriptions.map((entry) => `Scene ${entry.sceneNumber || '?' }: ${entry.before} -> ${entry.after}`));
+
+  return {
+    ...baseDocument,
+    exportType: 'revision',
+    selection: {
+      versionA: versionA.label || 'Version A',
+      versionB: versionB.label || 'Version B'
+    },
+    lines: reportLines,
+    scenes: [],
+    characters: [],
+    revisionSummary: {
+      addedScenes: addedScenes.length,
+      removedScenes: removedScenes.length,
+      modifiedDialogue: modifiedDialogue.length,
+      modifiedDescriptions: modifiedDescriptions.length
+    }
+  };
+}
+
+function buildShootingScriptDocument(baseDocument) {
+  const revisionDateSource = baseDocument.metadata.updatedAt || baseDocument.metadata.createdAt || '';
+  const parsedRevisionDate = revisionDateSource ? new Date(revisionDateSource) : null;
+  const revisionDate = parsedRevisionDate && !Number.isNaN(parsedRevisionDate.getTime())
+    ? parsedRevisionDate.toISOString().slice(0, 10)
+    : '';
+
+  return {
+    ...baseDocument,
+    exportType: 'shooting',
+    options: {
+      ...baseDocument.options,
+      includeSceneNumbers: true
+    },
+    selection: {
+      ...baseDocument.selection,
+      lockedSceneNumbers: true
+    },
+    shootingSummary: {
+      sceneCount: baseDocument.scenes.length,
+      revisionDate,
+      includesRevisions: Boolean(baseDocument.options.includeRevisions),
+      includesNotes: Boolean(baseDocument.options.includeNotes),
+      includesComments: Boolean(baseDocument.options.includeComments),
+      includesPageNumbers: Boolean(baseDocument.options.includePageNumbers)
+    }
+  };
+}
+
+export function applyWatermarkToExportDocument(baseDocument) {
+  const preset = String(baseDocument.options.watermarkPreset || '').trim();
+  const customText = String(baseDocument.options.watermarkText || '').trim();
+  const watermarkText = customText || preset || 'CONFIDENTIAL';
+  const opacity = Number(baseDocument.options.watermarkOpacity);
+  const normalizedOpacity = Number.isFinite(opacity)
+    ? Math.min(0.3, Math.max(0.04, opacity))
+    : 0.12;
+  const position = ['diagonal', 'header', 'footer'].includes(String(baseDocument.options.watermarkPosition || '').trim().toLowerCase())
+    ? String(baseDocument.options.watermarkPosition || '').trim().toLowerCase()
+    : 'diagonal';
+
+  return {
+    ...baseDocument,
+    options: {
+      ...baseDocument.options,
+      enableWatermarkSettings: true,
+      watermarkText,
+      watermarkOpacity: normalizedOpacity,
+      watermarkPosition: position
+    },
+    watermarkSummary: {
+      text: watermarkText,
+      opacity: normalizedOpacity,
+      position
+    }
+  };
+}
+
+function uidLineId(prefix) {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function buildBaseExportDocument(project, overrides = {}) {
   const options = {
     ...DEFAULT_OPTIONS,
@@ -462,12 +868,60 @@ export function buildSceneExportDocument(project, request = {}) {
   return buildSceneSelectionDocument(baseDocument, request);
 }
 
+export function buildProductionExportDocument(project, request = {}) {
+  const baseDocument = buildBaseExportDocument(project, request.options || request);
+  return buildProductionSelectionDocument(baseDocument, request);
+}
+
+export function buildShootingScriptExportDocument(project, request = {}) {
+  const baseDocument = buildBaseExportDocument(project, {
+    ...(request.options || request),
+    includeSceneNumbers: true
+  });
+  return buildShootingScriptDocument(baseDocument);
+}
+
+export function buildWatermarkedScriptExportDocument(project, request = {}) {
+  const baseDocument = buildBaseExportDocument(project, request.options || request);
+  return {
+    ...applyWatermarkToExportDocument(baseDocument),
+    exportType: 'watermarked'
+  };
+}
+
+export function buildCharacterPacketExportDocument(project, request = {}) {
+  const baseDocument = buildBaseExportDocument(project, request.options || request);
+  return buildCharacterPacketSelectionDocument(baseDocument, request);
+}
+
+export function buildLocationExportDocument(project, request = {}) {
+  const baseDocument = buildBaseExportDocument(project, request.options || request);
+  return buildLocationSelectionDocument(baseDocument, request);
+}
+
+export function buildRevisionExportDocument(project, request = {}) {
+  const baseDocument = buildBaseExportDocument(project, request.options || request);
+  return buildRevisionReportDocument(baseDocument, request);
+}
+
 export function buildExportFilename(exportDocument, extension) {
   const suffix = exportDocument.exportType === 'character'
     ? '-character-export'
+    : exportDocument.exportType === 'character-packet'
+      ? '-character-packet-export'
     : exportDocument.exportType === 'scene'
       ? '-scene-export'
-      : '-full-script';
+      : exportDocument.exportType === 'location'
+        ? '-location-export'
+      : exportDocument.exportType === 'revision'
+        ? '-revision-export'
+      : exportDocument.exportType === 'production'
+        ? '-production-export'
+        : exportDocument.exportType === 'shooting'
+          ? '-shooting-script'
+          : exportDocument.exportType === 'watermarked'
+            ? '-watermarked-script'
+        : '-full-script';
   return `${exportDocument.filenameBase}${suffix}.${extension}`;
 }
 

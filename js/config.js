@@ -173,6 +173,8 @@ export const state = {
   pendingInvitations: [],
   lastCreatedWorkspaceTaskId: "",
   backupPrompted: false,
+  exportJobs: [],
+  currentExportJobId: "",
   history: [],
   historyIndex: -1
 };

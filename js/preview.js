@@ -5,6 +5,7 @@ import { paginateScriptLines } from './pagination.js';
 import { escapeHtml, createTextNode, formatLineText } from './utils.js';
 import { t } from './i18n.js';
 import { buildFullScriptExportDocument } from './exportModel.js';
+import { buildPrintableDocumentFromExportDocument } from './printExport.js';
 
 export function renderCoverPreview() {
   const project = syncProjectFromInputs() || getCurrentProject();
@@ -107,21 +108,8 @@ export function buildPreviewData(project) {
   };
 }
 
-export function buildPreviewDataFromExportDocument(exportDocument) {
-  return {
-    scriptPages: paginateScriptLines((exportDocument?.lines || []).map((line) => ({
-      ...line,
-      secondary: line.secondary || undefined
-    })))
-  };
-}
-
 function buildPageNumberLabel(pageNumber, totalPages) {
   return t("preview.pageNumber", { page: pageNumber, total: totalPages });
-}
-
-function buildExportPageNumberLabel(pageNumber) {
-  return String(pageNumber);
 }
 
 export function buildPrintableDocument(project, autoPrint = false) {
@@ -131,61 +119,6 @@ export function buildPrintableDocument(project, autoPrint = false) {
     includeTitlePage: true
   });
   return buildPrintableDocumentFromExportDocument(exportDocument, autoPrint);
-}
-
-export function buildPrintableDocumentFromExportDocument(exportDocument, autoPrint = false) {
-  const previewData = buildPreviewDataFromExportDocument(exportDocument);
-  const metadata = exportDocument?.metadata || {};
-  const coverMarkup = exportDocument?.options?.includeTitlePage === false ? '' : `
-    <section class="print-page cover-page">
-      <div class="print-cover-stack">
-        <p class="print-cover-title">${escapeHtml(metadata.title || 'Untitled Script')}</p>
-        <p class="print-cover-byline">${escapeHtml(t("cover.by"))}</p>
-        <p class="print-cover-author">${escapeHtml(metadata.author || t("cover.authorFallback"))}</p>
-        <div class="print-cover-meta">
-          ${metadata.contact ? `<p>${escapeHtml(metadata.contact)}</p>` : ""}
-          ${metadata.company ? `<p>${escapeHtml(metadata.company)}</p>` : ""}
-          ${metadata.details ? `<p>${escapeHtml(metadata.details)}</p>` : ""}
-        </div>
-        ${metadata.logline ? `<p class="print-cover-logline">${escapeHtml(metadata.logline)}</p>` : ""}
-      </div>
-    </section>
-  `;
-
-  const scriptMarkup = previewData.scriptPages.map((pageLines, index) => {
-    const pageNum = index + 1;
-    const pageFooter = state.viewOptions.pageNumbers
-      ? `<div class="print-footer">${escapeHtml(buildExportPageNumberLabel(pageNum))}</div>`
-      : "";
-
-    const firstScriptPageClass = index === 0 ? " script-page-first" : "";
-    return `
-    <section class="print-page script-page${firstScriptPageClass}">
-      <div class="print-body">
-        ${pageLines.map((line) => line.secondary !== undefined
-          ? `<div class="print-line print-dual-row ${escapeHtml(line.type)}"><span class="print-dual-col">${escapeHtml(line.displayText)}</span><span class="print-dual-col">${escapeHtml(line.secondary)}</span></div>`
-          : `<p class="print-line ${escapeHtml(line.type)}">${escapeHtml(line.displayText)}</p>`
-        ).join("")}
-      </div>
-      ${pageFooter}
-    </section>
-  `}).join("");
-
-  return `<!DOCTYPE html>
-<html lang="${escapeHtml(state.language)}">
-<head>
-  <meta charset="UTF-8">
-  <title>${escapeHtml(metadata.title || 'Untitled Script')}</title>
-  <style>${getPrintableStyles()}</style>
-</head>
-  <body data-theme="${escapeHtml(state.theme)}">
-  <main class="print-shell">
-    ${coverMarkup}
-    ${scriptMarkup}
-  </main>
-  ${autoPrint ? "<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 350); }); window.addEventListener('afterprint', function () { window.close(); });<\/script>" : ""}
-</body>
-</html>`;
 }
 
 export function buildWordDocument(project) {
@@ -394,168 +327,3 @@ function buildWordLineStyle(type) {
   }
 }
 
-function getPrintableStyles() {
-  return `
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: #f3f1ef;
-      color: #111;
-      font-family: "Courier New", Courier, monospace;
-    }
-    .print-shell {
-      display: grid;
-      gap: 0;
-      padding: 0;
-    }
-    .print-page {
-      position: relative;
-      width: 8.5in;
-      min-height: 11in;
-      margin: 0 auto;
-      padding: 1.0in 1.0in 1.0in 1.5in;
-      background: #fff;
-      color: #111;
-      page-break-after: always;
-      break-after: page;
-      font-size: 12pt;
-    }
-    .print-page:last-child {
-      page-break-after: auto;
-      break-after: auto;
-    }
-    .cover-page {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding-left: 1in;
-      padding-right: 1in;
-      page-break-after: always !important;
-      break-after: page !important;
-    }
-    .script-page-first {
-      page-break-before: always !important;
-      break-before: page !important;
-    }
-    .print-cover-stack {
-      width: 100%;
-      text-align: center;
-    }
-    .print-cover-title,
-    .print-cover-byline,
-    .print-cover-author,
-    .print-cover-logline,
-    .print-cover-meta p {
-      margin: 0;
-    }
-    .print-cover-title {
-      font-weight: bold;
-      text-transform: uppercase;
-      letter-spacing: 0.8pt;
-      margin-bottom: 32pt;
-    }
-    .print-cover-byline {
-      font-size: 11pt;
-      margin-bottom: 14pt;
-    }
-    .print-cover-author {
-      font-weight: bold;
-      margin-bottom: 42pt;
-    }
-    .print-cover-meta {
-      margin-bottom: 34pt;
-    }
-    .print-cover-meta p {
-      margin-bottom: 8pt;
-    }
-    .print-cover-logline {
-      width: 4.8in;
-      margin: 0 auto;
-      line-height: 1.35;
-      white-space: pre-wrap;
-    }
-    .print-body {
-      width: 100%;
-      padding-top: 0.18in;
-      padding-bottom: 0.35in;
-    }
-    .print-line {
-      margin: 0 0 11pt;
-      white-space: pre-wrap;
-      line-height: 1.22;
-    }
-    .print-line.scene,
-    .print-line.shot {
-      font-weight: bold;
-      text-transform: uppercase;
-    }
-    .print-line.character,
-    .print-line.dual {
-      margin-left: 3.1in;
-      width: 2.3in;
-      font-weight: bold;
-      text-transform: uppercase;
-    }
-    .print-line.dialogue {
-      margin-left: 2.1in;
-      width: 3.2in;
-    }
-    .print-line.parenthetical {
-      margin-left: 2.6in;
-      width: 2.1in;
-      font-style: italic;
-    }
-    .print-line.transition {
-      font-weight: bold;
-      margin-left: auto;
-      width: 2.2in;
-      text-align: right;
-      text-transform: uppercase;
-    }
-    .print-dual-row {
-      display: table;
-      width: 100%;
-      margin: 0 0 11pt;
-      table-layout: fixed;
-    }
-    .print-dual-col {
-      display: table-cell;
-      width: 50%;
-      white-space: pre-wrap;
-      line-height: 1.22;
-      vertical-align: top;
-      padding: 0 6pt;
-    }
-    .print-dual-row.character .print-dual-col,
-    .print-dual-row.dual .print-dual-col {
-      font-weight: bold;
-      padding-left: 0.95in;
-      text-transform: uppercase;
-    }
-    .print-dual-row.dialogue .print-dual-col {
-      padding-left: 0.5in;
-      padding-right: 0.5in;
-    }
-    .print-dual-row.parenthetical .print-dual-col {
-      padding-left: 0.7in;
-      font-style: italic;
-    }
-    .print-footer {
-      position: absolute;
-      top: 0.45in;
-      right: 1in;
-      font-family: "Courier New", Courier, monospace;
-      font-size: 10pt;
-      color: #111;
-    }
-    @page {
-      size: letter;
-      margin: 0;
-    }
-    @media print {
-      body { background: #fff; }
-      .print-page { box-shadow: none; }
-    }
-  `;
-}

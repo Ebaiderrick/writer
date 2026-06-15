@@ -184,7 +184,7 @@ async function syncCurrentProjectToFirestore() {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
       const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
       'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
-      'activityLog', 'lastEditorName', 'lastActivityAt', 'workspace', 'version',
+      'activityLog', 'exportHistory', 'lastEditorName', 'lastActivityAt', 'workspace', 'version',
       'conversionJobId', 'conversionSourceFileName'];
       const contentPayload = Object.fromEntries(
         CONTENT_KEYS.filter(k => k in payload).map(k => [k, payload[k]])
@@ -412,6 +412,7 @@ export function sanitizeProject(project) {
     ownerId: project.ownerId || null,
     storyMemory: sanitizeStoryMemory(project.storyMemory),
     activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
+    exportHistory: Array.isArray(project.exportHistory) ? project.exportHistory : [],
     ownerName: project.ownerName || "",
     ownerEmail: project.ownerEmail || "",
     ownerPhotoURL: project.ownerPhotoURL || "",

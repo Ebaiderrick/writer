@@ -88,17 +88,25 @@ let activeConversionLiveProjectId = "";
 const conversionWorkspaceOverrides = new Map();
 const aiTaskTimers = new Map();
 let exportDialogPrefill = { format: "pdf", exportType: "full" };
+let exportDialogContext = { scenes: [], characters: [], revisions: [] };
 
 const EXPORT_TYPE_DETAILS = {
   full: "Title page, metadata, scenes, dialogue, transitions, and optional notes/comments.",
   character: "Actor-friendly pages with chosen character dialogue plus scene heading context.",
-  scene: "Single scenes, multi-scene selections, or a scene-number range."
+  "character-packet": "Actor packets with dialogue, parentheticals, scene headings, and character statistics.",
+  scene: "Single scenes, multi-scene selections, or a scene-number range.",
+  location: "Location packets collect every scene set at one selected location, with characters and time of day preserved.",
+  revision: "Revision reports compare two available versions and track added scenes, removed scenes, and changed text.",
+  production: "Production-ready packets filtered by location, time of day, scene range, and character presence.",
+  shooting: "Locked-scene screenplay pages with revision labeling, page numbers, and production-ready shooting script layout.",
+  watermarked: "Protected screenplay pages with configurable watermark text, placement, and opacity for controlled sharing."
 };
 
 const EXPORT_FORMAT_DETAILS = {
   pdf: "PDF opens a print-ready screenplay document for saving as PDF.",
   docx: "DOCX downloads a Word-compatible screenplay document built from the same export service.",
-  fountain: "Fountain downloads a plain-text screenplay file compatible with major screenwriting tools."
+  fountain: "Fountain downloads a plain-text screenplay file with title-page fields, scene-number syntax, and screenplay-safe formatting.",
+  fdx: "Final Draft downloads an .fdx screenplay file for professional screenwriting software."
 };
 const PROJECT_CARD_TOUCH_SCROLL_THRESHOLD = 12;
 const PROJECT_CARD_CLICK_SUPPRESSION_MS = 750;
@@ -109,6 +117,495 @@ const INLINE_SELECTION_TOOLS = [
   { label: "Rewrite", action: "Rephrase", requiresAi: true },
   { label: "Fix Grammar", action: "Grammar", requiresGrammar: true }
 ];
+
+function normalizeExportFilterToken(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function parseOptionalRange(startValue, endValue) {
+  const start = Number(startValue || 0);
+  const end = Number(endValue || 0);
+  if (start > 0 && end > 0) {
+    return { start: Math.min(start, end), end: Math.max(start, end) };
+  }
+  return null;
+}
+
+function sceneMatchesProductionFilters(scene, filters = {}) {
+  const location = normalizeExportFilterToken(filters.location);
+  const timeOfDay = normalizeExportFilterToken(filters.timeOfDay);
+  const characters = Array.isArray(filters.characters) ? filters.characters.map(normalizeExportFilterToken).filter(Boolean) : [];
+  const range = filters.sceneRange || null;
+
+  if (location && normalizeExportFilterToken(scene.location) !== location) {
+    return false;
+  }
+  if (timeOfDay && normalizeExportFilterToken(scene.timeOfDay) !== timeOfDay) {
+    return false;
+  }
+  if (characters.length) {
+    const sceneCharacters = new Set((scene.characters || []).map(normalizeExportFilterToken).filter(Boolean));
+    if (!characters.some((character) => sceneCharacters.has(character))) {
+      return false;
+    }
+  }
+  if (range && (scene.number < range.start || scene.number > range.end)) {
+    return false;
+  }
+
+  return true;
+}
+
+function estimateExportPages(lineCount) {
+  return Math.max(1, Math.ceil(Number(lineCount || 0) / 45));
+}
+
+function estimateExportFileSize(lineCount, format, sceneCount, characterCount) {
+  const safeLineCount = Number(lineCount || 0);
+  const safeSceneCount = Number(sceneCount || 0);
+  const safeCharacterCount = Number(characterCount || 0);
+  const bytes = format === "docx"
+    ? 12000 + (safeLineCount * 42) + (safeSceneCount * 160) + (safeCharacterCount * 90)
+    : format === "fountain"
+      ? 1200 + (safeLineCount * 26)
+      : format === "fdx"
+        ? 2400 + (safeLineCount * 34) + (safeSceneCount * 90) + (safeCharacterCount * 48)
+      : 9000 + (safeLineCount * 38) + (safeSceneCount * 140) + (safeCharacterCount * 80);
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function getExportTypeLabel(exportType) {
+  return exportType === "full" ? "Full Script"
+    : exportType === "character" ? "Character Export"
+    : exportType === "character-packet" ? "Character Packet Export"
+    : exportType === "scene" ? "Scene Export"
+    : exportType === "location" ? "Location Export"
+    : exportType === "revision" ? "Revision Export"
+    : exportType === "production" ? "Production Export"
+    : exportType === "shooting" ? "Shooting Script"
+    : "Export";
+}
+
+function getExportActorName() {
+  return auth.currentUser?.displayName || auth.currentUser?.email || "Current user";
+}
+
+function buildExportHistorySummary(request) {
+  if (request.exportType === "character" || request.exportType === "character-packet") {
+    return `${request.characters?.length || 0} character${request.characters?.length === 1 ? "" : "s"} selected`;
+  }
+  if (request.exportType === "scene") {
+    if (request.sceneRange) return `Range ${request.sceneRange.start}-${request.sceneRange.end}`;
+    return `${request.sceneIds?.length || 0} scene${request.sceneIds?.length === 1 ? "" : "s"} selected`;
+  }
+  if (request.exportType === "location") {
+    return request.location || "Location packet";
+  }
+  if (request.exportType === "revision") {
+    return `${request.versionA?.label || "Version A"} vs ${request.versionB?.label || "Version B"}`;
+  }
+  if (request.exportType === "production") {
+    const bits = [];
+    if (request.locations?.[0]) bits.push(request.locations[0]);
+    if (request.timeOfDay?.[0]) bits.push(request.timeOfDay[0]);
+    if (request.sceneRange) bits.push(`Range ${request.sceneRange.start}-${request.sceneRange.end}`);
+    if (request.characters?.length) bits.push(`${request.characters.length} character${request.characters.length === 1 ? "" : "s"}`);
+    return bits.join(" · ") || "Filtered production packet";
+  }
+  return "Whole screenplay";
+}
+
+function sanitizeExportHistoryEntry(entry) {
+  return {
+    id: entry.id || uid("export"),
+    createdAt: entry.createdAt || new Date().toISOString(),
+    exportType: entry.exportType || "full",
+    format: entry.format || "pdf",
+    user: entry.user || getExportActorName(),
+    projectId: entry.projectId || "",
+    projectTitle: entry.projectTitle || "Untitled Script",
+    summary: entry.summary || "",
+    options: entry.options ? { ...entry.options } : {},
+    request: entry.request ? JSON.parse(JSON.stringify(entry.request)) : {}
+  };
+}
+
+function updateExportProgressUI({ active = false, label = "Preparing export...", detail = "Reviewing your export settings.", percent = 0 } = {}) {
+  const card = document.getElementById("exportProgressCard");
+  const labelNode = document.getElementById("exportProgressLabel");
+  const detailNode = document.getElementById("exportProgressDetail");
+  const percentNode = document.getElementById("exportProgressPercent");
+  const fillNode = document.getElementById("exportProgressFill");
+  if (!card || !labelNode || !detailNode || !percentNode || !fillNode) return;
+  card.hidden = !active;
+  labelNode.textContent = label;
+  detailNode.textContent = detail;
+  const safePercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  percentNode.textContent = `${safePercent}%`;
+  fillNode.style.width = `${safePercent}%`;
+}
+
+function clearExportProgressUI() {
+  updateExportProgressUI({ active: false, label: "Preparing export...", detail: "Reviewing your export settings.", percent: 0 });
+}
+
+async function advanceExportProgress(step) {
+  updateExportProgressUI(step);
+  await new Promise((resolve) => window.setTimeout(resolve, 40));
+}
+
+function renderExportHistory(project = getCurrentProject()) {
+  const list = document.getElementById("exportHistoryList");
+  const empty = document.getElementById("exportHistoryEmpty");
+  if (!list || !empty) return;
+
+  const items = Array.isArray(project?.exportHistory) ? [...project.exportHistory].reverse() : [];
+  empty.hidden = items.length > 0;
+  list.hidden = items.length === 0;
+  if (!items.length) {
+    list.innerHTML = "";
+    return;
+  }
+
+  list.innerHTML = items.map((entry) => {
+    const createdAt = entry.createdAt
+      ? new Date(entry.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+      : "Unknown";
+    return `
+      <article class="export-history-item" data-export-history-id="${escapeHtml(entry.id)}">
+        <div class="export-history-copy">
+          <h5 class="export-history-title">${escapeHtml(getExportTypeLabel(entry.exportType))} · ${escapeHtml(String(entry.format || "").toUpperCase())}</h5>
+          <p class="export-history-meta">${escapeHtml(createdAt)} · ${escapeHtml(entry.user || "Current user")} · ${escapeHtml(entry.projectTitle || "Untitled Script")}</p>
+          <p class="export-history-meta">${escapeHtml(entry.summary || "Saved export settings ready for re-download.")}</p>
+        </div>
+        <div class="export-history-actions">
+          <button class="ghost-button btn-sm" type="button" data-export-history-action="download">Re-download</button>
+          <button class="ghost-button btn-sm" type="button" data-export-history-action="view">View Settings</button>
+          <button class="ghost-button btn-sm" type="button" data-export-history-action="delete">Delete</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function recordExportHistory(project, request) {
+  if (!project) return;
+  const entry = sanitizeExportHistoryEntry({
+    exportType: request.exportType,
+    format: request.format,
+    user: getExportActorName(),
+    projectId: project.id,
+    projectTitle: project.title,
+    summary: buildExportHistorySummary(request),
+    options: request.options,
+    request,
+    createdAt: new Date().toISOString()
+  });
+  project.exportHistory = Array.isArray(project.exportHistory) ? project.exportHistory : [];
+  project.exportHistory.push(entry);
+  if (project.exportHistory.length > 24) {
+    project.exportHistory = project.exportHistory.slice(-24);
+  }
+  persistProjects(false, { syncInputs: false });
+  renderExportHistory(project);
+}
+
+function getStoredExportHistoryEntry(project, entryId) {
+  if (!project || !entryId) return null;
+  return (project.exportHistory || []).find((entry) => entry.id === entryId) || null;
+}
+
+function updateExportJobRecord(jobId, patch = {}) {
+  const job = state.exportJobs.find((entry) => entry.id === jobId);
+  if (!job) return null;
+  Object.assign(job, patch);
+  return job;
+}
+
+function syncExportJobUI(job) {
+  if (!job) return;
+  if (job.projectId === state.currentProjectId || job.projectId === getCurrentProject()?.id) {
+    updateExportProgressUI({
+      active: job.status === "running",
+      label: job.label || "Preparing export...",
+      detail: job.detail || "Preparing screenplay export...",
+      percent: job.progress || 0
+    });
+  }
+  if (job.toastId) {
+    updateToast(job.toastId, job.detail || job.label || "Preparing screenplay export...", job.status === "failed" ? "error" : job.status === "completed" ? "success" : "loading", {
+      duration: job.status === "running" ? 0 : job.status === "failed" ? 4200 : 2600
+    });
+  }
+}
+
+async function processQueuedExportJobs() {
+  if (state.currentExportJobId) return;
+  const nextJob = state.exportJobs.find((entry) => entry.status === "queued");
+  if (!nextJob) return;
+
+  state.currentExportJobId = nextJob.id;
+  updateExportJobRecord(nextJob.id, {
+    status: "running",
+    progress: 12,
+    label: "Preparing export...",
+    detail: "Reviewing the queued export settings."
+  });
+  syncExportJobUI(nextJob);
+
+  const project = state.projects.find((entry) => entry.id === nextJob.projectId) || getCurrentProject();
+  try {
+    await new Promise((resolve) => window.setTimeout(resolve, 40));
+    const outcome = await executeExportRequest(project, nextJob.request || {});
+    if (!outcome) {
+      updateExportJobRecord(nextJob.id, {
+        status: "failed",
+        progress: 100,
+        label: "Export could not start.",
+        detail: "The queued export is missing required selections."
+      });
+      syncExportJobUI(nextJob);
+      return;
+    }
+
+    updateExportJobRecord(nextJob.id, {
+      progress: 68,
+      label: "Rendering export output...",
+      detail: "Building the queued screenplay package for download or print."
+    });
+    syncExportJobUI(nextJob);
+    await new Promise((resolve) => window.setTimeout(resolve, 40));
+
+    await runExportResult(outcome.result, project, outcome.message);
+    logActivity(project.id, outcome.message, { action: outcome.action, workspaceId: project.workspace?.id || project.id }).catch(() => {});
+    recordExportHistory(project, nextJob.request || {});
+    updateExportJobRecord(nextJob.id, {
+      status: "completed",
+      progress: 100,
+      label: "Export ready.",
+      detail: nextJob.request?.format === "pdf" ? "The queued export opened the print flow." : "The queued export finished downloading.",
+      completedAt: new Date().toISOString()
+    });
+    syncExportJobUI(nextJob);
+  } catch (error) {
+    console.error("Queued export failed", error);
+    updateExportJobRecord(nextJob.id, {
+      status: "failed",
+      progress: 100,
+      label: "Export failed.",
+      detail: "The queued export could not be generated."
+    });
+    syncExportJobUI(nextJob);
+  } finally {
+    window.setTimeout(() => clearExportProgressUI(), 900);
+    state.currentExportJobId = "";
+    window.setTimeout(() => {
+      state.exportJobs = state.exportJobs.filter((entry) => entry.status === "queued" || entry.status === "running");
+      void processQueuedExportJobs();
+    }, 0);
+  }
+}
+
+function enqueueExportJob(project, request) {
+  const queuedAhead = state.exportJobs.filter((entry) => entry.status === "queued" || entry.status === "running").length;
+  const id = uid("exportJob");
+  const toastId = showToast(
+    queuedAhead ? `Queued export ${queuedAhead + 1}. Waiting for earlier export jobs to finish.` : "Queued screenplay export.",
+    "loading",
+    { duration: 0 }
+  );
+  state.exportJobs.push({
+    id,
+    projectId: project.id,
+    request,
+    status: "queued",
+    progress: 0,
+    label: "Queued export",
+    detail: queuedAhead ? `Waiting behind ${queuedAhead} export job${queuedAhead === 1 ? "" : "s"}.` : "This export will start in a moment.",
+    createdAt: new Date().toISOString(),
+    toastId
+  });
+  void processQueuedExportJobs();
+}
+
+function buildExportRequestFromDialog(project) {
+  const exportType = document.getElementById("exportTypeSelect")?.value || "full";
+  const format = document.getElementById("exportFormatSelect")?.value || "pdf";
+  const options = {
+    includeNotes: Boolean(document.getElementById("exportIncludeNotes")?.checked),
+    includeComments: Boolean(document.getElementById("exportIncludeComments")?.checked),
+    includeSceneNumbers: state.autoNumberScenes,
+    includeMetadata: Boolean(document.getElementById("exportIncludeMetadata")?.checked),
+    includeTitlePage: true,
+    includePageNumbers: Boolean(document.getElementById("exportIncludePageNumbers")?.checked)
+  };
+  if (document.getElementById("exportEnableWatermarkSettings")?.checked) {
+    options.enableWatermarkSettings = true;
+    options.watermarkPreset = document.getElementById("exportWatermarkPreset")?.value || "";
+    options.watermarkText = document.getElementById("exportWatermarkText")?.value || "";
+    options.watermarkPosition = document.getElementById("exportWatermarkPosition")?.value || "diagonal";
+    options.watermarkOpacity = Number(document.getElementById("exportWatermarkOpacity")?.value || 0.12);
+  }
+  const request = {
+    exportType,
+    format,
+    options,
+    projectId: project?.id || "",
+    projectTitle: project?.title || "Untitled Script"
+  };
+
+  if (exportType === "character" || exportType === "character-packet") {
+    request.characters = [...document.querySelectorAll("input[name='exportCharacterName']:checked")].map((input) => input.value);
+    if (exportType === "character-packet") {
+      request.options.includeSceneDescriptions = Boolean(document.getElementById("exportIncludeSceneDescriptions")?.checked);
+    }
+  } else if (exportType === "scene") {
+    request.sceneIds = [...document.querySelectorAll("input[name='exportSceneId']:checked")].map((input) => input.value);
+    request.sceneRange = parseOptionalRange(document.getElementById("exportSceneRangeStart")?.value, document.getElementById("exportSceneRangeEnd")?.value);
+  } else if (exportType === "location") {
+    request.location = document.getElementById("exportLocationSelect")?.value || "";
+  } else if (exportType === "revision") {
+    const versionAId = document.getElementById("exportRevisionVersionA")?.value || "";
+    const versionBId = document.getElementById("exportRevisionVersionB")?.value || "";
+    request.versionA = exportDialogContext.revisions.find((entry) => entry.id === versionAId) || null;
+    request.versionB = exportDialogContext.revisions.find((entry) => entry.id === versionBId) || null;
+  } else if (exportType === "production") {
+    const location = document.getElementById("exportProductionLocationSelect")?.value || "";
+    const timeOfDay = document.getElementById("exportProductionTimeSelect")?.value || "";
+    request.locations = location ? [location] : [];
+    request.timeOfDay = timeOfDay ? [timeOfDay] : [];
+    request.characters = [...document.querySelectorAll("input[name='exportProductionCharacterName']:checked")].map((input) => input.value);
+    request.sceneRange = parseOptionalRange(document.getElementById("exportProductionRangeStart")?.value, document.getElementById("exportProductionRangeEnd")?.value);
+  } else if (exportType === "shooting") {
+    request.options.includeSceneNumbers = true;
+    request.options.includeRevisions = Boolean(document.getElementById("exportIncludeRevisions")?.checked);
+  }
+
+  return request;
+}
+
+async function executeExportRequest(project, request) {
+  const { exportType, format } = request;
+  if (exportType === "character") {
+    if (!request.characters?.length) {
+      await customAlert("Select one or more characters before generating a character export.", "Character Export");
+      return null;
+    }
+    return {
+      result: await ExportService.exportCharacter(project, { format, characters: request.characters, options: request.options }),
+      action: `export.character.${format}`,
+      message: `Exported character pages as ${format.toUpperCase()}.`
+    };
+  }
+  if (exportType === "character-packet") {
+    if (!request.characters?.length) {
+      await customAlert("Select one or more characters before generating a character packet.", "Character Packet Export");
+      return null;
+    }
+    return {
+      result: await ExportService.exportCharacterPacket(project, { format, characters: request.characters, options: request.options }),
+      action: `export.characterPacket.${format}`,
+      message: `Exported the character packet as ${format.toUpperCase()}.`
+    };
+  }
+  if (exportType === "scene") {
+    if (!request.sceneIds?.length && !request.sceneRange) {
+      await customAlert("Select at least one scene or enter a valid scene range before generating a scene export.", "Scene Export");
+      return null;
+    }
+    return {
+      result: await ExportService.exportScenes(project, { format, sceneIds: request.sceneIds || [], sceneRange: request.sceneRange || null, options: request.options }),
+      action: `export.scene.${format}`,
+      message: `Exported selected scenes as ${format.toUpperCase()}.`
+    };
+  }
+  if (exportType === "location") {
+    if (!request.location) {
+      await customAlert("Select a location before generating a location export.", "Location Export");
+      return null;
+    }
+    return {
+      result: await ExportService.exportLocation(project, { format, location: request.location, options: request.options }),
+      action: `export.location.${format}`,
+      message: `Exported the location packet as ${format.toUpperCase()}.`
+    };
+  }
+  if (exportType === "revision") {
+    if (!request.versionA || !request.versionB) {
+      await customAlert("Select two versions before generating a revision export.", "Revision Export");
+      return null;
+    }
+    if (request.versionA.id === request.versionB.id) {
+      await customAlert("Choose two different versions before generating a revision export.", "Revision Export");
+      return null;
+    }
+    return {
+      result: await ExportService.exportRevision(project, { format, versionA: request.versionA, versionB: request.versionB, options: request.options }),
+      action: `export.revision.${format}`,
+      message: `Exported the revision report as ${format.toUpperCase()}.`
+    };
+  }
+  if (exportType === "production") {
+    return {
+      result: await ExportService.exportProduction(project, {
+        format,
+        locations: request.locations || [],
+        timeOfDay: request.timeOfDay || [],
+        characters: request.characters || [],
+        sceneRange: request.sceneRange || null,
+        options: request.options
+      }),
+      action: `export.production.${format}`,
+      message: `Exported the production packet as ${format.toUpperCase()}.`
+    };
+  }
+  if (exportType === "shooting") {
+    return {
+      result: await ExportService.exportShootingScript(project, {
+        format,
+        options: request.options
+      }),
+      action: `export.shooting.${format}`,
+      message: `Exported the shooting script as ${format.toUpperCase()}.`
+    };
+  }
+  return {
+    result: await ExportService.exportFullScript(project, { format, options: request.options }),
+    action: `export.full.${format}`,
+    message: `Exported the full screenplay as ${format.toUpperCase()}.`
+  };
+}
+
+async function rerunStoredExportHistory(entry) {
+  const project = getCurrentProject();
+  if (!project) return;
+  enqueueExportJob(project, entry.request || {});
+}
+
+function buildRevisionVersionOptions(project) {
+  const currentLines = (project?.lines || []).map((line) => ({ ...line }));
+  const options = [{
+    id: "current",
+    label: `Current Draft${project?.version ? ` v${project.version}` : ""}`,
+    lines: currentLines
+  }];
+
+  const historySnapshots = Array.isArray(state.history) ? state.history : [];
+  historySnapshots.forEach((snapshot, index) => {
+    if (!Array.isArray(snapshot) || !snapshot.length) return;
+    const id = `history_${index}`;
+    const label = `Local History ${index + 1}`;
+    if (!options.some((entry) => JSON.stringify(entry.lines) === JSON.stringify(snapshot))) {
+      options.push({
+        id,
+        label,
+        lines: snapshot.map((line) => ({ ...line }))
+      });
+    }
+  });
+
+  return options;
+}
 
 function renderRecoveryList() {
   const dialog = document.getElementById("fileRecoveryDialog");
@@ -3245,23 +3742,58 @@ export function bindEvents() {
   document.getElementById("exportDialog")?.addEventListener("click", (event) => {
     if (event.target?.id === "exportDialog") {
       closeExportDialog();
+      return;
+    }
+    const actionButton = event.target?.closest?.("[data-export-history-action]");
+    if (!actionButton) return;
+    const item = actionButton.closest("[data-export-history-id]");
+    const project = getCurrentProject();
+    const entry = getStoredExportHistoryEntry(project, item?.dataset?.exportHistoryId || "");
+    if (!entry || !project) return;
+    const action = actionButton.dataset.exportHistoryAction;
+    if (action === "delete") {
+      project.exportHistory = (project.exportHistory || []).filter((candidate) => candidate.id !== entry.id);
+      persistProjects(false, { syncInputs: false });
+      renderExportHistory(project);
+      return;
+    }
+    if (action === "view") {
+      const detail = [
+        `Type: ${getExportTypeLabel(entry.exportType)}`,
+        `Format: ${String(entry.format || "").toUpperCase()}`,
+        `Saved: ${entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "Unknown"}`,
+        `User: ${entry.user || "Current user"}`,
+        `Summary: ${entry.summary || "Saved export settings"}`
+      ].join("\n");
+      customAlert(detail, "Export Settings");
+      return;
+    }
+    if (action === "download") {
+      void rerunStoredExportHistory(entry);
     }
   });
   document.getElementById("exportDialog")?.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.matches("#exportTypeSelect, #exportFormatSelect, input[name='exportCharacterName'], input[name='exportSceneId'], #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeSurroundingAction, #exportIncludeSceneDescriptions")) {
+    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeSceneDescriptions, #exportIncludePageNumbers, #exportIncludeRevisions")) {
       updateExportDialogState();
     }
   });
   document.getElementById("exportDialog")?.addEventListener("input", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.matches("#exportSceneRangeStart, #exportSceneRangeEnd")) {
+    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportWatermarkText")) {
       updateExportDialogState();
     }
   });
-  document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, input[name='exportCharacterName'], input[name='exportSceneId'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeSurroundingAction, #exportIncludeSceneDescriptions").forEach((element) => {
+  document.getElementById("exportDialog")?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.closest("#exportEnableWatermarkSettings")) {
+      requestAnimationFrame(() => updateExportDialogState());
+    }
+  });
+  document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeSceneDescriptions, #exportEnableWatermarkSettings, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity").forEach((element) => {
     element.addEventListener("change", updateExportDialogState);
     if (element instanceof HTMLInputElement && element.type === "number") {
       element.addEventListener("input", updateExportDialogState);
@@ -5429,10 +5961,33 @@ function openExportDialog(prefill = {}) {
     includeTitlePage: true
   });
 
+  exportDialogContext = {
+    scenes: exportDocument.scenes.map((scene) => ({
+      id: scene.id,
+      number: scene.number,
+      heading: scene.heading,
+      location: scene.location,
+      timeOfDay: scene.timeOfDay,
+      characters: [...(scene.characters || [])]
+    })),
+    characters: exportDocument.characters.map((character) => character.name),
+    revisions: buildRevisionVersionOptions(project)
+  };
+
   const characterList = document.getElementById("exportCharacterList");
   const sceneList = document.getElementById("exportSceneList");
+  const productionCharacterList = document.getElementById("exportProductionCharacterList");
   const characterMeta = document.getElementById("exportCharacterMeta");
   const sceneMeta = document.getElementById("exportSceneMeta");
+  const locationMeta = document.getElementById("exportLocationMeta");
+  const locationSelect = document.getElementById("exportLocationSelect");
+  const revisionMeta = document.getElementById("exportRevisionMeta");
+  const revisionVersionA = document.getElementById("exportRevisionVersionA");
+  const revisionVersionB = document.getElementById("exportRevisionVersionB");
+  const productionMeta = document.getElementById("exportProductionMeta");
+  const productionCharacterMeta = document.getElementById("exportProductionCharacterMeta");
+  const productionLocationSelect = document.getElementById("exportProductionLocationSelect");
+  const productionTimeSelect = document.getElementById("exportProductionTimeSelect");
   const sceneCount = exportDocument.scenes.length;
   if (characterList) {
     characterList.innerHTML = exportDocument.characters.length
@@ -5466,6 +6021,59 @@ function openExportDialog(prefill = {}) {
       : "No scene headings were found yet. Add scenes before using scene export.";
   }
 
+  if (locationSelect) {
+    const locations = [...new Set(exportDocument.scenes.map((scene) => scene.location).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+    locationSelect.innerHTML = ['<option value="">Choose location</option>', ...locations.map((location) => `<option value="${escapeHtml(location)}">${escapeHtml(location)}</option>`)].join("");
+  }
+  if (locationMeta) {
+    const locationCount = new Set(exportDocument.scenes.map((scene) => scene.location).filter(Boolean)).size;
+    locationMeta.textContent = locationCount
+      ? `${locationCount} location${locationCount === 1 ? "" : "s"} available for location export.`
+      : "No location headings were found yet. Add scenes before using location export.";
+  }
+  if (revisionVersionA && revisionVersionB) {
+    const options = exportDialogContext.revisions;
+    const markup = ['<option value="">Choose version</option>', ...options.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.label)}</option>`)].join("");
+    revisionVersionA.innerHTML = markup;
+    revisionVersionB.innerHTML = markup;
+    if (options[0]) revisionVersionA.value = options[0].id;
+    if (options[1]) revisionVersionB.value = options[1].id;
+  }
+  if (revisionMeta) {
+    revisionMeta.textContent = exportDialogContext.revisions.length >= 2
+      ? `${exportDialogContext.revisions.length} version snapshots available for revision comparison.`
+      : "At least two snapshots are needed before a revision report can be generated.";
+  }
+
+  if (productionLocationSelect) {
+    const locations = [...new Set(exportDocument.scenes.map((scene) => scene.location).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+    productionLocationSelect.innerHTML = ['<option value="">All locations</option>', ...locations.map((location) => `<option value="${escapeHtml(location)}">${escapeHtml(location)}</option>`)].join("");
+  }
+  if (productionTimeSelect) {
+    const times = [...new Set(exportDocument.scenes.map((scene) => scene.timeOfDay).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+    productionTimeSelect.innerHTML = ['<option value="">All times of day</option>', ...times.map((time) => `<option value="${escapeHtml(time)}">${escapeHtml(time)}</option>`)].join("");
+  }
+  if (productionCharacterList) {
+    productionCharacterList.innerHTML = exportDocument.characters.length
+      ? exportDocument.characters.map((character) => `
+        <label class="export-chip-item">
+          <input type="checkbox" name="exportProductionCharacterName" value="${escapeHtml(character.name)}">
+          <span>${escapeHtml(character.name)}</span>
+        </label>
+      `).join("")
+      : `<div class="export-inline-description">No characters found yet.</div>`;
+  }
+  if (productionMeta) {
+    productionMeta.textContent = exportDocument.scenes.length
+      ? `${exportDocument.scenes.length} scene${exportDocument.scenes.length === 1 ? "" : "s"} available for production filtering.`
+      : "No scene headings were found yet. Add scenes before building a production packet.";
+  }
+  if (productionCharacterMeta) {
+    productionCharacterMeta.textContent = exportDocument.characters.length
+      ? `${exportDocument.characters.length} character${exportDocument.characters.length === 1 ? "" : "s"} available for presence filtering.`
+      : "No characters are available yet for character-presence filtering.";
+  }
+
   const exportTypeSelect = document.getElementById("exportTypeSelect");
   const exportFormatSelect = document.getElementById("exportFormatSelect");
   if (exportTypeSelect) exportTypeSelect.value = exportDialogPrefill.exportType;
@@ -5474,12 +6082,36 @@ function openExportDialog(prefill = {}) {
   const includeNotes = document.getElementById("exportIncludeNotes");
   const includeComments = document.getElementById("exportIncludeComments");
   const includeMetadata = document.getElementById("exportIncludeMetadata");
+  const includePageNumbers = document.getElementById("exportIncludePageNumbers");
+  const includeRevisions = document.getElementById("exportIncludeRevisions");
+  const enableWatermarkSettings = document.getElementById("exportEnableWatermarkSettings");
+  const watermarkPreset = document.getElementById("exportWatermarkPreset");
+  const watermarkPosition = document.getElementById("exportWatermarkPosition");
+  const watermarkOpacity = document.getElementById("exportWatermarkOpacity");
+  const watermarkText = document.getElementById("exportWatermarkText");
+  const locationField = document.getElementById("exportLocationSelect");
   const rangeStart = document.getElementById("exportSceneRangeStart");
   const rangeEnd = document.getElementById("exportSceneRangeEnd");
+  const productionRangeStart = document.getElementById("exportProductionRangeStart");
+  const productionRangeEnd = document.getElementById("exportProductionRangeEnd");
 
   if (includeNotes) includeNotes.checked = defaults.includeNotes;
   if (includeComments) includeComments.checked = defaults.includeComments;
   if (includeMetadata) includeMetadata.checked = defaults.includeMetadata;
+  if (includePageNumbers) includePageNumbers.checked = state.viewOptions.pageNumbers;
+  if (includeRevisions) includeRevisions.checked = false;
+  if (enableWatermarkSettings) enableWatermarkSettings.checked = false;
+  if (enableWatermarkSettings && !enableWatermarkSettings.dataset.exportBound) {
+    enableWatermarkSettings.addEventListener("change", () => updateExportDialogState());
+    enableWatermarkSettings.addEventListener("click", () => {
+      requestAnimationFrame(() => updateExportDialogState());
+    });
+    enableWatermarkSettings.dataset.exportBound = "true";
+  }
+  if (watermarkPreset) watermarkPreset.value = "";
+  if (watermarkPosition) watermarkPosition.value = "diagonal";
+  if (watermarkOpacity) watermarkOpacity.value = "0.12";
+  if (watermarkText) watermarkText.value = "";
   if (rangeStart) {
     rangeStart.value = "";
     rangeStart.min = sceneCount ? "1" : "0";
@@ -5490,7 +6122,21 @@ function openExportDialog(prefill = {}) {
     rangeEnd.min = sceneCount ? "1" : "0";
     rangeEnd.max = String(sceneCount);
   }
+  if (productionRangeStart) {
+    productionRangeStart.value = "";
+    productionRangeStart.min = sceneCount ? "1" : "0";
+    productionRangeStart.max = String(sceneCount);
+  }
+  if (productionRangeEnd) {
+    productionRangeEnd.value = "";
+    productionRangeEnd.min = sceneCount ? "1" : "0";
+    productionRangeEnd.max = String(sceneCount);
+  }
+  if (locationField) locationField.value = "";
+  if (productionLocationSelect) productionLocationSelect.value = "";
+  if (productionTimeSelect) productionTimeSelect.value = "";
   updateExportDialogState();
+  renderExportHistory(project);
 
   if (!dialog.open) {
     dialog.showModal();
@@ -5502,38 +6148,112 @@ function closeExportDialog() {
 }
 
 function updateExportDialogState() {
-  const exportType = document.getElementById("exportTypeSelect")?.value || "full";
-  const format = document.getElementById("exportFormatSelect")?.value || "pdf";
+  const exportTypeSelect = document.getElementById("exportTypeSelect");
+  const exportFormatSelect = document.getElementById("exportFormatSelect");
+  const exportType = exportTypeSelect?.value || "full";
+  const fountainOption = exportFormatSelect?.querySelector("option[value='fountain']");
+  const fdxOption = exportFormatSelect?.querySelector("option[value='fdx']");
+  const screenplayOnlyFormat = exportType === "production" || exportType === "character-packet" || exportType === "location" || exportType === "revision" || exportType === "shooting";
+  if (fountainOption) {
+    fountainOption.disabled = screenplayOnlyFormat;
+  }
+  if (fdxOption) {
+    fdxOption.disabled = screenplayOnlyFormat;
+  }
+  if (screenplayOnlyFormat && (exportFormatSelect?.value === "fountain" || exportFormatSelect?.value === "fdx")) {
+    exportFormatSelect.value = "pdf";
+  }
+  const format = exportFormatSelect?.value || "pdf";
   const generateBtn = document.getElementById("exportDialogGenerateBtn");
   const validationNote = document.getElementById("exportValidationNote");
   const characterPanel = document.getElementById("exportCharacterPanel");
+  const characterPacketOptions = document.getElementById("exportCharacterPacketOptions");
+  const includeRevisionsToggle = document.getElementById("exportIncludeRevisionsToggle");
+  const watermarkPanel = document.getElementById("exportWatermarkPanel");
   const scenePanel = document.getElementById("exportScenePanel");
+  const locationPanel = document.getElementById("exportLocationPanel");
+  const revisionPanel = document.getElementById("exportRevisionPanel");
+  const productionPanel = document.getElementById("exportProductionPanel");
   const exportTypeDescription = document.getElementById("exportTypeDescription");
   const exportFormatDescription = document.getElementById("exportFormatDescription");
+
   if (characterPanel) {
-    const showCharacterPanel = exportType === "character";
+    const showCharacterPanel = exportType === "character" || exportType === "character-packet";
     characterPanel.hidden = !showCharacterPanel;
     characterPanel.style.display = showCharacterPanel ? "grid" : "none";
+  }
+  if (characterPacketOptions) {
+    const showCharacterPacketOptions = exportType === "character-packet";
+    characterPacketOptions.hidden = !showCharacterPacketOptions;
+    characterPacketOptions.style.display = showCharacterPacketOptions ? "flex" : "none";
+  }
+  if (includeRevisionsToggle) {
+    const showRevisionsToggle = exportType === "shooting";
+    includeRevisionsToggle.hidden = !showRevisionsToggle;
+    includeRevisionsToggle.style.display = showRevisionsToggle ? "inline-flex" : "none";
+  }
+  if (watermarkPanel) {
+    const watermarkEnabled = document.getElementById("exportEnableWatermarkSettings")?.checked;
+    const showWatermarkPanel = watermarkEnabled;
+    watermarkPanel.hidden = !showWatermarkPanel;
+    watermarkPanel.style.display = showWatermarkPanel ? "grid" : "none";
   }
   if (scenePanel) {
     const showScenePanel = exportType === "scene";
     scenePanel.hidden = !showScenePanel;
     scenePanel.style.display = showScenePanel ? "grid" : "none";
   }
+  if (locationPanel) {
+    const showLocationPanel = exportType === "location";
+    locationPanel.hidden = !showLocationPanel;
+    locationPanel.style.display = showLocationPanel ? "grid" : "none";
+  }
+  if (revisionPanel) {
+    const showRevisionPanel = exportType === "revision";
+    revisionPanel.hidden = !showRevisionPanel;
+    revisionPanel.style.display = showRevisionPanel ? "grid" : "none";
+  }
+  if (productionPanel) {
+    const showProductionPanel = exportType === "production";
+    productionPanel.hidden = !showProductionPanel;
+    productionPanel.style.display = showProductionPanel ? "grid" : "none";
+  }
   if (exportTypeDescription) exportTypeDescription.textContent = EXPORT_TYPE_DETAILS[exportType] || EXPORT_TYPE_DETAILS.full;
   if (exportFormatDescription) exportFormatDescription.textContent = EXPORT_FORMAT_DETAILS[format] || EXPORT_FORMAT_DETAILS.pdf;
 
   const selectedCharacters = document.querySelectorAll("input[name='exportCharacterName']:checked").length;
   const selectedScenes = document.querySelectorAll("input[name='exportSceneId']:checked").length;
+  const selectedProductionCharacters = [...document.querySelectorAll("input[name='exportProductionCharacterName']:checked")].map((input) => input.value);
   const includeMetadata = document.getElementById("exportIncludeMetadata")?.checked;
+  const location = document.getElementById("exportLocationSelect")?.value || "";
   const rangeStart = Number(document.getElementById("exportSceneRangeStart")?.value || 0);
   const rangeEnd = Number(document.getElementById("exportSceneRangeEnd")?.value || 0);
   const maxSceneCount = Number(document.getElementById("exportSceneRangeEnd")?.max || document.getElementById("exportSceneRangeStart")?.max || 0);
   const hasSceneRange = rangeStart > 0 && rangeEnd > 0;
+  const productionLocation = document.getElementById("exportProductionLocationSelect")?.value || "";
+  const productionTime = document.getElementById("exportProductionTimeSelect")?.value || "";
+  const productionRangeStart = Number(document.getElementById("exportProductionRangeStart")?.value || 0);
+  const productionRangeEnd = Number(document.getElementById("exportProductionRangeEnd")?.value || 0);
+  const productionMaxSceneCount = Number(document.getElementById("exportProductionRangeEnd")?.max || document.getElementById("exportProductionRangeStart")?.max || 0);
+  const productionRange = parseOptionalRange(productionRangeStart, productionRangeEnd);
+  const hasPartialProductionRange = (productionRangeStart > 0 && productionRangeEnd === 0) || (productionRangeStart === 0 && productionRangeEnd > 0);
+  const matchedProductionScenes = exportDialogContext.scenes.filter((scene) => sceneMatchesProductionFilters(scene, {
+    location: productionLocation,
+    timeOfDay: productionTime,
+    characters: selectedProductionCharacters,
+    sceneRange: productionRange
+  }));
+  const matchedLocationScenes = exportDialogContext.scenes.filter((scene) => normalizeExportFilterToken(scene.location) === normalizeExportFilterToken(location));
+  const revisionVersionAId = document.getElementById("exportRevisionVersionA")?.value || "";
+  const revisionVersionBId = document.getElementById("exportRevisionVersionB")?.value || "";
+  const revisionVersionA = exportDialogContext.revisions.find((entry) => entry.id === revisionVersionAId) || null;
+  const revisionVersionB = exportDialogContext.revisions.find((entry) => entry.id === revisionVersionBId) || null;
   let validationMessage = "";
 
-  if (exportType === "character" && selectedCharacters === 0) {
-    validationMessage = "Select at least one character before generating a character export.";
+  if ((exportType === "character" || exportType === "character-packet") && selectedCharacters === 0) {
+    validationMessage = exportType === "character-packet"
+      ? "Select at least one character before generating a character packet."
+      : "Select at least one character before generating a character export.";
   }
   if (exportType === "scene" && selectedScenes === 0 && !hasSceneRange) {
     validationMessage = "Select scenes or enter a scene range before generating a scene export.";
@@ -5544,14 +6264,43 @@ function updateExportDialogState() {
   if (exportType === "scene" && hasSceneRange && maxSceneCount && (rangeStart > maxSceneCount || rangeEnd > maxSceneCount)) {
     validationMessage = `Scene range must stay within 1 and ${maxSceneCount}.`;
   }
+  if (exportType === "location" && !location) {
+    validationMessage = "Choose a location before generating a location export.";
+  }
+  if (exportType === "location" && location && matchedLocationScenes.length === 0) {
+    validationMessage = "No scenes match the selected location.";
+  }
+  if (exportType === "revision" && (!revisionVersionA || !revisionVersionB)) {
+    validationMessage = "Choose two versions before generating a revision export.";
+  }
+  if (exportType === "revision" && revisionVersionA && revisionVersionB && revisionVersionA.id === revisionVersionB.id) {
+    validationMessage = "Choose two different versions before generating a revision export.";
+  }
+  if (exportType === "production" && hasPartialProductionRange) {
+    validationMessage = "Enter both production range values if you want to filter a scene range.";
+  }
+  if (exportType === "production" && productionRange && productionMaxSceneCount && (productionRange.start > productionMaxSceneCount || productionRange.end > productionMaxSceneCount)) {
+    validationMessage = `Production range must stay within 1 and ${productionMaxSceneCount}.`;
+  }
+  if (exportType === "production" && !hasPartialProductionRange && matchedProductionScenes.length === 0) {
+    validationMessage = "No scenes match the current production filters.";
+  }
 
   const typeLabel = exportType === "character"
     ? `${selectedCharacters || 0} character${selectedCharacters === 1 ? "" : "s"}`
+    : exportType === "character-packet"
+      ? `${selectedCharacters || 0} packet character${selectedCharacters === 1 ? "" : "s"}`
     : exportType === "scene"
-      ? selectedScenes
-        ? `${selectedScenes} selected scene${selectedScenes === 1 ? "" : "s"}`
-      : (hasSceneRange ? `scene range ${Math.min(rangeStart, rangeEnd)}-${Math.max(rangeStart, rangeEnd)}` : "selected scenes")
-      : "full screenplay";
+      ? (selectedScenes ? `${selectedScenes} selected scene${selectedScenes === 1 ? "" : "s"}` : (hasSceneRange ? `scene range ${Math.min(rangeStart, rangeEnd)}-${Math.max(rangeStart, rangeEnd)}` : "selected scenes"))
+      : exportType === "location"
+        ? `${matchedLocationScenes.length} location scene${matchedLocationScenes.length === 1 ? "" : "s"}`
+      : exportType === "revision"
+        ? "revision report"
+      : exportType === "production"
+        ? `${matchedProductionScenes.length} production scene${matchedProductionScenes.length === 1 ? "" : "s"}`
+      : exportType === "shooting"
+        ? "shooting script package"
+        : "full screenplay";
   const formatLabel = format.toUpperCase();
   const metadataLabel = includeMetadata ? "with metadata" : "without metadata";
 
@@ -5559,6 +6308,10 @@ function updateExportDialogState() {
   const summaryTitle = document.getElementById("exportSummaryTitle");
   const summaryChips = document.getElementById("exportSummaryChips");
   const summaryHint = document.getElementById("exportSummaryHint");
+  const previewScenes = document.getElementById("exportPreviewScenes");
+  const previewCharacters = document.getElementById("exportPreviewCharacters");
+  const previewPages = document.getElementById("exportPreviewPages");
+  const previewSize = document.getElementById("exportPreviewSize");
   if (summaryText) {
     summaryText.textContent = `Export ${typeLabel} as ${formatLabel}, ${metadataLabel}.`;
   }
@@ -5567,35 +6320,137 @@ function updateExportDialogState() {
       ? "Ready to export the whole screenplay:"
       : exportType === "character"
         ? "Ready to export character pages:"
-        : "Ready to export selected scenes:";
+      : exportType === "character-packet"
+        ? "Ready to export the character packet:"
+        : exportType === "scene"
+          ? "Ready to export selected scenes:"
+          : exportType === "location"
+            ? "Ready to export the location packet:"
+          : exportType === "revision"
+            ? "Ready to export the revision report:"
+          : exportType === "production"
+            ? "Ready to export the production packet:"
+            : "Ready to export the shooting script:";
   }
   if (summaryChips) {
     const chips = [
-      exportType === "full" ? "Full Script" : exportType === "character" ? "Character Export" : "Scene Export",
+      exportType === "full" ? "Full Script" : exportType === "character" ? "Character Export" : exportType === "character-packet" ? "Character Packet" : exportType === "scene" ? "Scene Export" : exportType === "location" ? "Location Export" : exportType === "revision" ? "Revision Export" : exportType === "production" ? "Production Export" : "Shooting Script",
       format.toUpperCase(),
       includeMetadata ? "Metadata on" : "Metadata off"
     ];
-    if (exportType === "character") {
+    if (exportType === "character" || exportType === "character-packet") {
       chips.push(`${selectedCharacters || 0} selected`);
+    }
+    if (exportType === "character-packet" && document.getElementById("exportIncludeSceneDescriptions")?.checked) {
+      chips.push("Scene descriptions");
     }
     if (exportType === "scene") {
       chips.push(selectedScenes ? `${selectedScenes} selected` : hasSceneRange ? `Range ${Math.min(rangeStart, rangeEnd)}-${Math.max(rangeStart, rangeEnd)}` : "Selection needed");
+    }
+    if (exportType === "location") {
+      chips.push(location || "Choose location");
+      if (location) chips.push(`${matchedLocationScenes.length} scenes`);
+    }
+    if (exportType === "revision") {
+      chips.push(revisionVersionA?.label || "Choose version A");
+      chips.push(revisionVersionB?.label || "Choose version B");
+    }
+    if (exportType === "production") {
+      chips.push(`${matchedProductionScenes.length} scenes`);
+      if (productionLocation) chips.push(productionLocation);
+      if (productionTime) chips.push(productionTime);
+      if (productionRange) chips.push(`Range ${productionRange.start}-${productionRange.end}`);
+      if (selectedProductionCharacters.length) chips.push(`${selectedProductionCharacters.length} character${selectedProductionCharacters.length === 1 ? "" : "s"}`);
+    }
+    if (exportType === "shooting") {
+      chips.push("Locked scene numbers");
+      if (document.getElementById("exportIncludeRevisions")?.checked) chips.push("Revisions on");
+      if (document.getElementById("exportIncludePageNumbers")?.checked) chips.push("Page numbers on");
+    }
+    if (document.getElementById("exportEnableWatermarkSettings")?.checked) {
+      const watermarkPreset = document.getElementById("exportWatermarkPreset")?.value || "";
+      const watermarkText = document.getElementById("exportWatermarkText")?.value || "";
+      const watermarkPosition = document.getElementById("exportWatermarkPosition")?.value || "diagonal";
+      const watermarkOpacity = document.getElementById("exportWatermarkOpacity")?.value || "0.12";
+      chips.push(watermarkText || watermarkPreset || "CONFIDENTIAL");
+      chips.push(watermarkPosition);
+      chips.push(`${Math.round(Number(watermarkOpacity) * 100)}% opacity`);
     }
     summaryChips.innerHTML = chips.map((chip) => `<span class="export-summary-chip">${escapeHtml(chip)}</span>`).join("");
   }
   if (summaryHint) {
     summaryHint.textContent = exportType === "character"
       ? "Character exports keep scene-heading context from the structured screenplay."
+      : exportType === "character-packet"
+        ? "Character packets add scene counts, line counts, and first/last appearance stats for each selected character."
       : exportType === "scene"
         ? "Scene exports can be built from checked scenes or a scene-number range."
-        : "Full script exports include the whole screenplay package in the chosen format.";
+        : exportType === "location"
+          ? "Location exports collect every scene, character, and time-of-day detail for the selected location."
+        : exportType === "revision"
+          ? "Revision exports compare two saved versions and report added scenes, removed scenes, and changed screenplay text."
+        : exportType === "production"
+          ? "Production exports collect filtered scenes with descriptions, dialogue, and characters present."
+        : exportType === "shooting"
+          ? "Shooting scripts keep scene numbers locked and carry revision-aware page formatting for production use."
+          : document.getElementById("exportEnableWatermarkSettings")?.checked
+            ? "This export will include a configurable watermark on the generated pages."
+            : "Full script exports include the whole screenplay package in the chosen format.";
   }
+
+  let previewSceneCount = exportDialogContext.scenes.length;
+  let previewCharacterCount = exportDialogContext.characters.length;
+  let previewLineCount = exportDialogContext.scenes.reduce((total, scene) => total + 1 + (scene.characters?.length || 0), 0);
+
+  if (exportType === "character" || exportType === "character-packet") {
+    previewSceneCount = exportDialogContext.scenes.filter((scene) => scene.characters?.some((character) => [...document.querySelectorAll("input[name='exportCharacterName']:checked")].map((input) => normalizeExportFilterToken(input.value)).includes(normalizeExportFilterToken(character)))).length;
+    previewCharacterCount = selectedCharacters;
+    previewLineCount = Math.max(previewSceneCount * 6, selectedCharacters * 5);
+  } else if (exportType === "scene") {
+    previewSceneCount = selectedScenes || (hasSceneRange ? (Math.max(rangeStart, rangeEnd) - Math.min(rangeStart, rangeEnd) + 1) : 0);
+    previewCharacterCount = Math.max(1, Math.min(exportDialogContext.characters.length, previewSceneCount * 2));
+    previewLineCount = Math.max(previewSceneCount * 8, previewCharacterCount * 3);
+  } else if (exportType === "location") {
+    previewSceneCount = matchedLocationScenes.length;
+    previewCharacterCount = new Set(matchedLocationScenes.flatMap((scene) => scene.characters || []).map((character) => normalizeExportFilterToken(character))).size;
+    previewLineCount = Math.max(previewSceneCount * 8, previewCharacterCount * 3);
+  } else if (exportType === "revision") {
+    previewSceneCount = revisionVersionA && revisionVersionB ? 2 : 0;
+    previewCharacterCount = 0;
+    previewLineCount = revisionVersionA && revisionVersionB ? 18 : 0;
+  } else if (exportType === "production") {
+    previewSceneCount = matchedProductionScenes.length;
+    previewCharacterCount = new Set(matchedProductionScenes.flatMap((scene) => scene.characters || []).map((character) => normalizeExportFilterToken(character))).size;
+    previewLineCount = Math.max(previewSceneCount * 8, previewCharacterCount * 3);
+  } else if (exportType === "shooting") {
+    previewSceneCount = exportDialogContext.scenes.length;
+    previewCharacterCount = exportDialogContext.characters.length;
+    previewLineCount = Math.max(exportDialogContext.scenes.length * 8, exportDialogContext.characters.length * 3);
+  }
+
+  if (previewScenes) previewScenes.textContent = String(previewSceneCount);
+  if (previewCharacters) previewCharacters.textContent = String(previewCharacterCount);
+  if (previewPages) previewPages.textContent = String(estimateExportPages(previewLineCount));
+  if (previewSize) previewSize.textContent = estimateExportFileSize(previewLineCount, format, previewSceneCount, previewCharacterCount);
+
   if (generateBtn) {
-    generateBtn.textContent = format === "pdf"
-      ? "Open PDF Export"
-      : format === "docx"
-        ? "Download DOCX"
-        : "Download Fountain";
+    generateBtn.textContent = exportType === "production"
+      ? (format === "pdf" ? "Open Production PDF" : "Download Production DOCX")
+      : exportType === "location"
+        ? (format === "pdf" ? "Open Location PDF" : "Download Location DOCX")
+      : exportType === "revision"
+        ? (format === "pdf" ? "Open Revision PDF" : "Download Revision DOCX")
+      : exportType === "character-packet"
+        ? (format === "pdf" ? "Open Character Packet PDF" : "Download Character Packet DOCX")
+      : exportType === "shooting"
+        ? (format === "pdf" ? "Open Shooting Script PDF" : "Download Shooting Script DOCX")
+      : format === "pdf"
+        ? "Open PDF Export"
+        : format === "docx"
+          ? "Download DOCX"
+          : format === "fdx"
+            ? "Download FDX"
+            : "Download Fountain";
     generateBtn.disabled = Boolean(validationMessage);
   }
   if (validationNote) {
@@ -5616,61 +6471,14 @@ async function generateExportFromDialog() {
   const project = syncProjectFromInputs() || getCurrentProject();
   if (!project) return;
 
-  const exportType = document.getElementById("exportTypeSelect")?.value || "full";
-  const format = document.getElementById("exportFormatSelect")?.value || "pdf";
   const generateBtn = document.getElementById("exportDialogGenerateBtn");
-  const options = {
-    includeNotes: Boolean(document.getElementById("exportIncludeNotes")?.checked),
-    includeComments: Boolean(document.getElementById("exportIncludeComments")?.checked),
-    includeSceneNumbers: state.autoNumberScenes,
-    includeMetadata: Boolean(document.getElementById("exportIncludeMetadata")?.checked),
-    includeTitlePage: true,
-    includePageNumbers: state.viewOptions.pageNumbers
-  };
-
-  const exportToast = showToast("Preparing screenplay export...", "loading", { duration: 0 });
+  const request = buildExportRequestFromDialog(project);
   try {
     if (generateBtn) generateBtn.disabled = true;
-    let result;
-    let action = "export.pdf";
-    let message = "Opened the screenplay export.";
-
-    if (exportType === "character") {
-      const characters = [...document.querySelectorAll("input[name='exportCharacterName']:checked")].map((input) => input.value);
-      if (!characters.length) {
-        updateToast(exportToast, "Choose at least one character.", "error", { duration: 3600 });
-        await customAlert("Select one or more characters before generating a character export.", "Character Export");
-        return;
-      }
-      result = await ExportService.exportCharacter(project, { format, characters, options });
-      action = `export.character.${format}`;
-      message = `Exported character pages as ${format.toUpperCase()}.`;
-    } else if (exportType === "scene") {
-      const sceneIds = [...document.querySelectorAll("input[name='exportSceneId']:checked")].map((input) => input.value);
-      const rangeStart = Number(document.getElementById("exportSceneRangeStart")?.value || 0);
-      const rangeEnd = Number(document.getElementById("exportSceneRangeEnd")?.value || 0);
-      const sceneRange = rangeStart && rangeEnd ? { start: Math.min(rangeStart, rangeEnd), end: Math.max(rangeStart, rangeEnd) } : null;
-      if (!sceneIds.length && !sceneRange) {
-        updateToast(exportToast, "Choose scenes or a scene range.", "error", { duration: 3600 });
-        await customAlert("Select at least one scene or enter a valid scene range before generating a scene export.", "Scene Export");
-        return;
-      }
-      result = await ExportService.exportScenes(project, { format, sceneIds, sceneRange, options });
-      action = `export.scene.${format}`;
-      message = `Exported selected scenes as ${format.toUpperCase()}.`;
-    } else {
-      result = await ExportService.exportFullScript(project, { format, options });
-      action = `export.full.${format}`;
-      message = `Exported the full screenplay as ${format.toUpperCase()}.`;
-    }
-
-    await runExportResult(result, project, message);
-    logActivity(project.id, message, { action, workspaceId: project.workspace?.id || project.id }).catch(() => {});
-    updateToast(exportToast, format === "pdf" ? "Print dialog opened." : "Export complete.", "success");
+    enqueueExportJob(project, request);
     closeExportDialog();
   } catch (error) {
     console.error("Screenplay export failed", error);
-    updateToast(exportToast, "Screenplay export failed.", "error", { duration: 4200 });
     await customAlert("The screenplay export could not be generated. Please try again after the export engine finishes loading.", "Screenplay Export");
   } finally {
     updateExportDialogState();
