@@ -97,7 +97,9 @@ const exportReportLayoutState = {
   breakdownBuilderParent: null,
   breakdownBuilderNext: null,
   breakdownPromptParent: null,
-  breakdownPromptNext: null
+  breakdownPromptNext: null,
+  reportGenerateRowParent: null,
+  reportGenerateRowNext: null
 };
 
 const EXPORT_TYPE_DETAILS = {
@@ -6454,10 +6456,12 @@ function openExportDialog(prefill = {}) {
   const titlePageToggle = document.getElementById("exportIncludeTitlePageToggle");
   const breakdownBuilder = document.getElementById("exportBreakdownBuilder");
   const breakdownPromptField = document.getElementById("exportBreakdownPromptField");
+  const reportGenerateRow = document.getElementById("exportReportGenerateRow");
 
   rememberReportLayoutNode("titleToggle", titlePageToggle);
   rememberReportLayoutNode("breakdownBuilder", breakdownBuilder);
   rememberReportLayoutNode("breakdownPrompt", breakdownPromptField);
+  rememberReportLayoutNode("reportGenerateRow", reportGenerateRow);
   if (projectMeta) {
     const sceneCount = (project.lines || []).filter((line) => line.type === "scene" && String(line.text || "").trim()).length;
     projectMeta.textContent = exportDialogMode === "report"
@@ -6524,10 +6528,12 @@ function openExportDialog(prefill = {}) {
     moveNodeToMount(breakdownBuilder, reportStep1Mount);
     moveNodeToMount(titlePageToggle, reportStep2Mount);
     moveNodeToMount(breakdownPromptField, reportStep3Mount);
+    moveNodeToMount(reportGenerateRow, reportStep3Mount);
   } else {
     restoreNodeFromMount("titleToggle", titlePageToggle);
     restoreNodeFromMount("breakdownBuilder", breakdownBuilder);
     restoreNodeFromMount("breakdownPrompt", breakdownPromptField);
+    restoreNodeFromMount("reportGenerateRow", reportGenerateRow);
   }
 
   const defaults = getDefaultExportOptions();
@@ -7185,16 +7191,19 @@ function updateExportDialogState() {
     inlineGenerateBtn.disabled = Boolean(validationMessage);
   }
   if (exportBtn) {
-    exportBtn.hidden = exportDialogMode !== "report";
+    exportBtn.hidden = false;
+    exportBtn.style.display = exportDialogMode === "report" ? "" : "none";
     exportBtn.disabled = !reportDraftRequest?.generatedSections?.length;
     exportBtn.textContent = format === "docx" ? "Build Report DOCX" : "Build Report PDF";
   }
   if (editBtn) {
-    editBtn.hidden = exportDialogMode !== "report";
+    editBtn.hidden = false;
+    editBtn.style.display = exportDialogMode === "report" ? "" : "none";
     editBtn.disabled = !reportDraftRequest?.generatedSections?.length;
   }
   if (saveBtn) {
-    saveBtn.hidden = exportDialogMode !== "report";
+    saveBtn.hidden = false;
+    saveBtn.style.display = exportDialogMode === "report" ? "" : "none";
     saveBtn.disabled = !reportDraftRequest?.generatedSections?.length;
   }
   if (validationNote) {
