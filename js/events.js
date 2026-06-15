@@ -91,6 +91,7 @@ let exportDialogPrefill = { format: "pdf", exportType: "full" };
 let exportDialogContext = { scenes: [], characters: [], revisions: [] };
 let exportDialogMode = "export";
 let reportDraftRequest = null;
+let reportGenerationController = null;
 const exportReportLayoutState = {
   titleToggleParent: null,
   titleToggleNext: null,
@@ -357,6 +358,8 @@ async function generateBreakdownSections(project, request) {
   if (!selections.length) {
     throw new Error("Select at least one AI report section before generating the report.");
   }
+  reportGenerationController?.abort();
+  reportGenerationController = new AbortController();
   if (card) card.hidden = false;
   if (title) title.textContent = exportDialogMode === "report" ? "Result" : "AI Breakdown Build";
   if (meta) meta.textContent = "Reading the screenplay...";
@@ -382,7 +385,10 @@ async function generateBreakdownSections(project, request) {
     sectionEl.innerHTML = `<strong>${escapeHtml(selection.label)}</strong><p contenteditable="true" spellcheck="true" data-role="report-body"></p>`;
     output?.appendChild(sectionEl);
     const bodyEl = sectionEl.querySelector("p");
-    const text = await AI.generateText(buildBreakdownPrompt(project, selection, customPrompt));
+    const text = await AI.generateText({
+      ...buildBreakdownPrompt(project, selection, customPrompt),
+      signal: reportGenerationController.signal
+    });
     await typeBreakdownText(bodyEl, text);
     generatedSections.push({
       key: selection.key,
@@ -402,6 +408,7 @@ async function generateBreakdownSections(project, request) {
   request.includeLocations = generatedSections.some((item) => item.key === "locations");
   request.includeScenes = generatedSections.some((item) => item.key === "scenes");
   request.customPrompt = customPrompt;
+  reportGenerationController = null;
   return request;
 }
 
@@ -4195,6 +4202,10 @@ export function bindEvents() {
   document.getElementById("exportDialogGenerateInlineBtn")?.addEventListener("click", () => {
     void generateExportFromDialog();
   });
+  document.getElementById("exportReportStopBtn")?.addEventListener("click", () => {
+    stopReportGeneration();
+    updateExportDialogState();
+  });
   document.getElementById("exportDialogExportBtn")?.addEventListener("click", () => {
     void exportReportFromDialog();
   });
@@ -6809,6 +6820,18 @@ function saveReportDraftFromLiveOutput() {
   reportDraftRequest.generatedSections = readReportSectionsFromLiveOutput();
 }
 
+function stopReportGeneration() {
+  if (!reportGenerationController) return;
+  reportGenerationController.abort();
+  reportGenerationController = null;
+  const progressLabel = document.getElementById("exportProgressLabel");
+  const progressDetail = document.getElementById("exportProgressDetail");
+  const liveMeta = document.getElementById("exportBreakdownLiveMeta");
+  if (progressLabel) progressLabel.textContent = "Generation stopped.";
+  if (progressDetail) progressDetail.textContent = "You can edit what was generated so far or run Generate again.";
+  if (liveMeta) liveMeta.textContent = "Generation stopped by user.";
+}
+
 function updateExportDialogState() {
   const exportTypeSelect = document.getElementById("exportTypeSelect");
   const exportFormatSelect = document.getElementById("exportFormatSelect");
@@ -6829,6 +6852,7 @@ function updateExportDialogState() {
   const generateBtn = document.getElementById("exportDialogGenerateBtn");
   const exportBtn = document.getElementById("exportDialogExportBtn");
   const inlineGenerateBtn = document.getElementById("exportDialogGenerateInlineBtn");
+  const stopBtn = document.getElementById("exportReportStopBtn");
   const editBtn = document.getElementById("exportReportEditBtn");
   const saveBtn = document.getElementById("exportReportSaveBtn");
   const validationNote = document.getElementById("exportValidationNote");
@@ -6977,10 +7001,7 @@ function updateExportDialogState() {
   if (exportType === "production" && !hasPartialProductionRange && matchedProductionScenes.length === 0) {
     validationMessage = "No scenes match the current production filters.";
   }
-  if (exportType === "breakdown"
-    && !document.getElementById("exportBreakdownCharacters")?.checked
-    && !document.getElementById("exportBreakdownLocations")?.checked
-    && !document.getElementById("exportBreakdownScenes")?.checked) {
+  if (exportType === "breakdown" && getBreakdownSelections().length === 0) {
     validationMessage = "Select at least one AI report section before generating the report.";
   }
 
@@ -7076,9 +7097,7 @@ function updateExportDialogState() {
       if (document.getElementById("exportIncludePageNumbers")?.checked) chips.push("Page numbers on");
     }
     if (exportType === "breakdown") {
-      if (document.getElementById("exportBreakdownCharacters")?.checked) chips.push("Characters");
-      if (document.getElementById("exportBreakdownLocations")?.checked) chips.push("Locations");
-      if (document.getElementById("exportBreakdownScenes")?.checked) chips.push("Scenes");
+      chips.push(`${getBreakdownSelections().length} selected`);
     }
     if (document.getElementById("exportEnableWatermarkSettings")?.checked) {
       const watermarkPreset = document.getElementById("exportWatermarkPreset")?.value || "";
@@ -7188,7 +7207,12 @@ function updateExportDialogState() {
   }
   if (inlineGenerateBtn) {
     inlineGenerateBtn.hidden = exportDialogMode !== "report";
-    inlineGenerateBtn.disabled = Boolean(validationMessage);
+    inlineGenerateBtn.disabled = Boolean(validationMessage) || Boolean(reportGenerationController);
+  }
+  if (stopBtn) {
+    stopBtn.hidden = false;
+    stopBtn.style.display = exportDialogMode === "report" ? "" : "none";
+    stopBtn.disabled = !reportGenerationController;
   }
   if (exportBtn) {
     exportBtn.hidden = false;
@@ -7245,6 +7269,9 @@ async function generateExportFromDialog() {
       closeExportDialog();
     }
   } catch (error) {
+    if (error?.name === "AbortError") {
+      return;
+    }
     console.error("Screenplay export failed", error);
     await customAlert(
       error instanceof Error ? error.message : "The report could not be generated. Please try again after the export engine finishes loading.",

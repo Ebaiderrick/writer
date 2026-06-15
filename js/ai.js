@@ -579,6 +579,7 @@ export const AI = (() => {
   async function requestAiText(request) {
     const response = await fetch(getAiEndpoint(), {
       method: "POST",
+      signal: request?.signal,
       headers: {
         "Content-Type": "application/json"
       },
@@ -1541,7 +1542,8 @@ export const AI = (() => {
       action: request.action || "Improve",
       current,
       context: String(request.context || request.input || "").trim(),
-      instruction: String(request.instruction || "").trim()
+      instruction: String(request.instruction || "").trim(),
+      signal: request.signal
     });
   }
 
