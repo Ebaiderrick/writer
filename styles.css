@@ -5543,6 +5543,53 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   gap: 0.65rem;
 }
 
+.export-presets-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(220px, 0.9fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.62rem 0.9rem;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--line) 86%, var(--accent) 14%);
+  background: var(--surface-strong);
+}
+
+.export-presets-copy {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.export-presets-copy strong {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.export-presets-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.export-preset-select-field {
+  min-width: 0;
+}
+
+.export-preset-select-field .comment-filter-select {
+  font-size: 12px;
+}
+
+.export-presets-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 .export-panel,
 .export-summary-card,
 .export-detail-panel {
@@ -5691,6 +5738,23 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   min-height: 35px;
   height: 35px;
   font-size: 12px;
+}
+
+.export-cover-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.export-cover-grid .modal-input {
+  min-height: 35px;
+  height: 35px;
+  font-size: 12px;
+}
+
+.export-cover-span-2 {
+  grid-column: 1 / -1;
 }
 
 .export-watermark-text-field {
@@ -5993,14 +6057,31 @@ html[data-theme="navy"] .section-scenes .list-item-title {
     grid-template-columns: 1fr;
   }
 
+  .export-cover-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .export-cover-span-2 {
+    grid-column: auto;
+  }
+
   .export-head,
   .export-panel-head,
-  .export-detail-head {
+  .export-detail-head,
+  .export-presets-bar {
     flex-direction: column;
     align-items: stretch;
   }
 
   .export-head-actions {
+    justify-content: flex-start;
+  }
+
+  .export-presets-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .export-presets-actions {
     justify-content: flex-start;
   }
 

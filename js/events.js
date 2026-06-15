@@ -99,6 +99,7 @@ const EXPORT_TYPE_DETAILS = {
   revision: "Revision reports compare two available versions and track added scenes, removed scenes, and changed text.",
   production: "Production-ready packets filtered by location, time of day, scene range, and character presence.",
   shooting: "Locked-scene screenplay pages with revision labeling, page numbers, and production-ready shooting script layout.",
+  breakdown: "Structured screenplay intelligence for characters, locations, and scene-level production insight.",
   watermarked: "Protected screenplay pages with configurable watermark text, placement, and opacity for controlled sharing."
 };
 
@@ -183,11 +184,43 @@ function getExportTypeLabel(exportType) {
     : exportType === "revision" ? "Revision Export"
     : exportType === "production" ? "Production Export"
     : exportType === "shooting" ? "Shooting Script"
+    : exportType === "breakdown" ? "AI Breakdown"
     : "Export";
 }
 
 function getExportActorName() {
   return auth.currentUser?.displayName || auth.currentUser?.email || "Current user";
+}
+
+function sanitizeExportPresetEntry(entry) {
+  return {
+    id: entry.id || uid("exportPreset"),
+    name: String(entry.name || "Untitled Preset").trim() || "Untitled Preset",
+    createdAt: entry.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    exportType: entry.exportType || "full",
+    format: entry.format || "pdf",
+    request: entry.request ? JSON.parse(JSON.stringify(entry.request)) : {}
+  };
+}
+
+function getStoredExportPresets(project) {
+  return Array.isArray(project?.exportPresets) ? project.exportPresets : [];
+}
+
+function renderExportPresetOptions(project = getCurrentProject()) {
+  const select = document.getElementById("exportPresetSelect");
+  const applyBtn = document.getElementById("exportPresetApplyBtn");
+  const deleteBtn = document.getElementById("exportPresetDeleteBtn");
+  if (!select) return;
+  const presets = getStoredExportPresets(project);
+  const currentValue = select.value;
+  select.innerHTML = ['<option value="">Choose preset</option>', ...presets.map((preset) => `<option value="${escapeHtml(preset.id)}">${escapeHtml(preset.name)}</option>`)].join("");
+  if (presets.some((preset) => preset.id === currentValue)) {
+    select.value = currentValue;
+  }
+  if (applyBtn) applyBtn.disabled = !select.value;
+  if (deleteBtn) deleteBtn.disabled = !select.value;
 }
 
 function buildExportHistorySummary(request) {
@@ -211,6 +244,13 @@ function buildExportHistorySummary(request) {
     if (request.sceneRange) bits.push(`Range ${request.sceneRange.start}-${request.sceneRange.end}`);
     if (request.characters?.length) bits.push(`${request.characters.length} character${request.characters.length === 1 ? "" : "s"}`);
     return bits.join(" · ") || "Filtered production packet";
+  }
+  if (request.exportType === "breakdown") {
+    const bits = [];
+    if (request.includeCharacters) bits.push("Characters");
+    if (request.includeLocations) bits.push("Locations");
+    if (request.includeScenes) bits.push("Scenes");
+    return bits.join(" | ") || "Breakdown report";
   }
   return "Whole screenplay";
 }
@@ -313,6 +353,134 @@ function recordExportHistory(project, request) {
 function getStoredExportHistoryEntry(project, entryId) {
   if (!project || !entryId) return null;
   return (project.exportHistory || []).find((entry) => entry.id === entryId) || null;
+}
+
+function getStoredExportPreset(project, presetId) {
+  if (!project || !presetId) return null;
+  return getStoredExportPresets(project).find((entry) => entry.id === presetId) || null;
+}
+
+function setCheckedExportValues(selector, values = []) {
+  const normalizedValues = new Set((Array.isArray(values) ? values : []).map((value) => String(value)));
+  document.querySelectorAll(selector).forEach((input) => {
+    input.checked = normalizedValues.has(String(input.value));
+  });
+}
+
+function applyExportRequestToDialog(request = {}) {
+  const exportType = String(request.exportType || "full");
+  const format = String(request.format || "pdf");
+  const options = request.options || {};
+
+  const exportTypeSelect = document.getElementById("exportTypeSelect");
+  const exportFormatSelect = document.getElementById("exportFormatSelect");
+  if (exportTypeSelect) exportTypeSelect.value = exportType;
+  if (exportFormatSelect) exportFormatSelect.value = format;
+
+  const setChecked = (id, value) => {
+    const element = document.getElementById(id);
+    if (element) element.checked = Boolean(value);
+  };
+  const setValue = (id, value, fallback = "") => {
+    const element = document.getElementById(id);
+    if (element) element.value = value ?? fallback;
+  };
+
+  setChecked("exportIncludeNotes", options.includeNotes);
+  setChecked("exportIncludeComments", options.includeComments);
+  setChecked("exportIncludeMetadata", options.includeMetadata !== false);
+  setChecked("exportIncludeTitlePage", options.includeTitlePage !== false);
+  setChecked("exportIncludePageNumbers", options.includePageNumbers);
+  setChecked("exportEnableWatermarkSettings", options.enableWatermarkSettings);
+  setChecked("exportIncludeRevisions", options.includeRevisions);
+  setChecked("exportIncludeSceneDescriptions", options.includeSceneDescriptions);
+  setChecked("exportBreakdownCharacters", request.includeCharacters !== false);
+  setChecked("exportBreakdownLocations", request.includeLocations !== false);
+  setChecked("exportBreakdownScenes", request.includeScenes !== false);
+
+  setValue("exportWatermarkPreset", options.watermarkPreset || "", "");
+  setValue("exportWatermarkPosition", options.watermarkPosition || "diagonal", "diagonal");
+  setValue("exportWatermarkOpacity", String(options.watermarkOpacity ?? 0.12), "0.12");
+  setValue("exportWatermarkText", options.watermarkText || "", "");
+  setValue("exportCoverTitle", options.coverPage?.title || "", "");
+  setValue("exportCoverSubtitle", options.coverPage?.subtitle || "", "");
+  setValue("exportCoverAuthor", options.coverPage?.author || "", "");
+  setValue("exportCoverCoWriters", options.coverPage?.coWriters || "", "");
+  setValue("exportCoverContact", options.coverPage?.contact || "", "");
+  setValue("exportCoverCompany", options.coverPage?.company || "", "");
+  setValue("exportCoverVersion", options.coverPage?.version || "", "");
+  setValue("exportCoverDraftDate", options.coverPage?.draftDate || "", "");
+  setValue("exportCoverDetails", options.coverPage?.details || "", "");
+  setValue("exportCoverCopyright", options.coverPage?.copyrightNotice || "", "");
+
+  setCheckedExportValues("input[name='exportCharacterName']", request.characters || []);
+  setCheckedExportValues("input[name='exportProductionCharacterName']", request.characters || []);
+  setCheckedExportValues("input[name='exportSceneId']", request.sceneIds || []);
+
+  const sceneRange = request.sceneRange || null;
+  setValue("exportSceneRangeStart", sceneRange?.start || "", "");
+  setValue("exportSceneRangeEnd", sceneRange?.end || "", "");
+  setValue("exportProductionRangeStart", sceneRange?.start || "", "");
+  setValue("exportProductionRangeEnd", sceneRange?.end || "", "");
+
+  setValue("exportLocationSelect", request.location || "", "");
+  setValue("exportProductionLocationSelect", request.locations?.[0] || "", "");
+  setValue("exportProductionTimeSelect", request.timeOfDay?.[0] || "", "");
+  setValue("exportRevisionVersionA", request.versionA?.id || "", "");
+  setValue("exportRevisionVersionB", request.versionB?.id || "", "");
+
+  updateExportDialogState();
+}
+
+async function saveCurrentExportPreset() {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project) return;
+  const name = await customPrompt("Name this preset so you can reuse the same export setup later.", "Save Export Preset", "Producer Package");
+  if (name == null) return;
+  const trimmedName = String(name).trim();
+  if (!trimmedName) {
+    await customAlert("Preset name cannot be empty.", "Save Export Preset");
+    return;
+  }
+  const request = buildExportRequestFromDialog(project);
+  const nextPreset = sanitizeExportPresetEntry({
+    name: trimmedName,
+    exportType: request.exportType,
+    format: request.format,
+    request
+  });
+  project.exportPresets = getStoredExportPresets(project).filter((entry) => entry.name.toLowerCase() !== trimmedName.toLowerCase());
+  project.exportPresets.push(nextPreset);
+  project.exportPresets = project.exportPresets.slice(-12);
+  persistProjects(false, { syncInputs: false });
+  renderExportPresetOptions(project);
+  const select = document.getElementById("exportPresetSelect");
+  if (select) select.value = nextPreset.id;
+  showToast(`Saved preset "${trimmedName}".`, "success", { duration: 2200 });
+}
+
+async function applySelectedExportPreset() {
+  const project = getCurrentProject();
+  const presetId = document.getElementById("exportPresetSelect")?.value || "";
+  const preset = getStoredExportPreset(project, presetId);
+  if (!preset) return;
+  applyExportRequestToDialog(preset.request || {});
+  showToast(`Applied preset "${preset.name}".`, "success", { duration: 1800 });
+}
+
+async function deleteSelectedExportPreset() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const select = document.getElementById("exportPresetSelect");
+  const preset = getStoredExportPreset(project, select?.value || "");
+  if (!preset) return;
+  const confirmed = await customConfirm(`Delete the preset "${preset.name}"?`, "Delete Export Preset");
+  if (!confirmed) return;
+  project.exportPresets = getStoredExportPresets(project).filter((entry) => entry.id !== preset.id);
+  persistProjects(false, { syncInputs: false });
+  if (select) select.value = "";
+  renderExportPresetOptions(project);
+  showToast(`Deleted preset "${preset.name}".`, "success", { duration: 1800 });
 }
 
 function updateExportJobRecord(jobId, patch = {}) {
@@ -431,13 +599,26 @@ function enqueueExportJob(project, request) {
 function buildExportRequestFromDialog(project) {
   const exportType = document.getElementById("exportTypeSelect")?.value || "full";
   const format = document.getElementById("exportFormatSelect")?.value || "pdf";
+  const coverVersionRaw = document.getElementById("exportCoverVersion")?.value || "";
   const options = {
     includeNotes: Boolean(document.getElementById("exportIncludeNotes")?.checked),
     includeComments: Boolean(document.getElementById("exportIncludeComments")?.checked),
     includeSceneNumbers: state.autoNumberScenes,
     includeMetadata: Boolean(document.getElementById("exportIncludeMetadata")?.checked),
-    includeTitlePage: true,
-    includePageNumbers: Boolean(document.getElementById("exportIncludePageNumbers")?.checked)
+    includeTitlePage: Boolean(document.getElementById("exportIncludeTitlePage")?.checked),
+    includePageNumbers: Boolean(document.getElementById("exportIncludePageNumbers")?.checked),
+    coverPage: {
+      title: document.getElementById("exportCoverTitle")?.value || "",
+      subtitle: document.getElementById("exportCoverSubtitle")?.value || "",
+      author: document.getElementById("exportCoverAuthor")?.value || "",
+      coWriters: document.getElementById("exportCoverCoWriters")?.value || "",
+      contact: document.getElementById("exportCoverContact")?.value || "",
+      company: document.getElementById("exportCoverCompany")?.value || "",
+      version: coverVersionRaw,
+      draftDate: document.getElementById("exportCoverDraftDate")?.value || "",
+      details: document.getElementById("exportCoverDetails")?.value || "",
+      copyrightNotice: document.getElementById("exportCoverCopyright")?.value || ""
+    }
   };
   if (document.getElementById("exportEnableWatermarkSettings")?.checked) {
     options.enableWatermarkSettings = true;
@@ -479,6 +660,10 @@ function buildExportRequestFromDialog(project) {
   } else if (exportType === "shooting") {
     request.options.includeSceneNumbers = true;
     request.options.includeRevisions = Boolean(document.getElementById("exportIncludeRevisions")?.checked);
+  } else if (exportType === "breakdown") {
+    request.includeCharacters = Boolean(document.getElementById("exportBreakdownCharacters")?.checked);
+    request.includeLocations = Boolean(document.getElementById("exportBreakdownLocations")?.checked);
+    request.includeScenes = Boolean(document.getElementById("exportBreakdownScenes")?.checked);
   }
 
   return request;
@@ -567,6 +752,19 @@ async function executeExportRequest(project, request) {
       }),
       action: `export.shooting.${format}`,
       message: `Exported the shooting script as ${format.toUpperCase()}.`
+    };
+  }
+  if (exportType === "breakdown") {
+    return {
+      result: await ExportService.exportBreakdown(project, {
+        format,
+        includeCharacters: request.includeCharacters,
+        includeLocations: request.includeLocations,
+        includeScenes: request.includeScenes,
+        options: request.options
+      }),
+      action: `export.breakdown.${format}`,
+      message: `Exported the AI breakdown as ${format.toUpperCase()}.`
     };
   }
   return {
@@ -3739,6 +3937,18 @@ export function bindEvents() {
   document.getElementById("exportDialogGenerateBtn")?.addEventListener("click", () => {
     void generateExportFromDialog();
   });
+  document.getElementById("exportPresetSaveBtn")?.addEventListener("click", () => {
+    void saveCurrentExportPreset();
+  });
+  document.getElementById("exportPresetApplyBtn")?.addEventListener("click", () => {
+    void applySelectedExportPreset();
+  });
+  document.getElementById("exportPresetDeleteBtn")?.addEventListener("click", () => {
+    void deleteSelectedExportPreset();
+  });
+  document.getElementById("exportPresetSelect")?.addEventListener("change", () => {
+    renderExportPresetOptions(getCurrentProject());
+  });
   document.getElementById("exportDialog")?.addEventListener("click", (event) => {
     if (event.target?.id === "exportDialog") {
       closeExportDialog();
@@ -3775,14 +3985,14 @@ export function bindEvents() {
   document.getElementById("exportDialog")?.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeSceneDescriptions, #exportIncludePageNumbers, #exportIncludeRevisions")) {
+    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportIncludePageNumbers, #exportIncludeRevisions, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes")) {
       updateExportDialogState();
     }
   });
   document.getElementById("exportDialog")?.addEventListener("input", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportWatermarkText")) {
+    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportWatermarkText, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright")) {
       updateExportDialogState();
     }
   });
@@ -3793,7 +4003,7 @@ export function bindEvents() {
       requestAnimationFrame(() => updateExportDialogState());
     }
   });
-  document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeSceneDescriptions, #exportEnableWatermarkSettings, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity").forEach((element) => {
+  document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportEnableWatermarkSettings, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes").forEach((element) => {
     element.addEventListener("change", updateExportDialogState);
     if (element instanceof HTMLInputElement && element.type === "number") {
       element.addEventListener("input", updateExportDialogState);
@@ -6082,13 +6292,27 @@ function openExportDialog(prefill = {}) {
   const includeNotes = document.getElementById("exportIncludeNotes");
   const includeComments = document.getElementById("exportIncludeComments");
   const includeMetadata = document.getElementById("exportIncludeMetadata");
+  const includeTitlePage = document.getElementById("exportIncludeTitlePage");
   const includePageNumbers = document.getElementById("exportIncludePageNumbers");
   const includeRevisions = document.getElementById("exportIncludeRevisions");
+  const breakdownCharacters = document.getElementById("exportBreakdownCharacters");
+  const breakdownLocations = document.getElementById("exportBreakdownLocations");
+  const breakdownScenes = document.getElementById("exportBreakdownScenes");
   const enableWatermarkSettings = document.getElementById("exportEnableWatermarkSettings");
   const watermarkPreset = document.getElementById("exportWatermarkPreset");
   const watermarkPosition = document.getElementById("exportWatermarkPosition");
   const watermarkOpacity = document.getElementById("exportWatermarkOpacity");
   const watermarkText = document.getElementById("exportWatermarkText");
+  const coverTitle = document.getElementById("exportCoverTitle");
+  const coverSubtitle = document.getElementById("exportCoverSubtitle");
+  const coverAuthor = document.getElementById("exportCoverAuthor");
+  const coverCoWriters = document.getElementById("exportCoverCoWriters");
+  const coverContact = document.getElementById("exportCoverContact");
+  const coverCompany = document.getElementById("exportCoverCompany");
+  const coverVersion = document.getElementById("exportCoverVersion");
+  const coverDraftDate = document.getElementById("exportCoverDraftDate");
+  const coverDetails = document.getElementById("exportCoverDetails");
+  const coverCopyright = document.getElementById("exportCoverCopyright");
   const locationField = document.getElementById("exportLocationSelect");
   const rangeStart = document.getElementById("exportSceneRangeStart");
   const rangeEnd = document.getElementById("exportSceneRangeEnd");
@@ -6098,8 +6322,15 @@ function openExportDialog(prefill = {}) {
   if (includeNotes) includeNotes.checked = defaults.includeNotes;
   if (includeComments) includeComments.checked = defaults.includeComments;
   if (includeMetadata) includeMetadata.checked = defaults.includeMetadata;
+  if (includeTitlePage) includeTitlePage.checked = defaults.includeTitlePage !== false;
   if (includePageNumbers) includePageNumbers.checked = state.viewOptions.pageNumbers;
   if (includeRevisions) includeRevisions.checked = false;
+  if (breakdownCharacters) breakdownCharacters.checked = true;
+  if (breakdownLocations) breakdownLocations.checked = true;
+  if (breakdownScenes) breakdownScenes.checked = true;
+  if (breakdownCharacters) breakdownCharacters.checked = true;
+  if (breakdownLocations) breakdownLocations.checked = true;
+  if (breakdownScenes) breakdownScenes.checked = true;
   if (enableWatermarkSettings) enableWatermarkSettings.checked = false;
   if (enableWatermarkSettings && !enableWatermarkSettings.dataset.exportBound) {
     enableWatermarkSettings.addEventListener("change", () => updateExportDialogState());
@@ -6112,6 +6343,16 @@ function openExportDialog(prefill = {}) {
   if (watermarkPosition) watermarkPosition.value = "diagonal";
   if (watermarkOpacity) watermarkOpacity.value = "0.12";
   if (watermarkText) watermarkText.value = "";
+  if (coverTitle) coverTitle.value = project?.title || "";
+  if (coverSubtitle) coverSubtitle.value = "";
+  if (coverAuthor) coverAuthor.value = project?.author || "";
+  if (coverCoWriters) coverCoWriters.value = "";
+  if (coverContact) coverContact.value = project?.contact || "";
+  if (coverCompany) coverCompany.value = project?.company || "";
+  if (coverVersion) coverVersion.value = project?.version ? String(project.version) : "";
+  if (coverDraftDate) coverDraftDate.value = "";
+  if (coverDetails) coverDetails.value = project?.details || "";
+  if (coverCopyright) coverCopyright.value = "";
   if (rangeStart) {
     rangeStart.value = "";
     rangeStart.min = sceneCount ? "1" : "0";
@@ -6137,6 +6378,7 @@ function openExportDialog(prefill = {}) {
   if (productionTimeSelect) productionTimeSelect.value = "";
   updateExportDialogState();
   renderExportHistory(project);
+  renderExportPresetOptions(project);
 
   if (!dialog.open) {
     dialog.showModal();
@@ -6153,7 +6395,7 @@ function updateExportDialogState() {
   const exportType = exportTypeSelect?.value || "full";
   const fountainOption = exportFormatSelect?.querySelector("option[value='fountain']");
   const fdxOption = exportFormatSelect?.querySelector("option[value='fdx']");
-  const screenplayOnlyFormat = exportType === "production" || exportType === "character-packet" || exportType === "location" || exportType === "revision" || exportType === "shooting";
+  const screenplayOnlyFormat = exportType === "production" || exportType === "character-packet" || exportType === "location" || exportType === "revision" || exportType === "shooting" || exportType === "breakdown";
   if (fountainOption) {
     fountainOption.disabled = screenplayOnlyFormat;
   }
@@ -6170,6 +6412,8 @@ function updateExportDialogState() {
   const characterPacketOptions = document.getElementById("exportCharacterPacketOptions");
   const includeRevisionsToggle = document.getElementById("exportIncludeRevisionsToggle");
   const watermarkPanel = document.getElementById("exportWatermarkPanel");
+  const coverPagePanel = document.getElementById("exportCoverPagePanel");
+  const breakdownPanel = document.getElementById("exportBreakdownPanel");
   const scenePanel = document.getElementById("exportScenePanel");
   const locationPanel = document.getElementById("exportLocationPanel");
   const revisionPanel = document.getElementById("exportRevisionPanel");
@@ -6198,6 +6442,11 @@ function updateExportDialogState() {
     watermarkPanel.hidden = !showWatermarkPanel;
     watermarkPanel.style.display = showWatermarkPanel ? "grid" : "none";
   }
+  if (coverPagePanel) {
+    const coverPageEnabled = document.getElementById("exportIncludeTitlePage")?.checked !== false;
+    coverPagePanel.hidden = !coverPageEnabled;
+    coverPagePanel.style.display = coverPageEnabled ? "grid" : "none";
+  }
   if (scenePanel) {
     const showScenePanel = exportType === "scene";
     scenePanel.hidden = !showScenePanel;
@@ -6218,6 +6467,11 @@ function updateExportDialogState() {
     productionPanel.hidden = !showProductionPanel;
     productionPanel.style.display = showProductionPanel ? "grid" : "none";
   }
+  if (breakdownPanel) {
+    const showBreakdownPanel = exportType === "breakdown";
+    breakdownPanel.hidden = !showBreakdownPanel;
+    breakdownPanel.style.display = showBreakdownPanel ? "grid" : "none";
+  }
   if (exportTypeDescription) exportTypeDescription.textContent = EXPORT_TYPE_DETAILS[exportType] || EXPORT_TYPE_DETAILS.full;
   if (exportFormatDescription) exportFormatDescription.textContent = EXPORT_FORMAT_DETAILS[format] || EXPORT_FORMAT_DETAILS.pdf;
 
@@ -6225,6 +6479,7 @@ function updateExportDialogState() {
   const selectedScenes = document.querySelectorAll("input[name='exportSceneId']:checked").length;
   const selectedProductionCharacters = [...document.querySelectorAll("input[name='exportProductionCharacterName']:checked")].map((input) => input.value);
   const includeMetadata = document.getElementById("exportIncludeMetadata")?.checked;
+  const includeTitlePage = document.getElementById("exportIncludeTitlePage")?.checked;
   const location = document.getElementById("exportLocationSelect")?.value || "";
   const rangeStart = Number(document.getElementById("exportSceneRangeStart")?.value || 0);
   const rangeEnd = Number(document.getElementById("exportSceneRangeEnd")?.value || 0);
@@ -6285,6 +6540,12 @@ function updateExportDialogState() {
   if (exportType === "production" && !hasPartialProductionRange && matchedProductionScenes.length === 0) {
     validationMessage = "No scenes match the current production filters.";
   }
+  if (exportType === "breakdown"
+    && !document.getElementById("exportBreakdownCharacters")?.checked
+    && !document.getElementById("exportBreakdownLocations")?.checked
+    && !document.getElementById("exportBreakdownScenes")?.checked) {
+    validationMessage = "Select at least one breakdown section before generating the report.";
+  }
 
   const typeLabel = exportType === "character"
     ? `${selectedCharacters || 0} character${selectedCharacters === 1 ? "" : "s"}`
@@ -6300,6 +6561,8 @@ function updateExportDialogState() {
         ? `${matchedProductionScenes.length} production scene${matchedProductionScenes.length === 1 ? "" : "s"}`
       : exportType === "shooting"
         ? "shooting script package"
+      : exportType === "breakdown"
+        ? "breakdown report"
         : "full screenplay";
   const formatLabel = format.toUpperCase();
   const metadataLabel = includeMetadata ? "with metadata" : "without metadata";
@@ -6330,14 +6593,17 @@ function updateExportDialogState() {
             ? "Ready to export the revision report:"
           : exportType === "production"
             ? "Ready to export the production packet:"
+            : exportType === "breakdown"
+              ? "Ready to export the AI breakdown:"
             : "Ready to export the shooting script:";
   }
   if (summaryChips) {
     const chips = [
-      exportType === "full" ? "Full Script" : exportType === "character" ? "Character Export" : exportType === "character-packet" ? "Character Packet" : exportType === "scene" ? "Scene Export" : exportType === "location" ? "Location Export" : exportType === "revision" ? "Revision Export" : exportType === "production" ? "Production Export" : "Shooting Script",
+      exportType === "full" ? "Full Script" : exportType === "character" ? "Character Export" : exportType === "character-packet" ? "Character Packet" : exportType === "scene" ? "Scene Export" : exportType === "location" ? "Location Export" : exportType === "revision" ? "Revision Export" : exportType === "production" ? "Production Export" : exportType === "breakdown" ? "AI Breakdown" : "Shooting Script",
       format.toUpperCase(),
       includeMetadata ? "Metadata on" : "Metadata off"
     ];
+    chips.push(includeTitlePage ? "Title page on" : "No title page");
     if (exportType === "character" || exportType === "character-packet") {
       chips.push(`${selectedCharacters || 0} selected`);
     }
@@ -6367,6 +6633,11 @@ function updateExportDialogState() {
       if (document.getElementById("exportIncludeRevisions")?.checked) chips.push("Revisions on");
       if (document.getElementById("exportIncludePageNumbers")?.checked) chips.push("Page numbers on");
     }
+    if (exportType === "breakdown") {
+      if (document.getElementById("exportBreakdownCharacters")?.checked) chips.push("Characters");
+      if (document.getElementById("exportBreakdownLocations")?.checked) chips.push("Locations");
+      if (document.getElementById("exportBreakdownScenes")?.checked) chips.push("Scenes");
+    }
     if (document.getElementById("exportEnableWatermarkSettings")?.checked) {
       const watermarkPreset = document.getElementById("exportWatermarkPreset")?.value || "";
       const watermarkText = document.getElementById("exportWatermarkText")?.value || "";
@@ -6391,6 +6662,8 @@ function updateExportDialogState() {
           ? "Revision exports compare two saved versions and report added scenes, removed scenes, and changed screenplay text."
         : exportType === "production"
           ? "Production exports collect filtered scenes with descriptions, dialogue, and characters present."
+        : exportType === "breakdown"
+          ? "AI breakdown exports turn structured screenplay data into character, location, and scene intelligence packets."
         : exportType === "shooting"
           ? "Shooting scripts keep scene numbers locked and carry revision-aware page formatting for production use."
           : document.getElementById("exportEnableWatermarkSettings")?.checked
@@ -6426,6 +6699,10 @@ function updateExportDialogState() {
     previewSceneCount = exportDialogContext.scenes.length;
     previewCharacterCount = exportDialogContext.characters.length;
     previewLineCount = Math.max(exportDialogContext.scenes.length * 8, exportDialogContext.characters.length * 3);
+  } else if (exportType === "breakdown") {
+    previewSceneCount = exportDialogContext.scenes.length;
+    previewCharacterCount = exportDialogContext.characters.length;
+    previewLineCount = Math.max(exportDialogContext.scenes.length * 4, exportDialogContext.characters.length * 4);
   }
 
   if (previewScenes) previewScenes.textContent = String(previewSceneCount);
@@ -6442,6 +6719,8 @@ function updateExportDialogState() {
         ? (format === "pdf" ? "Open Revision PDF" : "Download Revision DOCX")
       : exportType === "character-packet"
         ? (format === "pdf" ? "Open Character Packet PDF" : "Download Character Packet DOCX")
+      : exportType === "breakdown"
+        ? (format === "pdf" ? "Open Breakdown PDF" : "Download Breakdown DOCX")
       : exportType === "shooting"
         ? (format === "pdf" ? "Open Shooting Script PDF" : "Download Shooting Script DOCX")
       : format === "pdf"

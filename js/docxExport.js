@@ -244,6 +244,18 @@ function buildCoverSection(docxLib, project) {
         size: 28
       })]
     }),
+    ...(project.subtitle ? [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 140, line: LINE_SPACING },
+        children: [new TextRun({
+          text: String(project.subtitle),
+          italics: true,
+          font: "Courier New",
+          size: 22
+        })]
+      })
+    ] : []),
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 120, line: LINE_SPACING },
@@ -259,8 +271,35 @@ function buildCoverSection(docxLib, project) {
         size: 24
       })]
     }),
+    ...(project.coWriters ? [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 220, line: LINE_SPACING },
+        children: [new TextRun({
+          text: String(project.coWriters),
+          font: "Courier New",
+          size: 22
+        })]
+      })
+    ] : []),
     ...metaParagraphs
   ];
+
+  if (project.version) {
+    children.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 40, line: LINE_SPACING },
+      children: [new TextRun({ text: `Version ${String(project.version)}`, font: "Courier New", size: 22 })]
+    }));
+  }
+
+  if (project.draftDate) {
+    children.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 80, line: LINE_SPACING },
+      children: [new TextRun({ text: String(project.draftDate), font: "Courier New", size: 22 })]
+    }));
+  }
 
   if (project.logline) {
     children.push(
@@ -390,6 +429,16 @@ function buildScriptSectionFromExportDocument(docxLib, exportDocument) {
       spacing: { line: LINE_SPACING, after: PARAGRAPH_AFTER },
       children: [new TextRun({ text: " ", font: "Courier New", size: 24 })]
     }));
+  }
+
+  if (project.copyrightNotice) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 180, after: 0, line: LINE_SPACING },
+        children: createRuns(TextRun, String(project.copyrightNotice), { font: "Courier New", size: 22 })
+      })
+    );
   }
 
   return {

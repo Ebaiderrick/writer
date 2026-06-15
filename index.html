@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EyaWriter</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
-  <link rel="stylesheet" href="styles.css?v=20260615f">
+  <link rel="stylesheet" href="styles.css?v=20260615i">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
@@ -1732,17 +1732,34 @@
 
   <dialog id="exportDialog" class="export-dialog">
     <div class="export-sheet">
-      <div class="export-head">
-        <div>
-          <h3>Screenplay Export</h3>
-          <p id="exportDialogProjectMeta">Choose what to export, pick the format, then generate a screenplay-ready package without leaving the editor.</p>
-        </div>
+        <div class="export-head">
+          <div>
+            <h3>Screenplay Export</h3>
+            <p id="exportDialogProjectMeta">Choose what to export, pick the format, then generate a screenplay-ready package without leaving the editor.</p>
+          </div>
         <div class="export-head-actions">
           <button id="exportDialogCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+          </div>
         </div>
-      </div>
 
-      <div class="export-grid">
+        <section class="export-presets-bar" aria-label="Export Presets">
+          <div class="export-presets-copy">
+            <strong>Export Presets</strong>
+            <p>Save a reusable export setup for producer, actor, director, or custom delivery flows.</p>
+          </div>
+          <label class="field export-select-field export-preset-select-field">
+            <select id="exportPresetSelect" class="comment-filter-select">
+              <option value="">Choose preset</option>
+            </select>
+          </label>
+          <div class="export-presets-actions">
+            <button id="exportPresetApplyBtn" class="ghost-button btn-sm" type="button">Apply</button>
+            <button id="exportPresetSaveBtn" class="ghost-button btn-sm" type="button">Save Current</button>
+            <button id="exportPresetDeleteBtn" class="ghost-button btn-sm" type="button">Delete</button>
+          </div>
+        </section>
+
+        <div class="export-grid">
         <section class="export-panel">
           <div class="export-panel-head">
             <span class="export-step-badge">Step 1</span>
@@ -1756,14 +1773,15 @@
               <option value="character">Character Export</option>
               <option value="character-packet">Character Packet Export</option>
               <option value="scene">Scene Export</option>
-              <option value="location">Location Export</option>
-              <option value="revision">Revision Export</option>
-              <option value="production">Production Export</option>
-              <option value="shooting">Shooting Script</option>
-            </select>
-          </label>
-          <p id="exportTypeDescription" class="export-inline-description">Title page, metadata, scenes, dialogue, transitions, and optional notes/comments.</p>
-        </section>
+                <option value="location">Location Export</option>
+                <option value="revision">Revision Export</option>
+                <option value="production">Production Export</option>
+                <option value="shooting">Shooting Script</option>
+                <option value="breakdown">AI Breakdown</option>
+              </select>
+            </label>
+            <p id="exportTypeDescription" class="export-inline-description">Title page, metadata, scenes, dialogue, transitions, and optional notes/comments.</p>
+          </section>
 
         <section class="export-panel">
           <div class="export-panel-head">
@@ -1791,23 +1809,27 @@
             </div>
           </div>
 
-          <div class="export-options-grid">
-            <label class="export-toggle">
-              <input id="exportIncludeNotes" type="checkbox">
-              <span>Include Notes</span>
-            </label>
+            <div class="export-options-grid">
+              <label class="export-toggle">
+                <input id="exportIncludeNotes" type="checkbox">
+                <span>Include Notes</span>
+              </label>
             <label class="export-toggle">
               <input id="exportIncludeComments" type="checkbox">
               <span>Include Comments</span>
             </label>
-            <label class="export-toggle">
-              <input id="exportIncludeMetadata" type="checkbox" checked>
-              <span>Include Metadata</span>
-            </label>
-            <label class="export-toggle">
-              <input id="exportIncludePageNumbers" type="checkbox" checked>
-              <span>Include Page Numbers</span>
-            </label>
+              <label class="export-toggle">
+                <input id="exportIncludeMetadata" type="checkbox" checked>
+                <span>Include Metadata</span>
+              </label>
+              <label class="export-toggle">
+                <input id="exportIncludeTitlePage" type="checkbox" checked>
+                <span>Title Page</span>
+              </label>
+              <label class="export-toggle">
+                <input id="exportIncludePageNumbers" type="checkbox" checked>
+                <span>Include Page Numbers</span>
+              </label>
             <label class="export-toggle">
               <input id="exportEnableWatermarkSettings" type="checkbox">
               <span>Watermark</span>
@@ -1853,10 +1875,51 @@
               <label class="field export-select-field export-watermark-text-field">
                 <input id="exportWatermarkText" class="modal-input" type="text" maxlength="60" placeholder="Optional custom watermark text">
               </label>
+              </div>
             </div>
-          </div>
 
-          <div id="exportCharacterPanel" class="export-detail-panel" hidden>
+            <div id="exportCoverPagePanel" class="export-detail-panel">
+              <div class="export-detail-head">
+                <div class="export-inline-heading">
+                  <h5>Cover Page Builder:</h5>
+                  <p id="exportCoverPageMeta">Adjust the title-page package for this export without changing the whole project.</p>
+                </div>
+              </div>
+              <div class="export-cover-grid">
+                <label class="field export-select-field">
+                  <input id="exportCoverTitle" class="modal-input" type="text" maxlength="120" placeholder="Title">
+                </label>
+                <label class="field export-select-field">
+                  <input id="exportCoverSubtitle" class="modal-input" type="text" maxlength="120" placeholder="Subtitle">
+                </label>
+                <label class="field export-select-field">
+                  <input id="exportCoverAuthor" class="modal-input" type="text" maxlength="120" placeholder="Writer">
+                </label>
+                <label class="field export-select-field">
+                  <input id="exportCoverCoWriters" class="modal-input" type="text" maxlength="180" placeholder="Co-writers">
+                </label>
+                <label class="field export-select-field">
+                  <input id="exportCoverContact" class="modal-input" type="text" maxlength="180" placeholder="Contact Information">
+                </label>
+                <label class="field export-select-field">
+                  <input id="exportCoverCompany" class="modal-input" type="text" maxlength="140" placeholder="Production Company">
+                </label>
+                <label class="field export-select-field">
+                  <input id="exportCoverVersion" class="modal-input" type="text" maxlength="40" placeholder="Version Number">
+                </label>
+                <label class="field export-select-field">
+                  <input id="exportCoverDraftDate" class="modal-input" type="text" maxlength="40" placeholder="Draft Date">
+                </label>
+                <label class="field export-select-field export-cover-span-2">
+                  <input id="exportCoverDetails" class="modal-input" type="text" maxlength="180" placeholder="Additional Details">
+                </label>
+                <label class="field export-select-field export-cover-span-2">
+                  <input id="exportCoverCopyright" class="modal-input" type="text" maxlength="180" placeholder="Copyright Notice">
+                </label>
+              </div>
+            </div>
+
+            <div id="exportCharacterPanel" class="export-detail-panel" hidden>
             <div class="export-detail-head">
               <div class="export-inline-heading">
                 <h5>Character Selection:</h5>
@@ -1903,8 +1966,8 @@
             </div>
           </div>
 
-          <div id="exportRevisionPanel" class="export-detail-panel" hidden>
-            <div class="export-detail-head">
+            <div id="exportRevisionPanel" class="export-detail-panel" hidden>
+              <div class="export-detail-head">
               <div class="export-inline-heading">
                 <h5>Revision Compare:</h5>
                 <p id="exportRevisionMeta">Choose two available versions to generate a revision report.</p>
@@ -1921,10 +1984,33 @@
                   <option value="">Version B</option>
                 </select>
               </label>
+              </div>
             </div>
-          </div>
 
-          <div id="exportProductionPanel" class="export-detail-panel" hidden>
+            <div id="exportBreakdownPanel" class="export-detail-panel" hidden>
+              <div class="export-detail-head">
+                <div class="export-inline-heading">
+                  <h5>Breakdown Sections:</h5>
+                  <p id="exportBreakdownMeta">Choose which screenplay intelligence blocks to include in this report.</p>
+                </div>
+              </div>
+              <div class="export-options-grid">
+                <label class="export-toggle">
+                  <input id="exportBreakdownCharacters" type="checkbox" checked>
+                  <span>Character Breakdown</span>
+                </label>
+                <label class="export-toggle">
+                  <input id="exportBreakdownLocations" type="checkbox" checked>
+                  <span>Location Breakdown</span>
+                </label>
+                <label class="export-toggle">
+                  <input id="exportBreakdownScenes" type="checkbox" checked>
+                  <span>Scene Breakdown</span>
+                </label>
+              </div>
+            </div>
+
+            <div id="exportProductionPanel" class="export-detail-panel" hidden>
             <div class="export-detail-head">
               <div class="export-inline-heading">
                 <h5>Production Filters:</h5>
@@ -2389,7 +2475,7 @@
     </div>
   </dialog>
 
-<script type="module" src="js/main.js?v=20260615f"></script>
+<script type="module" src="js/main.js?v=20260615i"></script>
 </body>
 </html>
 

@@ -1,6 +1,7 @@
 import {
   buildCharacterExportDocument,
   buildCharacterPacketExportDocument,
+  buildBreakdownExportDocument,
   buildExportFilename,
   buildFullScriptExportDocument,
   buildLocationExportDocument,
@@ -62,13 +63,16 @@ function buildFountainTitlePage(metadata, options) {
     : '';
 
   pushBlock('Title', [metadata.title]);
+  pushInline('Title2', metadata.subtitle);
   pushInline('Credit', 'Written by');
   pushInline('Author', metadata.author);
+  pushInline('Authors', metadata.coWriters);
   pushInline('Draft date', draftDate);
   pushBlock('Contact', [metadata.contact, metadata.company, metadata.details]);
   pushInline('Genre', metadata.genre);
   pushInline('Version', Number.isFinite(Number(metadata.version)) && Number(metadata.version) > 0 ? `Version ${metadata.version}` : '');
   pushInline('Logline', metadata.logline);
+  pushInline('Copyright', metadata.copyrightNotice);
   pushInline('Project ID', metadata.projectId);
   pushInline('Script ID', metadata.scriptId);
   return lines.length ? `${lines.join('\n')}\n\n` : '';
@@ -134,11 +138,15 @@ function buildFdxTitlePage(metadata, options) {
   };
 
   pushParagraph(metadata.title);
+  pushParagraph(metadata.subtitle);
   pushParagraph('Written by');
   pushParagraph(metadata.author);
+  pushParagraph(metadata.coWriters);
   pushParagraph(metadata.genre ? `Genre: ${metadata.genre}` : '');
   pushParagraph(Number.isFinite(Number(metadata.version)) ? `Version ${metadata.version}` : '');
+  pushParagraph(metadata.draftDate);
   pushParagraph(metadata.logline);
+  pushParagraph(metadata.copyrightNotice);
   pushRightParagraph(metadata.contact);
   pushRightParagraph(metadata.company);
   pushRightParagraph(metadata.details);
@@ -379,6 +387,16 @@ export class ExportService {
     const normalized = normalizeExportRequest(request);
     assertSupportedFormat(normalized.format, ['pdf', 'docx'], 'Revision export');
     const exportDocument = buildRevisionExportDocument(project, {
+      ...request,
+      options: normalized.options
+    });
+    return buildFormatOutput(exportDocument, normalized.format);
+  }
+
+  static async exportBreakdown(project, request = {}) {
+    const normalized = normalizeExportRequest(request);
+    assertSupportedFormat(normalized.format, ['pdf', 'docx'], 'Breakdown export');
+    const exportDocument = buildBreakdownExportDocument(project, {
       ...request,
       options: normalized.options
     });

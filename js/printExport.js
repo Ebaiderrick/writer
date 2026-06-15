@@ -134,13 +134,17 @@ export function buildPrintableDocumentFromExportDocument(exportDocument, autoPri
       <div class="print-cover-stack">
         ${isProductionExport ? `<p class="print-cover-kicker">Production Export</p>` : isShootingScript ? `<p class="print-cover-kicker">Shooting Script</p>` : isWatermarkedScript ? `<p class="print-cover-kicker">Watermarked Script</p>` : ''}
         <p class="print-cover-title">${escapeHtml(metadata.title || 'Untitled Script')}</p>
+        ${metadata.subtitle ? `<p class="print-cover-subtitle">${escapeHtml(metadata.subtitle)}</p>` : ''}
         <p class="print-cover-byline">${escapeHtml(t('cover.by'))}</p>
         <p class="print-cover-author">${escapeHtml(metadata.author || t('cover.authorFallback'))}</p>
+        ${metadata.coWriters ? `<p class="print-cover-coauthors">${escapeHtml(metadata.coWriters)}</p>` : ''}
         <div class="print-cover-meta">
           ${metadata.contact ? `<p>${escapeHtml(metadata.contact)}</p>` : ''}
           ${metadata.company ? `<p>${escapeHtml(metadata.company)}</p>` : ''}
           ${metadata.details ? `<p>${escapeHtml(metadata.details)}</p>` : ''}
         </div>
+        ${metadata.version ? `<p class="print-cover-version">Version ${escapeHtml(String(metadata.version))}</p>` : ''}
+        ${metadata.draftDate ? `<p class="print-cover-version">${escapeHtml(metadata.draftDate)}</p>` : ''}
         ${isProductionExport && productionSummaryBits.length ? `
           <div class="print-production-summary">
             ${productionSummaryBits.map((bit) => `<p>${escapeHtml(bit)}</p>`).join('')}
@@ -157,6 +161,7 @@ export function buildPrintableDocumentFromExportDocument(exportDocument, autoPri
           </div>
         ` : ''}
         ${metadata.logline ? `<p class="print-cover-logline">${escapeHtml(metadata.logline)}</p>` : ''}
+        ${metadata.copyrightNotice ? `<p class="print-cover-copyright">${escapeHtml(metadata.copyrightNotice)}</p>` : ''}
       </div>
     </section>
   `;
@@ -272,9 +277,13 @@ function getPrintableStyles(exportType = 'full') {
       text-transform: uppercase;
     }
     .print-cover-title,
+    .print-cover-subtitle,
     .print-cover-byline,
     .print-cover-author,
+    .print-cover-coauthors,
+    .print-cover-version,
     .print-cover-logline,
+    .print-cover-copyright,
     .print-cover-meta p {
       margin: 0;
     }
@@ -290,19 +299,36 @@ function getPrintableStyles(exportType = 'full') {
     }
     .print-cover-author {
       font-weight: bold;
-      margin-bottom: 42pt;
+      margin-bottom: 10pt;
+    }
+    .print-cover-subtitle {
+      font-size: 11pt;
+      font-style: italic;
+      margin-bottom: 18pt;
+    }
+    .print-cover-coauthors,
+    .print-cover-version,
+    .print-cover-copyright {
+      font-size: 10.5pt;
+      line-height: 1.35;
+    }
+    .print-cover-coauthors {
+      margin-bottom: 32pt;
     }
     .print-cover-meta {
-      margin-bottom: 34pt;
+      margin-bottom: 20pt;
     }
     .print-cover-meta p {
       margin-bottom: 8pt;
     }
     .print-cover-logline {
       width: 4.8in;
-      margin: 0 auto;
+      margin: 20pt auto 0;
       line-height: 1.35;
       white-space: pre-wrap;
+    }
+    .print-cover-copyright {
+      margin-top: 18pt;
     }
     .print-production-summary {
       width: 5.2in;

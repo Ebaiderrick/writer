@@ -25,14 +25,19 @@ function normalizeToken(value) {
 }
 
 function normalizeMetadata(project = {}) {
+  const coverPage = project.coverPage && typeof project.coverPage === 'object' ? project.coverPage : {};
   return {
-    title: String(project.title || 'Untitled Script').trim() || 'Untitled Script',
-    author: String(project.author || '').trim(),
+    title: String(coverPage.title || project.title || 'Untitled Script').trim() || 'Untitled Script',
+    subtitle: String(coverPage.subtitle || '').trim(),
+    author: String(coverPage.author || project.author || '').trim(),
+    coWriters: String(coverPage.coWriters || '').trim(),
     genre: String(project.genre || '').trim(),
-    version: Number.isFinite(Number(project.version)) ? Number(project.version) : 0,
-    contact: String(project.contact || '').trim(),
-    company: String(project.company || '').trim(),
-    details: String(project.details || '').trim(),
+    version: Number.isFinite(Number(coverPage.version ?? project.version)) ? Number(coverPage.version ?? project.version) : 0,
+    contact: String(coverPage.contact || project.contact || '').trim(),
+    company: String(coverPage.company || project.company || '').trim(),
+    details: String(coverPage.details || project.details || '').trim(),
+    copyrightNotice: String(coverPage.copyrightNotice || '').trim(),
+    draftDate: String(coverPage.draftDate || '').trim(),
     logline: String(project.logline || '').trim(),
     projectId: String(project.id || '').trim(),
     scriptId: String(project.scriptId || '').trim(),
@@ -793,6 +798,101 @@ function buildShootingScriptDocument(baseDocument) {
   };
 }
 
+function buildBreakdownDocument(baseDocument, request = {}) {
+  const includeCharacters = request.includeCharacters !== false;
+  const includeLocations = request.includeLocations !== false;
+  const includeScenes = request.includeScenes !== false;
+  const reportLines = [{
+    id: 'breakdown-report-heading',
+    type: 'scene',
+    text: 'SCRIPT BREAKDOWN REPORT',
+    displayText: 'SCRIPT BREAKDOWN REPORT',
+    secondary: '',
+    sceneNumber: 0,
+    index: Number.MIN_SAFE_INTEGER
+  }];
+
+  const pushLine = (type, text) => {
+    reportLines.push({
+      id: uidLineId(`breakdown-${type}`),
+      type,
+      text,
+      displayText: type === 'note' ? `[${text}]` : text,
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER + reportLines.length + 1
+    });
+  };
+
+  if (includeCharacters) {
+    pushLine('action', 'Character Breakdown');
+    if (!baseDocument.characters.length) {
+      pushLine('note', 'No characters found.');
+    } else {
+      baseDocument.characters.forEach((character) => {
+        const normalizedName = normalizeToken(character.name);
+        const relatedScenes = baseDocument.scenes.filter((scene) => toArray(scene.characters).some((entry) => normalizeToken(entry) === normalizedName));
+        const dialogueCount = relatedScenes.reduce((total, scene) => total + scene.dialogue
+          .filter((block) => normalizeToken(block.character) === normalizedName)
+          .reduce((sum, block) => sum + block.dialogue.length, 0), 0);
+        pushLine('action', character.name);
+        pushLine('note', `Scenes: ${relatedScenes.length} | Dialogue lines: ${dialogueCount} | First appearance: ${relatedScenes[0]?.heading || 'Not found'} | Last appearance: ${relatedScenes[relatedScenes.length - 1]?.heading || 'Not found'}`);
+      });
+    }
+  }
+
+  if (includeLocations) {
+    pushLine('action', 'Location Breakdown');
+    const locations = [...new Set(baseDocument.scenes.map((scene) => scene.location).filter(Boolean))];
+    if (!locations.length) {
+      pushLine('note', 'No locations found.');
+    } else {
+      locations.forEach((location) => {
+        const relatedScenes = baseDocument.scenes.filter((scene) => scene.location === location);
+        const characters = [...new Set(relatedScenes.flatMap((scene) => toArray(scene.characters)).filter(Boolean))];
+        const times = [...new Set(relatedScenes.map((scene) => scene.timeOfDay).filter(Boolean))];
+        pushLine('action', location);
+        pushLine('note', `Scenes: ${relatedScenes.length} | Time of day: ${times.join(', ') || 'Unspecified'} | Characters involved: ${characters.length}`);
+      });
+    }
+  }
+
+  if (includeScenes) {
+    pushLine('action', 'Scene Breakdown');
+    if (!baseDocument.scenes.length) {
+      pushLine('note', 'No scenes found.');
+    } else {
+      baseDocument.scenes.forEach((scene) => {
+        const importance = scene.dialogue.length >= 3 || scene.description.length >= 3
+          ? 'High'
+          : scene.dialogue.length >= 1 || scene.description.length >= 1
+            ? 'Medium'
+            : 'Low';
+        pushLine('action', `${scene.number || '?'} ${scene.heading}`);
+        pushLine('note', `Characters: ${toArray(scene.characters).join(', ') || 'None'} | Estimated length: ${Math.max(1, Math.ceil(scene.lines.length / 4))} beats | Importance: ${importance}`);
+      });
+    }
+  }
+
+  return {
+    ...baseDocument,
+    exportType: 'breakdown',
+    lines: reportLines,
+    scenes: [],
+    characters: [],
+    selection: {
+      includeCharacters,
+      includeLocations,
+      includeScenes
+    },
+    breakdownSummary: {
+      characterCount: includeCharacters ? baseDocument.characters.length : 0,
+      locationCount: includeLocations ? new Set(baseDocument.scenes.map((scene) => scene.location).filter(Boolean)).size : 0,
+      sceneCount: includeScenes ? baseDocument.scenes.length : 0
+    }
+  };
+}
+
 export function applyWatermarkToExportDocument(baseDocument) {
   const preset = String(baseDocument.options.watermarkPreset || '').trim();
   const customText = String(baseDocument.options.watermarkText || '').trim();
@@ -831,7 +931,10 @@ function buildBaseExportDocument(project, overrides = {}) {
     ...DEFAULT_OPTIONS,
     ...overrides
   };
-  const metadata = normalizeMetadata(project);
+  const metadata = normalizeMetadata({
+    ...project,
+    coverPage: options.coverPage || {}
+  });
   const lines = buildPreparedLines(project, options);
   const comments = normalizeComments(project);
   const assignments = normalizeAssignments(project);
@@ -904,6 +1007,11 @@ export function buildRevisionExportDocument(project, request = {}) {
   return buildRevisionReportDocument(baseDocument, request);
 }
 
+export function buildBreakdownExportDocument(project, request = {}) {
+  const baseDocument = buildBaseExportDocument(project, request.options || request);
+  return buildBreakdownDocument(baseDocument, request);
+}
+
 export function buildExportFilename(exportDocument, extension) {
   const suffix = exportDocument.exportType === 'character'
     ? '-character-export'
@@ -919,6 +1027,8 @@ export function buildExportFilename(exportDocument, extension) {
         ? '-production-export'
         : exportDocument.exportType === 'shooting'
           ? '-shooting-script'
+          : exportDocument.exportType === 'breakdown'
+            ? '-ai-breakdown'
           : exportDocument.exportType === 'watermarked'
             ? '-watermarked-script'
         : '-full-script';
