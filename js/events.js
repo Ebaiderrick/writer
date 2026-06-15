@@ -7246,7 +7246,10 @@ async function generateExportFromDialog() {
     }
   } catch (error) {
     console.error("Screenplay export failed", error);
-    await customAlert(error instanceof Error ? error.message : "The screenplay export could not be generated. Please try again after the export engine finishes loading.", "Screenplay Export");
+    await customAlert(
+      error instanceof Error ? error.message : "The report could not be generated. Please try again after the export engine finishes loading.",
+      request.exportType === "breakdown" ? "Report" : "Screenplay Export"
+    );
   } finally {
     if (request.exportType !== "breakdown") {
       resetBreakdownLivePanel();

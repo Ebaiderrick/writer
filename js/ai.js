@@ -1527,7 +1527,25 @@ export const AI = (() => {
     });
   }
 
-  return { init, triggerAction, triggerSelectionAction, triggerSmartProofread, triggerAssistant, runWorkspaceTaskAssistant, generateText: requestAiText };
+  async function generateText(request = {}) {
+    const current = String(
+      request.current
+      ?? request.input
+      ?? request.text
+      ?? request.context
+      ?? ""
+    ).trim();
+
+    return requestAiText({
+      type: request.type || "analysis",
+      action: request.action || "Improve",
+      current,
+      context: String(request.context || request.input || "").trim(),
+      instruction: String(request.instruction || "").trim()
+    });
+  }
+
+  return { init, triggerAction, triggerSelectionAction, triggerSmartProofread, triggerAssistant, runWorkspaceTaskAssistant, generateText };
 })();
 
 function getSelectedTextInBlock(block) {
