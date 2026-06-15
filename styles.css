@@ -5864,6 +5864,12 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: flex;
   justify-content: flex-end;
   gap: 0.4rem;
+  opacity: 1;
+}
+
+.export-breakdown-live-actions .ghost-button:disabled,
+.export-summary-actions .ghost-button:disabled {
+  opacity: 0.5;
 }
 
 .export-breakdown-live-output {

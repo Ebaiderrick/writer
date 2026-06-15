@@ -7185,16 +7185,16 @@ function updateExportDialogState() {
     inlineGenerateBtn.disabled = Boolean(validationMessage);
   }
   if (exportBtn) {
-    exportBtn.hidden = exportDialogMode !== "report" || !reportDraftRequest?.generatedSections?.length;
+    exportBtn.hidden = exportDialogMode !== "report";
     exportBtn.disabled = !reportDraftRequest?.generatedSections?.length;
     exportBtn.textContent = format === "docx" ? "Build Report DOCX" : "Build Report PDF";
   }
   if (editBtn) {
-    editBtn.hidden = exportDialogMode !== "report" || !reportDraftRequest?.generatedSections?.length;
+    editBtn.hidden = exportDialogMode !== "report";
     editBtn.disabled = !reportDraftRequest?.generatedSections?.length;
   }
   if (saveBtn) {
-    saveBtn.hidden = exportDialogMode !== "report" || !reportDraftRequest?.generatedSections?.length;
+    saveBtn.hidden = exportDialogMode !== "report";
     saveBtn.disabled = !reportDraftRequest?.generatedSections?.length;
   }
   if (validationNote) {
