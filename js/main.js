@@ -1,6 +1,6 @@
 import { state } from './config.js';
 import { loadProjects } from './project.js';
-import { bindEvents, renderStudio, applySaveModeButtons } from './events.js';
+import { bindEvents, renderStudio, applySaveModeButtons, triggerReportDialog } from './events.js';
 import { showAuth, showHome, renderHome, applyToolbarState, applyTheme, applyViewState, showToast } from './ui.js';
 import { initBackground } from './background.js';
 import { AI } from './ai.js';
@@ -37,6 +37,18 @@ function normalizeStaticUiCopy() {
   }
 }
 
+function handleDebugLaunch() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('open') !== 'report') return;
+  window.setTimeout(() => {
+    try {
+      triggerReportDialog();
+    } catch (error) {
+      console.error('Debug report launch failed', error);
+    }
+  }, 400);
+}
+
 function boot() {
   restoreBootPathOverride();
   normalizeStaticUiCopy();
@@ -58,6 +70,7 @@ function boot() {
   applyViewState();
   applyTranslations();
   applySaveModeButtons();
+  handleDebugLaunch();
   if (state.pendingRecoveryNotice) {
     showToast("Recovered your latest local session.", "success", { duration: 3400 });
   }

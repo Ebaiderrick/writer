@@ -1,4 +1,4 @@
-import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
+﻿import { state, TYPE_SEQUENCE, TYPE_LABELS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
 import { ContextMenu } from './contextMenu.js';
 import {
@@ -89,6 +89,16 @@ const conversionWorkspaceOverrides = new Map();
 const aiTaskTimers = new Map();
 let exportDialogPrefill = { format: "pdf", exportType: "full" };
 let exportDialogContext = { scenes: [], characters: [], revisions: [] };
+let exportDialogMode = "export";
+let reportDraftRequest = null;
+const exportReportLayoutState = {
+  titleToggleParent: null,
+  titleToggleNext: null,
+  breakdownBuilderParent: null,
+  breakdownBuilderNext: null,
+  breakdownPromptParent: null,
+  breakdownPromptNext: null
+};
 
 const EXPORT_TYPE_DETAILS = {
   full: "Title page, metadata, scenes, dialogue, transitions, and optional notes/comments.",
@@ -99,7 +109,7 @@ const EXPORT_TYPE_DETAILS = {
   revision: "Revision reports compare two available versions and track added scenes, removed scenes, and changed text.",
   production: "Production-ready packets filtered by location, time of day, scene range, and character presence.",
   shooting: "Locked-scene screenplay pages with revision labeling, page numbers, and production-ready shooting script layout.",
-  breakdown: "Structured screenplay intelligence for characters, locations, and scene-level production insight.",
+  breakdown: "AI reads the script and writes focused report sections for characters, locations, and scene-level insight.",
   watermarked: "Protected screenplay pages with configurable watermark text, placement, and opacity for controlled sharing."
 };
 
@@ -175,6 +185,224 @@ function estimateExportFileSize(lineCount, format, sceneCount, characterCount) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+function getBreakdownLiveNodes() {
+  return {
+    card: document.getElementById("exportBreakdownLiveCard"),
+    title: document.getElementById("exportBreakdownLiveTitle"),
+    meta: document.getElementById("exportBreakdownLiveMeta"),
+    output: document.getElementById("exportBreakdownLiveOutput")
+  };
+}
+
+function resetBreakdownLivePanel() {
+  const { card, title, meta, output } = getBreakdownLiveNodes();
+  if (card) card.hidden = true;
+  if (title) title.textContent = exportDialogMode === "report" ? "Result" : "AI Breakdown Build";
+  if (meta) meta.textContent = "Waiting to begin...";
+  if (output) output.innerHTML = "";
+}
+
+function openReportDialog(prefill = {}) {
+  exportDialogMode = "report";
+  openExportDialog({
+    ...prefill,
+    format: "pdf",
+    exportType: "breakdown"
+  });
+}
+
+export function triggerReportDialog(prefill = {}) {
+  openReportDialog(prefill);
+}
+
+function rememberReportLayoutNode(key, node) {
+  if (!node || exportReportLayoutState[`${key}Parent`]) return;
+  exportReportLayoutState[`${key}Parent`] = node.parentElement || null;
+  exportReportLayoutState[`${key}Next`] = node.nextElementSibling || null;
+}
+
+function moveNodeToMount(node, mount) {
+  if (node && mount && node.parentElement !== mount) {
+    mount.appendChild(node);
+  }
+}
+
+function restoreNodeFromMount(key, node) {
+  const parent = exportReportLayoutState[`${key}Parent`];
+  const next = exportReportLayoutState[`${key}Next`];
+  if (!node || !parent) return;
+  if (next && next.parentElement === parent) {
+    parent.insertBefore(node, next);
+  } else {
+    parent.appendChild(node);
+  }
+}
+
+function readReportSectionsFromLiveOutput() {
+  return [...document.querySelectorAll("#exportBreakdownLiveOutput .export-breakdown-live-section")]
+    .map((section) => {
+      const key = String(section.dataset.sectionKey || "").trim();
+      const label = String(section.querySelector("strong")?.textContent || "").trim();
+      const text = [...section.querySelectorAll("p")]
+        .map((entry) => String(entry.textContent || "").trim())
+        .filter(Boolean)
+        .join("\n\n");
+      return { key, label, text };
+    })
+    .filter((section) => section.label && section.text);
+}
+
+function buildProjectScriptContext(project) {
+  return (project?.lines || [])
+    .map((line) => `[${String(line.type || "action").toUpperCase()}] ${String(line.text || "").trim()}`)
+    .filter(Boolean)
+    .join("\n");
+}
+
+function getBreakdownSelections() {
+  return [
+    {
+      key: "characters",
+      label: "Character Report",
+      checked: Boolean(document.getElementById("exportBreakdownCharacters")?.checked),
+      minWords: Number(document.getElementById("exportBreakdownCharactersMin")?.value || 120),
+      maxWords: Number(document.getElementById("exportBreakdownCharactersMax")?.value || 220)
+    },
+    {
+      key: "locations",
+      label: "Location Report",
+      checked: Boolean(document.getElementById("exportBreakdownLocations")?.checked),
+      minWords: Number(document.getElementById("exportBreakdownLocationsMin")?.value || 120),
+      maxWords: Number(document.getElementById("exportBreakdownLocationsMax")?.value || 220)
+    },
+    {
+      key: "scenes",
+      label: "Scene Report",
+      checked: Boolean(document.getElementById("exportBreakdownScenes")?.checked),
+      minWords: Number(document.getElementById("exportBreakdownScenesMin")?.value || 160),
+      maxWords: Number(document.getElementById("exportBreakdownScenesMax")?.value || 280)
+    },
+    {
+      key: "theme",
+      label: "Storyline & Theme",
+      checked: Boolean(document.getElementById("exportBreakdownTheme")?.checked),
+      minWords: Number(document.getElementById("exportBreakdownThemeMin")?.value || 140),
+      maxWords: Number(document.getElementById("exportBreakdownThemeMax")?.value || 260)
+    },
+    {
+      key: "style",
+      label: "Writing Style",
+      checked: Boolean(document.getElementById("exportBreakdownStyle")?.checked),
+      minWords: Number(document.getElementById("exportBreakdownStyleMin")?.value || 120),
+      maxWords: Number(document.getElementById("exportBreakdownStyleMax")?.value || 220)
+    },
+    {
+      key: "scenery",
+      label: "Scenery Development",
+      checked: Boolean(document.getElementById("exportBreakdownScenery")?.checked),
+      minWords: Number(document.getElementById("exportBreakdownSceneryMin")?.value || 120),
+      maxWords: Number(document.getElementById("exportBreakdownSceneryMax")?.value || 220)
+    },
+    {
+      key: "props",
+      label: "Props & Objects",
+      checked: Boolean(document.getElementById("exportBreakdownProps")?.checked),
+      minWords: Number(document.getElementById("exportBreakdownPropsMin")?.value || 100),
+      maxWords: Number(document.getElementById("exportBreakdownPropsMax")?.value || 180)
+    }
+  ].filter((item) => item.checked);
+}
+
+function buildBreakdownPrompt(project, selection, customPrompt = "") {
+  const title = project?.title || "Untitled Script";
+  const extra = String(customPrompt || "").trim();
+  return {
+    action: "Improve",
+    instruction: [
+      "You are writing a screenplay analysis report for the writer.",
+      `Write a ${selection.label} as polished prose, not bullet-point raw notes.`,
+      `Keep the response between ${selection.minWords} and ${selection.maxWords} words.`,
+      "Base the report only on the provided script content.",
+      "Be specific, insightful, and practical.",
+      "Do not use markdown fences.",
+      extra ? `Extra user guidance: ${extra}` : ""
+    ].filter(Boolean).join(" "),
+    input: `SCRIPT TITLE: ${title}\nREPORT TYPE: ${selection.label}\n\nSCREENPLAY:\n${buildProjectScriptContext(project)}`
+  };
+}
+
+async function typeBreakdownText(node, text) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  let buffer = "";
+  for (let index = 0; index < words.length; index += 1) {
+    buffer += `${index ? " " : ""}${words[index]}`;
+    node.textContent = buffer;
+    if (index % 6 === 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, 18));
+    }
+  }
+}
+
+async function generateBreakdownSections(project, request) {
+  const selections = getBreakdownSelections();
+  const customPrompt = request.breakdownPrompt || document.getElementById("exportBreakdownPrompt")?.value || "";
+  const { card, title, meta, output } = getBreakdownLiveNodes();
+  const progressCard = document.getElementById("exportProgressCard");
+  const progressLabel = document.getElementById("exportProgressLabel");
+  const progressPercent = document.getElementById("exportProgressPercent");
+  const progressDetail = document.getElementById("exportProgressDetail");
+  const progressFill = document.getElementById("exportProgressFill");
+  if (!selections.length) {
+    throw new Error("Select at least one AI report section before generating the report.");
+  }
+  if (card) card.hidden = false;
+  if (title) title.textContent = exportDialogMode === "report" ? "Result" : "AI Breakdown Build";
+  if (meta) meta.textContent = "Reading the screenplay...";
+  if (output) output.innerHTML = "";
+  if (progressCard) progressCard.hidden = false;
+  if (progressLabel) progressLabel.textContent = "Reading screenplay...";
+  if (progressPercent) progressPercent.textContent = "0%";
+  if (progressDetail) progressDetail.textContent = "Preparing the AI report workspace.";
+  if (progressFill) progressFill.style.width = "0%";
+
+  const generatedSections = [];
+  for (let index = 0; index < selections.length; index += 1) {
+    const selection = selections[index];
+    const percent = Math.round((index / selections.length) * 100);
+    if (meta) meta.textContent = `Writing ${selection.label} ${index + 1}/${selections.length}...`;
+    if (progressLabel) progressLabel.textContent = `Writing ${selection.label}...`;
+    if (progressPercent) progressPercent.textContent = `${percent}%`;
+    if (progressDetail) progressDetail.textContent = `Building section ${index + 1} of ${selections.length}.`;
+    if (progressFill) progressFill.style.width = `${percent}%`;
+    const sectionEl = document.createElement("article");
+    sectionEl.className = "export-breakdown-live-section";
+    sectionEl.dataset.sectionKey = selection.key;
+    sectionEl.innerHTML = `<strong>${escapeHtml(selection.label)}</strong><p contenteditable="true" spellcheck="true" data-role="report-body"></p>`;
+    output?.appendChild(sectionEl);
+    const bodyEl = sectionEl.querySelector("p");
+    const text = await AI.generateText(buildBreakdownPrompt(project, selection, customPrompt));
+    await typeBreakdownText(bodyEl, text);
+    generatedSections.push({
+      key: selection.key,
+      label: selection.label,
+      minWords: selection.minWords,
+      maxWords: selection.maxWords,
+      text: String(text || "").trim()
+    });
+  }
+  if (meta) meta.textContent = "Report ready for export.";
+  if (progressLabel) progressLabel.textContent = "Report ready.";
+  if (progressPercent) progressPercent.textContent = "100%";
+  if (progressDetail) progressDetail.textContent = "You can edit, save, and build the report now.";
+  if (progressFill) progressFill.style.width = "100%";
+  request.generatedSections = generatedSections;
+  request.includeCharacters = generatedSections.some((item) => item.key === "characters");
+  request.includeLocations = generatedSections.some((item) => item.key === "locations");
+  request.includeScenes = generatedSections.some((item) => item.key === "scenes");
+  request.customPrompt = customPrompt;
+  return request;
+}
+
 function getExportTypeLabel(exportType) {
   return exportType === "full" ? "Full Script"
     : exportType === "character" ? "Character Export"
@@ -184,7 +412,7 @@ function getExportTypeLabel(exportType) {
     : exportType === "revision" ? "Revision Export"
     : exportType === "production" ? "Production Export"
     : exportType === "shooting" ? "Shooting Script"
-    : exportType === "breakdown" ? "AI Breakdown"
+    : exportType === "breakdown" ? "AI Report"
     : "Export";
 }
 
@@ -243,14 +471,14 @@ function buildExportHistorySummary(request) {
     if (request.timeOfDay?.[0]) bits.push(request.timeOfDay[0]);
     if (request.sceneRange) bits.push(`Range ${request.sceneRange.start}-${request.sceneRange.end}`);
     if (request.characters?.length) bits.push(`${request.characters.length} character${request.characters.length === 1 ? "" : "s"}`);
-    return bits.join(" · ") || "Filtered production packet";
+    return bits.join(" Â· ") || "Filtered production packet";
   }
   if (request.exportType === "breakdown") {
     const bits = [];
     if (request.includeCharacters) bits.push("Characters");
     if (request.includeLocations) bits.push("Locations");
     if (request.includeScenes) bits.push("Scenes");
-    return bits.join(" | ") || "Breakdown report";
+    return bits.join(" | ") || "AI report";
   }
   return "Whole screenplay";
 }
@@ -314,8 +542,8 @@ function renderExportHistory(project = getCurrentProject()) {
     return `
       <article class="export-history-item" data-export-history-id="${escapeHtml(entry.id)}">
         <div class="export-history-copy">
-          <h5 class="export-history-title">${escapeHtml(getExportTypeLabel(entry.exportType))} · ${escapeHtml(String(entry.format || "").toUpperCase())}</h5>
-          <p class="export-history-meta">${escapeHtml(createdAt)} · ${escapeHtml(entry.user || "Current user")} · ${escapeHtml(entry.projectTitle || "Untitled Script")}</p>
+          <h5 class="export-history-title">${escapeHtml(getExportTypeLabel(entry.exportType))} Â· ${escapeHtml(String(entry.format || "").toUpperCase())}</h5>
+          <p class="export-history-meta">${escapeHtml(createdAt)} Â· ${escapeHtml(entry.user || "Current user")} Â· ${escapeHtml(entry.projectTitle || "Untitled Script")}</p>
           <p class="export-history-meta">${escapeHtml(entry.summary || "Saved export settings ready for re-download.")}</p>
         </div>
         <div class="export-history-actions">
@@ -397,6 +625,13 @@ function applyExportRequestToDialog(request = {}) {
   setChecked("exportBreakdownCharacters", request.includeCharacters !== false);
   setChecked("exportBreakdownLocations", request.includeLocations !== false);
   setChecked("exportBreakdownScenes", request.includeScenes !== false);
+  setValue("exportBreakdownPrompt", request.breakdownPrompt || "", "");
+  setValue("exportBreakdownCharactersMin", request.breakdownWords?.characters?.min || 120, 120);
+  setValue("exportBreakdownCharactersMax", request.breakdownWords?.characters?.max || 220, 220);
+  setValue("exportBreakdownLocationsMin", request.breakdownWords?.locations?.min || 120, 120);
+  setValue("exportBreakdownLocationsMax", request.breakdownWords?.locations?.max || 220, 220);
+  setValue("exportBreakdownScenesMin", request.breakdownWords?.scenes?.min || 160, 160);
+  setValue("exportBreakdownScenesMax", request.breakdownWords?.scenes?.max || 280, 280);
 
   setValue("exportWatermarkPreset", options.watermarkPreset || "", "");
   setValue("exportWatermarkPosition", options.watermarkPosition || "diagonal", "diagonal");
@@ -664,6 +899,21 @@ function buildExportRequestFromDialog(project) {
     request.includeCharacters = Boolean(document.getElementById("exportBreakdownCharacters")?.checked);
     request.includeLocations = Boolean(document.getElementById("exportBreakdownLocations")?.checked);
     request.includeScenes = Boolean(document.getElementById("exportBreakdownScenes")?.checked);
+    request.breakdownPrompt = document.getElementById("exportBreakdownPrompt")?.value || "";
+    request.breakdownWords = {
+      characters: {
+        min: Number(document.getElementById("exportBreakdownCharactersMin")?.value || 120),
+        max: Number(document.getElementById("exportBreakdownCharactersMax")?.value || 220)
+      },
+      locations: {
+        min: Number(document.getElementById("exportBreakdownLocationsMin")?.value || 120),
+        max: Number(document.getElementById("exportBreakdownLocationsMax")?.value || 220)
+      },
+      scenes: {
+        min: Number(document.getElementById("exportBreakdownScenesMin")?.value || 160),
+        max: Number(document.getElementById("exportBreakdownScenesMax")?.value || 280)
+      }
+    };
   }
 
   return request;
@@ -761,10 +1011,12 @@ async function executeExportRequest(project, request) {
         includeCharacters: request.includeCharacters,
         includeLocations: request.includeLocations,
         includeScenes: request.includeScenes,
+        generatedSections: request.generatedSections || [],
+        customPrompt: request.customPrompt || "",
         options: request.options
       }),
       action: `export.breakdown.${format}`,
-      message: `Exported the AI breakdown as ${format.toUpperCase()}.`
+      message: `Exported the AI report as ${format.toUpperCase()}.`
     };
   }
   return {
@@ -1153,7 +1405,7 @@ function buildConversionVersionOptions(record) {
         ? new Date(version.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
         : `Saved pass ${versions.length - index}`;
       const count = Number(version?.structuredLineCount || version?.structuredLines?.length || 0);
-      const label = `${version?.label || `Saved pass ${versions.length - index}`} · ${count} lines · ${stamp}`;
+      const label = `${version?.label || `Saved pass ${versions.length - index}`} Â· ${count} lines Â· ${stamp}`;
       return {
         id: String(version?.id || `version_${index}`),
         label,
@@ -1733,7 +1985,7 @@ function getWorkspaceStoryMemoryChoices(workspaceId = state.currentWorkspaceId) 
         type: bucket,
         id: item.id,
         name: item.name || bucketLabels[bucket],
-        label: `${project.title} · ${bucketLabels[bucket]} · ${item.name || "Untitled"}`
+        label: `${project.title} Â· ${bucketLabels[bucket]} Â· ${item.name || "Untitled"}`
       }))));
 }
 
@@ -1889,21 +2141,21 @@ function showWorkspaceReviewCenter() {
       key: "scripts",
       label: "Scripts",
       value: String(projects.length),
-      meta: `${sceneCount} scenes · ${characterCount} characters`,
+      meta: `${sceneCount} scenes Â· ${characterCount} characters`,
       note: "How much writing structure is already active inside this workspace."
     },
     {
       key: "tasks",
       label: "Task load",
       value: String(openTasks.length),
-      meta: `${completedTasks.length} completed · ${aiTasks.length} AI tasks`,
+      meta: `${completedTasks.length} completed Â· ${aiTasks.length} AI tasks`,
       note: "The active load the team is carrying right now."
     },
     {
       key: "queue",
       label: "Review queue",
       value: String(unresolvedComments.length + aiReviewTasks.length),
-      meta: `${unresolvedComments.length} comments · ${aiReviewTasks.length} AI reviews`,
+      meta: `${unresolvedComments.length} comments Â· ${aiReviewTasks.length} AI reviews`,
       note: "What still needs review before the workspace feels clear."
     },
     {
@@ -2788,7 +3040,7 @@ async function reviewAiTaskResult(taskId) {
     </div>
     <div class="workspace-ai-review-summary">
       <p class="modal-copy">${escapeHtml(task.title)}</p>
-      <p class="workspace-ai-review-caption">${escapeHtml(context.projectTitle)} · ${escapeHtml(context.targetLabel)}</p>
+      <p class="workspace-ai-review-caption">${escapeHtml(context.projectTitle)} Â· ${escapeHtml(context.targetLabel)}</p>
     </div>
     <div class="workspace-ai-review-grid">
       <div class="workspace-ai-review-panel">
@@ -3929,6 +4181,7 @@ export function bindEvents() {
   // Project Actions
   refs.saveBtn.addEventListener("click", () => persistProjects(true));
   refs.exportScreenplayBtn.addEventListener("click", () => openExportDialog({ format: "pdf", exportType: "full" }));
+  document.getElementById("openReportBtn")?.addEventListener("click", () => openReportDialog());
   refs.exportTxtBtn.addEventListener("click", exportTxt);
   refs.exportJsonBtn.addEventListener("click", exportJson);
   refs.fileInput.addEventListener("change", importFile);
@@ -3936,6 +4189,22 @@ export function bindEvents() {
   document.getElementById("exportDialogCloseBtn")?.addEventListener("click", closeExportDialog);
   document.getElementById("exportDialogGenerateBtn")?.addEventListener("click", () => {
     void generateExportFromDialog();
+  });
+  document.getElementById("exportDialogGenerateInlineBtn")?.addEventListener("click", () => {
+    void generateExportFromDialog();
+  });
+  document.getElementById("exportDialogExportBtn")?.addEventListener("click", () => {
+    void exportReportFromDialog();
+  });
+  document.getElementById("exportReportEditBtn")?.addEventListener("click", () => {
+    setReportEditing(true);
+    showToast("Report editing enabled.", "success", { duration: 1800 });
+  });
+  document.getElementById("exportReportSaveBtn")?.addEventListener("click", () => {
+    saveReportDraftFromLiveOutput();
+    setReportEditing(false);
+    updateExportDialogState();
+    showToast("Report draft saved.", "success", { duration: 1800 });
   });
   document.getElementById("exportPresetSaveBtn")?.addEventListener("click", () => {
     void saveCurrentExportPreset();
@@ -3992,7 +4261,7 @@ export function bindEvents() {
   document.getElementById("exportDialog")?.addEventListener("input", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportWatermarkText, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright")) {
+    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportWatermarkText, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownPrompt, #exportBreakdownCharactersMin, #exportBreakdownCharactersMax, #exportBreakdownLocationsMin, #exportBreakdownLocationsMax, #exportBreakdownScenesMin, #exportBreakdownScenesMax")) {
       updateExportDialogState();
     }
   });
@@ -4003,7 +4272,7 @@ export function bindEvents() {
       requestAnimationFrame(() => updateExportDialogState());
     }
   });
-  document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportEnableWatermarkSettings, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes").forEach((element) => {
+  document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportEnableWatermarkSettings, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes, #exportBreakdownPrompt, #exportBreakdownCharactersMin, #exportBreakdownCharactersMax, #exportBreakdownLocationsMin, #exportBreakdownLocationsMax, #exportBreakdownScenesMin, #exportBreakdownScenesMax").forEach((element) => {
     element.addEventListener("change", updateExportDialogState);
     if (element instanceof HTMLInputElement && element.type === "number") {
       element.addEventListener("input", updateExportDialogState);
@@ -4528,7 +4797,7 @@ export function bindEvents() {
       if (!text) return;
       const lineId = state.activeBlockId;
       if (!lineId) {
-        await customAlert('Click on a line in the script first — comments must be attached to a specific line.', 'No line selected');
+        await customAlert('Click on a line in the script first â€” comments must be attached to a specific line.', 'No line selected');
         return;
       }
       await addComment(project.id, text, { lineId });
@@ -4903,7 +5172,7 @@ function handleBlockKeydown(event, id) {
   if (event.key === "Delete") {
     const isEmpty = !activeEl.textContent.trim();
     if (!isEmpty) {
-      // Let the browser delete one character forward — do not touch the line
+      // Let the browser delete one character forward â€” do not touch the line
       return;
     }
     event.preventDefault();
@@ -5277,6 +5546,9 @@ function handleMenuAction(action) {
       break;
     case "export-screenplay":
       openExportDialog({ format: "pdf", exportType: "full" });
+      break;
+    case "open-report":
+      openReportDialog();
       break;
     case "export-json":
       exportJson();
@@ -6150,6 +6422,9 @@ function openExportDialog(prefill = {}) {
 
   const dialog = document.getElementById("exportDialog");
   if (!dialog) return;
+  exportDialogMode = prefill.exportType === "breakdown" ? "report" : "export";
+  dialog.classList.toggle("report-mode", exportDialogMode === "report");
+  reportDraftRequest = null;
 
   exportDialogPrefill = {
     format: String(prefill.format || exportDialogPrefill.format || "pdf"),
@@ -6157,9 +6432,102 @@ function openExportDialog(prefill = {}) {
   };
 
   const projectMeta = document.getElementById("exportDialogProjectMeta");
+  const dialogTitle = dialog.querySelector(".export-head h3");
+  const presetsBar = document.getElementById("exportPresetsBar");
+  const typePanel = document.getElementById("exportTypeChoices")?.closest(".export-panel");
+  const historyPanel = document.getElementById("exportHistoryList")?.closest(".export-panel");
+  const optionsPanel = document.getElementById("exportOptionsPanel");
+  const generatePanel = document.getElementById("exportGeneratePanel");
+  const presetsCopy = dialog.querySelector(".export-presets-copy strong");
+  const presetsBody = dialog.querySelector(".export-presets-copy p");
+  const historyTitle = historyPanel?.querySelector(".export-panel-head h4");
+  const historyEmpty = document.getElementById("exportHistoryEmpty");
+  const formatHeading = document.getElementById("exportFormatChoices")?.closest(".export-panel")?.querySelector(".export-panel-head h4");
+  const optionsHeading = document.getElementById("exportIncludeNotes")?.closest(".export-panel")?.querySelector(".export-panel-head h4");
+  const step1Heading = document.getElementById("exportStep1Heading");
+  const step2Heading = document.getElementById("exportStep2Heading");
+  const generateHeading = document.getElementById("exportGenerateHeading");
+  const generateBadge = document.getElementById("exportGenerateBadge");
+  const reportStep1Mount = document.getElementById("exportReportStep1Mount");
+  const reportStep2Mount = document.getElementById("exportReportStep2Mount");
+  const reportStep3Mount = document.getElementById("exportReportStep3Mount");
+  const titlePageToggle = document.getElementById("exportIncludeTitlePageToggle");
+  const breakdownBuilder = document.getElementById("exportBreakdownBuilder");
+  const breakdownPromptField = document.getElementById("exportBreakdownPromptField");
+
+  rememberReportLayoutNode("titleToggle", titlePageToggle);
+  rememberReportLayoutNode("breakdownBuilder", breakdownBuilder);
+  rememberReportLayoutNode("breakdownPrompt", breakdownPromptField);
   if (projectMeta) {
     const sceneCount = (project.lines || []).filter((line) => line.type === "scene" && String(line.text || "").trim()).length;
-    projectMeta.textContent = `${project.title || "Untitled Script"} · ${sceneCount} scene${sceneCount === 1 ? "" : "s"}`;
+    projectMeta.textContent = exportDialogMode === "report"
+      ? `${project.title || "Untitled Script"} · ${sceneCount} scene${sceneCount === 1 ? "" : "s"}`
+      : `${project.title || "Untitled Script"} · ${sceneCount} scene${sceneCount === 1 ? "" : "s"}`;
+  }
+  if (dialogTitle) {
+    dialogTitle.textContent = exportDialogMode === "report" ? "Report" : "Screenplay Export";
+  }
+  if (presetsBar) {
+    presetsBar.hidden = exportDialogMode === "report";
+    presetsBar.style.display = exportDialogMode === "report" ? "none" : "";
+  }
+  if (typePanel) {
+    typePanel.hidden = false;
+    typePanel.style.display = "grid";
+  }
+  if (historyPanel) {
+    historyPanel.hidden = exportDialogMode === "report";
+    historyPanel.style.display = exportDialogMode === "report" ? "none" : "grid";
+  }
+  if (optionsPanel) {
+    optionsPanel.hidden = exportDialogMode === "report";
+    optionsPanel.style.display = exportDialogMode === "report" ? "none" : "grid";
+  }
+  if (generatePanel) {
+    generatePanel.classList.toggle("export-panel-span-2", exportDialogMode !== "report");
+  }
+  if (presetsCopy) {
+    presetsCopy.textContent = exportDialogMode === "report" ? "Report Presets" : "Export Presets";
+  }
+  if (presetsBody) {
+    presetsBody.textContent = exportDialogMode === "report"
+      ? "Save reusable AI report setups for different reading goals and delivery styles."
+      : "Save a reusable export setup for producer, actor, director, or custom delivery flows.";
+  }
+  if (historyTitle) {
+    historyTitle.textContent = exportDialogMode === "report" ? "Report History" : "Export History";
+  }
+  if (historyEmpty) {
+    historyEmpty.textContent = exportDialogMode === "report"
+      ? "No saved AI reports for this script yet."
+      : "No exports recorded for this script yet.";
+  }
+  if (formatHeading) {
+    formatHeading.textContent = exportDialogMode === "report" ? "Choose Output Format" : "Choose Format";
+  }
+  if (optionsHeading) {
+    optionsHeading.textContent = exportDialogMode === "report" ? "Report Setup" : "Configure Options";
+  }
+  if (step1Heading) {
+    step1Heading.textContent = exportDialogMode === "report" ? "Report Sections" : "Choose Export Type";
+  }
+  if (step2Heading) {
+    step2Heading.textContent = exportDialogMode === "report" ? "Format" : "Choose Format";
+  }
+  if (generateHeading) {
+    generateHeading.textContent = exportDialogMode === "report" ? "Generation" : "Generate Export";
+  }
+  if (generateBadge) {
+    generateBadge.textContent = exportDialogMode === "report" ? "Step 3" : "Step 4";
+  }
+  if (exportDialogMode === "report") {
+    moveNodeToMount(breakdownBuilder, reportStep1Mount);
+    moveNodeToMount(titlePageToggle, reportStep2Mount);
+    moveNodeToMount(breakdownPromptField, reportStep3Mount);
+  } else {
+    restoreNodeFromMount("titleToggle", titlePageToggle);
+    restoreNodeFromMount("breakdownBuilder", breakdownBuilder);
+    restoreNodeFromMount("breakdownPrompt", breakdownPromptField);
   }
 
   const defaults = getDefaultExportOptions();
@@ -6376,17 +6744,63 @@ function openExportDialog(prefill = {}) {
   if (locationField) locationField.value = "";
   if (productionLocationSelect) productionLocationSelect.value = "";
   if (productionTimeSelect) productionTimeSelect.value = "";
+  const breakdownPrompt = document.getElementById("exportBreakdownPrompt");
+  const breakdownCharactersMin = document.getElementById("exportBreakdownCharactersMin");
+  const breakdownCharactersMax = document.getElementById("exportBreakdownCharactersMax");
+  const breakdownLocationsMin = document.getElementById("exportBreakdownLocationsMin");
+  const breakdownLocationsMax = document.getElementById("exportBreakdownLocationsMax");
+  const breakdownScenesMin = document.getElementById("exportBreakdownScenesMin");
+  const breakdownScenesMax = document.getElementById("exportBreakdownScenesMax");
+  const breakdownThemeMin = document.getElementById("exportBreakdownThemeMin");
+  const breakdownThemeMax = document.getElementById("exportBreakdownThemeMax");
+  const breakdownStyleMin = document.getElementById("exportBreakdownStyleMin");
+  const breakdownStyleMax = document.getElementById("exportBreakdownStyleMax");
+  const breakdownSceneryMin = document.getElementById("exportBreakdownSceneryMin");
+  const breakdownSceneryMax = document.getElementById("exportBreakdownSceneryMax");
+  const breakdownPropsMin = document.getElementById("exportBreakdownPropsMin");
+  const breakdownPropsMax = document.getElementById("exportBreakdownPropsMax");
+  if (breakdownPrompt) breakdownPrompt.value = "";
+  if (breakdownCharactersMin) breakdownCharactersMin.value = "120";
+  if (breakdownCharactersMax) breakdownCharactersMax.value = "220";
+  if (breakdownLocationsMin) breakdownLocationsMin.value = "120";
+  if (breakdownLocationsMax) breakdownLocationsMax.value = "220";
+  if (breakdownScenesMin) breakdownScenesMin.value = "160";
+  if (breakdownScenesMax) breakdownScenesMax.value = "280";
+  if (breakdownThemeMin) breakdownThemeMin.value = "140";
+  if (breakdownThemeMax) breakdownThemeMax.value = "260";
+  if (breakdownStyleMin) breakdownStyleMin.value = "120";
+  if (breakdownStyleMax) breakdownStyleMax.value = "220";
+  if (breakdownSceneryMin) breakdownSceneryMin.value = "120";
+  if (breakdownSceneryMax) breakdownSceneryMax.value = "220";
+  if (breakdownPropsMin) breakdownPropsMin.value = "100";
+  if (breakdownPropsMax) breakdownPropsMax.value = "180";
+  resetBreakdownLivePanel();
+  const exportBtn = document.getElementById("exportDialogExportBtn");
+  if (exportBtn) exportBtn.hidden = true;
   updateExportDialogState();
   renderExportHistory(project);
   renderExportPresetOptions(project);
 
-  if (!dialog.open) {
-    dialog.showModal();
+  if (dialog.open) {
+    dialog.close();
   }
+  dialog.showModal();
 }
 
 function closeExportDialog() {
+  reportDraftRequest = null;
   document.getElementById("exportDialog")?.close();
+}
+
+function setReportEditing(enabled) {
+  document.querySelectorAll("#exportBreakdownLiveOutput p[data-role='report-body']").forEach((node) => {
+    node.contentEditable = enabled ? "true" : "false";
+  });
+}
+
+function saveReportDraftFromLiveOutput() {
+  if (!reportDraftRequest) return;
+  reportDraftRequest.generatedSections = readReportSectionsFromLiveOutput();
 }
 
 function updateExportDialogState() {
@@ -6407,6 +6821,10 @@ function updateExportDialogState() {
   }
   const format = exportFormatSelect?.value || "pdf";
   const generateBtn = document.getElementById("exportDialogGenerateBtn");
+  const exportBtn = document.getElementById("exportDialogExportBtn");
+  const inlineGenerateBtn = document.getElementById("exportDialogGenerateInlineBtn");
+  const editBtn = document.getElementById("exportReportEditBtn");
+  const saveBtn = document.getElementById("exportReportSaveBtn");
   const validationNote = document.getElementById("exportValidationNote");
   const characterPanel = document.getElementById("exportCharacterPanel");
   const characterPacketOptions = document.getElementById("exportCharacterPacketOptions");
@@ -6414,12 +6832,13 @@ function updateExportDialogState() {
   const watermarkPanel = document.getElementById("exportWatermarkPanel");
   const coverPagePanel = document.getElementById("exportCoverPagePanel");
   const breakdownPanel = document.getElementById("exportBreakdownPanel");
+  const exportTypeDescription = document.getElementById("exportTypeDescription");
+  const exportTypeChoices = document.getElementById("exportTypeChoices");
+  const exportFormatDescription = document.getElementById("exportFormatDescription");
   const scenePanel = document.getElementById("exportScenePanel");
   const locationPanel = document.getElementById("exportLocationPanel");
   const revisionPanel = document.getElementById("exportRevisionPanel");
   const productionPanel = document.getElementById("exportProductionPanel");
-  const exportTypeDescription = document.getElementById("exportTypeDescription");
-  const exportFormatDescription = document.getElementById("exportFormatDescription");
 
   if (characterPanel) {
     const showCharacterPanel = exportType === "character" || exportType === "character-packet";
@@ -6472,8 +6891,20 @@ function updateExportDialogState() {
     breakdownPanel.hidden = !showBreakdownPanel;
     breakdownPanel.style.display = showBreakdownPanel ? "grid" : "none";
   }
-  if (exportTypeDescription) exportTypeDescription.textContent = EXPORT_TYPE_DETAILS[exportType] || EXPORT_TYPE_DETAILS.full;
-  if (exportFormatDescription) exportFormatDescription.textContent = EXPORT_FORMAT_DETAILS[format] || EXPORT_FORMAT_DETAILS.pdf;
+  if (exportTypeDescription) {
+    exportTypeDescription.textContent = EXPORT_TYPE_DETAILS[exportType] || EXPORT_TYPE_DETAILS.full;
+    exportTypeDescription.hidden = exportDialogMode === "report";
+    exportTypeDescription.style.display = exportDialogMode === "report" ? "none" : "";
+  }
+  if (exportTypeChoices) {
+    exportTypeChoices.hidden = exportDialogMode === "report";
+    exportTypeChoices.style.display = exportDialogMode === "report" ? "none" : "";
+  }
+  if (exportFormatDescription) {
+    exportFormatDescription.textContent = EXPORT_FORMAT_DETAILS[format] || EXPORT_FORMAT_DETAILS.pdf;
+    exportFormatDescription.hidden = exportDialogMode === "report";
+    exportFormatDescription.style.display = exportDialogMode === "report" ? "none" : "";
+  }
 
   const selectedCharacters = document.querySelectorAll("input[name='exportCharacterName']:checked").length;
   const selectedScenes = document.querySelectorAll("input[name='exportSceneId']:checked").length;
@@ -6544,7 +6975,7 @@ function updateExportDialogState() {
     && !document.getElementById("exportBreakdownCharacters")?.checked
     && !document.getElementById("exportBreakdownLocations")?.checked
     && !document.getElementById("exportBreakdownScenes")?.checked) {
-    validationMessage = "Select at least one breakdown section before generating the report.";
+    validationMessage = "Select at least one AI report section before generating the report.";
   }
 
   const typeLabel = exportType === "character"
@@ -6562,7 +6993,7 @@ function updateExportDialogState() {
       : exportType === "shooting"
         ? "shooting script package"
       : exportType === "breakdown"
-        ? "breakdown report"
+        ? "AI report"
         : "full screenplay";
   const formatLabel = format.toUpperCase();
   const metadataLabel = includeMetadata ? "with metadata" : "without metadata";
@@ -6571,15 +7002,20 @@ function updateExportDialogState() {
   const summaryTitle = document.getElementById("exportSummaryTitle");
   const summaryChips = document.getElementById("exportSummaryChips");
   const summaryHint = document.getElementById("exportSummaryHint");
+  const previewGrid = document.getElementById("exportPreviewGrid");
   const previewScenes = document.getElementById("exportPreviewScenes");
   const previewCharacters = document.getElementById("exportPreviewCharacters");
   const previewPages = document.getElementById("exportPreviewPages");
   const previewSize = document.getElementById("exportPreviewSize");
   if (summaryText) {
     summaryText.textContent = `Export ${typeLabel} as ${formatLabel}, ${metadataLabel}.`;
+    summaryText.hidden = exportDialogMode === "report";
+    summaryText.style.display = exportDialogMode === "report" ? "none" : "";
   }
   if (summaryTitle) {
-    summaryTitle.textContent = exportType === "full"
+    summaryTitle.textContent = exportDialogMode === "report"
+      ? "AI report workspace"
+      : exportType === "full"
       ? "Ready to export the whole screenplay:"
       : exportType === "character"
         ? "Ready to export character pages:"
@@ -6594,12 +7030,12 @@ function updateExportDialogState() {
           : exportType === "production"
             ? "Ready to export the production packet:"
             : exportType === "breakdown"
-              ? "Ready to export the AI breakdown:"
+              ? "Ready to build the AI report:"
             : "Ready to export the shooting script:";
   }
   if (summaryChips) {
     const chips = [
-      exportType === "full" ? "Full Script" : exportType === "character" ? "Character Export" : exportType === "character-packet" ? "Character Packet" : exportType === "scene" ? "Scene Export" : exportType === "location" ? "Location Export" : exportType === "revision" ? "Revision Export" : exportType === "production" ? "Production Export" : exportType === "breakdown" ? "AI Breakdown" : "Shooting Script",
+      exportType === "full" ? "Full Script" : exportType === "character" ? "Character Export" : exportType === "character-packet" ? "Character Packet" : exportType === "scene" ? "Scene Export" : exportType === "location" ? "Location Export" : exportType === "revision" ? "Revision Export" : exportType === "production" ? "Production Export" : exportType === "breakdown" ? "AI Report" : "Shooting Script",
       format.toUpperCase(),
       includeMetadata ? "Metadata on" : "Metadata off"
     ];
@@ -6648,9 +7084,13 @@ function updateExportDialogState() {
       chips.push(`${Math.round(Number(watermarkOpacity) * 100)}% opacity`);
     }
     summaryChips.innerHTML = chips.map((chip) => `<span class="export-summary-chip">${escapeHtml(chip)}</span>`).join("");
+    summaryChips.hidden = exportDialogMode === "report";
+    summaryChips.style.display = exportDialogMode === "report" ? "none" : "";
   }
   if (summaryHint) {
-    summaryHint.textContent = exportType === "character"
+    summaryHint.textContent = exportDialogMode === "report"
+      ? "Generate the report, refine the live text if needed, then export it."
+      : exportType === "character"
       ? "Character exports keep scene-heading context from the structured screenplay."
       : exportType === "character-packet"
         ? "Character packets add scene counts, line counts, and first/last appearance stats for each selected character."
@@ -6663,12 +7103,17 @@ function updateExportDialogState() {
         : exportType === "production"
           ? "Production exports collect filtered scenes with descriptions, dialogue, and characters present."
         : exportType === "breakdown"
-          ? "AI breakdown exports turn structured screenplay data into character, location, and scene intelligence packets."
+          ? "AI report reads the screenplay and writes focused character, location, and scene insight for the selected sections."
         : exportType === "shooting"
           ? "Shooting scripts keep scene numbers locked and carry revision-aware page formatting for production use."
           : document.getElementById("exportEnableWatermarkSettings")?.checked
             ? "This export will include a configurable watermark on the generated pages."
             : "Full script exports include the whole screenplay package in the chosen format.";
+    summaryHint.hidden = false;
+  }
+  if (previewGrid) {
+    previewGrid.hidden = exportDialogMode === "report";
+    previewGrid.style.display = exportDialogMode === "report" ? "none" : "";
   }
 
   let previewSceneCount = exportDialogContext.scenes.length;
@@ -6711,7 +7156,9 @@ function updateExportDialogState() {
   if (previewSize) previewSize.textContent = estimateExportFileSize(previewLineCount, format, previewSceneCount, previewCharacterCount);
 
   if (generateBtn) {
-    generateBtn.textContent = exportType === "production"
+    generateBtn.textContent = exportDialogMode === "report"
+      ? "Build AI Report"
+      : exportType === "production"
       ? (format === "pdf" ? "Open Production PDF" : "Download Production DOCX")
       : exportType === "location"
         ? (format === "pdf" ? "Open Location PDF" : "Download Location DOCX")
@@ -6720,7 +7167,7 @@ function updateExportDialogState() {
       : exportType === "character-packet"
         ? (format === "pdf" ? "Open Character Packet PDF" : "Download Character Packet DOCX")
       : exportType === "breakdown"
-        ? (format === "pdf" ? "Open Breakdown PDF" : "Download Breakdown DOCX")
+        ? (format === "pdf" ? "Open Report PDF" : "Download Report DOCX")
       : exportType === "shooting"
         ? (format === "pdf" ? "Open Shooting Script PDF" : "Download Shooting Script DOCX")
       : format === "pdf"
@@ -6731,10 +7178,32 @@ function updateExportDialogState() {
             ? "Download FDX"
             : "Download Fountain";
     generateBtn.disabled = Boolean(validationMessage);
+    generateBtn.hidden = exportDialogMode === "report";
+  }
+  if (inlineGenerateBtn) {
+    inlineGenerateBtn.hidden = exportDialogMode !== "report";
+    inlineGenerateBtn.disabled = Boolean(validationMessage);
+  }
+  if (exportBtn) {
+    exportBtn.hidden = exportDialogMode !== "report" || !reportDraftRequest?.generatedSections?.length;
+    exportBtn.disabled = !reportDraftRequest?.generatedSections?.length;
+    exportBtn.textContent = format === "docx" ? "Build Report DOCX" : "Build Report PDF";
+  }
+  if (editBtn) {
+    editBtn.hidden = exportDialogMode !== "report" || !reportDraftRequest?.generatedSections?.length;
+    editBtn.disabled = !reportDraftRequest?.generatedSections?.length;
+  }
+  if (saveBtn) {
+    saveBtn.hidden = exportDialogMode !== "report" || !reportDraftRequest?.generatedSections?.length;
+    saveBtn.disabled = !reportDraftRequest?.generatedSections?.length;
   }
   if (validationNote) {
     validationNote.hidden = !validationMessage;
     validationNote.textContent = validationMessage;
+  }
+  const liveTitle = document.getElementById("exportBreakdownLiveTitle");
+  if (liveTitle && exportDialogMode === "report" && liveTitle.textContent === "AI Breakdown Build") {
+    liveTitle.textContent = "AI Report Build";
   }
 }
 
@@ -6751,17 +7220,45 @@ async function generateExportFromDialog() {
   if (!project) return;
 
   const generateBtn = document.getElementById("exportDialogGenerateBtn");
-  const request = buildExportRequestFromDialog(project);
+  let request = buildExportRequestFromDialog(project);
   try {
     if (generateBtn) generateBtn.disabled = true;
+    if (request.exportType === "breakdown") {
+      request = await generateBreakdownSections(project, request);
+      request.generatedSections = readReportSectionsFromLiveOutput();
+      reportDraftRequest = request;
+      setReportEditing(false);
+      updateExportDialogState();
+      return;
+    }
     enqueueExportJob(project, request);
-    closeExportDialog();
+    if (request.exportType !== "breakdown") {
+      closeExportDialog();
+    }
   } catch (error) {
     console.error("Screenplay export failed", error);
-    await customAlert("The screenplay export could not be generated. Please try again after the export engine finishes loading.", "Screenplay Export");
+    await customAlert(error instanceof Error ? error.message : "The screenplay export could not be generated. Please try again after the export engine finishes loading.", "Screenplay Export");
   } finally {
+    if (request.exportType !== "breakdown") {
+      resetBreakdownLivePanel();
+    }
     updateExportDialogState();
   }
+}
+
+async function exportReportFromDialog() {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project || !reportDraftRequest) return;
+  const request = {
+    ...reportDraftRequest,
+    generatedSections: readReportSectionsFromLiveOutput()
+  };
+  if (!request.generatedSections.length) {
+    await customAlert("Build the AI report first before exporting it.", "Report");
+    return;
+  }
+  reportDraftRequest = request;
+  enqueueExportJob(project, request);
 }
 
 function openPreviewWindow(autoPrint) {
@@ -7364,3 +7861,5 @@ async function checkFirstWorkBackup() {
     }
   }
 }
+
+

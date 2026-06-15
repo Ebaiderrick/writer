@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EyaWriter</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
-  <link rel="stylesheet" href="styles.css?v=20260615i">
+  <link rel="stylesheet" href="styles.css?v=20260615q">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
@@ -788,9 +788,10 @@
                 </div>
               </details>
               <details class="menu-group">
-              <summary class="menu-group-summary">Import &amp; Export</summary>
+              <summary class="menu-group-summary">Export &amp; Report</summary>
               <div class="menu-group-body">
                 <button class="nav-menu-button" type="button" data-menu-action="export-screenplay">Screenplay Export</button>
+                <button class="nav-menu-button" type="button" data-menu-action="open-report">Report</button>
                 <button class="nav-menu-button" type="button" data-menu-action="export-txt">Export as TXT</button>
                 <button class="nav-menu-button" type="button" data-menu-action="export-json">Export as JSON</button>
               </div>
@@ -1268,6 +1269,7 @@
                   <input id="convertImportInput" type="file" accept=".txt,.fountain,.md,.doc,.docx,.pdf" hidden>
                   <button id="saveBtn" class="ghost-button project-tool-button" type="button">Save</button>
                   <button id="exportScreenplayBtn" class="ghost-button project-tool-button" type="button">Screenplay Export</button>
+                  <button id="openReportBtn" class="ghost-button project-tool-button" type="button">Report</button>
                   <button id="exportTxtBtn" class="ghost-button project-tool-button" type="button">Export TXT</button>
                   <button id="exportJsonBtn" class="ghost-button project-tool-button" type="button">Export JSON</button>
                 </div>
@@ -1742,7 +1744,7 @@
           </div>
         </div>
 
-        <section class="export-presets-bar" aria-label="Export Presets">
+        <section id="exportPresetsBar" class="export-presets-bar" aria-label="Export Presets">
           <div class="export-presets-copy">
             <strong>Export Presets</strong>
             <p>Save a reusable export setup for producer, actor, director, or custom delivery flows.</p>
@@ -1760,34 +1762,35 @@
         </section>
 
         <div class="export-grid">
-        <section class="export-panel">
+        <section id="exportStep1Panel" class="export-panel">
           <div class="export-panel-head">
             <span class="export-step-badge">Step 1</span>
             <div>
-              <h4>Choose Export Type</h4>
+              <h4 id="exportStep1Heading">Choose Export Type</h4>
             </div>
           </div>
-          <label class="field export-select-field" id="exportTypeChoices">
-            <select id="exportTypeSelect" class="comment-filter-select">
-              <option value="full">Full Script</option>
-              <option value="character">Character Export</option>
-              <option value="character-packet">Character Packet Export</option>
-              <option value="scene">Scene Export</option>
+            <label class="field export-select-field" id="exportTypeChoices">
+              <select id="exportTypeSelect" class="comment-filter-select">
+                <option value="full">Full Script</option>
+                <option value="character">Character Export</option>
+                <option value="character-packet">Character Packet Export</option>
+                <option value="scene">Scene Export</option>
                 <option value="location">Location Export</option>
                 <option value="revision">Revision Export</option>
                 <option value="production">Production Export</option>
                 <option value="shooting">Shooting Script</option>
-                <option value="breakdown">AI Breakdown</option>
+                <option value="breakdown" hidden>AI Report</option>
               </select>
             </label>
             <p id="exportTypeDescription" class="export-inline-description">Title page, metadata, scenes, dialogue, transitions, and optional notes/comments.</p>
+            <div id="exportReportStep1Mount"></div>
           </section>
 
-        <section class="export-panel">
+        <section id="exportStep2Panel" class="export-panel">
           <div class="export-panel-head">
             <span class="export-step-badge">Step 2</span>
             <div>
-              <h4>Choose Format</h4>
+              <h4 id="exportStep2Heading">Choose Format</h4>
             </div>
           </div>
           <label class="field export-select-field" id="exportFormatChoices">
@@ -1799,9 +1802,10 @@
             </select>
           </label>
           <p id="exportFormatDescription" class="export-inline-description">PDF opens a print-ready screenplay document for saving as PDF.</p>
+          <div id="exportReportStep2Mount"></div>
         </section>
 
-        <section class="export-panel export-panel-span-2">
+        <section id="exportOptionsPanel" class="export-panel export-panel-span-2">
           <div class="export-panel-head">
             <span class="export-step-badge">Step 3</span>
             <div>
@@ -1822,7 +1826,7 @@
                 <input id="exportIncludeMetadata" type="checkbox" checked>
                 <span>Include Metadata</span>
               </label>
-              <label class="export-toggle">
+              <label id="exportIncludeTitlePageToggle" class="export-toggle">
                 <input id="exportIncludeTitlePage" type="checkbox" checked>
                 <span>Title Page</span>
               </label>
@@ -1990,23 +1994,78 @@
             <div id="exportBreakdownPanel" class="export-detail-panel" hidden>
               <div class="export-detail-head">
                 <div class="export-inline-heading">
-                  <h5>Breakdown Sections:</h5>
-                  <p id="exportBreakdownMeta">Choose which screenplay intelligence blocks to include in this report.</p>
+                  <h5>AI Report Sections:</h5>
+                  <p id="exportBreakdownMeta">Choose the report angles AI should read for and write back to you.</p>
                 </div>
               </div>
-              <div class="export-options-grid">
-                <label class="export-toggle">
-                  <input id="exportBreakdownCharacters" type="checkbox" checked>
-                  <span>Character Breakdown</span>
-                </label>
-                <label class="export-toggle">
-                  <input id="exportBreakdownLocations" type="checkbox" checked>
-                  <span>Location Breakdown</span>
-                </label>
-                <label class="export-toggle">
-                  <input id="exportBreakdownScenes" type="checkbox" checked>
-                  <span>Scene Breakdown</span>
-                </label>
+              <div id="exportBreakdownBuilder" class="export-breakdown-builder">
+                <div class="export-breakdown-range-head">
+                  <span></span>
+                  <span>Min words</span>
+                  <span>Max words</span>
+                </div>
+                <article class="export-breakdown-row">
+                  <label class="export-toggle">
+                    <input id="exportBreakdownCharacters" type="checkbox" checked>
+                    <span>Character Report</span>
+                  </label>
+                  <input id="exportBreakdownCharactersMin" class="modal-input export-breakdown-range-input" type="number" min="40" step="10" value="120" placeholder="Min words">
+                  <input id="exportBreakdownCharactersMax" class="modal-input export-breakdown-range-input" type="number" min="80" step="10" value="220" placeholder="Max words">
+                </article>
+                <article class="export-breakdown-row">
+                  <label class="export-toggle">
+                    <input id="exportBreakdownLocations" type="checkbox" checked>
+                    <span>Location Report</span>
+                  </label>
+                  <input id="exportBreakdownLocationsMin" class="modal-input export-breakdown-range-input" type="number" min="40" step="10" value="120" placeholder="Min words">
+                  <input id="exportBreakdownLocationsMax" class="modal-input export-breakdown-range-input" type="number" min="80" step="10" value="220" placeholder="Max words">
+                </article>
+                <article class="export-breakdown-row">
+                  <label class="export-toggle">
+                    <input id="exportBreakdownScenes" type="checkbox" checked>
+                    <span>Scene Report</span>
+                  </label>
+                  <input id="exportBreakdownScenesMin" class="modal-input export-breakdown-range-input" type="number" min="60" step="10" value="160" placeholder="Min words">
+                  <input id="exportBreakdownScenesMax" class="modal-input export-breakdown-range-input" type="number" min="100" step="10" value="280" placeholder="Max words">
+                </article>
+                <article class="export-breakdown-row">
+                  <label class="export-toggle">
+                    <input id="exportBreakdownTheme" type="checkbox">
+                    <span>Storyline &amp; Theme</span>
+                  </label>
+                  <input id="exportBreakdownThemeMin" class="modal-input export-breakdown-range-input" type="number" min="60" step="10" value="140" placeholder="Min words">
+                  <input id="exportBreakdownThemeMax" class="modal-input export-breakdown-range-input" type="number" min="100" step="10" value="260" placeholder="Max words">
+                </article>
+                <article class="export-breakdown-row">
+                  <label class="export-toggle">
+                    <input id="exportBreakdownStyle" type="checkbox">
+                    <span>Writing Style</span>
+                  </label>
+                  <input id="exportBreakdownStyleMin" class="modal-input export-breakdown-range-input" type="number" min="50" step="10" value="120" placeholder="Min words">
+                  <input id="exportBreakdownStyleMax" class="modal-input export-breakdown-range-input" type="number" min="90" step="10" value="220" placeholder="Max words">
+                </article>
+                <article class="export-breakdown-row">
+                  <label class="export-toggle">
+                    <input id="exportBreakdownScenery" type="checkbox">
+                    <span>Scenery Development</span>
+                  </label>
+                  <input id="exportBreakdownSceneryMin" class="modal-input export-breakdown-range-input" type="number" min="50" step="10" value="120" placeholder="Min words">
+                  <input id="exportBreakdownSceneryMax" class="modal-input export-breakdown-range-input" type="number" min="90" step="10" value="220" placeholder="Max words">
+                </article>
+                <article class="export-breakdown-row">
+                  <label class="export-toggle">
+                    <input id="exportBreakdownProps" type="checkbox">
+                    <span>Props &amp; Objects</span>
+                  </label>
+                  <input id="exportBreakdownPropsMin" class="modal-input export-breakdown-range-input" type="number" min="40" step="10" value="100" placeholder="Min words">
+                  <input id="exportBreakdownPropsMax" class="modal-input export-breakdown-range-input" type="number" min="80" step="10" value="180" placeholder="Max words">
+                </article>
+              </div>
+              <label id="exportBreakdownPromptField" class="field export-select-field export-breakdown-prompt-field">
+                <textarea id="exportBreakdownPrompt" class="collab-textarea export-breakdown-prompt-input" placeholder="Optional: ask the AI to focus on emotional arcs, production practicality, weak scenes, hidden motifs, or any other angle."></textarea>
+              </label>
+              <div id="exportReportGenerateRow" class="export-report-generate-row">
+                <button id="exportDialogGenerateInlineBtn" class="primary-button btn-sm" type="button">Generate</button>
               </div>
             </div>
 
@@ -2042,14 +2101,15 @@
           </div>
         </section>
 
-        <section class="export-panel export-panel-span-2">
+        <section id="exportGeneratePanel" class="export-panel export-panel-span-2">
           <div class="export-panel-head">
-            <span class="export-step-badge">Step 4</span>
+            <span id="exportGenerateBadge" class="export-step-badge">Step 4</span>
             <div>
-              <h4>Generate Export</h4>
+              <h4 id="exportGenerateHeading">Generate Export</h4>
             </div>
           </div>
           <div class="export-summary-card">
+            <div id="exportReportStep3Mount"></div>
             <div class="export-inline-heading export-summary-inline">
               <strong id="exportSummaryTitle">Ready to export:</strong>
               <p id="exportSummaryText">Export the full screenplay as PDF with metadata included.</p>
@@ -2073,7 +2133,7 @@
                 <strong id="exportPreviewSize">0 KB</strong>
               </div>
             </div>
-            <div id="exportProgressCard" class="export-progress-card" hidden>
+              <div id="exportProgressCard" class="export-progress-card" hidden>
               <div class="export-progress-head">
                 <strong id="exportProgressLabel">Preparing export...</strong>
                 <span id="exportProgressPercent">0%</span>
@@ -2081,10 +2141,22 @@
               <div class="export-progress-track">
                 <span id="exportProgressFill" class="export-progress-fill" style="width:0%"></span>
               </div>
-              <p id="exportProgressDetail" class="export-progress-detail">Reviewing your export settings.</p>
-            </div>
-            <div class="export-summary-actions">
+                <p id="exportProgressDetail" class="export-progress-detail">Reviewing your export settings.</p>
+              </div>
+              <div id="exportBreakdownLiveCard" class="export-breakdown-live-card" hidden>
+                <div class="export-breakdown-live-head">
+                  <strong id="exportBreakdownLiveTitle">Result</strong>
+                  <span id="exportBreakdownLiveMeta">Waiting to begin...</span>
+                </div>
+                <div class="export-breakdown-live-actions">
+                  <button id="exportReportEditBtn" class="ghost-button btn-sm" type="button" hidden>Edit</button>
+                  <button id="exportReportSaveBtn" class="ghost-button btn-sm" type="button" hidden>Save</button>
+                </div>
+                <div id="exportBreakdownLiveOutput" class="export-breakdown-live-output"></div>
+              </div>
+              <div class="export-summary-actions">
               <button id="exportDialogGenerateBtn" class="primary-button btn-sm" type="button">Generate Export</button>
+              <button id="exportDialogExportBtn" class="ghost-button btn-sm" type="button" hidden>Build Report</button>
               <span id="exportSummaryHint" class="export-summary-hint">This export is prepared from structured screenplay data.</span>
             </div>
           </div>
@@ -2475,7 +2547,7 @@
     </div>
   </dialog>
 
-<script type="module" src="js/main.js?v=20260615i"></script>
+<script type="module" src="js/main.js?v=20260615q"></script>
 </body>
 </html>
 

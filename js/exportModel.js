@@ -799,6 +799,59 @@ function buildShootingScriptDocument(baseDocument) {
 }
 
 function buildBreakdownDocument(baseDocument, request = {}) {
+  const generatedSections = Array.isArray(request.generatedSections) ? request.generatedSections.filter((item) => String(item?.text || "").trim()) : [];
+  if (generatedSections.length) {
+    const reportLines = [{
+      id: 'breakdown-report-heading',
+      type: 'scene',
+      text: 'AI REPORT',
+      displayText: 'AI REPORT',
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER
+    }];
+    generatedSections.forEach((section) => {
+      reportLines.push({
+        id: uidLineId(`breakdown-section-${section.key || 'custom'}`),
+        type: 'action',
+        text: section.label || 'Report Section',
+        displayText: section.label || 'Report Section',
+        secondary: '',
+        sceneNumber: 0,
+        index: Number.MIN_SAFE_INTEGER + reportLines.length + 1
+      });
+      String(section.text || '').split(/\n{2,}/).map((entry) => entry.trim()).filter(Boolean).forEach((paragraph) => {
+        reportLines.push({
+          id: uidLineId(`breakdown-paragraph-${section.key || 'custom'}`),
+          type: 'action',
+          text: paragraph,
+          displayText: paragraph,
+          secondary: '',
+          sceneNumber: 0,
+          index: Number.MIN_SAFE_INTEGER + reportLines.length + 1
+        });
+      });
+    });
+    return {
+      ...baseDocument,
+      exportType: 'breakdown',
+      lines: reportLines,
+      scenes: [],
+      characters: [],
+      selection: {
+        includeCharacters: Boolean(request.includeCharacters),
+        includeLocations: Boolean(request.includeLocations),
+        includeScenes: Boolean(request.includeScenes),
+        customPrompt: String(request.customPrompt || '').trim()
+      },
+      breakdownSummary: {
+        sectionCount: generatedSections.length,
+        characterCount: generatedSections.some((item) => item.key === 'characters') ? baseDocument.characters.length : 0,
+        locationCount: generatedSections.some((item) => item.key === 'locations') ? new Set(baseDocument.scenes.map((scene) => scene.location).filter(Boolean)).size : 0,
+        sceneCount: generatedSections.some((item) => item.key === 'scenes') ? baseDocument.scenes.length : 0
+      }
+    };
+  }
   const includeCharacters = request.includeCharacters !== false;
   const includeLocations = request.includeLocations !== false;
   const includeScenes = request.includeScenes !== false;

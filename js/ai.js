@@ -1527,7 +1527,7 @@ export const AI = (() => {
     });
   }
 
-  return { init, triggerAction, triggerSelectionAction, triggerSmartProofread, triggerAssistant, runWorkspaceTaskAssistant };
+  return { init, triggerAction, triggerSelectionAction, triggerSmartProofread, triggerAssistant, runWorkspaceTaskAssistant, generateText: requestAiText };
 })();
 
 function getSelectedTextInBlock(block) {
