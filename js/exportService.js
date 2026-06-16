@@ -1,4 +1,5 @@
 import {
+  buildCollaborativeExportDocument,
   buildCharacterExportDocument,
   buildCharacterPacketExportDocument,
   buildBreakdownExportDocument,
@@ -347,6 +348,16 @@ export class ExportService {
     const normalized = normalizeExportRequest(request);
     assertSupportedFormat(normalized.format, ['pdf', 'docx'], 'Production export');
     const exportDocument = buildProductionExportDocument(project, {
+      ...request,
+      options: normalized.options
+    });
+    return buildFormatOutput(exportDocument, normalized.format);
+  }
+
+  static async exportCollaborative(project, request = {}) {
+    const normalized = normalizeExportRequest(request);
+    assertSupportedFormat(normalized.format, ['pdf', 'docx'], 'Collaborative export');
+    const exportDocument = buildCollaborativeExportDocument(project, {
       ...request,
       options: normalized.options
     });

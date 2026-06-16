@@ -1778,6 +1778,8 @@
                 <option value="location">Location Export</option>
                 <option value="revision">Revision Export</option>
                 <option value="production">Production Export</option>
+                <option value="collaborative">Collaborative Export</option>
+                <option value="watermarked" hidden>Watermarked Script</option>
                 <option value="shooting">Shooting Script</option>
                 <option value="breakdown" hidden>AI Report</option>
               </select>
@@ -2099,6 +2101,43 @@
             </div>
             <div id="exportProductionCharacterList" class="export-chip-list"></div>
           </div>
+
+          <div id="exportCollaborativePanel" class="export-detail-panel" hidden>
+            <div class="export-detail-head">
+              <div class="export-inline-heading">
+                <h5>Collaborative Filters:</h5>
+                <p id="exportCollaborativeMeta">Filter scenes by assigned writer, reviewer, editor, or workflow status.</p>
+              </div>
+            </div>
+            <div class="export-production-grid export-collaborative-grid">
+              <label class="field export-select-field">
+                <select id="exportCollaborativeWriterSelect" class="comment-filter-select">
+                  <option value="">All assigned writers</option>
+                </select>
+              </label>
+              <label class="field export-select-field">
+                <select id="exportCollaborativeReviewerSelect" class="comment-filter-select">
+                  <option value="">All reviewers</option>
+                </select>
+              </label>
+              <label class="field export-select-field">
+                <select id="exportCollaborativeEditorSelect" class="comment-filter-select">
+                  <option value="">All editors</option>
+                </select>
+              </label>
+              <label class="field export-select-field">
+                <select id="exportCollaborativeStatusSelect" class="comment-filter-select">
+                  <option value="">All statuses</option>
+                  <option value="approved">Approved</option>
+                  <option value="awaiting-review">Awaiting review</option>
+                  <option value="awaiting-ai">Awaiting AI</option>
+                  <option value="in-progress">In progress</option>
+                  <option value="todo">To do</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </label>
+            </div>
+          </div>
         </section>
 
         <section id="exportGeneratePanel" class="export-panel export-panel-span-2">
@@ -2151,6 +2190,7 @@
                 <div class="export-breakdown-live-actions">
                   <button id="exportReportEditBtn" class="ghost-button btn-sm" type="button" hidden>Edit</button>
                   <button id="exportReportLoadBtn" class="ghost-button btn-sm" type="button" hidden>Load</button>
+                  <button id="exportReportMergeBtn" class="ghost-button btn-sm" type="button" hidden>Merge</button>
                   <button id="exportReportSaveBtn" class="ghost-button btn-sm" type="button" hidden>Save</button>
                 </div>
                 <div id="exportReportEditor" class="export-report-editor"></div>
@@ -2169,11 +2209,27 @@
           <div class="export-panel-head">
             <span class="export-step-badge">History</span>
             <div>
-              <h4>Export History</h4>
+              <h4>Export Center</h4>
             </div>
           </div>
-          <div id="exportHistoryEmpty" class="export-history-empty">No exports recorded for this script yet.</div>
-          <div id="exportHistoryList" class="export-history-list" hidden></div>
+          <div id="exportCenterMetrics" class="export-preview-grid export-center-metrics"></div>
+          <div class="export-center-grid">
+            <section class="export-center-card">
+              <div class="export-inline-heading export-center-heading">
+                <strong>Recent Exports</strong>
+                <span hidden>Export History</span>
+                <p id="exportHistoryEmpty" class="export-history-empty">No exports recorded for this script yet.</p>
+              </div>
+              <div id="exportHistoryList" class="export-history-list" hidden></div>
+            </section>
+            <section class="export-center-card">
+              <div class="export-inline-heading export-center-heading">
+                <strong>Download Management</strong>
+                <p id="exportQueueEmpty" class="export-history-empty">No queued or recent export jobs yet.</p>
+              </div>
+              <div id="exportQueueList" class="export-history-list" hidden></div>
+            </section>
+          </div>
         </section>
       </div>
     </div>
@@ -2192,6 +2248,24 @@
       <div id="reportDraftLoadList" class="report-draft-load-list" hidden></div>
       <div class="report-draft-load-actions">
         <button id="reportDraftLoadApplyBtn" class="primary-button btn-sm" type="button">Load</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="reportDraftMergeDialog" class="report-draft-load-dialog">
+    <div class="report-draft-load-sheet">
+      <div class="report-draft-load-head">
+        <div>
+          <strong>Merge Report</strong>
+          <p>Current report stays in place. Choose one saved report to merge into it.</p>
+        </div>
+        <button id="reportDraftMergeCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+      </div>
+      <div id="reportDraftMergeCurrent" class="report-draft-load-empty"></div>
+      <div id="reportDraftMergeEmpty" class="report-draft-load-empty">No saved reports available to merge.</div>
+      <div id="reportDraftMergeList" class="report-draft-load-list" hidden></div>
+      <div class="report-draft-load-actions">
+        <button id="reportDraftMergeApplyBtn" class="primary-button btn-sm" type="button">Merge</button>
       </div>
     </div>
   </dialog>

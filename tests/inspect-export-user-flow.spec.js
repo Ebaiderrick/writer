@@ -502,7 +502,7 @@ test('user-style Watermarked Script PDF flow stamps the print export and records
   await page.selectOption('#exportTypeSelect', 'watermarked');
   await expect(page.locator('#exportTypeDescription')).toContainText(/protected screenplay pages/i);
   await expect(page.locator('#exportFormatSelect')).toHaveValue('pdf');
-  await expect(page.locator('#exportDialogGenerateBtn')).toContainText('Open Watermarked PDF');
+  await expect(page.locator('#exportDialogGenerateBtn')).toContainText('Open PDF Export');
 
   await page.selectOption('#exportWatermarkPreset', 'CONFIDENTIAL');
   await page.fill('#exportWatermarkText', 'Festival Review Copy');
@@ -536,4 +536,160 @@ test('user-style Watermarked Script PDF flow stamps the print export and records
   await expect(page.locator('#customModal')).toContainText('Type: Watermarked Script');
   await expect(page.locator('#customModal')).toContainText('Format: PDF');
   await page.evaluate(() => document.getElementById('customModal')?.close());
+});
+
+test('user-style Collaborative Export flow filters workspace-linked scenes and records export history', async ({ page }) => {
+  test.setTimeout(180000);
+
+  await page.route('**/cdnjs.cloudflare.com/ajax/libs/three.js/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: 'window.THREE = window.THREE || {};'
+    });
+  });
+  await page.route('**/cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: 'window.emailjs = window.emailjs || { init() {}, send() { return Promise.resolve(); } };'
+    });
+  });
+  await page.route('**/unpkg.com/docx@8.5.0/build/index.umd.js', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: 'window.docx = window.docx || {};'
+    });
+  });
+
+  await login(page);
+
+  await page.evaluate(() => {
+    const storageKey = 'eyawriter-projects-v5';
+    const project = {
+      id: 'project-export-collaborative-journey',
+      scriptId: 'COLLAB1',
+      title: 'Collaborative Journey',
+      author: 'Lenon',
+      logline: 'A team tests scene export from real workspace activity.',
+      createdAt: '2026-06-16T09:00:00.000Z',
+      updatedAt: '2026-06-16T09:00:00.000Z',
+      comments: [
+        { id: 'comment-1', sceneId: 'scene-1', author: 'Ruth Reviewer', text: 'Approved once the opening beat lands.' }
+      ],
+      workspace: {
+        tasks: [
+          {
+            id: 'task-1',
+            title: 'Polish opening',
+            description: 'Tighten the first scene.',
+            status: 'done',
+            assignedTo: 'writer-lenon',
+            assignedLabel: 'Lenon',
+            assigneeType: 'human',
+            sceneId: 'scene-1',
+            lineId: 'line-1',
+            createdByName: 'Ebai',
+            comments: [
+              { id: 'task-comment-1', author: 'Ruth Reviewer', text: 'Looks approved now.' }
+            ]
+          },
+          {
+            id: 'task-2',
+            title: 'Reshape ending beat',
+            description: 'Keep the second scene in motion.',
+            status: 'in-progress',
+            assignedTo: 'writer-maya',
+            assignedLabel: 'Maya',
+            assigneeType: 'human',
+            sceneId: 'scene-2',
+            lineId: 'line-4',
+            createdByName: 'Ebai',
+            comments: []
+          }
+        ]
+      },
+      lines: [
+        { id: 'scene-1', type: 'scene', text: 'INT. WRITERS ROOM - DAY' },
+        { id: 'line-1', type: 'action', text: 'Pinned pages show the first approved beat.' },
+        { id: 'line-2', type: 'character', text: 'MARA' },
+        { id: 'line-3', type: 'dialogue', text: 'This scene is ready for the shared export.' },
+        { id: 'scene-2', type: 'scene', text: 'EXT. CITY EDGE - NIGHT' },
+        { id: 'line-4', type: 'action', text: 'The unfinished rewrite still waits on the curb.' },
+        { id: 'line-5', type: 'character', text: 'RUIZ' },
+        { id: 'line-6', type: 'dialogue', text: 'Do not export me yet.' }
+      ],
+      activityLog: [],
+      exportHistory: []
+    };
+
+    localStorage.setItem(storageKey, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      currentProjectId: project.id,
+      currentWorkspaceId: null,
+      projects: [project],
+      aiAssist: false,
+      toolStripCollapsed: false,
+      autoNumberScenes: true,
+      backgroundAnimation: false,
+      theme: 'cedar',
+      language: 'en',
+      writingLanguage: 'en',
+      grammarCheck: false,
+      localBackupEnabled: false,
+      localSaveIntervalMinutes: 5,
+      backupPrompted: true,
+      viewOptions: {
+        ruler: false,
+        pageNumbers: true,
+        pageCount: false,
+        showOutline: true,
+        textSize: 12,
+        focusMode: false
+      },
+      tourShown: true
+    }));
+  });
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await expect(page.locator('#homeView')).toBeVisible({ timeout: 20000 });
+
+  const studioHidden = await page.locator('#studioView').getAttribute('hidden').catch(() => '');
+  if (studioHidden !== null) {
+    const projectCard = page.locator('.project-card').filter({ hasText: 'Collaborative Journey' }).first();
+    await expect(projectCard).toBeVisible({ timeout: 15000 });
+    await projectCard.locator('.project-card-open').click();
+  }
+
+  await expect(page.locator('#studioView')).toBeVisible({ timeout: 15000 });
+  await page.evaluate(() => document.getElementById('exportScreenplayBtn')?.click());
+  await expect(page.locator('#exportDialog[open]')).toBeVisible({ timeout: 15000 });
+
+  await page.selectOption('#exportTypeSelect', 'collaborative');
+  await expect(page.locator('#exportTypeDescription')).toContainText(/assigned writer|reviewer|editor|workflow status/i);
+  await page.selectOption('#exportCollaborativeWriterSelect', { label: 'Lenon' });
+  await page.selectOption('#exportCollaborativeReviewerSelect', { label: 'Ruth Reviewer' });
+  await page.selectOption('#exportCollaborativeStatusSelect', 'approved');
+  await expect(page.locator('#exportSummaryChips')).toContainText('Collaborative Export');
+  await expect(page.locator('#exportSummaryChips')).toContainText('Lenon');
+  await expect(page.locator('#exportSummaryChips')).toContainText('Reviewer: Ruth Reviewer');
+  await expect(page.locator('#exportSummaryChips')).toContainText('approved');
+
+  await page.locator('#exportDialogGenerateBtn').click();
+  await page.waitForSelector('#printExportFrame', { timeout: 60000, state: 'attached' });
+  const printHtml = await page.locator('#printExportFrame').evaluate((frame) => frame.getAttribute('srcdoc') || '');
+  expect(printHtml).toContain('COLLABORATIVE EXPORT');
+  expect(printHtml).toContain('Writer: Lenon');
+  expect(printHtml).toContain('INT. WRITERS ROOM - DAY');
+  expect(printHtml).toContain('This scene is ready for the shared export.');
+  expect(printHtml).not.toContain('Do not export me yet.');
+
+  await page.evaluate(() => document.getElementById('exportScreenplayBtn')?.click());
+  await expect(page.locator('#exportDialog[open]')).toBeVisible({ timeout: 15000 });
+  const historyItems = page.locator('.export-history-item');
+  await expect(historyItems).toHaveCount(1, { timeout: 15000 });
+  await expect(historyItems.first()).toContainText('Collaborative Export');
+  await expect(historyItems.first()).toContainText('PDF');
+  await expect(historyItems.first()).toContainText('Lenon');
 });

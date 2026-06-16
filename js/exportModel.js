@@ -247,9 +247,22 @@ function normalizeAssignments(project) {
     title: String(assignment?.title || '').trim(),
     description: String(assignment?.description || '').trim(),
     assignee: String(assignment?.assignee || assignment?.assignedTo || '').trim(),
+    assignedLabel: String(assignment?.assignedLabel || assignment?.assignee || assignment?.assignedTo || '').trim(),
+    assigneeType: String(assignment?.assigneeType || '').trim(),
     status: String(assignment?.status || '').trim(),
+    aiState: String(assignment?.aiState || '').trim(),
+    createdByName: String(assignment?.createdByName || '').trim(),
     sceneId: String(assignment?.sceneId || '').trim(),
     lineId: String(assignment?.lineId || '').trim()
+    ,
+    comments: toArray(assignment?.comments).map((comment, commentIndex) => ({
+      id: String(comment?.id || `${assignment?.id || `assignment_${index}`}_comment_${commentIndex}`),
+      author: String(comment?.author || '').trim(),
+      text: String(comment?.text || '').trim(),
+      mentionId: String(comment?.mentionId || '').trim(),
+      mentionLabel: String(comment?.mentionLabel || '').trim(),
+      createdAt: String(comment?.createdAt || '').trim()
+    })).filter((comment) => comment.author || comment.text)
   })).filter((assignment) => assignment.title || assignment.description);
 }
 
@@ -346,6 +359,171 @@ function buildSceneLineIndexSet(scenes) {
     }
   });
   return indexes;
+}
+
+function getSceneAssignments(baseDocument, scene) {
+  const lineIndexes = buildSceneLineIndexSet([scene]);
+  return baseDocument.assignments.filter((assignment) => {
+    if (assignment.sceneId && assignment.sceneId === scene.id) {
+      return true;
+    }
+    if (!assignment.lineId) {
+      return false;
+    }
+    const linkedLine = baseDocument.lines.find((line) => line.id === assignment.lineId);
+    return Boolean(linkedLine && lineIndexes.has(linkedLine.index));
+  });
+}
+
+function getSceneComments(baseDocument, scene) {
+  const lineIndexes = buildSceneLineIndexSet([scene]);
+  return baseDocument.comments.filter((comment) => {
+    if (comment.sceneId && comment.sceneId === scene.id) {
+      return true;
+    }
+    if (!comment.lineId) {
+      return false;
+    }
+    const linkedLine = baseDocument.lines.find((line) => line.id === comment.lineId);
+    return Boolean(linkedLine && lineIndexes.has(linkedLine.index));
+  });
+}
+
+function normalizeCollaborativeStatus(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized === 'done') return 'approved';
+  if (normalized === 'review') return 'awaiting-review';
+  if (normalized === 'scheduled' || normalized === 'ready' || normalized === 'running') return 'awaiting-ai';
+  if (normalized === 'failed') return 'failed';
+  if (normalized === 'in-progress') return 'in-progress';
+  if (normalized === 'todo') return 'todo';
+  return normalized;
+}
+
+function buildCollaborativeSceneSummary(baseDocument, scene) {
+  const assignments = getSceneAssignments(baseDocument, scene);
+  const comments = getSceneComments(baseDocument, scene);
+  const assignedWriters = [...new Set(assignments
+    .filter((assignment) => assignment.assigneeType !== 'system')
+    .map((assignment) => assignment.assignedLabel || assignment.assignee)
+    .filter(Boolean))];
+  const reviewers = [...new Set([
+    ...comments.map((comment) => comment.author).filter(Boolean),
+    ...assignments.flatMap((assignment) => toArray(assignment.comments).map((comment) => comment.author)).filter(Boolean)
+  ])];
+  const editors = [...new Set(assignments.map((assignment) => assignment.createdByName).filter(Boolean))];
+  const statuses = [...new Set(assignments.flatMap((assignment) => [
+    normalizeCollaborativeStatus(assignment.status),
+    normalizeCollaborativeStatus(assignment.aiState)
+  ]).filter(Boolean))];
+
+  return {
+    scene,
+    assignments,
+    comments,
+    assignedWriters,
+    reviewers,
+    editors,
+    statuses
+  };
+}
+
+function matchesCollaborativeValue(values, target) {
+  if (!target) {
+    return true;
+  }
+  const normalizedTarget = normalizeToken(target);
+  return values.some((value) => normalizeToken(value) === normalizedTarget);
+}
+
+function buildCollaborativeSelectionDocument(baseDocument, request = {}) {
+  const selectedWriter = String(request.assignedWriter || '').trim();
+  const selectedReviewer = String(request.reviewer || '').trim();
+  const selectedEditor = String(request.editor || '').trim();
+  const selectedStatus = normalizeCollaborativeStatus(request.status);
+  const sceneSummaries = baseDocument.scenes
+    .map((scene) => buildCollaborativeSceneSummary(baseDocument, scene))
+    .filter((summary) => {
+      if (!matchesCollaborativeValue(summary.assignedWriters, selectedWriter)) {
+        return false;
+      }
+      if (!matchesCollaborativeValue(summary.reviewers, selectedReviewer)) {
+        return false;
+      }
+      if (!matchesCollaborativeValue(summary.editors, selectedEditor)) {
+        return false;
+      }
+      if (selectedStatus && !summary.statuses.includes(selectedStatus)) {
+        return false;
+      }
+      return true;
+    });
+
+  const selectedScenes = sceneSummaries.map((summary) => summary.scene);
+  const selectedSceneIdSet = new Set(selectedScenes.map((scene) => scene.id));
+  const selectedLineIndexes = buildSceneLineIndexSet(selectedScenes);
+  let lines = baseDocument.lines.filter((line) => selectedSceneIdSet.has(line.id) || selectedLineIndexes.has(line.index));
+  if (baseDocument.options.includeComments) {
+    const comments = baseDocument.comments.filter((comment) => !comment.sceneId || selectedSceneIdSet.has(comment.sceneId));
+    lines = appendCommentsAsNotes(lines, comments);
+  }
+
+  const introLines = [
+    {
+      id: 'collaborative-export-heading',
+      type: 'scene',
+      text: 'COLLABORATIVE EXPORT',
+      displayText: 'COLLABORATIVE EXPORT',
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER
+    },
+    {
+      id: 'collaborative-export-summary',
+      type: 'note',
+      text: [
+        selectedWriter ? `Writer: ${selectedWriter}` : '',
+        selectedReviewer ? `Reviewer: ${selectedReviewer}` : '',
+        selectedEditor ? `Editor: ${selectedEditor}` : '',
+        selectedStatus ? `Status: ${selectedStatus}` : '',
+        `Scenes: ${selectedScenes.length}`
+      ].filter(Boolean).join(' | '),
+      displayText: `[${[
+        selectedWriter ? `Writer: ${selectedWriter}` : '',
+        selectedReviewer ? `Reviewer: ${selectedReviewer}` : '',
+        selectedEditor ? `Editor: ${selectedEditor}` : '',
+        selectedStatus ? `Status: ${selectedStatus}` : '',
+        `Scenes: ${selectedScenes.length}`
+      ].filter(Boolean).join(' | ')}]`,
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER + 1
+    }
+  ];
+
+  return {
+    ...baseDocument,
+    exportType: 'collaborative',
+    selection: {
+      assignedWriter: selectedWriter,
+      reviewer: selectedReviewer,
+      editor: selectedEditor,
+      status: selectedStatus
+    },
+    scenes: selectedScenes,
+    lines: [...introLines, ...lines.map(cloneLine)],
+    characters: extractCharactersFromLines(lines),
+    collaborativeSummary: {
+      sceneCount: selectedScenes.length,
+      assignedWriters: [...new Set(sceneSummaries.flatMap((summary) => summary.assignedWriters))],
+      reviewers: [...new Set(sceneSummaries.flatMap((summary) => summary.reviewers))],
+      editors: [...new Set(sceneSummaries.flatMap((summary) => summary.editors))],
+      statuses: [...new Set(sceneSummaries.flatMap((summary) => summary.statuses))]
+    }
+  };
 }
 
 function buildSceneSelectionDocument(baseDocument, request) {
@@ -1114,6 +1292,11 @@ export function buildProductionExportDocument(project, request = {}) {
   return buildProductionSelectionDocument(baseDocument, request);
 }
 
+export function buildCollaborativeExportDocument(project, request = {}) {
+  const baseDocument = buildBaseExportDocument(project, request.options || request);
+  return buildCollaborativeSelectionDocument(baseDocument, request);
+}
+
 export function buildShootingScriptExportDocument(project, request = {}) {
   const baseDocument = buildBaseExportDocument(project, {
     ...(request.options || request),
@@ -1163,6 +1346,8 @@ export function buildExportFilename(exportDocument, extension) {
         ? '-revision-export'
       : exportDocument.exportType === 'production'
         ? '-production-export'
+        : exportDocument.exportType === 'collaborative'
+          ? '-collaborative-export'
         : exportDocument.exportType === 'shooting'
           ? '-shooting-script'
           : exportDocument.exportType === 'breakdown'
