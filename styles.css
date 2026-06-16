@@ -5872,43 +5872,46 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   opacity: 0.5;
 }
 
-.export-breakdown-live-output {
-  display: grid;
-  gap: 0.55rem;
-  max-height: 280px;
-  overflow: auto;
-  padding-right: 0.18rem;
+.export-report-editor {
+  min-height: 280px;
 }
 
-.export-dialog.report-mode .export-breakdown-live-output {
+.export-dialog.report-mode .export-report-editor {
+  min-height: 360px;
+}
+
+.export-report-editor .note-editor.note-frame {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 14%);
+  background: color-mix(in srgb, var(--surface-strong) 88%, white 12%);
+}
+
+.export-report-editor .note-toolbar {
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 10%);
+  background: color-mix(in srgb, var(--panel) 88%, white 12%);
+}
+
+.export-report-editor .note-editing-area .note-editable {
   min-height: 220px;
   max-height: 420px;
-}
-
-.export-breakdown-live-section {
-  display: grid;
-  gap: 0.24rem;
-  padding: 0.56rem 0.62rem;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 14%);
-  background: color-mix(in srgb, var(--surface-strong) 84%, white 16%);
-}
-
-.export-breakdown-live-section strong {
-  font-size: 12px;
+  padding: 0.9rem 1rem;
+  background: transparent;
   color: var(--ink);
+  font-size: 13px;
+  line-height: 1.65;
 }
 
-.export-breakdown-live-section p {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.55;
-  white-space: pre-wrap;
+.export-report-section {
+  margin-bottom: 1rem;
 }
 
-.export-breakdown-live-section p[data-role="report-body"] {
-  outline: none;
-  min-height: 72px;
+.export-report-section h4 {
+  margin: 0 0 0.42rem;
+  font-size: 13px;
+}
+
+.export-report-section-body p {
+  margin: 0 0 0.7rem;
 }
 
 .export-watermark-text-field {

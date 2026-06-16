@@ -413,6 +413,14 @@ export function sanitizeProject(project) {
     storyMemory: sanitizeStoryMemory(project.storyMemory),
     activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
     exportHistory: Array.isArray(project.exportHistory) ? project.exportHistory : [],
+    reportDraft: project.reportDraft && typeof project.reportDraft === "object"
+      ? {
+          html: typeof project.reportDraft.html === "string" ? project.reportDraft.html : "",
+          generatedSections: Array.isArray(project.reportDraft.generatedSections) ? project.reportDraft.generatedSections : [],
+          request: project.reportDraft.request && typeof project.reportDraft.request === "object" ? project.reportDraft.request : null,
+          updatedAt: project.reportDraft.updatedAt || project.updatedAt || new Date().toISOString()
+        }
+      : null,
     ownerName: project.ownerName || "",
     ownerEmail: project.ownerEmail || "",
     ownerPhotoURL: project.ownerPhotoURL || "",

@@ -41,6 +41,7 @@ import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
   slugify, downloadFile, selectElementText, parseTextToLines, uid,
   placeCaretAtEnd, getCaretOffset, setCaretOffset, clamp, inferTypeFromText,
+  formatDateTime,
   formatLineText, escapeHtml
 } from './utils.js';
 import {
@@ -193,8 +194,98 @@ function getBreakdownLiveNodes() {
     card: document.getElementById("exportBreakdownLiveCard"),
     title: document.getElementById("exportBreakdownLiveTitle"),
     meta: document.getElementById("exportBreakdownLiveMeta"),
-    output: document.getElementById("exportBreakdownLiveOutput")
+    output: document.getElementById("exportReportEditor")
   };
+}
+
+function ensureReportEditor() {
+  const editor = document.getElementById("exportReportEditor");
+  if (!editor || typeof window.$ !== "function") return null;
+  const $editor = window.$(editor);
+  if (!$editor.data("summernote")) {
+    $editor.summernote({
+      placeholder: "AI will write here. You can refine, format, and save the report before building it.",
+      tabsize: 2,
+      height: 320,
+      dialogsInBody: true,
+      toolbar: [
+        ['style', ['style']],
+        ['font', ['bold', 'italic', 'underline', 'clear']],
+        ['fontname', ['fontname']],
+        ['color', ['color']],
+        ['para', ['ul', 'ol', 'paragraph']],
+        ['insert', ['link', 'table']],
+        ['view', ['fullscreen', 'codeview', 'help']]
+      ]
+    });
+  }
+  return $editor;
+}
+
+function getReportEditorHtml() {
+  const editor = ensureReportEditor();
+  return editor ? String(editor.summernote("code") || "") : "";
+}
+
+function setReportEditorHtml(html = "") {
+  const editor = ensureReportEditor();
+  if (!editor) return;
+  editor.summernote("code", String(html || ""));
+}
+
+function setReportEditorEditing(enabled) {
+  const editor = ensureReportEditor();
+  if (!editor) return;
+  editor.summernote(enabled ? "enable" : "disable");
+}
+
+function getReportEditorEditableElement() {
+  const editor = ensureReportEditor();
+  if (!editor) return null;
+  return editor.next(".note-editor").find(".note-editable")[0] || null;
+}
+
+function appendReportSectionShell(selection) {
+  const editorEl = getReportEditorEditableElement();
+  if (!editorEl) return null;
+  const section = document.createElement("section");
+  section.className = "export-report-section";
+  section.dataset.sectionKey = selection.key;
+  section.innerHTML = `
+    <h4 data-report-section-key="${escapeHtml(selection.key)}">${escapeHtml(selection.label)}</h4>
+    <div class="export-report-section-body" data-report-section-body="${escapeHtml(selection.key)}"><p></p></div>
+  `;
+  editorEl.appendChild(section);
+  return section.querySelector(".export-report-section-body p");
+}
+
+function readReportSectionsFromEditorHtml() {
+  const html = getReportEditorHtml();
+  if (!html.trim()) return [];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  return [...doc.querySelectorAll("[data-report-section-key]")]
+    .map((heading) => {
+      const key = String(heading.getAttribute("data-report-section-key") || "").trim();
+      const label = String(heading.textContent || "").trim();
+      let cursor = heading.nextElementSibling;
+      const fragments = [];
+      while (cursor && !cursor.matches("[data-report-section-key]")) {
+        fragments.push(cursor.outerHTML);
+        cursor = cursor.nextElementSibling;
+      }
+      const htmlBody = fragments.join("").trim();
+      const text = htmlBody
+        ? new DOMParser().parseFromString(`<div>${htmlBody}</div>`, "text/html").body.textContent || ""
+        : "";
+      return {
+        key,
+        label,
+        html: htmlBody,
+        text: String(text || "").trim()
+      };
+    })
+    .filter((section) => section.label && (section.text || section.html));
 }
 
 function resetBreakdownLivePanel() {
@@ -202,7 +293,7 @@ function resetBreakdownLivePanel() {
   if (card) card.hidden = true;
   if (title) title.textContent = exportDialogMode === "report" ? "Result" : "AI Breakdown Build";
   if (meta) meta.textContent = "Waiting to begin...";
-  if (output) output.innerHTML = "";
+  if (output) setReportEditorHtml("");
 }
 
 function openReportDialog(prefill = {}) {
@@ -242,17 +333,7 @@ function restoreNodeFromMount(key, node) {
 }
 
 function readReportSectionsFromLiveOutput() {
-  return [...document.querySelectorAll("#exportBreakdownLiveOutput .export-breakdown-live-section")]
-    .map((section) => {
-      const key = String(section.dataset.sectionKey || "").trim();
-      const label = String(section.querySelector("strong")?.textContent || "").trim();
-      const text = [...section.querySelectorAll("p")]
-        .map((entry) => String(entry.textContent || "").trim())
-        .filter(Boolean)
-        .join("\n\n");
-      return { key, label, text };
-    })
-    .filter((section) => section.label && section.text);
+  return readReportSectionsFromEditorHtml();
 }
 
 function buildProjectScriptContext(project) {
@@ -363,7 +444,10 @@ async function generateBreakdownSections(project, request) {
   if (card) card.hidden = false;
   if (title) title.textContent = exportDialogMode === "report" ? "Result" : "AI Breakdown Build";
   if (meta) meta.textContent = "Reading the screenplay...";
-  if (output) output.innerHTML = "";
+  if (output) {
+    setReportEditorHtml("");
+    setReportEditorEditing(true);
+  }
   if (progressCard) progressCard.hidden = false;
   if (progressLabel) progressLabel.textContent = "Reading screenplay...";
   if (progressPercent) progressPercent.textContent = "0%";
@@ -379,22 +463,20 @@ async function generateBreakdownSections(project, request) {
     if (progressPercent) progressPercent.textContent = `${percent}%`;
     if (progressDetail) progressDetail.textContent = `Building section ${index + 1} of ${selections.length}.`;
     if (progressFill) progressFill.style.width = `${percent}%`;
-    const sectionEl = document.createElement("article");
-    sectionEl.className = "export-breakdown-live-section";
-    sectionEl.dataset.sectionKey = selection.key;
-    sectionEl.innerHTML = `<strong>${escapeHtml(selection.label)}</strong><p contenteditable="true" spellcheck="true" data-role="report-body"></p>`;
-    output?.appendChild(sectionEl);
-    const bodyEl = sectionEl.querySelector("p");
+    const bodyEl = appendReportSectionShell(selection);
     const text = await AI.generateText({
       ...buildBreakdownPrompt(project, selection, customPrompt),
       signal: reportGenerationController.signal
     });
-    await typeBreakdownText(bodyEl, text);
+    if (bodyEl) {
+      await typeBreakdownText(bodyEl, text);
+    }
     generatedSections.push({
       key: selection.key,
       label: selection.label,
       minWords: selection.minWords,
       maxWords: selection.maxWords,
+      html: bodyEl?.parentElement?.innerHTML || `<p>${escapeHtml(String(text || "").trim())}</p>`,
       text: String(text || "").trim()
     });
   }
@@ -404,6 +486,7 @@ async function generateBreakdownSections(project, request) {
   if (progressDetail) progressDetail.textContent = "You can edit, save, and build the report now.";
   if (progressFill) progressFill.style.width = "100%";
   request.generatedSections = generatedSections;
+  request.reportHtml = getReportEditorHtml();
   request.includeCharacters = generatedSections.some((item) => item.key === "characters");
   request.includeLocations = generatedSections.some((item) => item.key === "locations");
   request.includeScenes = generatedSections.some((item) => item.key === "scenes");
@@ -6802,6 +6885,13 @@ function openExportDialog(prefill = {}) {
     dialog.close();
   }
   dialog.showModal();
+  if (exportDialogMode === "report") {
+    ensureReportEditor();
+    if (!restoreSavedReportDraft(project)) {
+      setReportEditorEditing(true);
+    }
+    updateExportDialogState();
+  }
 }
 
 function closeExportDialog() {
@@ -6810,14 +6900,47 @@ function closeExportDialog() {
 }
 
 function setReportEditing(enabled) {
-  document.querySelectorAll("#exportBreakdownLiveOutput p[data-role='report-body']").forEach((node) => {
-    node.contentEditable = enabled ? "true" : "false";
-  });
+  setReportEditorEditing(enabled);
 }
 
 function saveReportDraftFromLiveOutput() {
-  if (!reportDraftRequest) return;
-  reportDraftRequest.generatedSections = readReportSectionsFromLiveOutput();
+  const project = getCurrentProject();
+  if (!project) return;
+  const generatedSections = readReportSectionsFromLiveOutput();
+  const draft = {
+    html: getReportEditorHtml(),
+    generatedSections,
+    request: reportDraftRequest ? { ...reportDraftRequest, generatedSections } : null,
+    updatedAt: new Date().toISOString()
+  };
+  project.reportDraft = draft;
+  project.updatedAt = draft.updatedAt;
+  upsertProject(project);
+  persistProjects(true);
+  if (draft.request) {
+    draft.request.reportHtml = draft.html;
+  }
+  reportDraftRequest = draft.request || reportDraftRequest;
+}
+
+function restoreSavedReportDraft(project = getCurrentProject()) {
+  const draft = project?.reportDraft;
+  if (!draft?.html) return false;
+  const { card, title, meta } = getBreakdownLiveNodes();
+  if (card) card.hidden = false;
+  if (title) title.textContent = "Result";
+  if (meta) meta.textContent = `Restored last saved draft from ${formatDateTime(draft.updatedAt)}.`;
+  setReportEditorHtml(draft.html);
+  setReportEditing(false);
+  const generatedSections = Array.isArray(draft.generatedSections) ? draft.generatedSections : readReportSectionsFromLiveOutput();
+  reportDraftRequest = draft.request
+    ? { ...draft.request, generatedSections, reportHtml: draft.html }
+    : {
+        ...buildExportRequestFromDialog(project),
+        generatedSections,
+        reportHtml: draft.html
+      };
+  return true;
 }
 
 function stopReportGeneration() {
@@ -7290,7 +7413,8 @@ async function exportReportFromDialog() {
   if (!project || !reportDraftRequest) return;
   const request = {
     ...reportDraftRequest,
-    generatedSections: readReportSectionsFromLiveOutput()
+    generatedSections: readReportSectionsFromLiveOutput(),
+    reportHtml: getReportEditorHtml()
   };
   if (!request.generatedSections.length) {
     await customAlert("Build the AI report first before exporting it.", "Report");
