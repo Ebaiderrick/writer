@@ -94,6 +94,7 @@ let exportDialogMode = "export";
 let reportDraftRequest = null;
 let reportGenerationController = null;
 let selectedReportDraftLoadId = "";
+let activeReportDraftId = "";
 const exportReportLayoutState = {
   titleToggleParent: null,
   titleToggleNext: null,
@@ -6940,15 +6941,23 @@ function saveReportDraftFromLiveOutput() {
   };
   project.reportDraft = draft;
   project.reportDrafts = Array.isArray(project.reportDrafts) ? project.reportDrafts : [];
-  project.reportDrafts.unshift({
-    id: uid("reportDraft"),
+  const targetDraftId = activeReportDraftId || selectedReportDraftLoadId || uid("reportDraft");
+  const existingIndex = project.reportDrafts.findIndex((entry) => entry.id === targetDraftId);
+  const savedEntry = {
+    id: targetDraftId,
     name: draftName,
     html: draft.html,
     generatedSections,
     request: draft.request,
     updatedAt
-  });
+  };
+  if (existingIndex >= 0) {
+    project.reportDrafts.splice(existingIndex, 1);
+  }
+  project.reportDrafts.unshift(savedEntry);
   project.reportDrafts = project.reportDrafts.slice(0, 12);
+  activeReportDraftId = targetDraftId;
+  selectedReportDraftLoadId = targetDraftId;
   project.updatedAt = draft.updatedAt;
   upsertProject(project);
   persistProjects(true);
@@ -6975,6 +6984,7 @@ function restoreSavedReportDraft(project = getCurrentProject()) {
         generatedSections,
         reportHtml: draft.html
       };
+  activeReportDraftId = "";
   return true;
 }
 
@@ -6994,6 +7004,8 @@ function applyLoadedReportDraft(entry, project = getCurrentProject()) {
         generatedSections,
         reportHtml: entry.html || ""
       };
+  activeReportDraftId = entry.id || "";
+  selectedReportDraftLoadId = entry.id || "";
   updateExportDialogState();
   return true;
 }
