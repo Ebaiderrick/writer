@@ -799,13 +799,98 @@ function buildShootingScriptDocument(baseDocument) {
 }
 
 function buildBreakdownDocument(baseDocument, request = {}) {
+  const reportHtml = String(request.reportHtml || '').trim();
   const generatedSections = Array.isArray(request.generatedSections) ? request.generatedSections.filter((item) => String(item?.text || "").trim()) : [];
+  if (reportHtml) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${reportHtml}</div>`, 'text/html');
+    const root = doc.body.firstElementChild || doc.body;
+    const reportLines = [{
+      id: 'breakdown-report-heading',
+      type: 'scene',
+      text: 'REPORT',
+      displayText: 'REPORT',
+      secondary: '',
+      sceneNumber: 0,
+      index: Number.MIN_SAFE_INTEGER
+    }];
+
+    const pushParagraphsFromNode = (node, key = 'custom') => {
+      const text = String(node?.textContent || '').trim();
+      if (!text) return;
+      text
+        .split(/\n{2,}/)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .forEach((paragraph) => {
+          reportLines.push({
+            id: uidLineId(`breakdown-paragraph-${key}`),
+            type: 'action',
+            text: paragraph,
+            displayText: paragraph,
+            secondary: '',
+            sceneNumber: 0,
+            index: Number.MIN_SAFE_INTEGER + reportLines.length + 1
+          });
+        });
+    };
+
+    const sectionNodes = [...root.querySelectorAll('.export-report-section')];
+    if (sectionNodes.length) {
+      sectionNodes.forEach((section, sectionIndex) => {
+        const heading = String(section.querySelector('[data-report-section-key]')?.textContent || '').trim() || `Report Section ${sectionIndex + 1}`;
+        reportLines.push({
+          id: uidLineId(`breakdown-section-${sectionIndex + 1}`),
+          type: 'action',
+          text: heading,
+          displayText: heading,
+          secondary: '',
+          sceneNumber: 0,
+          index: Number.MIN_SAFE_INTEGER + reportLines.length + 1
+        });
+        const body = section.querySelector('.export-report-section-body') || section;
+        const blockChildren = [...body.children];
+        if (blockChildren.length) {
+          blockChildren.forEach((child) => pushParagraphsFromNode(child, String(sectionIndex + 1)));
+        } else {
+          pushParagraphsFromNode(body, String(sectionIndex + 1));
+        }
+      });
+    } else {
+      const blockChildren = [...root.children];
+      if (blockChildren.length) {
+        blockChildren.forEach((child) => pushParagraphsFromNode(child));
+      } else {
+        pushParagraphsFromNode(root);
+      }
+    }
+
+    return {
+      ...baseDocument,
+      exportType: 'breakdown',
+      lines: reportLines,
+      scenes: [],
+      characters: [],
+      selection: {
+        includeCharacters: Boolean(request.includeCharacters),
+        includeLocations: Boolean(request.includeLocations),
+        includeScenes: Boolean(request.includeScenes),
+        customPrompt: String(request.customPrompt || '').trim()
+      },
+      breakdownSummary: {
+        sectionCount: Math.max(0, reportLines.filter((line) => line.type === 'action').length - 1),
+        characterCount: generatedSections.some((item) => item.key === 'characters') ? baseDocument.characters.length : 0,
+        locationCount: generatedSections.some((item) => item.key === 'locations') ? new Set(baseDocument.scenes.map((scene) => scene.location).filter(Boolean)).size : 0,
+        sceneCount: generatedSections.some((item) => item.key === 'scenes') ? baseDocument.scenes.length : 0
+      }
+    };
+  }
   if (generatedSections.length) {
     const reportLines = [{
       id: 'breakdown-report-heading',
       type: 'scene',
-      text: 'AI REPORT',
-      displayText: 'AI REPORT',
+      text: 'REPORT',
+      displayText: 'REPORT',
       secondary: '',
       sceneNumber: 0,
       index: Number.MIN_SAFE_INTEGER
