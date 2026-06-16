@@ -93,6 +93,7 @@ let exportDialogContext = { scenes: [], characters: [], revisions: [] };
 let exportDialogMode = "export";
 let reportDraftRequest = null;
 let reportGenerationController = null;
+let selectedReportDraftLoadId = "";
 const exportReportLayoutState = {
   titleToggleParent: null,
   titleToggleNext: null,
@@ -4296,11 +4297,20 @@ export function bindEvents() {
     setReportEditing(true);
     showToast("Report editing enabled.", "success", { duration: 1800 });
   });
+  document.getElementById("exportReportLoadBtn")?.addEventListener("click", () => {
+    openReportDraftLoadDialog();
+  });
   document.getElementById("exportReportSaveBtn")?.addEventListener("click", () => {
     saveReportDraftFromLiveOutput();
     setReportEditing(false);
     updateExportDialogState();
     showToast("Report draft saved.", "success", { duration: 1800 });
+  });
+  document.getElementById("reportDraftLoadCloseBtn")?.addEventListener("click", () => {
+    closeReportDraftLoadDialog();
+  });
+  document.getElementById("reportDraftLoadApplyBtn")?.addEventListener("click", () => {
+    loadSelectedReportDraft();
   });
   document.getElementById("exportPresetSaveBtn")?.addEventListener("click", () => {
     void saveCurrentExportPreset();
@@ -6903,17 +6913,42 @@ function setReportEditing(enabled) {
   setReportEditorEditing(enabled);
 }
 
+function buildSavedReportName(generatedSections = [], updatedAt = new Date().toISOString()) {
+  const labels = generatedSections
+    .map((section) => String(section?.label || "").trim())
+    .filter(Boolean);
+  if (!labels.length) {
+    return `Saved Report - ${formatDateTime(updatedAt)}`;
+  }
+  const lead = labels[0];
+  const extraCount = labels.length - 1;
+  const summary = extraCount > 0 ? `${lead} + ${extraCount} more` : lead;
+  return `${summary} - ${formatDateTime(updatedAt)}`;
+}
+
 function saveReportDraftFromLiveOutput() {
   const project = getCurrentProject();
   if (!project) return;
   const generatedSections = readReportSectionsFromLiveOutput();
+  const updatedAt = new Date().toISOString();
+  const draftName = buildSavedReportName(generatedSections, updatedAt);
   const draft = {
     html: getReportEditorHtml(),
     generatedSections,
     request: reportDraftRequest ? { ...reportDraftRequest, generatedSections } : null,
-    updatedAt: new Date().toISOString()
+    updatedAt
   };
   project.reportDraft = draft;
+  project.reportDrafts = Array.isArray(project.reportDrafts) ? project.reportDrafts : [];
+  project.reportDrafts.unshift({
+    id: uid("reportDraft"),
+    name: draftName,
+    html: draft.html,
+    generatedSections,
+    request: draft.request,
+    updatedAt
+  });
+  project.reportDrafts = project.reportDrafts.slice(0, 12);
   project.updatedAt = draft.updatedAt;
   upsertProject(project);
   persistProjects(true);
@@ -6941,6 +6976,84 @@ function restoreSavedReportDraft(project = getCurrentProject()) {
         reportHtml: draft.html
       };
   return true;
+}
+
+function applyLoadedReportDraft(entry, project = getCurrentProject()) {
+  if (!entry || !project) return false;
+  const { card, title, meta } = getBreakdownLiveNodes();
+  if (card) card.hidden = false;
+  if (title) title.textContent = "Result";
+  if (meta) meta.textContent = `Loaded saved report from ${formatDateTime(entry.updatedAt)}.`;
+  setReportEditorHtml(entry.html || "");
+  setReportEditing(false);
+  const generatedSections = Array.isArray(entry.generatedSections) ? entry.generatedSections : [];
+  reportDraftRequest = entry.request
+    ? { ...entry.request, generatedSections, reportHtml: entry.html || "" }
+    : {
+        ...buildExportRequestFromDialog(project),
+        generatedSections,
+        reportHtml: entry.html || ""
+      };
+  updateExportDialogState();
+  return true;
+}
+
+function renderReportDraftLoadDialog(project = getCurrentProject()) {
+  const list = document.getElementById("reportDraftLoadList");
+  const empty = document.getElementById("reportDraftLoadEmpty");
+  const applyBtn = document.getElementById("reportDraftLoadApplyBtn");
+  if (!list || !empty || !applyBtn) return;
+  const drafts = Array.isArray(project?.reportDrafts) ? project.reportDrafts : [];
+  if (!drafts.length) {
+    list.hidden = true;
+    list.innerHTML = "";
+    empty.hidden = false;
+    applyBtn.disabled = true;
+    return;
+  }
+  if (!drafts.some((entry) => entry.id === selectedReportDraftLoadId)) {
+    selectedReportDraftLoadId = drafts[0].id;
+  }
+  empty.hidden = true;
+  list.hidden = false;
+  list.innerHTML = drafts.map((entry) => `
+    <label class="report-draft-load-item">
+      <input type="radio" name="reportDraftLoadChoice" value="${escapeHtml(entry.id)}"${entry.id === selectedReportDraftLoadId ? " checked" : ""}>
+      <span class="report-draft-load-copy">
+        <strong>${escapeHtml(entry.name || "Saved Report")}</strong>
+        <em>${escapeHtml(formatDateTime(entry.updatedAt))}</em>
+      </span>
+    </label>
+  `).join("");
+  list.querySelectorAll("input[name='reportDraftLoadChoice']").forEach((input) => {
+    input.addEventListener("change", () => {
+      selectedReportDraftLoadId = input.value;
+      applyBtn.disabled = !selectedReportDraftLoadId;
+    });
+  });
+  applyBtn.disabled = !selectedReportDraftLoadId;
+}
+
+function openReportDraftLoadDialog() {
+  const project = getCurrentProject();
+  const dialog = document.getElementById("reportDraftLoadDialog");
+  if (!project || !dialog) return;
+  renderReportDraftLoadDialog(project);
+  dialog.showModal();
+}
+
+function closeReportDraftLoadDialog() {
+  document.getElementById("reportDraftLoadDialog")?.close();
+}
+
+function loadSelectedReportDraft() {
+  const project = getCurrentProject();
+  const drafts = Array.isArray(project?.reportDrafts) ? project.reportDrafts : [];
+  const entry = drafts.find((item) => item.id === selectedReportDraftLoadId);
+  if (!entry) return;
+  applyLoadedReportDraft(entry, project);
+  closeReportDraftLoadDialog();
+  showToast("Saved report loaded.", "success", { duration: 1800 });
 }
 
 function stopReportGeneration() {
@@ -6977,6 +7090,7 @@ function updateExportDialogState() {
   const inlineGenerateBtn = document.getElementById("exportDialogGenerateInlineBtn");
   const stopBtn = document.getElementById("exportReportStopBtn");
   const editBtn = document.getElementById("exportReportEditBtn");
+  const loadBtn = document.getElementById("exportReportLoadBtn");
   const saveBtn = document.getElementById("exportReportSaveBtn");
   const validationNote = document.getElementById("exportValidationNote");
   const characterPanel = document.getElementById("exportCharacterPanel");
@@ -7347,6 +7461,11 @@ function updateExportDialogState() {
     editBtn.hidden = false;
     editBtn.style.display = exportDialogMode === "report" ? "" : "none";
     editBtn.disabled = !reportDraftRequest?.generatedSections?.length;
+  }
+  if (loadBtn) {
+    loadBtn.hidden = false;
+    loadBtn.style.display = exportDialogMode === "report" ? "" : "none";
+    loadBtn.disabled = !(getCurrentProject()?.reportDrafts?.length);
   }
   if (saveBtn) {
     saveBtn.hidden = false;

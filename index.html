@@ -2157,6 +2157,7 @@
               </div>
               <div class="export-summary-actions">
               <button id="exportDialogGenerateBtn" class="primary-button btn-sm" type="button">Generate Export</button>
+              <button id="exportReportLoadBtn" class="ghost-button btn-sm" type="button" hidden>Load</button>
               <button id="exportDialogExportBtn" class="ghost-button btn-sm" type="button" hidden>Build Report</button>
               <span id="exportSummaryHint" class="export-summary-hint">This export is prepared from structured screenplay data.</span>
             </div>
@@ -2174,6 +2175,23 @@
           <div id="exportHistoryEmpty" class="export-history-empty">No exports recorded for this script yet.</div>
           <div id="exportHistoryList" class="export-history-list" hidden></div>
         </section>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="reportDraftLoadDialog" class="report-draft-load-dialog">
+    <div class="report-draft-load-sheet">
+      <div class="report-draft-load-head">
+        <div>
+          <strong>Load Saved Report</strong>
+          <p>Choose one saved report draft to continue editing.</p>
+        </div>
+        <button id="reportDraftLoadCloseBtn" class="ghost-button btn-sm" type="button">Close</button>
+      </div>
+      <div id="reportDraftLoadEmpty" class="report-draft-load-empty">No saved reports for this script yet.</div>
+      <div id="reportDraftLoadList" class="report-draft-load-list" hidden></div>
+      <div class="report-draft-load-actions">
+        <button id="reportDraftLoadApplyBtn" class="primary-button btn-sm" type="button">Load</button>
       </div>
     </div>
   </dialog>

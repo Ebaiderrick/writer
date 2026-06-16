@@ -421,6 +421,18 @@ export function sanitizeProject(project) {
           updatedAt: project.reportDraft.updatedAt || project.updatedAt || new Date().toISOString()
         }
       : null,
+    reportDrafts: Array.isArray(project.reportDrafts)
+      ? project.reportDrafts
+          .filter((entry) => entry && typeof entry === "object")
+          .map((entry) => ({
+            id: entry.id || uid("reportDraft"),
+            name: typeof entry.name === "string" ? entry.name : "Saved Report",
+            html: typeof entry.html === "string" ? entry.html : "",
+            generatedSections: Array.isArray(entry.generatedSections) ? entry.generatedSections : [],
+            request: entry.request && typeof entry.request === "object" ? entry.request : null,
+            updatedAt: entry.updatedAt || project.updatedAt || new Date().toISOString()
+          }))
+      : [],
     ownerName: project.ownerName || "",
     ownerEmail: project.ownerEmail || "",
     ownerPhotoURL: project.ownerPhotoURL || "",
