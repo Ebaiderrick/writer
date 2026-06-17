@@ -1,4 +1,5 @@
 import { formatLineText, normalizeLineText, slugify } from './utils.js';
+import { paginateScriptLines } from './pagination.js';
 
 const DEFAULT_OPTIONS = {
   includeNotes: false,
@@ -10,6 +11,7 @@ const DEFAULT_OPTIONS = {
   includeSceneDescriptions: true,
   includeRevisions: false,
   includePageNumbers: true,
+  exportMode: 'spec',
   watermarkText: '',
   watermarkPreset: '',
   watermarkPosition: 'diagonal',
@@ -67,13 +69,58 @@ function formatSceneHeading(text, sceneNumber, options) {
   return options.includeSceneNumbers ? `${sceneNumber}. ${heading}` : heading;
 }
 
+function detectScreenplayElementType(line = {}, previousPreparedLine = null) {
+  const originalType = String(line?.type || 'action');
+  if (!['text', 'action', 'shot'].includes(originalType)) {
+    return originalType;
+  }
+  const rawText = String(line?.text || '').trim();
+  if (!rawText) return originalType;
+  if (/^(INT\.|EXT\.|INT\.\/EXT\.|INT\/EXT\.|EST\.)/i.test(rawText)) {
+    return 'scene';
+  }
+  if (/^\(.+\)$/.test(rawText)) {
+    return 'parenthetical';
+  }
+  if (/^[A-Z0-9 .'\-()]+TO:$/.test(rawText) || rawText === 'FADE OUT.' || rawText === 'CUT TO BLACK.') {
+    return 'transition';
+  }
+  if (
+    /^[A-Z0-9 .'\-()]+$/.test(rawText) &&
+    rawText.length <= 40 &&
+    previousPreparedLine &&
+    ['scene', 'action', 'shot', 'text', 'transition'].includes(previousPreparedLine.type)
+  ) {
+    return 'character';
+  }
+  return originalType;
+}
+
+function resolveExportModeOptions(options = {}) {
+  const mode = String(options.exportMode || 'spec').trim().toLowerCase();
+  if (mode === 'production') {
+    return {
+      ...options,
+      exportMode: mode,
+      includeSceneNumbers: true
+    };
+  }
+  return {
+    ...options,
+    exportMode: ['spec', 'production', 'character'].includes(mode) ? mode : 'spec'
+  };
+}
+
 function buildPreparedLines(project, options) {
   const prepared = [];
   let sceneNumber = 0;
 
   toArray(project.lines).forEach((line, index) => {
-    const type = String(line?.type || 'action');
+    const type = detectScreenplayElementType(line, prepared[prepared.length - 1] || null);
     const rawText = String(line?.text || '');
+    if (rawText.trim() === '--- PAGE BREAK ---') {
+      return;
+    }
     const normalized = formatLineText(rawText, type);
     if (!normalized) {
       return;
@@ -1243,10 +1290,10 @@ function uidLineId(prefix) {
 }
 
 function buildBaseExportDocument(project, overrides = {}) {
-  const options = {
+  const options = resolveExportModeOptions({
     ...DEFAULT_OPTIONS,
     ...overrides
-  };
+  });
   const metadata = normalizeMetadata({
     ...project,
     coverPage: options.coverPage || {}
@@ -1256,6 +1303,13 @@ function buildBaseExportDocument(project, overrides = {}) {
   const assignments = normalizeAssignments(project);
   const tags = normalizeTags(project);
   const baseLines = options.includeComments ? appendCommentsAsNotes(lines, comments) : lines.map(cloneLine);
+  const scriptPages = paginateScriptLines(baseLines.map((line) => ({ ...line })));
+  const estimatedRuntimeMinutes = Math.max(1, scriptPages.length);
+  const elementSummary = baseLines.reduce((acc, line) => {
+    const key = String(line?.type || 'action');
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
 
   return {
     exportType: 'full',
@@ -1269,7 +1323,11 @@ function buildBaseExportDocument(project, overrides = {}) {
     comments,
     assignments,
     tags,
-    selection: {}
+    selection: {},
+    screenplayMode: options.exportMode,
+    estimatedRuntimeMinutes,
+    estimatedPageCount: scriptPages.length,
+    elementSummary
   };
 }
 

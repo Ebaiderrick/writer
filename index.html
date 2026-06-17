@@ -1816,14 +1816,25 @@
           </div>
 
             <div class="export-options-grid">
-              <label class="export-toggle">
-                <input id="exportIncludeNotes" type="checkbox">
-                <span>Include Notes</span>
-              </label>
+            <label class="export-toggle">
+              <input id="exportIncludeNotes" type="checkbox">
+              <span>Include Notes</span>
+            </label>
+            <label class="field export-select-field">
+              <select id="exportModeSelect" class="comment-filter-select">
+                <option value="spec">Spec Script</option>
+                <option value="production">Production Script</option>
+                <option value="character">Character Script</option>
+              </select>
+            </label>
             <label class="export-toggle">
               <input id="exportIncludeComments" type="checkbox">
               <span>Include Comments</span>
             </label>
+              <label class="export-toggle">
+                <input id="exportIncludeSceneNumbers" type="checkbox">
+                <span>Scene Numbers</span>
+              </label>
               <label class="export-toggle">
                 <input id="exportIncludeMetadata" type="checkbox" checked>
                 <span>Include Metadata</span>
@@ -2246,6 +2257,8 @@
       </div>
       <div id="reportDraftLoadEmpty" class="report-draft-load-empty">No saved reports for this script yet.</div>
       <div id="reportDraftLoadList" class="report-draft-load-list" hidden></div>
+      <div id="reportDraftRevisionEmpty" class="report-draft-load-empty" hidden>Select a saved report to view its revisions.</div>
+      <div id="reportDraftRevisionList" class="report-draft-load-list" hidden></div>
       <div class="report-draft-load-actions">
         <button id="reportDraftLoadApplyBtn" class="primary-button btn-sm" type="button">Load</button>
       </div>

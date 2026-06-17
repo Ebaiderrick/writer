@@ -95,7 +95,10 @@ let reportDraftRequest = null;
 let reportGenerationController = null;
 let selectedReportDraftLoadId = "";
 let selectedReportDraftMergeId = "";
+let selectedReportDraftRevisionId = "";
 let activeReportDraftId = "";
+let reportAutosaveTimer = 0;
+let reportAutosaveMuted = false;
 const exportReportLayoutState = {
   titleToggleParent: null,
   titleToggleNext: null,
@@ -222,6 +225,13 @@ function ensureReportEditor() {
         ['view', ['fullscreen', 'codeview', 'help']]
       ]
     });
+    const editable = $editor.next(".note-editor").find(".note-editable")[0];
+    if (editable && !editable.dataset.reportAutosaveBound) {
+      editable.dataset.reportAutosaveBound = "true";
+      editable.addEventListener("input", () => {
+        queueReportAutosave();
+      });
+    }
   }
   return $editor;
 }
@@ -242,6 +252,45 @@ function getPlainReportTextPreview(html = "", maxLength = 140) {
   const text = String(doc.body.textContent || "").replace(/\s+/g, " ").trim();
   if (!text) return "No report text saved yet.";
   return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text;
+}
+
+function hasReportEditorContent() {
+  return Boolean(getPlainReportTextPreview(getReportEditorHtml(), 8) !== "No report text saved yet.");
+}
+
+function getReportDraftRevisionSnapshots(existingEntry = null, draft = null, updatedAt = new Date().toISOString()) {
+  const revisions = Array.isArray(existingEntry?.revisions) ? [...existingEntry.revisions] : [];
+  const html = String(draft?.html || "").trim();
+  if (!html) return revisions.slice(0, 20);
+  const lastRevision = revisions[0] || null;
+  if (lastRevision && String(lastRevision.html || "").trim() === html) {
+    revisions[0] = {
+      ...lastRevision,
+      updatedAt
+    };
+    return revisions.slice(0, 20);
+  }
+  revisions.unshift({
+    id: uid("reportRevision"),
+    updatedAt,
+    html,
+    generatedSections: Array.isArray(draft?.generatedSections) ? draft.generatedSections : [],
+    request: draft?.request ? { ...draft.request } : null
+  });
+  return revisions.slice(0, 20);
+}
+
+function queueReportAutosave() {
+  if (reportAutosaveMuted || exportDialogMode !== "report") return;
+  if (reportAutosaveTimer) window.clearTimeout(reportAutosaveTimer);
+  reportAutosaveTimer = window.setTimeout(() => {
+    reportAutosaveTimer = 0;
+    if (!hasReportEditorContent()) return;
+    saveReportDraftFromLiveOutput({ autosave: true });
+    const liveMeta = document.getElementById("exportBreakdownLiveMeta");
+    if (liveMeta) liveMeta.textContent = `Autosaved ${formatDateTime(new Date().toISOString())}.`;
+    updateExportDialogState();
+  }, 900);
 }
 
 function setReportEditorEditing(enabled) {
@@ -862,6 +911,8 @@ function applyExportRequestToDialog(request = {}) {
     const element = document.getElementById(id);
     if (element) element.checked = Boolean(value);
   };
+  const exportModeSelect = document.getElementById("exportModeSelect");
+  if (exportModeSelect) exportModeSelect.value = String(options.exportMode || "spec");
   const setValue = (id, value, fallback = "") => {
     const element = document.getElementById(id);
     if (element) element.value = value ?? fallback;
@@ -869,6 +920,7 @@ function applyExportRequestToDialog(request = {}) {
 
   setChecked("exportIncludeNotes", options.includeNotes);
   setChecked("exportIncludeComments", options.includeComments);
+  setChecked("exportIncludeSceneNumbers", options.includeSceneNumbers);
   setChecked("exportIncludeMetadata", options.includeMetadata !== false);
   setChecked("exportIncludeTitlePage", options.includeTitlePage !== false);
   setChecked("exportIncludePageNumbers", options.includePageNumbers);
@@ -1093,9 +1145,10 @@ function buildExportRequestFromDialog(project) {
   const format = document.getElementById("exportFormatSelect")?.value || "pdf";
   const coverVersionRaw = document.getElementById("exportCoverVersion")?.value || "";
   const options = {
+    exportMode: document.getElementById("exportModeSelect")?.value || "spec",
     includeNotes: Boolean(document.getElementById("exportIncludeNotes")?.checked),
     includeComments: Boolean(document.getElementById("exportIncludeComments")?.checked),
-    includeSceneNumbers: state.autoNumberScenes,
+    includeSceneNumbers: Boolean(document.getElementById("exportIncludeSceneNumbers")?.checked),
     includeMetadata: Boolean(document.getElementById("exportIncludeMetadata")?.checked),
     includeTitlePage: Boolean(document.getElementById("exportIncludeTitlePage")?.checked),
     includePageNumbers: Boolean(document.getElementById("exportIncludePageNumbers")?.checked),
@@ -4552,14 +4605,14 @@ export function bindEvents() {
   document.getElementById("exportDialog")?.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportCollaborativeWriterSelect, #exportCollaborativeReviewerSelect, #exportCollaborativeEditorSelect, #exportCollaborativeStatusSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportIncludePageNumbers, #exportIncludeRevisions, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes")) {
+    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportModeSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportCollaborativeWriterSelect, #exportCollaborativeReviewerSelect, #exportCollaborativeEditorSelect, #exportCollaborativeStatusSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportIncludeNotes, #exportIncludeComments, #exportIncludeSceneNumbers, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportIncludePageNumbers, #exportIncludeRevisions, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes")) {
       updateExportDialogState();
     }
   });
   document.getElementById("exportDialog")?.addEventListener("input", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportCollaborativeWriterSelect, #exportCollaborativeReviewerSelect, #exportCollaborativeEditorSelect, #exportCollaborativeStatusSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportWatermarkText, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownPrompt, #exportBreakdownCharactersMin, #exportBreakdownCharactersMax, #exportBreakdownLocationsMin, #exportBreakdownLocationsMax, #exportBreakdownScenesMin, #exportBreakdownScenesMax")) {
+    if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportModeSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportCollaborativeWriterSelect, #exportCollaborativeReviewerSelect, #exportCollaborativeEditorSelect, #exportCollaborativeStatusSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportWatermarkText, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownPrompt, #exportBreakdownCharactersMin, #exportBreakdownCharactersMax, #exportBreakdownLocationsMin, #exportBreakdownLocationsMax, #exportBreakdownScenesMin, #exportBreakdownScenesMax")) {
       updateExportDialogState();
     }
   });
@@ -4570,7 +4623,7 @@ export function bindEvents() {
       requestAnimationFrame(() => updateExportDialogState());
     }
   });
-  document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportCollaborativeWriterSelect, #exportCollaborativeReviewerSelect, #exportCollaborativeEditorSelect, #exportCollaborativeStatusSelect, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportEnableWatermarkSettings, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes, #exportBreakdownPrompt, #exportBreakdownCharactersMin, #exportBreakdownCharactersMax, #exportBreakdownLocationsMin, #exportBreakdownLocationsMax, #exportBreakdownScenesMin, #exportBreakdownScenesMax").forEach((element) => {
+  document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, #exportModeSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportCollaborativeWriterSelect, #exportCollaborativeReviewerSelect, #exportCollaborativeEditorSelect, #exportCollaborativeStatusSelect, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeSceneNumbers, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportEnableWatermarkSettings, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes, #exportBreakdownPrompt, #exportBreakdownCharactersMin, #exportBreakdownCharactersMax, #exportBreakdownLocationsMin, #exportBreakdownLocationsMax, #exportBreakdownScenesMin, #exportBreakdownScenesMax").forEach((element) => {
     element.addEventListener("change", updateExportDialogState);
     if (element instanceof HTMLInputElement && element.type === "number") {
       element.addEventListener("input", updateExportDialogState);
@@ -7081,6 +7134,8 @@ function openExportDialog(prefill = {}) {
   const breakdownSceneryMax = document.getElementById("exportBreakdownSceneryMax");
   const breakdownPropsMin = document.getElementById("exportBreakdownPropsMin");
   const breakdownPropsMax = document.getElementById("exportBreakdownPropsMax");
+  const exportModeSelect = document.getElementById("exportModeSelect");
+  const exportIncludeSceneNumbers = document.getElementById("exportIncludeSceneNumbers");
   if (breakdownPrompt) breakdownPrompt.value = "";
   if (breakdownCharactersMin) breakdownCharactersMin.value = "120";
   if (breakdownCharactersMax) breakdownCharactersMax.value = "220";
@@ -7096,6 +7151,8 @@ function openExportDialog(prefill = {}) {
   if (breakdownSceneryMax) breakdownSceneryMax.value = "220";
   if (breakdownPropsMin) breakdownPropsMin.value = "100";
   if (breakdownPropsMax) breakdownPropsMax.value = "180";
+  if (exportModeSelect && !exportModeSelect.value) exportModeSelect.value = "spec";
+  if (exportIncludeSceneNumbers) exportIncludeSceneNumbers.checked = Boolean(state.autoNumberScenes);
   resetBreakdownLivePanel();
   const exportBtn = document.getElementById("exportDialogExportBtn");
   if (exportBtn) exportBtn.hidden = true;
@@ -7142,7 +7199,7 @@ function buildSavedReportName(generatedSections = [], updatedAt = new Date().toI
   return `${summary} - ${formatDateTime(updatedAt)}`;
 }
 
-function saveReportDraftFromLiveOutput() {
+function saveReportDraftFromLiveOutput({ autosave = false } = {}) {
   const project = getCurrentProject();
   if (!project) return;
   const generatedSections = readReportSectionsFromLiveOutput();
@@ -7158,13 +7215,15 @@ function saveReportDraftFromLiveOutput() {
   project.reportDrafts = Array.isArray(project.reportDrafts) ? project.reportDrafts : [];
   const targetDraftId = activeReportDraftId || selectedReportDraftLoadId || uid("reportDraft");
   const existingIndex = project.reportDrafts.findIndex((entry) => entry.id === targetDraftId);
+  const existingEntry = existingIndex >= 0 ? project.reportDrafts[existingIndex] : null;
   const savedEntry = {
     id: targetDraftId,
     name: draftName,
     html: draft.html,
     generatedSections,
     request: draft.request,
-    updatedAt
+    updatedAt,
+    revisions: getReportDraftRevisionSnapshots(existingEntry, draft, updatedAt)
   };
   if (existingIndex >= 0) {
     project.reportDrafts.splice(existingIndex, 1);
@@ -7180,6 +7239,13 @@ function saveReportDraftFromLiveOutput() {
     draft.request.reportHtml = draft.html;
   }
   reportDraftRequest = draft.request || reportDraftRequest;
+  if (!autosave) {
+    const liveMeta = document.getElementById("exportBreakdownLiveMeta");
+    if (liveMeta) {
+      const revisionCount = savedEntry.revisions?.length || 1;
+      liveMeta.textContent = `Saved ${formatDateTime(updatedAt)}. ${revisionCount} revision${revisionCount === 1 ? "" : "s"} stored.`;
+    }
+  }
 }
 
 function restoreSavedReportDraft(project = getCurrentProject()) {
@@ -7221,8 +7287,88 @@ function applyLoadedReportDraft(entry, project = getCurrentProject()) {
       };
   activeReportDraftId = entry.id || "";
   selectedReportDraftLoadId = entry.id || "";
+  const revisionCount = Array.isArray(entry.revisions) ? entry.revisions.length : 0;
+  if (meta) meta.textContent = `Loaded saved report from ${formatDateTime(entry.updatedAt)}.${revisionCount ? ` ${revisionCount} revision${revisionCount === 1 ? "" : "s"} available.` : ""}`;
   updateExportDialogState();
   return true;
+}
+
+function applyLoadedReportRevision(entry, revision, project = getCurrentProject()) {
+  if (!entry || !revision || !project) return false;
+  const revisionHtml = String(revision.html || entry.html || "");
+  const generatedSections = Array.isArray(revision.generatedSections)
+    ? revision.generatedSections
+    : Array.isArray(entry.generatedSections)
+      ? entry.generatedSections
+      : [];
+  const requestBase = revision.request || entry.request || null;
+  const { card, title, meta } = getBreakdownLiveNodes();
+  if (card) card.hidden = false;
+  if (title) title.textContent = "Result";
+  setReportEditorHtml(revisionHtml);
+  setReportEditing(false);
+  reportDraftRequest = requestBase
+    ? { ...requestBase, generatedSections, reportHtml: revisionHtml }
+    : {
+        ...buildExportRequestFromDialog(project),
+        generatedSections,
+        reportHtml: revisionHtml
+      };
+  activeReportDraftId = entry.id || "";
+  selectedReportDraftLoadId = entry.id || "";
+  selectedReportDraftRevisionId = revision.id || "";
+  if (meta) {
+    meta.textContent = `Loaded revision from ${formatDateTime(revision.updatedAt || entry.updatedAt)} for ${entry.name || "Saved Report"}.`;
+  }
+  updateExportDialogState();
+  return true;
+}
+
+function renderReportDraftRevisionOptions(entry) {
+  const revisionList = document.getElementById("reportDraftRevisionList");
+  const revisionEmpty = document.getElementById("reportDraftRevisionEmpty");
+  const applyBtn = document.getElementById("reportDraftLoadApplyBtn");
+  if (!revisionList || !revisionEmpty || !applyBtn) return;
+  if (!entry) {
+    revisionList.hidden = true;
+    revisionList.innerHTML = "";
+    revisionEmpty.hidden = false;
+    revisionEmpty.textContent = "Select a saved report to view its revisions.";
+    selectedReportDraftRevisionId = "";
+    applyBtn.disabled = !selectedReportDraftLoadId;
+    return;
+  }
+  const revisions = Array.isArray(entry.revisions) && entry.revisions.length
+    ? entry.revisions
+    : [{
+        id: `${entry.id || "report"}-latest`,
+        updatedAt: entry.updatedAt,
+        html: entry.html || "",
+        generatedSections: entry.generatedSections || [],
+        request: entry.request || null
+      }];
+  if (!revisions.some((revision) => revision.id === selectedReportDraftRevisionId)) {
+    selectedReportDraftRevisionId = revisions[0].id;
+  }
+  revisionEmpty.hidden = true;
+  revisionList.hidden = false;
+  revisionList.innerHTML = revisions.map((revision, index) => `
+    <label class="report-draft-load-item">
+      <input type="radio" name="reportDraftRevisionChoice" value="${escapeHtml(revision.id)}"${revision.id === selectedReportDraftRevisionId ? " checked" : ""}>
+      <span class="report-draft-load-copy">
+        <strong>${escapeHtml(index === 0 ? "Latest revision" : `Revision ${revisions.length - index}`)}</strong>
+        <em>${escapeHtml(formatDateTime(revision.updatedAt || entry.updatedAt))}</em>
+        <small>${escapeHtml(getPlainReportTextPreview(revision.html || "", 120))}</small>
+      </span>
+    </label>
+  `).join("");
+  revisionList.querySelectorAll("input[name='reportDraftRevisionChoice']").forEach((input) => {
+    input.addEventListener("change", () => {
+      selectedReportDraftRevisionId = input.value;
+      applyBtn.disabled = !selectedReportDraftLoadId;
+    });
+  });
+  applyBtn.disabled = !selectedReportDraftLoadId;
 }
 
 function renderReportDraftLoadDialog(project = getCurrentProject()) {
@@ -7235,6 +7381,7 @@ function renderReportDraftLoadDialog(project = getCurrentProject()) {
     list.hidden = true;
     list.innerHTML = "";
     empty.hidden = false;
+    renderReportDraftRevisionOptions(null);
     applyBtn.disabled = true;
     return;
   }
@@ -7249,15 +7396,20 @@ function renderReportDraftLoadDialog(project = getCurrentProject()) {
       <span class="report-draft-load-copy">
         <strong>${escapeHtml(entry.name || "Saved Report")}</strong>
         <em>${escapeHtml(formatDateTime(entry.updatedAt))}</em>
+        <small>${escapeHtml(`${Array.isArray(entry.revisions) ? entry.revisions.length : 1} revision${(Array.isArray(entry.revisions) ? entry.revisions.length : 1) === 1 ? "" : "s"}`)}</small>
       </span>
     </label>
   `).join("");
   list.querySelectorAll("input[name='reportDraftLoadChoice']").forEach((input) => {
     input.addEventListener("change", () => {
       selectedReportDraftLoadId = input.value;
+      selectedReportDraftRevisionId = "";
+      const targetEntry = drafts.find((entry) => entry.id === selectedReportDraftLoadId) || null;
+      renderReportDraftRevisionOptions(targetEntry);
       applyBtn.disabled = !selectedReportDraftLoadId;
     });
   });
+  renderReportDraftRevisionOptions(drafts.find((entry) => entry.id === selectedReportDraftLoadId) || drafts[0] || null);
   applyBtn.disabled = !selectedReportDraftLoadId;
 }
 
@@ -7278,7 +7430,13 @@ function loadSelectedReportDraft() {
   const drafts = Array.isArray(project?.reportDrafts) ? project.reportDrafts : [];
   const entry = drafts.find((item) => item.id === selectedReportDraftLoadId);
   if (!entry) return;
-  applyLoadedReportDraft(entry, project);
+  const revisions = Array.isArray(entry.revisions) ? entry.revisions : [];
+  const selectedRevision = revisions.find((revision) => revision.id === selectedReportDraftRevisionId) || null;
+  if (selectedRevision) {
+    applyLoadedReportRevision(entry, selectedRevision, project);
+  } else {
+    applyLoadedReportDraft(entry, project);
+  }
   closeReportDraftLoadDialog();
   showToast("Saved report loaded.", "success", { duration: 1800 });
 }
@@ -7290,8 +7448,17 @@ function renderReportDraftMergeDialog(project = getCurrentProject()) {
   const applyBtn = document.getElementById("reportDraftMergeApplyBtn");
   if (!current || !list || !empty || !applyBtn) return;
   const drafts = Array.isArray(project?.reportDrafts) ? project.reportDrafts : [];
-  const mergeableDrafts = drafts.filter((entry) => entry.id !== activeReportDraftId);
-  current.textContent = `Current report: ${getPlainReportTextPreview(getReportEditorHtml(), 180)}`;
+  const currentHtml = String(getReportEditorHtml() || "").trim();
+  const mergeableDrafts = drafts.filter((entry) => {
+    if (entry.id === activeReportDraftId) return false;
+    const entryHtml = String(entry?.html || "").trim();
+    if (currentHtml && entryHtml && entryHtml === currentHtml) return false;
+    return true;
+  });
+  current.innerHTML = `
+    <strong>Current report</strong>
+    <span>${escapeHtml(getPlainReportTextPreview(currentHtml, 180))}</span>
+  `;
   if (!mergeableDrafts.length) {
     list.hidden = true;
     list.innerHTML = "";
@@ -7506,6 +7673,7 @@ function updateExportDialogState() {
   const collaborativeReviewer = document.getElementById("exportCollaborativeReviewerSelect")?.value || "";
   const collaborativeEditor = document.getElementById("exportCollaborativeEditorSelect")?.value || "";
   const collaborativeStatus = document.getElementById("exportCollaborativeStatusSelect")?.value || "";
+  const exportMode = document.getElementById("exportModeSelect")?.value || "spec";
   const productionRangeStart = Number(document.getElementById("exportProductionRangeStart")?.value || 0);
   const productionRangeEnd = Number(document.getElementById("exportProductionRangeEnd")?.value || 0);
   const productionMaxSceneCount = Number(document.getElementById("exportProductionRangeEnd")?.max || document.getElementById("exportProductionRangeStart")?.max || 0);
@@ -7646,6 +7814,7 @@ function updateExportDialogState() {
       format.toUpperCase(),
       includeMetadata ? "Metadata on" : "Metadata off"
     ];
+    chips.push(exportMode === "production" ? "Production Script" : exportMode === "character" ? "Character Script" : "Spec Script");
     chips.push(includeTitlePage ? "Title page on" : "No title page");
     if (exportType === "character" || exportType === "character-packet") {
       chips.push(`${selectedCharacters || 0} selected`);
@@ -7833,7 +8002,7 @@ function updateExportDialogState() {
   if (saveBtn) {
     saveBtn.hidden = false;
     saveBtn.style.display = exportDialogMode === "report" ? "" : "none";
-    saveBtn.disabled = !reportDraftRequest?.generatedSections?.length;
+    saveBtn.disabled = !hasReportEditorContent();
   }
   if (breakdownLiveCard && exportDialogMode !== "report") {
     breakdownLiveCard.hidden = true;

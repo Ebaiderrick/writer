@@ -4,12 +4,13 @@ import { t } from './i18n.js';
 import { buildFullScriptExportDocument } from './exportModel.js';
 
 const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const SCREENPLAY_FONT = "Courier Prime";
 const LINE_SPACING = 360;
 const PARAGRAPH_AFTER = 80;
 const LETTER_WIDTH = 12240;
 const LETTER_HEIGHT = 15840;
-const PAGE_MARGIN_TOP_BOTTOM = centimeters(2);
-const PAGE_MARGIN_LEFT_RIGHT = centimeters(2.5);
+const PAGE_MARGIN_TOP_BOTTOM = inches(1);
+const PAGE_MARGIN_LEFT_RIGHT = inches(1);
 const CHARACTER_BLOCK_SIDE_MARGIN = centimeters(5.4);
 const DUAL_CHARACTER_BLOCK_SIDE_MARGIN = centimeters(1.15);
 
@@ -230,7 +231,7 @@ function buildCoverSection(docxLib, project) {
     .map((value) => new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { line: LINE_SPACING, after: 40 },
-      children: [new TextRun({ text: String(value), font: "Courier New", size: 24 })]
+      children: [new TextRun({ text: String(value), font: SCREENPLAY_FONT, size: 24 })]
     }));
 
   const children = [
@@ -240,7 +241,7 @@ function buildCoverSection(docxLib, project) {
       children: [new TextRun({
         text: String(project.title || "UNTITLED").toUpperCase(),
         bold: true,
-        font: "Courier New",
+        font: SCREENPLAY_FONT,
         size: 28
       })]
     }),
@@ -251,7 +252,7 @@ function buildCoverSection(docxLib, project) {
         children: [new TextRun({
           text: String(project.subtitle),
           italics: true,
-          font: "Courier New",
+          font: SCREENPLAY_FONT,
           size: 22
         })]
       })
@@ -259,7 +260,7 @@ function buildCoverSection(docxLib, project) {
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 120, line: LINE_SPACING },
-      children: [new TextRun({ text: t("cover.by"), font: "Courier New", size: 24 })]
+      children: [new TextRun({ text: t("cover.by"), font: SCREENPLAY_FONT, size: 24 })]
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -267,7 +268,7 @@ function buildCoverSection(docxLib, project) {
       children: [new TextRun({
         text: String(project.author || t("cover.authorFallback")),
         bold: true,
-        font: "Courier New",
+        font: SCREENPLAY_FONT,
         size: 24
       })]
     }),
@@ -277,7 +278,7 @@ function buildCoverSection(docxLib, project) {
         spacing: { after: 220, line: LINE_SPACING },
         children: [new TextRun({
           text: String(project.coWriters),
-          font: "Courier New",
+          font: SCREENPLAY_FONT,
           size: 22
         })]
       })
@@ -289,7 +290,7 @@ function buildCoverSection(docxLib, project) {
     children.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 40, line: LINE_SPACING },
-      children: [new TextRun({ text: `Version ${String(project.version)}`, font: "Courier New", size: 22 })]
+      children: [new TextRun({ text: `Version ${String(project.version)}`, font: SCREENPLAY_FONT, size: 22 })]
     }));
   }
 
@@ -297,7 +298,7 @@ function buildCoverSection(docxLib, project) {
     children.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 80, line: LINE_SPACING },
-      children: [new TextRun({ text: String(project.draftDate), font: "Courier New", size: 22 })]
+      children: [new TextRun({ text: String(project.draftDate), font: SCREENPLAY_FONT, size: 22 })]
     }));
   }
 
@@ -313,7 +314,7 @@ function buildCoverSection(docxLib, project) {
           right: inches(1.2)
         },
         spacing: { line: LINE_SPACING, after: 120 },
-        children: createRuns(TextRun, String(project.logline), { font: "Courier New", size: 24 })
+        children: createRuns(TextRun, String(project.logline), { font: SCREENPLAY_FONT, size: 24 })
       })
     );
   }
@@ -366,7 +367,7 @@ function buildScriptSection(docxLib, project) {
   if (!children.length) {
     children.push(new Paragraph({
       spacing: { line: LINE_SPACING, after: PARAGRAPH_AFTER },
-      children: [new TextRun({ text: " ", font: "Courier New", size: 24 })]
+      children: [new TextRun({ text: " ", font: SCREENPLAY_FONT, size: 24 })]
     }));
   }
 
@@ -402,6 +403,7 @@ function buildCoverSectionFromExportDocument(docxLib, exportDocument) {
 function buildScriptSectionFromExportDocument(docxLib, exportDocument) {
   const { Header, Paragraph, AlignmentType, PageNumber, TextRun } = docxLib;
   const lines = Array.isArray(exportDocument?.lines) ? exportDocument.lines : [];
+  const metadata = exportDocument?.metadata || {};
   const pageNumbersEnabled = exportDocument?.options?.includePageNumbers ?? state.viewOptions.pageNumbers;
   const header = pageNumbersEnabled
     ? new Header({
@@ -427,16 +429,16 @@ function buildScriptSectionFromExportDocument(docxLib, exportDocument) {
   if (!children.length) {
     children.push(new Paragraph({
       spacing: { line: LINE_SPACING, after: PARAGRAPH_AFTER },
-      children: [new TextRun({ text: " ", font: "Courier New", size: 24 })]
+      children: [new TextRun({ text: " ", font: SCREENPLAY_FONT, size: 24 })]
     }));
   }
 
-  if (project.copyrightNotice) {
+  if (metadata.copyrightNotice) {
     children.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 180, after: 0, line: LINE_SPACING },
-        children: createRuns(TextRun, String(project.copyrightNotice), { font: "Courier New", size: 22 })
+        children: createRuns(TextRun, String(metadata.copyrightNotice), { font: SCREENPLAY_FONT, size: 22 })
       })
     );
   }
@@ -485,7 +487,7 @@ export async function buildWordDocxBlobFromExportDocument(exportDocument) {
       default: {
         document: {
           run: {
-            font: "Courier New",
+            font: SCREENPLAY_FONT,
             size: 24,
             color: "111111"
           },

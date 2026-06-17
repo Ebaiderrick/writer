@@ -85,24 +85,41 @@ function buildWatermarkSummaryBits(exportDocument) {
 
 function buildPrintablePageHeader(exportDocument, pageNumber) {
   const hasWatermark = Boolean(exportDocument?.watermarkSummary?.text);
-  if (!['production', 'shooting', 'watermarked'].includes(exportDocument?.exportType) && !hasWatermark) {
-    return '';
-  }
+  const screenplayMode = String(exportDocument?.screenplayMode || exportDocument?.options?.exportMode || 'spec');
   const metadata = exportDocument?.metadata || {};
   const isShootingScript = exportDocument?.exportType === 'shooting';
   const isWatermarkedScript = exportDocument?.exportType === 'watermarked' || hasWatermark;
+  const shouldRenderHeader = ['production', 'shooting', 'watermarked'].includes(exportDocument?.exportType)
+    || hasWatermark
+    || screenplayMode === 'production'
+    || screenplayMode === 'character';
+  if (!shouldRenderHeader) {
+    return '';
+  }
   const summaryBits = isShootingScript
     ? buildShootingSummaryBits(exportDocument)
     : isWatermarkedScript
       ? buildWatermarkSummaryBits(exportDocument)
-    : buildProductionSummaryBits(exportDocument);
+      : buildProductionSummaryBits(exportDocument);
+  if (!isShootingScript && !isWatermarkedScript && Number.isFinite(Number(exportDocument?.estimatedRuntimeMinutes))) {
+    summaryBits.push(`Runtime est: ${Number(exportDocument.estimatedRuntimeMinutes)} min`);
+  }
   const summaryMarkup = summaryBits.length
     ? `<p class="print-page-header-meta">${escapeHtml(summaryBits.join(' · '))}</p>`
     : '';
+  const headerLabel = isShootingScript
+    ? 'Production Script'
+    : isWatermarkedScript
+      ? 'Watermarked Script'
+      : screenplayMode === 'production'
+        ? 'Production Script'
+        : screenplayMode === 'character'
+          ? 'Character Script'
+          : 'Spec Script';
   return `
     <div class="print-page-header" role="presentation">
       <div>
-        <p class="print-page-header-label">${isShootingScript ? 'Shooting Script' : isWatermarkedScript ? 'Watermarked Script' : 'Production Export'}</p>
+        <p class="print-page-header-label">${headerLabel}</p>
         <h2 class="print-page-header-title">${escapeHtml(metadata.title || 'Untitled Script')}</h2>
         ${summaryMarkup}
       </div>
@@ -117,9 +134,13 @@ export function buildPrintableDocumentFromExportDocument(exportDocument, autoPri
   const isProductionExport = exportDocument?.exportType === 'production';
   const isShootingScript = exportDocument?.exportType === 'shooting';
   const isWatermarkedScript = exportDocument?.exportType === 'watermarked' || Boolean(exportDocument?.watermarkSummary?.text);
+  const screenplayMode = String(exportDocument?.screenplayMode || exportDocument?.options?.exportMode || 'spec');
   const productionSummaryBits = buildProductionSummaryBits(exportDocument);
   const shootingSummaryBits = buildShootingSummaryBits(exportDocument);
   const watermarkSummaryBits = buildWatermarkSummaryBits(exportDocument);
+  const runtimeEstimate = Number.isFinite(Number(exportDocument?.estimatedRuntimeMinutes))
+    ? `${Number(exportDocument.estimatedRuntimeMinutes)} minute${Number(exportDocument.estimatedRuntimeMinutes) === 1 ? '' : 's'}`
+    : '';
   const watermarkText = escapeHtml(String(exportDocument?.options?.watermarkText || '').trim());
   const watermarkPosition = String(exportDocument?.options?.watermarkPosition || 'diagonal').trim().toLowerCase();
   const watermarkOpacity = Number.isFinite(Number(exportDocument?.options?.watermarkOpacity))
@@ -132,19 +153,32 @@ export function buildPrintableDocumentFromExportDocument(exportDocument, autoPri
     <section class="print-page cover-page${isProductionExport || isShootingScript || isWatermarkedScript ? ' production-cover-page' : ''}${isWatermarkedScript ? ' watermarked-page' : ''}"${isWatermarkedScript ? ` style="--print-watermark-opacity:${watermarkOpacity};"` : ''}>
       ${watermarkMarkup}
       <div class="print-cover-stack">
-        ${isProductionExport ? `<p class="print-cover-kicker">Production Export</p>` : isShootingScript ? `<p class="print-cover-kicker">Shooting Script</p>` : isWatermarkedScript ? `<p class="print-cover-kicker">Watermarked Script</p>` : ''}
+        ${isProductionExport
+          ? `<p class="print-cover-kicker">Production Export</p>`
+          : isShootingScript
+            ? `<p class="print-cover-kicker">Production Script</p>`
+            : isWatermarkedScript
+              ? `<p class="print-cover-kicker">Watermarked Script</p>`
+              : screenplayMode === 'production'
+                ? `<p class="print-cover-kicker">Production Script</p>`
+                : screenplayMode === 'character'
+                  ? `<p class="print-cover-kicker">Character Script</p>`
+                  : ''}
         <p class="print-cover-title">${escapeHtml(metadata.title || 'Untitled Script')}</p>
         ${metadata.subtitle ? `<p class="print-cover-subtitle">${escapeHtml(metadata.subtitle)}</p>` : ''}
-        <p class="print-cover-byline">${escapeHtml(t('cover.by'))}</p>
+        <p class="print-cover-byline">Written By</p>
         <p class="print-cover-author">${escapeHtml(metadata.author || t('cover.authorFallback'))}</p>
         ${metadata.coWriters ? `<p class="print-cover-coauthors">${escapeHtml(metadata.coWriters)}</p>` : ''}
         <div class="print-cover-meta">
-          ${metadata.contact ? `<p>${escapeHtml(metadata.contact)}</p>` : ''}
+          ${metadata.author ? `<p>Author: ${escapeHtml(metadata.author)}</p>` : ''}
+          ${metadata.contact ? `<p>Contact: ${escapeHtml(metadata.contact)}</p>` : ''}
           ${metadata.company ? `<p>${escapeHtml(metadata.company)}</p>` : ''}
           ${metadata.details ? `<p>${escapeHtml(metadata.details)}</p>` : ''}
+          ${metadata.draftDate ? `<p>Draft Date: ${escapeHtml(metadata.draftDate)}</p>` : ''}
+          ${metadata.version ? `<p>Version: ${escapeHtml(String(metadata.version))}</p>` : ''}
+          ${runtimeEstimate ? `<p>Estimated Runtime: ${escapeHtml(runtimeEstimate)}</p>` : ''}
         </div>
-        ${metadata.version ? `<p class="print-cover-version">Version ${escapeHtml(String(metadata.version))}</p>` : ''}
-        ${metadata.draftDate ? `<p class="print-cover-version">${escapeHtml(metadata.draftDate)}</p>` : ''}
+        <p class="print-cover-version">${escapeHtml(screenplayMode === 'production' ? 'Production Script' : screenplayMode === 'character' ? 'Character Script' : 'Spec Script')}</p>
         ${isProductionExport && productionSummaryBits.length ? `
           <div class="print-production-summary">
             ${productionSummaryBits.map((bit) => `<p>${escapeHtml(bit)}</p>`).join('')}
@@ -193,6 +227,9 @@ export function buildPrintableDocumentFromExportDocument(exportDocument, autoPri
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(metadata.title || 'Untitled Script')}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
   <style>${getPrintableStyles(exportDocument?.exportType || 'full')}</style>
 </head>
   <body data-theme="${escapeHtml(state.theme)}">
@@ -215,7 +252,7 @@ function getPrintableStyles(exportType = 'full') {
       margin: 0;
       background: #f3f1ef;
       color: #111;
-      font-family: "Courier New", Courier, monospace;
+      font-family: "Courier Prime", "Courier New", Courier, monospace;
     }
     .print-shell {
       display: grid;
@@ -422,9 +459,9 @@ function getPrintableStyles(exportType = 'full') {
       z-index: 1;
     }
     .print-line {
-      margin: 0 0 11pt;
+      margin: 0 0 10pt;
       white-space: pre-wrap;
-      line-height: 1.22;
+      line-height: 1.18;
     }
     .print-line.scene,
     .print-line.shot {
@@ -441,24 +478,24 @@ function getPrintableStyles(exportType = 'full') {
     }
     .print-line.character,
     .print-line.dual {
-      margin-left: 3.1in;
-      width: 2.3in;
+      margin-left: 3.5in;
+      width: 2in;
       font-weight: bold;
       text-transform: uppercase;
     }
     .print-line.dialogue {
-      margin-left: 2.1in;
-      width: 3.2in;
+      margin-left: 2.5in;
+      width: 3.5in;
     }
     .print-line.parenthetical {
-      margin-left: 2.6in;
-      width: 2.1in;
+      margin-left: 3in;
+      width: 2.5in;
       font-style: italic;
     }
     .print-line.transition {
       font-weight: bold;
       margin-left: auto;
-      width: 2.2in;
+      width: 2.4in;
       text-align: right;
       text-transform: uppercase;
     }
@@ -494,7 +531,7 @@ function getPrintableStyles(exportType = 'full') {
       position: absolute;
       top: 0.45in;
       right: 1in;
-      font-family: "Courier New", Courier, monospace;
+      font-family: "Courier Prime", "Courier New", Courier, monospace;
       font-size: 10pt;
       color: #111;
     }
