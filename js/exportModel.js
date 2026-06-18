@@ -1,4 +1,4 @@
-import { formatLineText, normalizeLineText, slugify } from './utils.js';
+import { formatLineText, inferTypeFromText, normalizeLineText, slugify } from './utils.js';
 import { paginateScriptLines } from './pagination.js';
 
 const DEFAULT_OPTIONS = {
@@ -96,6 +96,88 @@ function detectScreenplayElementType(line = {}, previousPreparedLine = null) {
   return originalType;
 }
 
+function looksLikeSceneHeading(rawText = '') {
+  return /^(INT\.|EXT\.|INT\.\/EXT\.|INT\/EXT\.|EST\.)/i.test(String(rawText || '').trim());
+}
+
+function looksLikeTransition(rawText = '') {
+  const value = String(rawText || '').trim();
+  return /^[A-Z0-9 .'\-()]+TO:$/.test(value) || value === 'FADE OUT.' || value === 'CUT TO BLACK.';
+}
+
+function looksLikeCharacterCue(rawText = '') {
+  const value = String(rawText || '').trim();
+  if (!value || value.length > 32) return false;
+  if (/:|\.$/.test(value)) return false;
+  if (value !== value.toUpperCase()) return false;
+  if (/^\d+[\.\)]/.test(value)) return false;
+  return /^[A-Z0-9 .'\-()&]+$/.test(value);
+}
+
+function isExportNoiseLine(rawText = '') {
+  const value = String(rawText || '').trim();
+  if (!value) return false;
+  if (/^(https?:\/\/|www\.)/i.test(value)) return true;
+  if (/github\.com\//i.test(value)) return true;
+  return false;
+}
+
+function shouldPreserveSecondaryForExport(line = {}, type = '') {
+  const secondaryText = String(line?.secondary || '').trim();
+  if (!secondaryText || isExportNoiseLine(secondaryText)) return false;
+  return ['character', 'dialogue', 'parenthetical', 'dual'].includes(String(type || '').trim());
+}
+
+function resolvePreparedLineType(lines, index, previousPreparedLine = null) {
+  const line = lines[index] || {};
+  const originalType = String(line?.type || 'action');
+  const rawText = String(line?.text || '').trim();
+  const previousRaw = String(lines[index - 1]?.text || '').trim();
+  const nextRaw = String(lines[index + 1]?.text || '').trim();
+  const inferredType = inferTypeFromText(rawText, previousRaw, nextRaw);
+
+  if (!rawText) return originalType;
+  if (originalType === 'image' || inferredType === 'image') return 'image';
+  if (originalType === 'scene') {
+    if (looksLikeSceneHeading(rawText)) return 'scene';
+    if (inferredType === 'image') return 'image';
+    return inferredType === 'dialogue' ? 'dialogue' : 'action';
+  }
+  if (originalType === 'transition') {
+    return looksLikeTransition(rawText) ? 'transition' : 'action';
+  }
+  if (originalType === 'parenthetical') {
+    if (/^\(.+\)$/.test(rawText)) return 'parenthetical';
+    return previousPreparedLine && ['character', 'dialogue', 'parenthetical', 'dual'].includes(previousPreparedLine.type) ? 'dialogue' : 'action';
+  }
+  if (originalType === 'dialogue') {
+    return previousPreparedLine && ['character', 'dialogue', 'parenthetical', 'dual'].includes(previousPreparedLine.type) ? 'dialogue' : 'action';
+  }
+  if (originalType === 'character' || originalType === 'dual') {
+    const nextInferred = inferTypeFromText(nextRaw, rawText, String(lines[index + 2]?.text || '').trim());
+    const previousType = previousPreparedLine?.type || '';
+    if (
+      looksLikeCharacterCue(rawText)
+      && !['character', 'dual'].includes(previousType)
+      && ['dialogue', 'parenthetical', 'action', 'text'].includes(nextInferred)
+    ) {
+      return originalType === 'dual' ? 'dual' : 'character';
+    }
+    if (previousPreparedLine && ['character', 'dialogue', 'parenthetical', 'dual'].includes(previousType)) {
+      return 'dialogue';
+    }
+    return inferredType === 'scene' ? 'scene' : 'action';
+  }
+  if (['text', 'action', 'shot'].includes(originalType)) {
+    if (inferredType === 'character') {
+      const nextInferred = inferTypeFromText(nextRaw, rawText, String(lines[index + 2]?.text || '').trim());
+      return ['dialogue', 'parenthetical'].includes(nextInferred) && !['character', 'dual'].includes(previousPreparedLine?.type || '') ? 'character' : 'action';
+    }
+    return inferredType;
+  }
+  return detectScreenplayElementType(line, previousPreparedLine);
+}
+
 function resolveExportModeOptions(options = {}) {
   const mode = String(options.exportMode || 'spec').trim().toLowerCase();
   if (mode === 'production') {
@@ -113,12 +195,16 @@ function resolveExportModeOptions(options = {}) {
 
 function buildPreparedLines(project, options) {
   const prepared = [];
+  const sourceLines = toArray(project.lines);
   let sceneNumber = 0;
 
-  toArray(project.lines).forEach((line, index) => {
-    const type = detectScreenplayElementType(line, prepared[prepared.length - 1] || null);
+  sourceLines.forEach((line, index) => {
+    const type = resolvePreparedLineType(sourceLines, index, prepared[prepared.length - 1] || null);
     const rawText = String(line?.text || '');
     if (rawText.trim() === '--- PAGE BREAK ---') {
+      return;
+    }
+    if (isExportNoiseLine(rawText)) {
       return;
     }
     const normalized = formatLineText(rawText, type);
@@ -141,7 +227,7 @@ function buildPreparedLines(project, options) {
       displayText: type === 'scene'
         ? formatSceneHeading(rawText, sceneNumber, options)
         : formatLineText(rawText, type),
-      secondary: typeof line?.secondary === 'string' ? formatLineText(line.secondary, type) : '',
+      secondary: shouldPreserveSecondaryForExport(line, type) ? formatLineText(line.secondary, type) : '',
       sceneNumber,
       index
     });
