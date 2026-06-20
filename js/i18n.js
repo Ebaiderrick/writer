@@ -113,8 +113,8 @@ const TRANSLATIONS = {
 
     "pane.activeBlock": "Active Block",
     "pane.activeBlockDesc": "Script details, scenes, characters, and metrics",
-    "pane.currentScript": "Current Script",
-    "pane.currentScriptDesc": "Simple overview like your reference",
+    "pane.currentScript": "Cover Builder",
+    "pane.currentScriptDesc": "Shared cover-page data for studio and export",
     "pane.projectTools": "Project Tools",
     "pane.projectToolsDesc": "Keep every control close by",
     "pane.scenes": "Scenes",

@@ -2,99 +2,217 @@ import { PAGE_UNIT_CAPACITY } from './config.js';
 import { stripWrapperChars } from './utils.js';
 
 /**
- * Paginates screenplay lines into pages based on line capacity and industry-standard rules.
- * Handles orphan protection for character names and injects continuity markers like (MORE) and (CONT'D).
+ * Paginates screenplay lines into pages based on line capacity and screenplay-aware blocks.
+ * Groups dialogue runs together so pages are filled more naturally and only splits speech
+ * when a block genuinely cannot fit on the current page.
  */
 export function paginateScriptLines(lines) {
+  const blocks = buildPaginationBlocks(lines);
   const pages = [];
   let currentPage = [];
   let usedUnits = 0;
 
+  const flushPage = () => {
+    if (!currentPage.length) return;
+    pages.push(currentPage);
+    currentPage = [];
+    usedUnits = 0;
+  };
+
+  for (const block of blocks) {
+    if (!block.lines.length) continue;
+
+    if (block.kind === 'speech') {
+      const handled = placeSpeechBlock(block, {
+        currentPage,
+        usedUnits,
+        pages,
+        flushPage
+      });
+      currentPage = handled.currentPage;
+      usedUnits = handled.usedUnits;
+      continue;
+    }
+
+    if (currentPage.length > 0 && usedUnits + block.units > PAGE_UNIT_CAPACITY) {
+      flushPage();
+    }
+
+    for (const line of block.lines) {
+      currentPage.push({ ...line });
+    }
+    usedUnits += block.units;
+  }
+
+  flushPage();
+  return pages;
+}
+
+function buildPaginationBlocks(lines) {
+  const blocks = [];
   let i = 0;
+
   while (i < lines.length) {
     const line = lines[i];
-    const lineUnits = estimateLineUnits(line.type, line.displayText);
+    if (!line) {
+      i += 1;
+      continue;
+    }
 
-    // 1. Orphan Protection for Character Names
-    // A character name should not be at the bottom of a page without at least 2 lines of dialogue following.
     if (line.type === 'character') {
-      let lookaheadUnits = lineUnits;
-      let j = 1;
-      let dialogueLinesFound = 0;
-
-      // Look ahead to see the "speech block" (Character + Parenthetical + Dialogue)
-      while (i + j < lines.length && dialogueLinesFound < 2) {
-        const next = lines[i + j];
-        if (next.type === 'dialogue') {
-          dialogueLinesFound++;
-        } else if (next.type !== 'parenthetical') {
-          // If we hit a scene, action, etc. before finding 2 dialogue lines, the block ends early.
-          break;
+      const speechLines = [{ ...line }];
+      let j = i + 1;
+      while (j < lines.length) {
+        const next = lines[j];
+        if (!next) {
+          j += 1;
+          continue;
         }
-        lookaheadUnits += estimateLineUnits(next.type, next.displayText);
-        j++;
+        if (next.type === 'parenthetical' || next.type === 'dialogue') {
+          speechLines.push({ ...next });
+          j += 1;
+          continue;
+        }
+        break;
       }
-
-      // If the character + at least some dialogue doesn't fit, move the whole start of the block to the next page.
-      if (usedUnits + lookaheadUnits > PAGE_UNIT_CAPACITY && currentPage.length > 0) {
-        pages.push(currentPage);
-        currentPage = [];
-        usedUnits = 0;
-      }
+      blocks.push({
+        kind: 'speech',
+        lines: speechLines,
+        units: sumBlockUnits(speechLines)
+      });
+      i = j;
+      continue;
     }
 
-    // 2. Standard Page Break Handling
-    if (currentPage.length > 0 && usedUnits + lineUnits > PAGE_UNIT_CAPACITY) {
-      const lastLine = currentPage[currentPage.length - 1];
+    blocks.push({
+      kind: 'line',
+      lines: [{ ...line }],
+      units: estimateLineUnits(line.type, line.displayText)
+    });
+    i += 1;
+  }
 
-      // Split Dialogue Handling: (MORE) and (CONT'D)
-      if (lastLine.type === 'dialogue' || lastLine.type === 'parenthetical' || lastLine.type === 'character') {
-        // Find the active character for this speech block
-        let activeCharacter = "";
-        for (let k = currentPage.length - 1; k >= 0; k--) {
-          if (currentPage[k].type === 'character') {
-            activeCharacter = stripContd(currentPage[k].displayText);
-            break;
-          }
-        }
+  return blocks;
+}
 
-        // Add (MORE) to the bottom of the current page
-        const moreLine = { type: 'dialogue', displayText: '(MORE)' };
-        currentPage.push(moreLine);
+function placeSpeechBlock(block, state) {
+  let currentPage = state.currentPage;
+  let usedUnits = state.usedUnits;
+  const { pages, flushPage } = state;
 
-        pages.push(currentPage);
+  const speechLines = block.lines.map((line) => ({ ...line }));
+  const startUnits = estimateSpeechStartUnits(speechLines);
 
-        // Start new page with (CONT'D)
-        currentPage = [];
-        usedUnits = 0;
+  if (currentPage.length > 0 && usedUnits + startUnits > PAGE_UNIT_CAPACITY) {
+    flushPage();
+    currentPage = [];
+    usedUnits = 0;
+  }
 
-        if (activeCharacter) {
-          const contdLine = { type: 'character', displayText: `${activeCharacter} (CONT'D)` };
-          currentPage.push(contdLine);
-          usedUnits += estimateLineUnits(contdLine.type, contdLine.displayText);
-        }
+  let queue = speechLines;
+  while (queue.length) {
+    const remainingUnits = PAGE_UNIT_CAPACITY - usedUnits;
+    const queueUnits = sumBlockUnits(queue);
+
+    if (queueUnits <= remainingUnits) {
+      for (const line of queue) {
+        currentPage.push({ ...line });
+      }
+      usedUnits += queueUnits;
+      queue = [];
+      break;
+    }
+
+    const split = splitSpeechLines(queue, remainingUnits);
+    if (split.fitLines.length) {
+      for (const line of split.fitLines) {
+        currentPage.push({ ...line });
+      }
+      usedUnits += split.fitUnits;
+      if (split.remainingLines.length) {
+        currentPage.push({ type: 'dialogue', displayText: '(MORE)' });
+        usedUnits += estimateLineUnits('dialogue', '(MORE)');
+      }
+      flushPage();
+      currentPage = [];
+      usedUnits = 0;
+      if (split.remainingLines.length) {
+        const speaker = stripContd(split.speaker);
+        queue = [
+          { type: 'character', displayText: `${speaker} (CONT'D)` },
+          ...split.remainingLines
+        ];
       } else {
-        // Standard break for action/scene/etc.
-        pages.push(currentPage);
-        currentPage = [];
-        usedUnits = 0;
+        queue = [];
       }
+      continue;
     }
 
-    // Add the current line to the current (possibly new) page
-    currentPage.push({ ...line });
-    usedUnits += lineUnits;
-    i++;
+    if (currentPage.length === 0) {
+      for (const line of queue) {
+        currentPage.push({ ...line });
+      }
+      usedUnits += queueUnits;
+      queue = [];
+      break;
+    }
+
+    flushPage();
+    currentPage = [];
+    usedUnits = 0;
   }
 
-  if (currentPage.length > 0) {
-    pages.push(currentPage);
+  return { currentPage, usedUnits, pages };
+}
+
+function splitSpeechLines(lines, availableUnits) {
+  const speaker = lines[0]?.displayText || '';
+  const fitLines = [];
+  let fitUnits = 0;
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const units = estimateLineUnits(line.type, line.displayText);
+    const reserveForMore = index < lines.length - 1 ? estimateLineUnits('dialogue', '(MORE)') : 0;
+    if (fitLines.length > 0 && fitUnits + units + reserveForMore > availableUnits) {
+      break;
+    }
+    if (fitLines.length === 0 && units > availableUnits) {
+      break;
+    }
+    fitLines.push({ ...line });
+    fitUnits += units;
+    index += 1;
   }
 
-  // Final Pass: Add "CONTINUED:" markers for split scenes if desired.
-  // (Optional: can be added here if needed, but (MORE)/(CONT'D) are primary)
+  return {
+    speaker,
+    fitLines,
+    fitUnits,
+    remainingLines: lines.slice(index).map((line) => ({ ...line }))
+  };
+}
 
-  return pages;
+function estimateSpeechStartUnits(lines) {
+  if (!lines.length) return 0;
+  let units = estimateLineUnits(lines[0].type, lines[0].displayText);
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.type === 'parenthetical') {
+      units += Math.min(0.8, estimateLineUnits(line.type, line.displayText));
+      continue;
+    }
+    if (line.type === 'dialogue') {
+      units += Math.min(1.3, estimateLineUnits(line.type, line.displayText));
+    }
+    break;
+  }
+  return units;
+}
+
+function sumBlockUnits(lines) {
+  return lines.reduce((total, line) => total + estimateLineUnits(line.type, line.displayText), 0);
 }
 
 /**
@@ -103,25 +221,18 @@ export function paginateScriptLines(lines) {
 export function estimateLineUnits(type, text) {
   const compact = stripWrapperChars(text);
 
-  // Character widths based on standard screenplay indentation/margins
-  let width = 63; // Default (Action/Scene)
-  if (type === "dialogue") width = 40;
-  if (type === "parenthetical") width = 28;
-  if (type === "character") width = 30;
-  if (type === "transition") width = 28;
-  if (type === "dual") width = 30;
+  let width = 68;
+  if (type === 'dialogue') width = 46;
+  if (type === 'parenthetical') width = 30;
+  if (type === 'character') width = 32;
+  if (type === 'transition') width = 32;
+  if (type === 'dual') width = 32;
 
   const wrappedLines = Math.max(1, Math.ceil(compact.length / width));
-
-  // Industry standard often adds extra spacing before scenes and transitions
-  const breathingRoom = (type === "scene" || type === "transition") ? 0.35 : 0.0;
-
+  const breathingRoom = (type === 'scene' || type === 'transition') ? 0.1 : 0.0;
   return wrappedLines + breathingRoom;
 }
 
-/**
- * Removes existing (CONT'D) markers for clean re-injection.
- */
 function stripContd(text) {
-  return text.replace(/\s*\(CONT'D\)\s*$/i, "").trim();
+  return text.replace(/\s*\(CONT'D\)\s*$/i, '').trim();
 }

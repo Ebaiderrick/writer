@@ -89,12 +89,14 @@ function buildPrintablePageHeader(exportDocument, pageNumber) {
   const metadata = exportDocument?.metadata || {};
   const isShootingScript = exportDocument?.exportType === 'shooting';
   const isWatermarkedScript = exportDocument?.exportType === 'watermarked' || hasWatermark;
-  const shouldRenderHeader = ['production', 'shooting', 'watermarked'].includes(exportDocument?.exportType)
+  const shouldRenderFullHeader = ['production', 'shooting', 'watermarked'].includes(exportDocument?.exportType)
     || hasWatermark
-    || screenplayMode === 'production'
-    || screenplayMode === 'character';
-  if (!shouldRenderHeader) {
-    return '';
+    || screenplayMode === 'production';
+  const pageNumberEnabled = exportDocument?.options?.includePageNumbers ?? state.viewOptions.pageNumbers;
+  if (!shouldRenderFullHeader) {
+    return pageNumberEnabled
+      ? `<div class="print-page-number" role="presentation">${escapeHtml(buildExportPageNumberLabel(pageNumber))}</div>`
+      : '';
   }
   const summaryBits = isShootingScript
     ? buildShootingSummaryBits(exportDocument)
@@ -123,7 +125,7 @@ function buildPrintablePageHeader(exportDocument, pageNumber) {
         <h2 class="print-page-header-title">${escapeHtml(metadata.title || 'Untitled Script')}</h2>
         ${summaryMarkup}
       </div>
-      ${(isShootingScript && exportDocument?.options?.includePageNumbers === false) ? '' : `<span class="print-page-header-page">Page ${escapeHtml(buildExportPageNumberLabel(pageNumber))}</span>`}
+      ${pageNumberEnabled ? `<span class="print-page-header-page">Page ${escapeHtml(buildExportPageNumberLabel(pageNumber))}</span>` : ''}
     </div>
   `;
 }
@@ -202,9 +204,6 @@ export function buildPrintableDocumentFromExportDocument(exportDocument, autoPri
 
   const scriptMarkup = previewData.scriptPages.map((pageLines, index) => {
     const pageNum = index + 1;
-    const pageFooter = state.viewOptions.pageNumbers && !isProductionExport && !isShootingScript
-      ? `<div class="print-footer">${escapeHtml(buildExportPageNumberLabel(pageNum))}</div>`
-      : '';
     const pageHeader = buildPrintablePageHeader(exportDocument, pageNum);
     const firstScriptPageClass = index === 0 ? ' script-page-first' : '';
     return `
@@ -217,7 +216,6 @@ export function buildPrintableDocumentFromExportDocument(exportDocument, autoPri
           : `<p class="print-line ${escapeHtml(line.type)}">${escapeHtml(line.displayText)}</p>`
         ).join('')}
       </div>
-      ${pageFooter}
     </section>
   `;
   }).join('');
@@ -392,7 +390,8 @@ function getPrintableStyles(exportType = 'full') {
     .print-page-header-label,
     .print-page-header-meta,
     .print-page-header-title,
-    .print-page-header-page {
+    .print-page-header-page,
+    .print-page-number {
       margin: 0;
     }
     .print-page-header-label {
@@ -414,6 +413,13 @@ function getPrintableStyles(exportType = 'full') {
       font-size: 10pt;
       white-space: nowrap;
       padding-top: 2pt;
+    }
+    .print-page-number {
+      position: absolute;
+      top: 0.6in;
+      right: 1in;
+      font-size: 10pt;
+      line-height: 1;
     }
     .print-watermark {
       position: absolute;
@@ -447,21 +453,23 @@ function getPrintableStyles(exportType = 'full') {
     }
     .print-body {
       width: 100%;
-      padding-top: ${isProductionExport || isShootingScript ? '0.02in' : '0.12in'};
-      padding-bottom: 0.22in;
+      padding-top: ${isProductionExport || isShootingScript ? '0.01in' : '0.08in'};
+      padding-bottom: 0.1in;
       position: relative;
       z-index: 1;
     }
     .print-page-header,
-    .print-cover-stack,
-    .print-footer {
+    .print-cover-stack {
       position: relative;
       z-index: 1;
     }
+    .print-page-number {
+      z-index: 1;
+    }
     .print-line {
-      margin: 0 0 5pt;
+      margin: 0 0 3pt;
       white-space: pre-wrap;
-      line-height: 1.15;
+      line-height: 1.08;
     }
     .print-line.action,
     .print-line.text,
@@ -511,14 +519,14 @@ function getPrintableStyles(exportType = 'full') {
     .print-dual-row {
       display: table;
       width: 100%;
-      margin: 0 0 6pt;
+      margin: 0 0 4pt;
       table-layout: fixed;
     }
     .print-dual-col {
       display: table-cell;
       width: 50%;
       white-space: pre-wrap;
-      line-height: 1.22;
+      line-height: 1.1;
       vertical-align: top;
       padding: 0 6pt;
     }
@@ -535,14 +543,6 @@ function getPrintableStyles(exportType = 'full') {
     .print-dual-row.parenthetical .print-dual-col {
       padding-left: 0.7in;
       font-style: italic;
-    }
-    .print-footer {
-      position: absolute;
-      bottom: 0.55in;
-      right: 1in;
-      font-family: "Courier Prime", "Courier New", Courier, monospace;
-      font-size: 10pt;
-      color: #111;
     }
     @page {
       size: letter;

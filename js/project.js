@@ -182,7 +182,7 @@ async function syncCurrentProjectToFirestore() {
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
-      const CONTENT_KEYS = ['title', 'author', 'contact', 'company', 'details', 'logline',
+      const CONTENT_KEYS = ['title', 'subtitle', 'author', 'coWriters', 'contact', 'company', 'coverVersion', 'draftDate', 'copyrightNotice', 'details', 'logline',
       'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
       'activityLog', 'exportHistory', 'lastEditorName', 'lastActivityAt', 'workspace', 'version',
       'conversionJobId', 'conversionSourceFileName'];
@@ -398,12 +398,17 @@ export function sanitizeProject(project) {
     id: project.id || uid("project"),
     scriptId: normalizeScriptId(project.scriptId),
     title: project.title || "Untitled Script",
+    subtitle: project.subtitle || "",
     workType: project.workType === "prose-poetry" ? "prose-poetry" : "film-script",
     creationKind: project.creationKind === "workspace" ? "workspace" : "project",
     isWorkspaceRoot: Boolean(project.isWorkspaceRoot),
     author: project.author || "",
+    coWriters: project.coWriters || "",
     contact: project.contact || "",
     company: project.company || "",
+    coverVersion: project.coverVersion || "",
+    draftDate: project.draftDate || "",
+    copyrightNotice: project.copyrightNotice || "",
     details: project.details || "",
     logline: project.logline || "",
     createdAt: project.createdAt || new Date().toISOString(),
@@ -650,11 +655,16 @@ export function syncProjectFromInputs() {
     return null;
   }
   project.title = refs.titleInput.value.trim() || "Untitled Script";
+  project.subtitle = refs.subtitleInput?.value.trim() || "";
   project.author = refs.authorInput.value.trim();
+  project.coWriters = refs.coWritersInput?.value.trim() || "";
   project.contact = refs.contactInput.value.trim();
   project.company = refs.companyInput.value.trim();
+  project.draftDate = refs.draftDateInput?.value.trim() || "";
+  project.copyrightNotice = refs.copyrightInput?.value.trim() || "";
   project.details = refs.detailsInput.value.trim();
   project.logline = refs.loglineInput.value.trim();
+  project.coverVersion = refs.coverVersionInput?.value.trim() || "";
   project.updatedAt = new Date().toISOString();
   return project;
 }

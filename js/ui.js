@@ -1663,10 +1663,15 @@ export function showCharacterScenes(characterName, onSelect) {
 
 export function syncInputsFromProject(project) {
   refs.titleInput.value = project.title;
+  if (refs.subtitleInput) refs.subtitleInput.value = project.subtitle || "";
   refs.authorInput.value = project.author;
+  if (refs.coWritersInput) refs.coWritersInput.value = project.coWriters || "";
   refs.contactInput.value = project.contact;
   refs.companyInput.value = project.company;
+  if (refs.coverVersionInput) refs.coverVersionInput.value = project.coverVersion || (project.version ? String(project.version) : "");
+  if (refs.draftDateInput) refs.draftDateInput.value = project.draftDate || "";
   refs.detailsInput.value = project.details;
+  if (refs.copyrightInput) refs.copyrightInput.value = project.copyrightNotice || "";
   refs.loglineInput.value = project.logline;
   document.querySelectorAll("[data-menu-action='open-conversion-interface']").forEach((button) => {
     button.disabled = !project?.conversionJobId;

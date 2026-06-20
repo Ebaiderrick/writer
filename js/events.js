@@ -91,6 +91,8 @@ const aiTaskTimers = new Map();
 let exportDialogPrefill = { format: "pdf", exportType: "full" };
 let exportDialogContext = { scenes: [], characters: [], revisions: [], collaborative: { scenes: [], assignedWriters: [], reviewers: [], editors: [] } };
 let exportDialogMode = "export";
+let exportPreviewRefreshTimer = 0;
+let exportPreviewOpenUrl = "";
 let reportDraftRequest = null;
 let reportGenerationController = null;
 let selectedReportDraftLoadId = "";
@@ -1232,6 +1234,114 @@ function buildExportRequestFromDialog(project) {
   }
 
   return request;
+}
+
+async function buildExportPreviewResult(project, request) {
+  const previewRequest = {
+    ...request,
+    format: "pdf"
+  };
+  switch (previewRequest.exportType) {
+    case "character":
+      if (!previewRequest.characters?.length) return null;
+      return ExportService.exportCharacter(project, previewRequest);
+    case "character-packet":
+      if (!previewRequest.characters?.length) return null;
+      return ExportService.exportCharacterPacket(project, previewRequest);
+    case "scene":
+      if (!previewRequest.sceneIds?.length && !previewRequest.sceneRange) return null;
+      return ExportService.exportScenes(project, previewRequest);
+    case "location":
+      if (!previewRequest.location) return null;
+      return ExportService.exportLocation(project, previewRequest);
+    case "revision":
+      if (!previewRequest.versionA || !previewRequest.versionB || previewRequest.versionA.id === previewRequest.versionB.id) return null;
+      return ExportService.exportRevision(project, previewRequest);
+    case "production":
+      return ExportService.exportProduction(project, previewRequest);
+    case "collaborative":
+      return ExportService.exportCollaborative(project, previewRequest);
+    case "shooting":
+      return ExportService.exportShootingScript(project, previewRequest);
+    case "watermarked":
+      return ExportService.exportWatermarkedScript(project, previewRequest);
+    case "breakdown":
+      return null;
+    case "full":
+    default:
+      return ExportService.exportFullScript(project, previewRequest);
+  }
+}
+
+function setExportPreviewState({ html = "", message = "", showFrame = false } = {}) {
+  const frame = document.getElementById("exportPreviewFrame");
+  const empty = document.getElementById("exportPreviewEmpty");
+  const openBtn = document.getElementById("exportPreviewOpenBtn");
+  const refreshBtn = document.getElementById("exportPreviewRefreshBtn");
+  const meta = document.getElementById("exportPreviewMeta");
+  if (frame) {
+    frame.hidden = !showFrame;
+    if (showFrame) {
+      frame.srcdoc = html;
+    } else {
+      frame.removeAttribute("srcdoc");
+    }
+  }
+  if (empty) {
+    empty.hidden = showFrame;
+    empty.textContent = message || "Preview will appear here for the current export selection.";
+  }
+  if (meta) {
+    meta.textContent = showFrame
+      ? "This is the live export layout from the current settings."
+      : (message || "Preview the current screenplay export layout inside Wraita.");
+  }
+  if (openBtn) openBtn.disabled = !showFrame || !exportPreviewOpenUrl;
+  if (refreshBtn) refreshBtn.disabled = false;
+}
+
+async function refreshExportPreview(force = false) {
+  const dialog = document.getElementById("exportDialog");
+  if (!dialog?.open || exportDialogMode === "report") return;
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project) return;
+  const request = buildExportRequestFromDialog(project);
+  const refreshBtn = document.getElementById("exportPreviewRefreshBtn");
+  if (refreshBtn) refreshBtn.disabled = true;
+  if (force) {
+    setExportPreviewState({ message: "Refreshing preview..." });
+  }
+  try {
+    const result = await buildExportPreviewResult(project, request);
+    if (!result?.content) {
+      exportPreviewOpenUrl = "";
+      setExportPreviewState({ message: "Choose the required export selections to preview this layout." });
+      return;
+    }
+    const blob = new Blob([result.content], { type: result.mimeType || "text/html;charset=utf-8" });
+    if (exportPreviewOpenUrl) {
+      URL.revokeObjectURL(exportPreviewOpenUrl);
+    }
+    exportPreviewOpenUrl = URL.createObjectURL(blob);
+    setExportPreviewState({ html: result.content, showFrame: true });
+  } catch (error) {
+    console.error("Export preview failed", error);
+    exportPreviewOpenUrl = "";
+    setExportPreviewState({ message: "Preview could not be built from the current export settings." });
+  } finally {
+    if (refreshBtn) refreshBtn.disabled = false;
+  }
+}
+
+function scheduleExportPreviewRefresh(force = false) {
+  if (exportDialogMode === "report") return;
+  if (exportPreviewRefreshTimer) {
+    window.clearTimeout(exportPreviewRefreshTimer);
+  }
+  exportPreviewRefreshTimer = window.setTimeout(() => {
+    exportPreviewRefreshTimer = 0;
+    void refreshExportPreview(force);
+  }, force ? 40 : 180);
 }
 
 async function executeExportRequest(project, request) {
@@ -4238,7 +4348,7 @@ export function bindEvents() {
   });
 
   // Meta Inputs
-  [refs.titleInput, refs.authorInput, refs.contactInput, refs.companyInput, refs.detailsInput, refs.loglineInput]
+  [refs.titleInput, refs.subtitleInput, refs.authorInput, refs.coWritersInput, refs.contactInput, refs.companyInput, refs.coverVersionInput, refs.draftDateInput, refs.detailsInput, refs.copyrightInput, refs.loglineInput]
     .forEach((input) => input.addEventListener("input", handleMetaInput));
 
   // Tool Selection
@@ -4545,6 +4655,13 @@ export function bindEvents() {
     updateExportDialogState();
     showToast("Report draft saved.", "success", { duration: 1800 });
   });
+  document.getElementById("exportPreviewRefreshBtn")?.addEventListener("click", () => {
+    void refreshExportPreview(true);
+  });
+  document.getElementById("exportPreviewOpenBtn")?.addEventListener("click", () => {
+    if (!exportPreviewOpenUrl) return;
+    window.open(exportPreviewOpenUrl, "_blank", "noopener,noreferrer");
+  });
   document.getElementById("reportDraftLoadCloseBtn")?.addEventListener("click", () => {
     closeReportDraftLoadDialog();
   });
@@ -4612,6 +4729,9 @@ export function bindEvents() {
   document.getElementById("exportDialog")?.addEventListener("input", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+    if (target.matches("#exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright")) {
+      syncProjectCoverFromExportInputs();
+    }
     if (target.matches("#exportTypeSelect, #exportFormatSelect, #exportModeSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportCollaborativeWriterSelect, #exportCollaborativeReviewerSelect, #exportCollaborativeEditorSelect, #exportCollaborativeStatusSelect, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportEnableWatermarkSettings, #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportWatermarkText, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownPrompt, #exportBreakdownCharactersMin, #exportBreakdownCharactersMax, #exportBreakdownLocationsMin, #exportBreakdownLocationsMax, #exportBreakdownScenesMin, #exportBreakdownScenesMax")) {
       updateExportDialogState();
     }
@@ -5281,6 +5401,48 @@ export function duplicateActiveBlock() {
 
 function handleMetaInput() {
   syncProjectFromInputs();
+  syncExportCoverInputsFromProject();
+  schedulePreviewRefresh({ includeCover: true });
+  scheduleStudioSidebarRefresh({ includeHome: false, includeAnalytics: false });
+  queueSave();
+}
+
+function syncExportCoverInputsFromProject(project = getCurrentProject()) {
+  if (!project) return;
+  const setValue = (id, value) => {
+    const element = document.getElementById(id);
+    if (element && document.activeElement !== element) {
+      element.value = value || "";
+    }
+  };
+  setValue("exportCoverTitle", project.title || "");
+  setValue("exportCoverSubtitle", project.subtitle || "");
+  setValue("exportCoverAuthor", project.author || "");
+  setValue("exportCoverCoWriters", project.coWriters || "");
+  setValue("exportCoverContact", project.contact || "");
+  setValue("exportCoverCompany", project.company || "");
+  setValue("exportCoverVersion", project.coverVersion || (project.version ? String(project.version) : ""));
+  setValue("exportCoverDraftDate", project.draftDate || "");
+  setValue("exportCoverDetails", project.details || "");
+  setValue("exportCoverCopyright", project.copyrightNotice || "");
+}
+
+function syncProjectCoverFromExportInputs() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const readValue = (id) => String(document.getElementById(id)?.value || "").trim();
+  project.title = readValue("exportCoverTitle") || "Untitled Script";
+  project.subtitle = readValue("exportCoverSubtitle");
+  project.author = readValue("exportCoverAuthor");
+  project.coWriters = readValue("exportCoverCoWriters");
+  project.contact = readValue("exportCoverContact");
+  project.company = readValue("exportCoverCompany");
+  project.coverVersion = readValue("exportCoverVersion");
+  project.draftDate = readValue("exportCoverDraftDate");
+  project.details = readValue("exportCoverDetails");
+  project.copyrightNotice = readValue("exportCoverCopyright");
+  project.updatedAt = new Date().toISOString();
+  syncInputsFromProject(project);
   schedulePreviewRefresh({ includeCover: true });
   scheduleStudioSidebarRefresh({ includeHome: false, includeAnalytics: false });
   queueSave();
@@ -7087,15 +7249,15 @@ function openExportDialog(prefill = {}) {
   if (watermarkOpacity) watermarkOpacity.value = "0.12";
   if (watermarkText) watermarkText.value = "";
   if (coverTitle) coverTitle.value = project?.title || "";
-  if (coverSubtitle) coverSubtitle.value = "";
+  if (coverSubtitle) coverSubtitle.value = project?.subtitle || "";
   if (coverAuthor) coverAuthor.value = project?.author || "";
-  if (coverCoWriters) coverCoWriters.value = "";
+  if (coverCoWriters) coverCoWriters.value = project?.coWriters || "";
   if (coverContact) coverContact.value = project?.contact || "";
   if (coverCompany) coverCompany.value = project?.company || "";
-  if (coverVersion) coverVersion.value = project?.version ? String(project.version) : "";
-  if (coverDraftDate) coverDraftDate.value = "";
+  if (coverVersion) coverVersion.value = project?.coverVersion || (project?.version ? String(project.version) : "");
+  if (coverDraftDate) coverDraftDate.value = project?.draftDate || "";
   if (coverDetails) coverDetails.value = project?.details || "";
-  if (coverCopyright) coverCopyright.value = "";
+  if (coverCopyright) coverCopyright.value = project?.copyrightNotice || "";
   if (rangeStart) {
     rangeStart.value = "";
     rangeStart.min = sceneCount ? "1" : "0";
@@ -7174,11 +7336,22 @@ function openExportDialog(prefill = {}) {
       setReportEditorEditing(true);
     }
     updateExportDialogState();
+  } else {
+    scheduleExportPreviewRefresh(true);
   }
 }
 
 function closeExportDialog() {
   reportDraftRequest = null;
+  if (exportPreviewRefreshTimer) {
+    window.clearTimeout(exportPreviewRefreshTimer);
+    exportPreviewRefreshTimer = 0;
+  }
+  if (exportPreviewOpenUrl) {
+    URL.revokeObjectURL(exportPreviewOpenUrl);
+    exportPreviewOpenUrl = "";
+  }
+  setExportPreviewState({ message: "Preview will appear here for the current export selection." });
   document.getElementById("exportDialog")?.close();
 }
 
@@ -7585,6 +7758,7 @@ function updateExportDialogState() {
   const revisionPanel = document.getElementById("exportRevisionPanel");
   const productionPanel = document.getElementById("exportProductionPanel");
   const collaborativePanel = document.getElementById("exportCollaborativePanel");
+  const previewCard = document.getElementById("exportPreviewCard");
 
   if (characterPanel) {
     const showCharacterPanel = exportType === "character" || exportType === "character-packet";
@@ -7641,6 +7815,11 @@ function updateExportDialogState() {
     const showBreakdownPanel = exportType === "breakdown";
     breakdownPanel.hidden = !showBreakdownPanel;
     breakdownPanel.style.display = showBreakdownPanel ? "grid" : "none";
+  }
+  if (previewCard) {
+    const showPreviewCard = exportDialogMode !== "report";
+    previewCard.hidden = !showPreviewCard;
+    previewCard.style.display = showPreviewCard ? "grid" : "none";
   }
   if (exportTypeDescription) {
     exportTypeDescription.textContent = EXPORT_TYPE_DETAILS[exportType] || EXPORT_TYPE_DETAILS.full;
@@ -8014,6 +8193,9 @@ function updateExportDialogState() {
   const liveTitle = document.getElementById("exportBreakdownLiveTitle");
   if (liveTitle && exportDialogMode === "report" && liveTitle.textContent === "AI Breakdown Build") {
     liveTitle.textContent = "AI Report Build";
+  }
+  if (exportDialogMode !== "report") {
+    scheduleExportPreviewRefresh();
   }
 }
 

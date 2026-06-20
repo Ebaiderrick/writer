@@ -32,7 +32,7 @@ export const DEFAULT_VIEW_OPTIONS = {
   focusMode: false
 };
 export const LEFT_PANE_BLOCK_DEFS = [
-  { key: "current", label: "Current Script" },
+  { key: "current", label: "Cover Builder" },
   { key: "workspace", label: "Team Assembly" },
   { key: "characters", label: "Characters" },
   { key: "scenes", label: "Scenes" },
@@ -51,9 +51,9 @@ const DEFAULT_VISIBLE_BLOCK_KEYS = new Set(['current', 'scenes', 'characters', '
 export const DEFAULT_LEFT_PANE_BLOCKS = LEFT_PANE_BLOCK_DEFS.map(({ key }) => ({
   key,
   visible: DEFAULT_VISIBLE_BLOCK_KEYS.has(key),
-  collapsed: false
+  collapsed: key === "current"
 }));
-export const PAGE_UNIT_CAPACITY = 57;
+export const PAGE_UNIT_CAPACITY = 68;
 
 export const DEFAULT_STORY_MEMORY = {
   characters: [],

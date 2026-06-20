@@ -1201,23 +1201,31 @@
             </div>
 
             <div id="leftPaneBody" class="pane-shell-body">
-              <section class="panel cover-panel section-current" data-left-pane-block="current" data-left-pane-label="Current Script">
+              <section class="panel cover-panel section-current" data-left-pane-block="current" data-left-pane-label="Cover Builder">
                 <div class="panel-head">
                   <div>
-                    <h3>Current Script</h3>
-                    <p>Simple overview like your reference</p>
+                    <h3>Cover Builder</h3>
+                    <p>Shared cover-page data for studio and export</p>
                   </div>
-                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="current" aria-label="Collapse Current Script">▼</button>
+                  <button class="panel-toggle" type="button" data-left-pane-section-toggle="current" aria-label="Expand Cover Builder" aria-expanded="false">▶</button>
                 </div>
-                <div class="panel-section-body">
+                <div class="panel-section-body" hidden>
                 <div class="field-grid">
                   <label class="field field-wide">
                     <span>Title</span>
                     <input id="titleInput" type="text">
                   </label>
                   <label class="field">
+                    <span>Subtitle</span>
+                    <input id="subtitleInput" type="text">
+                  </label>
+                  <label class="field">
                     <span>Author</span>
                     <input id="authorInput" type="text">
+                  </label>
+                  <label class="field">
+                    <span>Co-writers</span>
+                    <input id="coWritersInput" type="text">
                   </label>
                   <label class="field">
                     <span>Contact</span>
@@ -1228,8 +1236,20 @@
                     <input id="companyInput" type="text">
                   </label>
                   <label class="field">
+                    <span>Version</span>
+                    <input id="coverVersionInput" type="text">
+                  </label>
+                  <label class="field">
+                    <span>Draft date</span>
+                    <input id="draftDateInput" type="text">
+                  </label>
+                  <label class="field">
                     <span>Other details</span>
                     <input id="detailsInput" type="text">
+                  </label>
+                  <label class="field field-wide">
+                    <span>Copyright notice</span>
+                    <input id="copyrightInput" type="text">
                   </label>
                   <label class="field field-wide">
                     <span>Logline</span>
@@ -2205,6 +2225,22 @@
                   <button id="exportReportSaveBtn" class="ghost-button btn-sm" type="button" hidden>Save</button>
                 </div>
                 <div id="exportReportEditor" class="export-report-editor"></div>
+              </div>
+              <div id="exportPreviewCard" class="export-preview-card">
+                <div class="export-preview-card-head">
+                  <div class="export-inline-heading">
+                    <strong>Live Preview</strong>
+                    <p id="exportPreviewMeta">Preview the current screenplay export layout inside Wraita.</p>
+                  </div>
+                  <div class="export-preview-card-actions">
+                    <button id="exportPreviewRefreshBtn" class="ghost-button btn-sm" type="button">Refresh</button>
+                    <button id="exportPreviewOpenBtn" class="ghost-button btn-sm" type="button">Open</button>
+                  </div>
+                </div>
+                <div id="exportPreviewViewport" class="export-preview-viewport">
+                  <p id="exportPreviewEmpty" class="export-preview-empty">Preview will appear here for the current export selection.</p>
+                  <iframe id="exportPreviewFrame" class="export-preview-frame" title="Export Preview" hidden></iframe>
+                </div>
               </div>
               <div class="export-summary-actions">
               <button id="exportDialogExportBtn" class="ghost-button btn-sm" type="button" hidden>Build Report</button>
