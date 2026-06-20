@@ -453,8 +453,8 @@ function getPrintableStyles(exportType = 'full') {
     }
     .print-body {
       width: 100%;
-      padding-top: ${isProductionExport || isShootingScript ? '0.01in' : '0.08in'};
-      padding-bottom: 0.1in;
+      padding-top: ${isProductionExport || isShootingScript ? '0' : '0.03in'};
+      padding-bottom: 0;
       position: relative;
       z-index: 1;
     }
@@ -467,9 +467,9 @@ function getPrintableStyles(exportType = 'full') {
       z-index: 1;
     }
     .print-line {
-      margin: 0 0 3pt;
+      margin: 0 0 1.5pt;
       white-space: pre-wrap;
-      line-height: 1.08;
+      line-height: 1.02;
     }
     .print-line.action,
     .print-line.text,
@@ -519,14 +519,14 @@ function getPrintableStyles(exportType = 'full') {
     .print-dual-row {
       display: table;
       width: 100%;
-      margin: 0 0 4pt;
+      margin: 0 0 2pt;
       table-layout: fixed;
     }
     .print-dual-col {
       display: table-cell;
       width: 50%;
       white-space: pre-wrap;
-      line-height: 1.1;
+      line-height: 1.02;
       vertical-align: top;
       padding: 0 6pt;
     }

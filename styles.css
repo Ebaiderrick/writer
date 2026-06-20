@@ -5883,14 +5883,9 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .export-preview-empty {
   margin: 0;
-  min-height: 320px;
-  display: grid;
-  place-items: center;
-  text-align: center;
-  padding: 1rem;
-  color: var(--muted);
-  font-size: 12px;
-  font-style: italic;
+  min-height: 0;
+  display: none;
+  padding: 0;
 }
 
 .export-preview-frame {

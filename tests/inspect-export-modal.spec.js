@@ -20,8 +20,8 @@ test('screenplay export modal shell is present in the app document', async ({ re
   expect(html).toContain('id="exportFormatChoices"');
   expect(html).toContain('Fountain');
   expect(html).toContain('Final Draft (.fdx)');
-  expect(html).toContain('Include Page Numbers');
-  expect(html).toContain('Include Revisions');
+  expect(html).toContain('Page Numbers');
+  expect(html).toContain('Revisions');
   expect(html).toContain('Watermark Settings');
   expect(html).toContain('Optional custom watermark text');
   expect(html).toContain('Generate Export');

@@ -353,7 +353,7 @@ function readReportSectionsFromEditorHtml() {
 function resetBreakdownLivePanel() {
   const { card, title, meta, output } = getBreakdownLiveNodes();
   if (card) card.hidden = exportDialogMode !== "report";
-  if (title) title.textContent = exportDialogMode === "report" ? "Result" : "AI Breakdown Build";
+  if (title) title.textContent = "Result";
   if (meta) {
     meta.textContent = exportDialogMode === "report"
       ? "Start typing here, load a saved report, or generate AI content."
@@ -508,7 +508,7 @@ async function generateBreakdownSections(project, request) {
   reportGenerationController?.abort();
   reportGenerationController = new AbortController();
   if (card) card.hidden = false;
-  if (title) title.textContent = exportDialogMode === "report" ? "Result" : "AI Breakdown Build";
+  if (title) title.textContent = "Result";
   if (meta) meta.textContent = "Reading the screenplay...";
   if (output) {
     setReportEditorHtml("");
@@ -1282,14 +1282,14 @@ function setExportPreviewState({ html = "", message = "", showFrame = false } = 
   if (frame) {
     frame.hidden = !showFrame;
     if (showFrame) {
-      frame.srcdoc = html;
+      frame.srcdoc = decorateExportPreviewHtml(html);
     } else {
       frame.removeAttribute("srcdoc");
     }
   }
   if (empty) {
     empty.hidden = showFrame;
-    empty.textContent = message || "Preview will appear here for the current export selection.";
+    empty.textContent = showFrame ? "" : "";
   }
   if (meta) {
     meta.textContent = showFrame
@@ -1298,6 +1298,55 @@ function setExportPreviewState({ html = "", message = "", showFrame = false } = 
   }
   if (openBtn) openBtn.disabled = !showFrame || !exportPreviewOpenUrl;
   if (refreshBtn) refreshBtn.disabled = false;
+}
+
+function decorateExportPreviewHtml(html = "") {
+  const previewCss = `
+  <style id="wraita-export-preview-tune">
+    html, body {
+      background: #d8dbe2 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      min-height: 100% !important;
+    }
+    body {
+      overflow-y: auto !important;
+    }
+    .print-shell {
+      display: grid !important;
+      align-content: start !important;
+      gap: 18px !important;
+      padding: 14px 0 24px !important;
+    }
+    .print-page {
+      margin: 0 auto !important;
+      box-shadow: 0 10px 28px rgba(30, 36, 48, 0.16) !important;
+      overflow: visible !important;
+    }
+    .print-page:not(:last-child)::after {
+      content: "Page Break";
+      position: absolute;
+      left: 50%;
+      bottom: -18px;
+      transform: translateX(-50%);
+      font: italic 11px/1.1 Georgia, serif;
+      color: rgba(93, 99, 112, 0.9);
+      letter-spacing: 0.02em;
+      background: #d8dbe2;
+      padding: 0 8px;
+    }
+    .cover-page {
+      justify-content: flex-start !important;
+      padding-top: 1.4in !important;
+    }
+    .production-cover-page {
+      padding-top: 1.4in !important;
+    }
+  </style>`;
+  if (!html) return html;
+  return html.includes("</head>")
+    ? html.replace("</head>", `${previewCss}</head>`)
+    : `${previewCss}${html}`;
 }
 
 async function refreshExportPreview(force = false) {
@@ -8191,8 +8240,8 @@ function updateExportDialogState() {
     validationNote.textContent = validationMessage;
   }
   const liveTitle = document.getElementById("exportBreakdownLiveTitle");
-  if (liveTitle && exportDialogMode === "report" && liveTitle.textContent === "AI Breakdown Build") {
-    liveTitle.textContent = "AI Report Build";
+  if (liveTitle && exportDialogMode === "report" && liveTitle.textContent !== "Result") {
+    liveTitle.textContent = "Result";
   }
   if (exportDialogMode !== "report") {
     scheduleExportPreviewRefresh();

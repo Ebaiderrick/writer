@@ -229,7 +229,7 @@ export function estimateLineUnits(type, text) {
   if (type === 'dual') width = 32;
 
   const wrappedLines = Math.max(1, Math.ceil(compact.length / width));
-  const breathingRoom = (type === 'scene' || type === 'transition') ? 0.1 : 0.0;
+  const breathingRoom = (type === 'scene' || type === 'transition') ? 0.05 : 0.0;
   return wrappedLines + breathingRoom;
 }
 
