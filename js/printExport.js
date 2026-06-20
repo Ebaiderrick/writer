@@ -385,8 +385,8 @@ function getPrintableStyles(exportType = 'full') {
       justify-content: space-between;
       align-items: flex-start;
       gap: 16pt;
-      margin-bottom: 18pt;
-      padding-bottom: 10pt;
+      margin-bottom: 14pt;
+      padding-bottom: 8pt;
       border-bottom: 1px solid #111;
     }
     .print-page-header-label,
@@ -403,12 +403,12 @@ function getPrintableStyles(exportType = 'full') {
     .print-page-header-title {
       font-size: 12pt;
       text-transform: uppercase;
-      margin-top: 4pt;
+      margin-top: 3pt;
     }
     .print-page-header-meta {
       font-size: 10pt;
-      line-height: 1.3;
-      margin-top: 4pt;
+      line-height: 1.25;
+      margin-top: 3pt;
     }
     .print-page-header-page {
       font-size: 10pt;
@@ -447,8 +447,8 @@ function getPrintableStyles(exportType = 'full') {
     }
     .print-body {
       width: 100%;
-      padding-top: ${isProductionExport || isShootingScript ? '0.04in' : '0.18in'};
-      padding-bottom: 0.35in;
+      padding-top: ${isProductionExport || isShootingScript ? '0.02in' : '0.12in'};
+      padding-bottom: 0.22in;
       position: relative;
       z-index: 1;
     }
@@ -459,9 +459,9 @@ function getPrintableStyles(exportType = 'full') {
       z-index: 1;
     }
     .print-line {
-      margin: 0 0 7pt;
+      margin: 0 0 5pt;
       white-space: pre-wrap;
-      line-height: 1.18;
+      line-height: 1.15;
     }
     .print-line.action,
     .print-line.text,
@@ -511,7 +511,7 @@ function getPrintableStyles(exportType = 'full') {
     .print-dual-row {
       display: table;
       width: 100%;
-      margin: 0 0 8pt;
+      margin: 0 0 6pt;
       table-layout: fixed;
     }
     .print-dual-col {
@@ -538,7 +538,7 @@ function getPrintableStyles(exportType = 'full') {
     }
     .print-footer {
       position: absolute;
-      top: 0.45in;
+      bottom: 0.55in;
       right: 1in;
       font-family: "Courier Prime", "Courier New", Courier, monospace;
       font-size: 10pt;

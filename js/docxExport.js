@@ -6,7 +6,7 @@ import { buildFullScriptExportDocument } from './exportModel.js';
 const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const SCREENPLAY_FONT = "Courier Prime";
 const LINE_SPACING = 360;
-const PARAGRAPH_AFTER = 80;
+const PARAGRAPH_AFTER = 50;
 const LETTER_WIDTH = 12240;
 const LETTER_HEIGHT = 15840;
 const PAGE_MARGIN_TOP_BOTTOM = centimeters(1.5);
@@ -243,7 +243,7 @@ function buildCoverSection(docxLib, project) {
   const children = [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: inches(2.35), after: 200, line: LINE_SPACING },
+      spacing: { before: inches(2.35), after: 180, line: LINE_SPACING },
       children: [new TextRun({
         text: String(project.title || "UNTITLED").toUpperCase(),
         bold: true,
@@ -254,7 +254,7 @@ function buildCoverSection(docxLib, project) {
     ...(project.subtitle ? [
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 140, line: LINE_SPACING },
+        spacing: { after: 110, line: LINE_SPACING },
         children: [new TextRun({
           text: String(project.subtitle),
           italics: true,
@@ -265,12 +265,12 @@ function buildCoverSection(docxLib, project) {
     ] : []),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 120, line: LINE_SPACING },
+      spacing: { after: 90, line: LINE_SPACING },
       children: [new TextRun({ text: t("cover.by"), font: SCREENPLAY_FONT, size: 24 })]
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 180, line: LINE_SPACING },
+      spacing: { after: 130, line: LINE_SPACING },
       children: [new TextRun({
         text: String(project.author || t("cover.authorFallback")),
         bold: true,
@@ -281,7 +281,7 @@ function buildCoverSection(docxLib, project) {
     ...(project.coWriters ? [
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 180, line: LINE_SPACING },
+        spacing: { after: 130, line: LINE_SPACING },
         children: [new TextRun({
           text: String(project.coWriters),
           font: SCREENPLAY_FONT,
@@ -295,7 +295,7 @@ function buildCoverSection(docxLib, project) {
   if (project.version) {
     children.push(new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 40, line: LINE_SPACING },
+      spacing: { after: 30, line: LINE_SPACING },
       children: [new TextRun({ text: `Version ${String(project.version)}`, font: SCREENPLAY_FONT, size: 22 })]
     }));
   }
@@ -303,7 +303,7 @@ function buildCoverSection(docxLib, project) {
   if (project.draftDate) {
     children.push(new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 60, line: LINE_SPACING },
+      spacing: { after: 45, line: LINE_SPACING },
       children: [new TextRun({ text: String(project.draftDate), font: SCREENPLAY_FONT, size: 22 })]
     }));
   }
@@ -311,7 +311,7 @@ function buildCoverSection(docxLib, project) {
   if (project.logline) {
     children.push(
       new Paragraph({
-        spacing: { before: 240, after: 120, line: LINE_SPACING }
+        spacing: { before: 180, after: 90, line: LINE_SPACING }
       }),
       new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -337,8 +337,8 @@ function buildCoverSection(docxLib, project) {
           right: PAGE_MARGIN_LEFT_RIGHT,
           bottom: PAGE_MARGIN_TOP_BOTTOM,
           left: PAGE_MARGIN_LEFT_RIGHT,
-          header: centimeters(1),
-          footer: centimeters(1)
+          header: centimeters(1.5),
+          footer: centimeters(1.5)
         }
       }
     },
@@ -389,8 +389,8 @@ function buildScriptSection(docxLib, project) {
           right: PAGE_MARGIN_LEFT_RIGHT,
           bottom: PAGE_MARGIN_TOP_BOTTOM,
           left: PAGE_MARGIN_LEFT_RIGHT,
-          header: centimeters(0.9),
-          footer: centimeters(0.9)
+          header: centimeters(1.5),
+          footer: centimeters(1.5)
         },
         pageNumbers: {
           start: 1
@@ -443,7 +443,7 @@ function buildScriptSectionFromExportDocument(docxLib, exportDocument) {
     children.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { before: 180, after: 0, line: LINE_SPACING },
+        spacing: { before: 120, after: 0, line: LINE_SPACING },
         children: createRuns(TextRun, String(metadata.copyrightNotice), { font: SCREENPLAY_FONT, size: 22 })
       })
     );
@@ -461,8 +461,8 @@ function buildScriptSectionFromExportDocument(docxLib, exportDocument) {
           right: PAGE_MARGIN_LEFT_RIGHT,
           bottom: PAGE_MARGIN_TOP_BOTTOM,
           left: PAGE_MARGIN_LEFT_RIGHT,
-          header: centimeters(0.9),
-          footer: centimeters(0.9)
+          header: centimeters(1.5),
+          footer: centimeters(1.5)
         },
         pageNumbers: {
           start: 1

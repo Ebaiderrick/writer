@@ -104,17 +104,17 @@ export function estimateLineUnits(type, text) {
   const compact = stripWrapperChars(text);
 
   // Character widths based on standard screenplay indentation/margins
-  let width = 60; // Default (Action/Scene)
-  if (type === "dialogue") width = 36;
-  if (type === "parenthetical") width = 24;
-  if (type === "character") width = 24;
-  if (type === "transition") width = 24;
-  if (type === "dual") width = 24;
+  let width = 63; // Default (Action/Scene)
+  if (type === "dialogue") width = 40;
+  if (type === "parenthetical") width = 28;
+  if (type === "character") width = 30;
+  if (type === "transition") width = 28;
+  if (type === "dual") width = 30;
 
   const wrappedLines = Math.max(1, Math.ceil(compact.length / width));
 
   // Industry standard often adds extra spacing before scenes and transitions
-  const breathingRoom = (type === "scene" || type === "transition") ? 1.0 : 0.0;
+  const breathingRoom = (type === "scene" || type === "transition") ? 0.35 : 0.0;
 
   return wrappedLines + breathingRoom;
 }

@@ -53,7 +53,7 @@ export const DEFAULT_LEFT_PANE_BLOCKS = LEFT_PANE_BLOCK_DEFS.map(({ key }) => ({
   visible: DEFAULT_VISIBLE_BLOCK_KEYS.has(key),
   collapsed: false
 }));
-export const PAGE_UNIT_CAPACITY = 54;
+export const PAGE_UNIT_CAPACITY = 57;
 
 export const DEFAULT_STORY_MEMORY = {
   characters: [],
