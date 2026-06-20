@@ -264,7 +264,7 @@ function getPrintableStyles(exportType = 'full') {
       width: 8.5in;
       min-height: 11in;
       margin: 0 auto;
-      padding: 0.82in 0.8in 0.85in 1.18in;
+      padding: 1.5cm 0.8in 1.5cm 1.18in;
       background: #fff;
       color: #111;
       page-break-after: always;
@@ -279,15 +279,15 @@ function getPrintableStyles(exportType = 'full') {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
+      justify-content: center;
       padding-left: 1in;
       padding-right: 1in;
-      padding-top: 1.6in;
+      padding-top: 1.5cm;
       page-break-after: always !important;
       break-after: page !important;
     }
     .production-cover-page {
-      padding-top: 1.35in;
+      padding-top: 1.5cm;
     }
     .script-page-first {
       page-break-before: always !important;
@@ -459,7 +459,7 @@ function getPrintableStyles(exportType = 'full') {
       z-index: 1;
     }
     .print-line {
-      margin: 0 0 10pt;
+      margin: 0 0 7pt;
       white-space: pre-wrap;
       line-height: 1.18;
     }
@@ -511,7 +511,7 @@ function getPrintableStyles(exportType = 'full') {
     .print-dual-row {
       display: table;
       width: 100%;
-      margin: 0 0 11pt;
+      margin: 0 0 8pt;
       table-layout: fixed;
     }
     .print-dual-col {

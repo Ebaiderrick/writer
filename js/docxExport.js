@@ -9,7 +9,7 @@ const LINE_SPACING = 360;
 const PARAGRAPH_AFTER = 80;
 const LETTER_WIDTH = 12240;
 const LETTER_HEIGHT = 15840;
-const PAGE_MARGIN_TOP_BOTTOM = inches(0.85);
+const PAGE_MARGIN_TOP_BOTTOM = centimeters(1.5);
 const PAGE_MARGIN_LEFT_RIGHT = inches(0.8);
 const CHARACTER_BLOCK_LEFT = inches(2.2);
 const CHARACTER_BLOCK_RIGHT = inches(2.1);
@@ -243,7 +243,7 @@ function buildCoverSection(docxLib, project) {
   const children = [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: inches(1.7), after: 200, line: LINE_SPACING },
+      spacing: { before: inches(2.35), after: 200, line: LINE_SPACING },
       children: [new TextRun({
         text: String(project.title || "UNTITLED").toUpperCase(),
         bold: true,
@@ -372,7 +372,7 @@ function buildScriptSection(docxLib, project) {
 
   if (!children.length) {
     children.push(new Paragraph({
-      spacing: { line: LINE_SPACING, after: PARAGRAPH_AFTER },
+      spacing: { line: LINE_SPACING, after: 60 },
       children: [new TextRun({ text: " ", font: SCREENPLAY_FONT, size: 24 })]
     }));
   }
@@ -434,7 +434,7 @@ function buildScriptSectionFromExportDocument(docxLib, exportDocument) {
 
   if (!children.length) {
     children.push(new Paragraph({
-      spacing: { line: LINE_SPACING, after: PARAGRAPH_AFTER },
+      spacing: { line: LINE_SPACING, after: 60 },
       children: [new TextRun({ text: " ", font: SCREENPLAY_FONT, size: 24 })]
     }));
   }
