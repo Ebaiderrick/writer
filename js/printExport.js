@@ -279,14 +279,14 @@ function getPrintableStyles(exportType = 'full') {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       padding-left: 1in;
       padding-right: 1in;
+      padding-top: 1.6in;
       page-break-after: always !important;
       break-after: page !important;
     }
     .production-cover-page {
-      justify-content: flex-start;
       padding-top: 1.35in;
     }
     .script-page-first {
@@ -328,7 +328,7 @@ function getPrintableStyles(exportType = 'full') {
       font-weight: bold;
       text-transform: uppercase;
       letter-spacing: 0.8pt;
-      margin-bottom: 32pt;
+      margin-bottom: 24pt;
     }
     .print-cover-byline {
       font-size: 11pt;
@@ -336,7 +336,7 @@ function getPrintableStyles(exportType = 'full') {
     }
     .print-cover-author {
       font-weight: bold;
-      margin-bottom: 10pt;
+      margin-bottom: 18pt;
     }
     .print-cover-subtitle {
       font-size: 11pt;
@@ -350,17 +350,17 @@ function getPrintableStyles(exportType = 'full') {
       line-height: 1.35;
     }
     .print-cover-coauthors {
-      margin-bottom: 32pt;
+      margin-bottom: 22pt;
     }
     .print-cover-meta {
-      margin-bottom: 20pt;
+      margin-bottom: 16pt;
     }
     .print-cover-meta p {
-      margin-bottom: 8pt;
+      margin-bottom: 6pt;
     }
     .print-cover-logline {
-      width: 4.8in;
-      margin: 20pt auto 0;
+      width: 4.9in;
+      margin: 28pt auto 0;
       line-height: 1.35;
       white-space: pre-wrap;
     }
@@ -463,10 +463,19 @@ function getPrintableStyles(exportType = 'full') {
       white-space: pre-wrap;
       line-height: 1.18;
     }
+    .print-line.action,
+    .print-line.text,
+    .print-line.image,
+    .print-line.note {
+      margin-left: 0;
+      width: 6in;
+    }
     .print-line.scene,
     .print-line.shot {
       font-weight: bold;
       text-transform: uppercase;
+      margin-left: 0;
+      width: 6.1in;
     }
     .shooting-page .print-line.scene {
       letter-spacing: 0.01em;
@@ -478,24 +487,24 @@ function getPrintableStyles(exportType = 'full') {
     }
     .print-line.character,
     .print-line.dual {
-      margin-left: 3.5in;
-      width: 2in;
+      margin-left: 2.2in;
+      width: 2.2in;
       font-weight: bold;
       text-transform: uppercase;
     }
     .print-line.dialogue {
-      margin-left: 2.5in;
-      width: 3.5in;
+      margin-left: 1.2in;
+      width: 3.6in;
     }
     .print-line.parenthetical {
-      margin-left: 3in;
-      width: 2.5in;
+      margin-left: 1.6in;
+      width: 2.4in;
       font-style: italic;
     }
     .print-line.transition {
       font-weight: bold;
       margin-left: auto;
-      width: 2.4in;
+      width: 2.1in;
       text-align: right;
       text-transform: uppercase;
     }

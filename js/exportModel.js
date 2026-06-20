@@ -169,6 +169,12 @@ function resolvePreparedLineType(lines, index, previousPreparedLine = null) {
     return inferredType === 'scene' ? 'scene' : 'action';
   }
   if (['text', 'action', 'shot'].includes(originalType)) {
+    if (
+      inferredType === 'dialogue'
+      && !['character', 'dialogue', 'parenthetical', 'dual'].includes(previousPreparedLine?.type || '')
+    ) {
+      return originalType === 'shot' ? 'shot' : 'action';
+    }
     if (inferredType === 'character') {
       const nextInferred = inferTypeFromText(nextRaw, rawText, String(lines[index + 2]?.text || '').trim());
       return ['dialogue', 'parenthetical'].includes(nextInferred) && !['character', 'dual'].includes(previousPreparedLine?.type || '') ? 'character' : 'action';

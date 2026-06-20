@@ -11,7 +11,13 @@ const LETTER_WIDTH = 12240;
 const LETTER_HEIGHT = 15840;
 const PAGE_MARGIN_TOP_BOTTOM = inches(1);
 const PAGE_MARGIN_LEFT_RIGHT = inches(1);
-const CHARACTER_BLOCK_SIDE_MARGIN = centimeters(5.4);
+const CHARACTER_BLOCK_LEFT = inches(2.2);
+const CHARACTER_BLOCK_RIGHT = inches(2.1);
+const DIALOGUE_BLOCK_LEFT = inches(1.2);
+const DIALOGUE_BLOCK_RIGHT = inches(1.8);
+const PARENTHETICAL_BLOCK_LEFT = inches(1.6);
+const PARENTHETICAL_BLOCK_RIGHT = inches(2.4);
+const TRANSITION_BLOCK_LEFT = inches(4.1);
 const DUAL_CHARACTER_BLOCK_SIDE_MARGIN = centimeters(1.15);
 
 function inches(value) {
@@ -83,7 +89,7 @@ function createParagraph(docxLib, text, type, extra = {}) {
       return new Paragraph({
         ...base,
         alignment: AlignmentType.RIGHT,
-        indent: { left: inches(3.9) },
+        indent: { left: TRANSITION_BLOCK_LEFT },
         children: createRuns(TextRun, String(text || "").toUpperCase(), { bold: true })
       });
     case "character":
@@ -91,8 +97,8 @@ function createParagraph(docxLib, text, type, extra = {}) {
       return new Paragraph({
         ...base,
         indent: {
-          left: CHARACTER_BLOCK_SIDE_MARGIN,
-          right: CHARACTER_BLOCK_SIDE_MARGIN
+          left: CHARACTER_BLOCK_LEFT,
+          right: CHARACTER_BLOCK_RIGHT
         },
         children: createRuns(TextRun, String(text || "").toUpperCase(), { bold: true })
       });
@@ -100,16 +106,16 @@ function createParagraph(docxLib, text, type, extra = {}) {
       return new Paragraph({
         ...base,
         indent: {
-          left: inches(1.0),
-          right: inches(1.5)
+          left: DIALOGUE_BLOCK_LEFT,
+          right: DIALOGUE_BLOCK_RIGHT
         }
       });
     case "parenthetical":
       return new Paragraph({
         ...base,
         indent: {
-          left: inches(1.5),
-          right: inches(2.0)
+          left: PARENTHETICAL_BLOCK_LEFT,
+          right: PARENTHETICAL_BLOCK_RIGHT
         },
         children: createRuns(TextRun, text, { italics: true })
       });
@@ -237,7 +243,7 @@ function buildCoverSection(docxLib, project) {
   const children = [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: inches(2.4), after: 240, line: LINE_SPACING },
+      spacing: { before: inches(1.7), after: 200, line: LINE_SPACING },
       children: [new TextRun({
         text: String(project.title || "UNTITLED").toUpperCase(),
         bold: true,
@@ -264,7 +270,7 @@ function buildCoverSection(docxLib, project) {
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 300, line: LINE_SPACING },
+      spacing: { after: 180, line: LINE_SPACING },
       children: [new TextRun({
         text: String(project.author || t("cover.authorFallback")),
         bold: true,
@@ -275,7 +281,7 @@ function buildCoverSection(docxLib, project) {
     ...(project.coWriters ? [
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 220, line: LINE_SPACING },
+        spacing: { after: 180, line: LINE_SPACING },
         children: [new TextRun({
           text: String(project.coWriters),
           font: SCREENPLAY_FONT,
@@ -297,7 +303,7 @@ function buildCoverSection(docxLib, project) {
   if (project.draftDate) {
     children.push(new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 80, line: LINE_SPACING },
+      spacing: { after: 60, line: LINE_SPACING },
       children: [new TextRun({ text: String(project.draftDate), font: SCREENPLAY_FONT, size: 22 })]
     }));
   }
@@ -310,8 +316,8 @@ function buildCoverSection(docxLib, project) {
       new Paragraph({
         alignment: AlignmentType.CENTER,
         indent: {
-          left: inches(1.2),
-          right: inches(1.2)
+          left: inches(1.0),
+          right: inches(1.0)
         },
         spacing: { line: LINE_SPACING, after: 120 },
         children: createRuns(TextRun, String(project.logline), { font: SCREENPLAY_FONT, size: 24 })
