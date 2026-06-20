@@ -264,7 +264,7 @@ function getPrintableStyles(exportType = 'full') {
       width: 8.5in;
       min-height: 11in;
       margin: 0 auto;
-      padding: 1.0in 1.0in 1.0in 1.5in;
+      padding: 0.82in 0.8in 0.85in 1.18in;
       background: #fff;
       color: #111;
       page-break-after: always;
