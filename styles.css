@@ -5634,6 +5634,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   justify-content: space-between;
 }
 
+.export-collapse-btn {
+  flex: 0 0 auto;
+}
+
 .export-step-badge {
   align-self: start;
   padding: 0.28rem 0.56rem;
@@ -5706,6 +5710,10 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .export-options-grid[hidden],
 .export-detail-panel[hidden],
 .export-toggle[hidden] {
+  display: none !important;
+}
+
+#exportCoverPageContent[hidden] {
   display: none !important;
 }
 

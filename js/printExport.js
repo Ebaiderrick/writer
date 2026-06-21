@@ -281,11 +281,13 @@ function getPrintableStyles(exportType = 'full') {
       padding-left: 1in;
       padding-right: 1in;
       padding-top: 1.5cm;
+      padding-bottom: 1.5cm;
       page-break-after: always !important;
       break-after: page !important;
     }
     .production-cover-page {
       padding-top: 1.5cm;
+      padding-bottom: 1.5cm;
     }
     .script-page-first {
       page-break-before: always !important;
@@ -467,9 +469,9 @@ function getPrintableStyles(exportType = 'full') {
       z-index: 1;
     }
     .print-line {
-      margin: 0 0 1.5pt;
+      margin: 0 0 2pt;
       white-space: pre-wrap;
-      line-height: 1.02;
+      line-height: 1.08;
     }
     .print-line.action,
     .print-line.text,
@@ -484,6 +486,12 @@ function getPrintableStyles(exportType = 'full') {
       text-transform: uppercase;
       margin-left: 0;
       width: 6.1in;
+      margin-top: 7pt;
+      margin-bottom: 3pt;
+    }
+    .print-line.scene:first-child,
+    .print-line.shot:first-child {
+      margin-top: 0;
     }
     .shooting-page .print-line.scene {
       letter-spacing: 0.01em;
@@ -496,52 +504,61 @@ function getPrintableStyles(exportType = 'full') {
     .print-line.character,
     .print-line.dual {
       margin-left: 2.2in;
-      width: 2.2in;
+      width: 2.35in;
       font-weight: bold;
       text-transform: uppercase;
+      margin-top: 5pt;
+      margin-bottom: 1.5pt;
     }
     .print-line.dialogue {
-      margin-left: 1.2in;
-      width: 3.6in;
+      margin-left: 1.45in;
+      width: 3.15in;
+      margin-bottom: 2.5pt;
     }
     .print-line.parenthetical {
-      margin-left: 1.6in;
-      width: 2.4in;
+      margin-left: 1.95in;
+      width: 2.1in;
       font-style: italic;
+      margin-bottom: 1.5pt;
     }
     .print-line.transition {
       font-weight: bold;
       margin-left: auto;
-      width: 2.1in;
+      width: 2.35in;
       text-align: right;
       text-transform: uppercase;
+      margin-top: 5pt;
+      margin-bottom: 2pt;
     }
     .print-dual-row {
-      display: table;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 0.28in;
       width: 100%;
-      margin: 0 0 2pt;
-      table-layout: fixed;
+      margin: 0 0 3pt;
     }
     .print-dual-col {
-      display: table-cell;
-      width: 50%;
+      display: block;
+      flex: 0 0 2.45in;
+      max-width: 2.45in;
       white-space: pre-wrap;
-      line-height: 1.02;
-      vertical-align: top;
-      padding: 0 6pt;
+      line-height: 1.08;
+      min-width: 0;
+      padding: 0;
     }
     .print-dual-row.character .print-dual-col,
     .print-dual-row.dual .print-dual-col {
       font-weight: bold;
-      padding-left: 0.95in;
+      text-align: center;
       text-transform: uppercase;
     }
     .print-dual-row.dialogue .print-dual-col {
-      padding-left: 0.5in;
-      padding-right: 0.5in;
+      text-align: left;
     }
     .print-dual-row.parenthetical .print-dual-col {
-      padding-left: 0.7in;
+      padding-left: 0.18in;
+      padding-right: 0.18in;
       font-style: italic;
     }
     @page {

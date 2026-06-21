@@ -93,6 +93,8 @@ let exportDialogContext = { scenes: [], characters: [], revisions: [], collabora
 let exportDialogMode = "export";
 let exportPreviewRefreshTimer = 0;
 let exportPreviewOpenUrl = "";
+let exportCoverPageBuilderCollapsed = false;
+let exportDialogProjectId = "";
 let reportDraftRequest = null;
 let reportGenerationController = null;
 let selectedReportDraftLoadId = "";
@@ -1236,6 +1238,13 @@ function buildExportRequestFromDialog(project) {
   return request;
 }
 
+function getExportDialogProject() {
+  const lockedProject = exportDialogProjectId
+    ? state.projects.find((entry) => entry.id === exportDialogProjectId)
+    : null;
+  return lockedProject || getCurrentProject();
+}
+
 async function buildExportPreviewResult(project, request) {
   const previewRequest = {
     ...request,
@@ -1335,12 +1344,11 @@ function decorateExportPreviewHtml(html = "") {
       background: #d8dbe2;
       padding: 0 8px;
     }
-    .cover-page {
-      justify-content: flex-start !important;
-      padding-top: 1.4in !important;
-    }
+    .cover-page,
     .production-cover-page {
-      padding-top: 1.4in !important;
+      justify-content: center !important;
+      padding-top: 1.5cm !important;
+      padding-bottom: 1.5cm !important;
     }
   </style>`;
   if (!html) return html;
@@ -1352,8 +1360,11 @@ function decorateExportPreviewHtml(html = "") {
 async function refreshExportPreview(force = false) {
   const dialog = document.getElementById("exportDialog");
   if (!dialog?.open || exportDialogMode === "report") return;
-  const project = syncProjectFromInputs() || getCurrentProject();
+  const project = getExportDialogProject();
   if (!project) return;
+  if (project.id === state.currentProjectId) {
+    syncProjectFromInputs();
+  }
   const request = buildExportRequestFromDialog(project);
   const refreshBtn = document.getElementById("exportPreviewRefreshBtn");
   if (refreshBtn) refreshBtn.disabled = true;
@@ -4790,6 +4801,11 @@ export function bindEvents() {
     if (!(target instanceof HTMLElement)) return;
     if (target.closest("#exportEnableWatermarkSettings")) {
       requestAnimationFrame(() => updateExportDialogState());
+      return;
+    }
+    if (target.closest("#exportCoverPageCollapseBtn")) {
+      exportCoverPageBuilderCollapsed = !exportCoverPageBuilderCollapsed;
+      updateExportDialogState();
     }
   });
   document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, #exportModeSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportCollaborativeWriterSelect, #exportCollaborativeReviewerSelect, #exportCollaborativeEditorSelect, #exportCollaborativeStatusSelect, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeSceneNumbers, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportEnableWatermarkSettings, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes, #exportBreakdownPrompt, #exportBreakdownCharactersMin, #exportBreakdownCharactersMax, #exportBreakdownLocationsMin, #exportBreakdownLocationsMax, #exportBreakdownScenesMin, #exportBreakdownScenesMax").forEach((element) => {
@@ -6992,6 +7008,7 @@ function openExportDialog(prefill = {}) {
     format: String(prefill.format || exportDialogPrefill.format || "pdf"),
     exportType: String(prefill.exportType || exportDialogPrefill.exportType || "full")
   };
+  exportDialogProjectId = project.id;
 
   const projectMeta = document.getElementById("exportDialogProjectMeta");
   const dialogTitle = dialog.querySelector(".export-head h3");
@@ -7400,6 +7417,7 @@ function closeExportDialog() {
     URL.revokeObjectURL(exportPreviewOpenUrl);
     exportPreviewOpenUrl = "";
   }
+  exportDialogProjectId = "";
   setExportPreviewState({ message: "Preview will appear here for the current export selection." });
   document.getElementById("exportDialog")?.close();
 }
@@ -7798,6 +7816,8 @@ function updateExportDialogState() {
   const includeRevisionsToggle = document.getElementById("exportIncludeRevisionsToggle");
   const watermarkPanel = document.getElementById("exportWatermarkPanel");
   const coverPagePanel = document.getElementById("exportCoverPagePanel");
+  const coverPageContent = document.getElementById("exportCoverPageContent");
+  const coverPageCollapseBtn = document.getElementById("exportCoverPageCollapseBtn");
   const breakdownPanel = document.getElementById("exportBreakdownPanel");
   const exportTypeDescription = document.getElementById("exportTypeDescription");
   const exportTypeChoices = document.getElementById("exportTypeChoices");
@@ -7835,6 +7855,14 @@ function updateExportDialogState() {
     coverPagePanel.hidden = !coverPageEnabled;
     coverPagePanel.style.display = coverPageEnabled ? "grid" : "none";
   }
+  if (coverPageContent && coverPageCollapseBtn) {
+    const coverPageEnabled = document.getElementById("exportIncludeTitlePage")?.checked !== false;
+    const showCoverPageContent = coverPageEnabled && !exportCoverPageBuilderCollapsed;
+    coverPageContent.hidden = !showCoverPageContent;
+    coverPageCollapseBtn.hidden = !coverPageEnabled;
+    coverPageCollapseBtn.textContent = showCoverPageContent ? "Hide" : "Show";
+    coverPageCollapseBtn.setAttribute("aria-expanded", showCoverPageContent ? "true" : "false");
+  }
   if (scenePanel) {
     const showScenePanel = exportType === "scene";
     scenePanel.hidden = !showScenePanel;
@@ -7864,6 +7892,11 @@ function updateExportDialogState() {
     const showBreakdownPanel = exportType === "breakdown";
     breakdownPanel.hidden = !showBreakdownPanel;
     breakdownPanel.style.display = showBreakdownPanel ? "grid" : "none";
+  }
+  if (breakdownLiveCard) {
+    const showBreakdownLiveCard = exportDialogMode === "report";
+    breakdownLiveCard.hidden = !showBreakdownLiveCard;
+    breakdownLiveCard.style.display = showBreakdownLiveCard ? "grid" : "none";
   }
   if (previewCard) {
     const showPreviewCard = exportDialogMode !== "report";

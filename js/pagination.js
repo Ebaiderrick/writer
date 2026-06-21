@@ -87,7 +87,7 @@ function buildPaginationBlocks(lines) {
     blocks.push({
       kind: 'line',
       lines: [{ ...line }],
-      units: estimateLineUnits(line.type, line.displayText)
+      units: estimateLineRenderUnits(line)
     });
     i += 1;
   }
@@ -131,7 +131,7 @@ function placeSpeechBlock(block, state) {
       usedUnits += split.fitUnits;
       if (split.remainingLines.length) {
         currentPage.push({ type: 'dialogue', displayText: '(MORE)' });
-        usedUnits += estimateLineUnits('dialogue', '(MORE)');
+        usedUnits += estimateLineRenderUnits({ type: 'dialogue', displayText: '(MORE)' });
       }
       flushPage();
       currentPage = [];
@@ -173,8 +173,8 @@ function splitSpeechLines(lines, availableUnits) {
 
   while (index < lines.length) {
     const line = lines[index];
-    const units = estimateLineUnits(line.type, line.displayText);
-    const reserveForMore = index < lines.length - 1 ? estimateLineUnits('dialogue', '(MORE)') : 0;
+    const units = estimateLineRenderUnits(line);
+    const reserveForMore = index < lines.length - 1 ? estimateLineRenderUnits({ type: 'dialogue', displayText: '(MORE)' }) : 0;
     if (fitLines.length > 0 && fitUnits + units + reserveForMore > availableUnits) {
       break;
     }
@@ -196,15 +196,15 @@ function splitSpeechLines(lines, availableUnits) {
 
 function estimateSpeechStartUnits(lines) {
   if (!lines.length) return 0;
-  let units = estimateLineUnits(lines[0].type, lines[0].displayText);
+  let units = estimateLineRenderUnits(lines[0]);
   for (let i = 1; i < lines.length; i += 1) {
     const line = lines[i];
     if (line.type === 'parenthetical') {
-      units += Math.min(0.8, estimateLineUnits(line.type, line.displayText));
+      units += Math.min(0.8, estimateLineRenderUnits(line));
       continue;
     }
     if (line.type === 'dialogue') {
-      units += Math.min(1.3, estimateLineUnits(line.type, line.displayText));
+      units += Math.min(1.3, estimateLineRenderUnits(line));
     }
     break;
   }
@@ -212,7 +212,18 @@ function estimateSpeechStartUnits(lines) {
 }
 
 function sumBlockUnits(lines) {
-  return lines.reduce((total, line) => total + estimateLineUnits(line.type, line.displayText), 0);
+  return lines.reduce((total, line) => total + estimateLineRenderUnits(line), 0);
+}
+
+function estimateLineRenderUnits(line = {}) {
+  const type = line.type;
+  const primary = estimateLineUnits(type, line.displayText);
+  const secondaryText = String(line.secondary || '').trim();
+  if (!secondaryText) {
+    return primary;
+  }
+  const secondary = estimateLineUnits(type, secondaryText);
+  return Math.max(primary, secondary);
 }
 
 /**
@@ -229,7 +240,7 @@ export function estimateLineUnits(type, text) {
   if (type === 'dual') width = 32;
 
   const wrappedLines = Math.max(1, Math.ceil(compact.length / width));
-  const breathingRoom = (type === 'scene' || type === 'transition') ? 0.05 : 0.0;
+  const breathingRoom = (type === 'scene' || type === 'transition') ? 0.08 : 0.0;
   return wrappedLines + breathingRoom;
 }
 
