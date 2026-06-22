@@ -18,9 +18,22 @@ import {
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
 import { DOCX_MIME_TYPE } from './docxExport.js';
-import { ExportService } from './exportService.js';
-import { buildFullScriptExportDocument, getDefaultExportOptions } from './exportModel.js';
+import { ExportService } from './exportService.js?v=20260622c';
+import {
+  buildCharacterExportDocument,
+  buildCharacterPacketExportDocument,
+  buildCollaborativeExportDocument,
+  buildFullScriptExportDocument,
+  buildLocationExportDocument,
+  buildProductionExportDocument,
+  buildRevisionExportDocument,
+  buildSceneExportDocument,
+  buildShootingScriptExportDocument,
+  buildWatermarkedScriptExportDocument,
+  getDefaultExportOptions
+} from './exportModel.js';
 import { paginateScriptLines } from './pagination.js';
+import { buildPrintableDocumentFromExportDocument } from './printExport.js';
 import { auth } from './firebase.js';
 import { EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { logActivity } from './activity.js';
@@ -35,7 +48,7 @@ import {
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView, renderStudioProjectContext,
   showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow, showFilmProjectSetupFlow, renderWorkspaceInboxPopup
-} from './ui.js?v=20260622a';
+} from './ui.js?v=20260622c';
 import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
@@ -1251,36 +1264,52 @@ async function buildExportPreviewResult(project, request) {
     ...request,
     format: "pdf"
   };
+  let exportDocument = null;
   switch (previewRequest.exportType) {
     case "character":
       if (!previewRequest.characters?.length) return null;
-      return ExportService.exportCharacter(project, previewRequest);
+      exportDocument = buildCharacterExportDocument(project, previewRequest);
+      break;
     case "character-packet":
       if (!previewRequest.characters?.length) return null;
-      return ExportService.exportCharacterPacket(project, previewRequest);
+      exportDocument = buildCharacterPacketExportDocument(project, previewRequest);
+      break;
     case "scene":
       if (!previewRequest.sceneIds?.length && !previewRequest.sceneRange) return null;
-      return ExportService.exportScenes(project, previewRequest);
+      exportDocument = buildSceneExportDocument(project, previewRequest);
+      break;
     case "location":
       if (!previewRequest.location) return null;
-      return ExportService.exportLocation(project, previewRequest);
+      exportDocument = buildLocationExportDocument(project, previewRequest);
+      break;
     case "revision":
       if (!previewRequest.versionA || !previewRequest.versionB || previewRequest.versionA.id === previewRequest.versionB.id) return null;
-      return ExportService.exportRevision(project, previewRequest);
+      exportDocument = buildRevisionExportDocument(project, previewRequest);
+      break;
     case "production":
-      return ExportService.exportProduction(project, previewRequest);
+      exportDocument = buildProductionExportDocument(project, previewRequest);
+      break;
     case "collaborative":
-      return ExportService.exportCollaborative(project, previewRequest);
+      exportDocument = buildCollaborativeExportDocument(project, previewRequest);
+      break;
     case "shooting":
-      return ExportService.exportShootingScript(project, previewRequest);
+      exportDocument = buildShootingScriptExportDocument(project, previewRequest);
+      break;
     case "watermarked":
-      return ExportService.exportWatermarkedScript(project, previewRequest);
+      exportDocument = buildWatermarkedScriptExportDocument(project, previewRequest);
+      break;
     case "breakdown":
       return null;
     case "full":
     default:
-      return ExportService.exportFullScript(project, previewRequest);
+      exportDocument = buildFullScriptExportDocument(project, previewRequest.options || previewRequest);
+      break;
   }
+  if (!exportDocument) return null;
+  return {
+    content: buildPrintableDocumentFromExportDocument(exportDocument, false),
+    mimeType: "text/html;charset=utf-8"
+  };
 }
 
 function setExportPreviewState({ html = "", message = "", showFrame = false } = {}) {
@@ -1326,26 +1355,6 @@ async function downloadExportFromPreview() {
     const outcome = await executeExportRequest(project, request);
     const result = outcome?.result;
     if (!result) return;
-    if (result.transport === "print-html") {
-      const printableHtml = decorateExportPreviewHtml(String(result.content || ""));
-      const filename = String(result.filename || `${slugify(project.title)}-export.html`).replace(/\.pdf$/iu, ".html");
-      try {
-        downloadFile(filename, printableHtml, "text/html;charset=utf-8");
-        showToast("Export downloaded.", "success", { duration: 2200 });
-      } catch (downloadError) {
-        console.error("Preview HTML download failed", downloadError);
-        const printableBlob = new Blob([printableHtml], { type: "text/html;charset=utf-8" });
-        const printableUrl = URL.createObjectURL(printableBlob);
-        const opened = window.open(printableUrl, "_blank", "noopener,noreferrer");
-        window.setTimeout(() => URL.revokeObjectURL(printableUrl), 60_000);
-        if (!opened) {
-          customAlert("The export is ready, but this browser blocked both download and fallback open. Try again in a regular browser to save the file.", "Screenplay Export");
-        } else {
-          customAlert("This browser blocked the direct download, so the prepared export was opened in a new tab instead.", "Screenplay Export");
-        }
-      }
-      return;
-    }
     downloadFile(result.filename, result.content, result.mimeType || DOCX_MIME_TYPE);
     showToast("Export downloaded.", "success", { duration: 2200 });
   } catch (error) {

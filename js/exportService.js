@@ -14,10 +14,10 @@ import {
   buildWatermarkedScriptExportDocument,
   getDefaultExportOptions
 } from './exportModel.js';
-import { buildPrintableDocumentFromExportDocument } from './printExport.js';
 import { buildWordDocxBlobFromExportDocument, DOCX_MIME_TYPE } from './docxExport.js';
+import { buildPdfBlobFromExportDocument } from './pdfExport.js?v=20260622c';
 
-const PDF_MIME_TYPE = 'text/html;charset=utf-8';
+const PDF_MIME_TYPE = 'application/pdf';
 const FOUNTAIN_MIME_TYPE = 'text/plain;charset=utf-8';
 const FDX_MIME_TYPE = 'application/xml;charset=utf-8';
 
@@ -298,12 +298,11 @@ async function buildFormatOutput(exportDocument, format) {
     }
     case 'pdf':
     default: {
-      const content = buildPrintableDocumentFromExportDocument(exportDocumentWithWatermark, false);
+      const content = await buildPdfBlobFromExportDocument(exportDocumentWithWatermark);
       return {
-        filename: buildExportFilename(exportDocumentWithWatermark, 'html'),
+        filename: buildExportFilename(exportDocumentWithWatermark, 'pdf'),
         content,
-        mimeType: PDF_MIME_TYPE,
-        transport: 'print-html'
+        mimeType: PDF_MIME_TYPE
       };
     }
   }
