@@ -1311,7 +1311,7 @@ function setExportPreviewState({ html = "", message = "", showFrame = false } = 
   }
   if (openBtn) {
     openBtn.disabled = hasValidationError;
-    openBtn.textContent = format === "pdf" ? "Open Export" : "Download";
+    openBtn.textContent = "Download";
   }
   if (refreshBtn) refreshBtn.disabled = false;
 }
@@ -1328,14 +1328,21 @@ async function downloadExportFromPreview() {
     if (!result) return;
     if (result.transport === "print-html") {
       const printableHtml = decorateExportPreviewHtml(String(result.content || ""));
-      const printableBlob = new Blob([printableHtml], { type: "text/html;charset=utf-8" });
-      const printableUrl = URL.createObjectURL(printableBlob);
-      const opened = window.open(printableUrl, "_blank", "noopener,noreferrer");
-      window.setTimeout(() => URL.revokeObjectURL(printableUrl), 60_000);
-      if (!opened) {
-        customAlert("The export is ready, but this browser blocked the new tab. Allow pop-ups or open Wraita in a regular browser to save the file there.", "Screenplay Export");
-      } else {
-        showToast("Export opened in a new tab.", "success", { duration: 2200 });
+      const filename = String(result.filename || `${slugify(project.title)}-export.html`).replace(/\.pdf$/iu, ".html");
+      try {
+        downloadFile(filename, printableHtml, "text/html;charset=utf-8");
+        showToast("Export downloaded.", "success", { duration: 2200 });
+      } catch (downloadError) {
+        console.error("Preview HTML download failed", downloadError);
+        const printableBlob = new Blob([printableHtml], { type: "text/html;charset=utf-8" });
+        const printableUrl = URL.createObjectURL(printableBlob);
+        const opened = window.open(printableUrl, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => URL.revokeObjectURL(printableUrl), 60_000);
+        if (!opened) {
+          customAlert("The export is ready, but this browser blocked both download and fallback open. Try again in a regular browser to save the file.", "Screenplay Export");
+        } else {
+          customAlert("This browser blocked the direct download, so the prepared export was opened in a new tab instead.", "Screenplay Export");
+        }
       }
       return;
     }
@@ -2111,6 +2118,20 @@ function continueWorkspaceWriting() {
     return;
   }
   createProjectInsideCurrentWorkspace();
+}
+
+function ensureExportProjectContext() {
+  if (!refs.studioView?.hidden && getCurrentProject() && !getCurrentProject()?.isWorkspaceRoot) {
+    return true;
+  }
+  const workspaceProject = getLatestWorkspaceScript(state.currentWorkspaceId)
+    || state.projects.find((project) => !project.isWorkspaceRoot)
+    || null;
+  if (!workspaceProject) {
+    showToast("Open or create a screenplay project first before exporting.", "error", { duration: 3600 });
+    return false;
+  }
+  return openProjectOrNotify(workspaceProject.id, { silentLoadToast: true });
 }
 
 function focusWorkspaceTaskForm() {
@@ -4095,6 +4116,11 @@ export function bindEvents() {
       continueWorkspaceWriting();
       return;
     }
+    if (action === "open-export") {
+      if (!ensureExportProjectContext()) return;
+      openExportDialog({ format: "pdf", exportType: "full" });
+      return;
+    }
     if (action === "focus-task-form") {
       focusWorkspaceTaskForm();
       return;
@@ -4170,6 +4196,11 @@ export function bindEvents() {
     }
     if (action === "continue-writing") {
       continueWorkspaceWriting();
+      return;
+    }
+    if (action === "open-export") {
+      if (!ensureExportProjectContext()) return;
+      openExportDialog({ format: "pdf", exportType: "full" });
       return;
     }
     if (action === "focus-task-form") {
@@ -4733,8 +4764,14 @@ export function bindEvents() {
 
   // Project Actions
   refs.saveBtn.addEventListener("click", () => persistProjects(true));
-  refs.exportScreenplayBtn.addEventListener("click", () => openExportDialog({ format: "pdf", exportType: "full" }));
-  document.getElementById("openReportBtn")?.addEventListener("click", () => openReportDialog());
+  refs.exportScreenplayBtn.addEventListener("click", () => {
+    if (!ensureExportProjectContext()) return;
+    openExportDialog({ format: "pdf", exportType: "full" });
+  });
+  document.getElementById("openReportBtn")?.addEventListener("click", () => {
+    if (!ensureExportProjectContext()) return;
+    openReportDialog();
+  });
   refs.exportTxtBtn.addEventListener("click", exportTxt);
   refs.exportJsonBtn.addEventListener("click", exportJson);
   refs.fileInput.addEventListener("change", importFile);
@@ -6181,9 +6218,11 @@ function handleMenuAction(action) {
       exportTxt();
       break;
     case "export-screenplay":
+      if (!ensureExportProjectContext()) break;
       openExportDialog({ format: "pdf", exportType: "full" });
       break;
     case "open-report":
+      if (!ensureExportProjectContext()) break;
       openReportDialog();
       break;
     case "export-json":

@@ -1288,6 +1288,7 @@ export function renderHome() {
           </div>
           <div class="workspace-flow-actions">
             <button class="primary-button btn-sm" type="button" data-workspace-home-action="continue-writing">${latestProject ? "Continue Writing" : "Create Script"}</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-export">Screenplay Export</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="focus-task-form">Add Task</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">New Script</button>
           </div>
