@@ -1289,6 +1289,7 @@ function setExportPreviewState({ html = "", message = "", showFrame = false } = 
   const openBtn = document.getElementById("exportPreviewOpenBtn");
   const refreshBtn = document.getElementById("exportPreviewRefreshBtn");
   const meta = document.getElementById("exportPreviewMeta");
+  const format = document.getElementById("exportFormatSelect")?.value || "pdf";
   if (frame) {
     frame.hidden = !showFrame;
     if (showFrame) {
@@ -1308,7 +1309,7 @@ function setExportPreviewState({ html = "", message = "", showFrame = false } = 
   }
   if (openBtn) {
     openBtn.disabled = !showFrame;
-    openBtn.textContent = "Download";
+    openBtn.textContent = format === "pdf" ? "Open Export" : "Download";
   }
   if (refreshBtn) refreshBtn.disabled = false;
 }
@@ -1324,9 +1325,16 @@ async function downloadExportFromPreview() {
     const result = outcome?.result;
     if (!result) return;
     if (result.transport === "print-html") {
-      const filename = String(result.filename || `${slugify(project.title)}-export.html`).replace(/\.pdf$/iu, ".html");
-      downloadFile(filename, result.content, "text/html;charset=utf-8");
-      showToast("Export HTML downloaded.", "success", { duration: 2200 });
+      const printableHtml = decorateExportPreviewHtml(String(result.content || ""));
+      const printableBlob = new Blob([printableHtml], { type: "text/html;charset=utf-8" });
+      const printableUrl = URL.createObjectURL(printableBlob);
+      const opened = window.open(printableUrl, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(printableUrl), 60_000);
+      if (!opened) {
+        customAlert("The export is ready, but this browser blocked the new tab. Allow pop-ups or open Wraita in a regular browser to save the file there.", "Screenplay Export");
+      } else {
+        showToast("Export opened in a new tab.", "success", { duration: 2200 });
+      }
       return;
     }
     downloadFile(result.filename, result.content, result.mimeType || DOCX_MIME_TYPE);
