@@ -35,7 +35,7 @@ import {
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView, renderStudioProjectContext,
   showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow, showFilmProjectSetupFlow, renderWorkspaceInboxPopup
-} from './ui.js';
+} from './ui.js?v=20260622a';
 import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
@@ -2134,6 +2134,20 @@ function ensureExportProjectContext() {
   return openProjectOrNotify(workspaceProject.id, { silentLoadToast: true });
 }
 
+async function openWorkspaceExportFlow(prefill = { format: "pdf", exportType: "full" }) {
+  if (!ensureExportProjectContext()) return false;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+    await new Promise((resolve) => window.setTimeout(resolve, 60));
+    if (!refs.studioView?.hidden && getCurrentProject() && !getCurrentProject()?.isWorkspaceRoot) {
+      openExportDialog(prefill);
+      return true;
+    }
+  }
+  showToast("The screenplay editor is still loading. Try export again in a moment.", "error", { duration: 2800 });
+  return false;
+}
+
 function focusWorkspaceTaskForm() {
   const taskInput = refs.workspaceDashboard?.querySelector("[data-workspace-task-title]")
     || refs.homeWorkspaceDashboard?.querySelector("[data-workspace-task-title]");
@@ -4117,8 +4131,7 @@ export function bindEvents() {
       return;
     }
     if (action === "open-export") {
-      if (!ensureExportProjectContext()) return;
-      openExportDialog({ format: "pdf", exportType: "full" });
+      void openWorkspaceExportFlow({ format: "pdf", exportType: "full" });
       return;
     }
     if (action === "focus-task-form") {
@@ -4199,8 +4212,7 @@ export function bindEvents() {
       return;
     }
     if (action === "open-export") {
-      if (!ensureExportProjectContext()) return;
-      openExportDialog({ format: "pdf", exportType: "full" });
+      void openWorkspaceExportFlow({ format: "pdf", exportType: "full" });
       return;
     }
     if (action === "focus-task-form") {

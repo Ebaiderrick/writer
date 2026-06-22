@@ -748,6 +748,7 @@ export function renderWorkspaceView() {
           <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
           <div class="workspace-home-hero-actions">
             <button class="primary-button btn-sm" type="button" data-workspace-home-action="continue-writing">${latestProject ? "Continue Writing" : "Create Script"}</button>
+            <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-export">Screenplay Export</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="focus-task-form">Assign Task</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-popup">Open Board</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-notepad">Notepad</button>
