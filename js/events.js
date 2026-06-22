@@ -1290,6 +1290,8 @@ function setExportPreviewState({ html = "", message = "", showFrame = false } = 
   const refreshBtn = document.getElementById("exportPreviewRefreshBtn");
   const meta = document.getElementById("exportPreviewMeta");
   const format = document.getElementById("exportFormatSelect")?.value || "pdf";
+  const validationNote = document.getElementById("exportValidationNote");
+  const hasValidationError = Boolean(validationNote && !validationNote.hidden && String(validationNote.textContent || "").trim());
   if (frame) {
     frame.hidden = !showFrame;
     if (showFrame) {
@@ -1308,7 +1310,7 @@ function setExportPreviewState({ html = "", message = "", showFrame = false } = 
       : (message || "Preview the current screenplay export layout inside Wraita.");
   }
   if (openBtn) {
-    openBtn.disabled = !showFrame;
+    openBtn.disabled = hasValidationError;
     openBtn.textContent = format === "pdf" ? "Open Export" : "Download";
   }
   if (refreshBtn) refreshBtn.disabled = false;
