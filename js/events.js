@@ -1306,8 +1306,40 @@ function setExportPreviewState({ html = "", message = "", showFrame = false } = 
       ? "This is the live export layout from the current settings."
       : (message || "Preview the current screenplay export layout inside Wraita.");
   }
-  if (openBtn) openBtn.disabled = !showFrame || !exportPreviewOpenUrl;
+  if (openBtn) {
+    openBtn.disabled = !showFrame;
+    openBtn.textContent = "Download";
+  }
   if (refreshBtn) refreshBtn.disabled = false;
+}
+
+async function downloadExportFromPreview() {
+  const project = syncProjectFromInputs() || getCurrentProject();
+  if (!project) return;
+  const downloadBtn = document.getElementById("exportPreviewOpenBtn");
+  try {
+    if (downloadBtn) downloadBtn.disabled = true;
+    const request = buildExportRequestFromDialog(project);
+    const outcome = await executeExportRequest(project, request);
+    const result = outcome?.result;
+    if (!result) return;
+    if (result.transport === "print-html") {
+      const filename = String(result.filename || `${slugify(project.title)}-export.html`).replace(/\.pdf$/iu, ".html");
+      downloadFile(filename, result.content, "text/html;charset=utf-8");
+      showToast("Export HTML downloaded.", "success", { duration: 2200 });
+      return;
+    }
+    downloadFile(result.filename, result.content, result.mimeType || DOCX_MIME_TYPE);
+    showToast("Export downloaded.", "success", { duration: 2200 });
+  } catch (error) {
+    console.error("Preview download failed", error);
+    customAlert(
+      error instanceof Error ? error.message : "The export could not be downloaded from preview.",
+      "Screenplay Export"
+    );
+  } finally {
+    updateExportDialogState();
+  }
 }
 
 function decorateExportPreviewHtml(html = "") {
@@ -4731,8 +4763,7 @@ export function bindEvents() {
     void refreshExportPreview(true);
   });
   document.getElementById("exportPreviewOpenBtn")?.addEventListener("click", () => {
-    if (!exportPreviewOpenUrl) return;
-    window.open(exportPreviewOpenUrl, "_blank", "noopener,noreferrer");
+    void downloadExportFromPreview();
   });
   document.getElementById("reportDraftLoadCloseBtn")?.addEventListener("click", () => {
     closeReportDraftLoadDialog();
