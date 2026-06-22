@@ -93,7 +93,8 @@ let exportDialogContext = { scenes: [], characters: [], revisions: [], collabora
 let exportDialogMode = "export";
 let exportPreviewRefreshTimer = 0;
 let exportPreviewOpenUrl = "";
-let exportCoverPageBuilderCollapsed = false;
+let exportCoverPageBuilderCollapsed = true;
+let exportHistoryCollapsed = true;
 let exportDialogProjectId = "";
 let reportDraftRequest = null;
 let reportGenerationController = null;
@@ -1349,6 +1350,17 @@ function decorateExportPreviewHtml(html = "") {
       justify-content: center !important;
       padding-top: 1.5cm !important;
       padding-bottom: 1.5cm !important;
+    }
+    @media print {
+      html, body {
+        background: #fff !important;
+      }
+      .print-page {
+        box-shadow: none !important;
+      }
+      .print-page:not(:last-child)::after {
+        content: none !important;
+      }
     }
   </style>`;
   if (!html) return html;
@@ -4806,6 +4818,11 @@ export function bindEvents() {
     if (target.closest("#exportCoverPageCollapseBtn")) {
       exportCoverPageBuilderCollapsed = !exportCoverPageBuilderCollapsed;
       updateExportDialogState();
+      return;
+    }
+    if (target.closest("#exportHistoryCollapseBtn")) {
+      exportHistoryCollapsed = !exportHistoryCollapsed;
+      updateExportDialogState();
     }
   });
   document.querySelectorAll("#exportTypeSelect, #exportFormatSelect, #exportModeSelect, #exportLocationSelect, #exportRevisionVersionA, #exportRevisionVersionB, #exportProductionLocationSelect, #exportProductionTimeSelect, #exportCollaborativeWriterSelect, #exportCollaborativeReviewerSelect, #exportCollaborativeEditorSelect, #exportCollaborativeStatusSelect, input[name='exportCharacterName'], input[name='exportSceneId'], input[name='exportProductionCharacterName'], #exportSceneRangeStart, #exportSceneRangeEnd, #exportProductionRangeStart, #exportProductionRangeEnd, #exportIncludeNotes, #exportIncludeComments, #exportIncludeSceneNumbers, #exportIncludeMetadata, #exportIncludeTitlePage, #exportIncludeSceneDescriptions, #exportEnableWatermarkSettings, #exportWatermarkPreset, #exportWatermarkPosition, #exportWatermarkOpacity, #exportCoverTitle, #exportCoverSubtitle, #exportCoverAuthor, #exportCoverCoWriters, #exportCoverContact, #exportCoverCompany, #exportCoverVersion, #exportCoverDraftDate, #exportCoverDetails, #exportCoverCopyright, #exportBreakdownCharacters, #exportBreakdownLocations, #exportBreakdownScenes, #exportBreakdownPrompt, #exportBreakdownCharactersMin, #exportBreakdownCharactersMax, #exportBreakdownLocationsMin, #exportBreakdownLocationsMax, #exportBreakdownScenesMin, #exportBreakdownScenesMax").forEach((element) => {
@@ -7818,6 +7835,8 @@ function updateExportDialogState() {
   const coverPagePanel = document.getElementById("exportCoverPagePanel");
   const coverPageContent = document.getElementById("exportCoverPageContent");
   const coverPageCollapseBtn = document.getElementById("exportCoverPageCollapseBtn");
+  const historyContent = document.getElementById("exportHistoryContent");
+  const historyCollapseBtn = document.getElementById("exportHistoryCollapseBtn");
   const breakdownPanel = document.getElementById("exportBreakdownPanel");
   const exportTypeDescription = document.getElementById("exportTypeDescription");
   const exportTypeChoices = document.getElementById("exportTypeChoices");
@@ -7862,6 +7881,13 @@ function updateExportDialogState() {
     coverPageCollapseBtn.hidden = !coverPageEnabled;
     coverPageCollapseBtn.textContent = showCoverPageContent ? "Hide" : "Show";
     coverPageCollapseBtn.setAttribute("aria-expanded", showCoverPageContent ? "true" : "false");
+  }
+  if (historyContent && historyCollapseBtn) {
+    const showHistoryContent = exportDialogMode !== "report" && !exportHistoryCollapsed;
+    historyContent.hidden = !showHistoryContent;
+    historyCollapseBtn.hidden = exportDialogMode === "report";
+    historyCollapseBtn.textContent = showHistoryContent ? "Hide" : "Expand";
+    historyCollapseBtn.setAttribute("aria-expanded", showHistoryContent ? "true" : "false");
   }
   if (scenePanel) {
     const showScenePanel = exportType === "scene";
@@ -8395,7 +8421,7 @@ async function openPrintExportHtml(html, project, activityMessage = "Opened the 
       }
     }, 350);
   };
-  frame.srcdoc = String(html || buildPrintableDocument(project, false));
+  frame.srcdoc = decorateExportPreviewHtml(String(html || buildPrintableDocument(project, false)));
 }
 
 async function printWithHiddenFrame() {

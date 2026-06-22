@@ -5638,6 +5638,11 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   flex: 0 0 auto;
 }
 
+#exportHistoryContent[hidden],
+#exportCoverPageContent[hidden] {
+  display: none !important;
+}
+
 .export-step-badge {
   align-self: start;
   padding: 0.28rem 0.56rem;

@@ -1921,9 +1921,9 @@
                   <h5>Cover Page Builder:</h5>
                   <p id="exportCoverPageMeta">Adjust the title-page package for this export without changing the whole project.</p>
                 </div>
-                <button id="exportCoverPageCollapseBtn" class="ghost-button btn-sm export-collapse-btn" type="button" aria-expanded="true" aria-controls="exportCoverPageContent">Hide</button>
+                <button id="exportCoverPageCollapseBtn" class="ghost-button btn-sm export-collapse-btn" type="button" aria-expanded="false" aria-controls="exportCoverPageContent">Show</button>
               </div>
-              <div id="exportCoverPageContent" class="export-cover-grid">
+              <div id="exportCoverPageContent" class="export-cover-grid" hidden>
                 <label class="field export-select-field">
                   <input id="exportCoverTitle" class="modal-input" type="text" maxlength="120" placeholder="Title">
                 </label>
@@ -2259,24 +2259,27 @@
             <div>
               <h4>Export Center</h4>
             </div>
+            <button id="exportHistoryCollapseBtn" class="ghost-button btn-sm export-collapse-btn" type="button" aria-expanded="false" aria-controls="exportHistoryContent">Expand</button>
           </div>
-          <div id="exportCenterMetrics" class="export-preview-grid export-center-metrics"></div>
-          <div class="export-center-grid">
-            <section class="export-center-card">
-              <div class="export-inline-heading export-center-heading">
-                <strong>Recent Exports</strong>
-                <span hidden>Export History</span>
-                <p id="exportHistoryEmpty" class="export-history-empty">No exports recorded for this script yet.</p>
-              </div>
-              <div id="exportHistoryList" class="export-history-list" hidden></div>
-            </section>
-            <section class="export-center-card">
-              <div class="export-inline-heading export-center-heading">
-                <strong>Download Management</strong>
-                <p id="exportQueueEmpty" class="export-history-empty">No queued or recent export jobs yet.</p>
-              </div>
-              <div id="exportQueueList" class="export-history-list" hidden></div>
-            </section>
+          <div id="exportHistoryContent" hidden>
+            <div id="exportCenterMetrics" class="export-preview-grid export-center-metrics"></div>
+            <div class="export-center-grid">
+              <section class="export-center-card">
+                <div class="export-inline-heading export-center-heading">
+                  <strong>Recent Exports</strong>
+                  <span hidden>Export History</span>
+                  <p id="exportHistoryEmpty" class="export-history-empty">No exports recorded for this script yet.</p>
+                </div>
+                <div id="exportHistoryList" class="export-history-list" hidden></div>
+              </section>
+              <section class="export-center-card">
+                <div class="export-inline-heading export-center-heading">
+                  <strong>Download Management</strong>
+                  <p id="exportQueueEmpty" class="export-history-empty">No queued or recent export jobs yet.</p>
+                </div>
+                <div id="exportQueueList" class="export-history-list" hidden></div>
+              </section>
+            </div>
           </div>
         </section>
       </div>
