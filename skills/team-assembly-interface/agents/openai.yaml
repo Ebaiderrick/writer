@@ -1,0 +1,4 @@
+interface:
+  display_name: "Team Assembly Interface"
+  short_description: "Reuse Wraita's compact team assembly modal."
+  default_prompt: "Use $team-assembly-interface to rebuild a collaboration modal in Wraita's compact Team Assembly style."

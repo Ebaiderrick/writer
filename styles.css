@@ -5380,7 +5380,31 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 }
 
 .modal-content-workspace {
-  width: min(880px, calc(100vw - 40px));
+  width: min(820px, calc(100vw - 40px));
+  padding: 16px 18px 14px;
+}
+
+.modal-content-workspace .modal-title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  line-height: 1.1;
+}
+
+.modal-content-workspace .modal-message {
+  margin: 0 0 12px;
+}
+
+.modal-content-workspace .modal-actions {
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.modal-content-workspace .modal-actions .ghost-button,
+.modal-content-workspace .modal-actions .primary-button {
+  min-height: 32px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 0.76rem;
 }
 
 .modal-content-work-tracking {
@@ -5440,11 +5464,14 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .notepad-content {
   width: min(800px, calc(100vw - 48px));
-  border: none;
-  background: #ffffff;
-  color: #000000;
-  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 14%, transparent), transparent 46%),
+    color-mix(in srgb, var(--surface-strong) 94%, var(--panel) 6%);
+  color: var(--ink);
+  padding: 10px 10px 12px;
   border-radius: 16px;
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
 }
 
 .notepad-modal {
@@ -5460,12 +5487,86 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  gap: 0.6rem;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
 }
 
 .notepad-header h3 {
-  color: #000000;
+  color: var(--ink);
   margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.1;
+}
+
+.note-editor.note-frame {
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line)) !important;
+  border-radius: 12px !important;
+  background: color-mix(in srgb, var(--surface-strong) 96%, var(--panel)) !important;
+  color: var(--ink) !important;
+  overflow: hidden !important;
+}
+
+.note-editor.note-frame .note-toolbar,
+.note-editor.note-frame .card-header {
+  background: color-mix(in srgb, var(--panel) 94%, var(--surface-strong)) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line)) !important;
+  color: var(--ink) !important;
+  padding: 6px !important;
+}
+
+.note-editor.note-frame .note-toolbar .note-btn,
+.note-editor.note-frame .note-toolbar .btn,
+.note-editor.note-frame .note-toolbar .dropdown-toggle,
+.note-editor.note-frame .note-toolbar select,
+.note-editor.note-frame .note-toolbar .form-control,
+.note-editor.note-frame .note-toolbar .custom-select {
+  background: color-mix(in srgb, var(--surface-strong) 90%, var(--panel)) !important;
+  background-color: color-mix(in srgb, var(--surface-strong) 90%, var(--panel)) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line)) !important;
+  color: var(--ink) !important;
+  box-shadow: none !important;
+}
+
+.note-editor.note-frame .note-toolbar .note-btn:hover,
+.note-editor.note-frame .note-toolbar .btn:hover,
+.note-editor.note-frame .note-toolbar .dropdown-toggle:hover,
+.note-editor.note-frame .note-toolbar select:hover {
+  background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface-strong)) !important;
+  background-color: color-mix(in srgb, var(--accent-soft) 58%, var(--surface-strong)) !important;
+  color: var(--ink) !important;
+}
+
+.note-editor.note-frame .note-toolbar .dropdown-menu,
+.note-editor.note-frame .note-toolbar .note-dropdown-menu {
+  background: color-mix(in srgb, var(--surface-strong) 94%, var(--panel)) !important;
+  background-color: color-mix(in srgb, var(--surface-strong) 94%, var(--panel)) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line)) !important;
+  color: var(--ink) !important;
+}
+
+.note-editor.note-frame .note-toolbar .dropdown-item,
+.note-editor.note-frame .note-toolbar .note-dropdown-item,
+.note-editor.note-frame .note-toolbar .note-current-fontname,
+.note-editor.note-frame .note-toolbar .caret,
+.note-editor.note-frame .note-toolbar .note-icon-caret,
+.note-editor.note-frame .note-toolbar .note-icon-menu-check {
+  color: var(--ink) !important;
+}
+
+.note-editor.note-frame .note-editing-area,
+.note-editor.note-frame .note-editing-area .note-editable,
+.note-editor.note-frame .note-editing-area .note-codable,
+.note-editor.note-frame .note-statusbar {
+  background: color-mix(in srgb, var(--surface-strong) 98%, var(--panel)) !important;
+  background-color: color-mix(in srgb, var(--surface-strong) 98%, var(--panel)) !important;
+  color: var(--ink) !important;
+  border-color: color-mix(in srgb, var(--accent) 8%, var(--line)) !important;
+}
+
+.note-editor.note-frame .note-placeholder {
+  color: color-mix(in srgb, var(--ink) 68%, var(--muted)) !important;
 }
 
 .file-recovery-dialog {
@@ -5495,7 +5596,7 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   max-height: min(86vh, 900px);
   box-sizing: border-box;
   display: grid;
-  gap: 0.72rem;
+  gap: 0.56rem;
   overflow: auto;
   scrollbar-gutter: stable;
   padding: 0 var(--workspace-sheet-pad) var(--workspace-sheet-pad);
@@ -5512,16 +5613,31 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 0.9rem;
+  gap: 0.7rem;
   position: sticky;
   top: 0;
   z-index: 6;
-  padding: var(--workspace-sheet-pad) 0 0.45rem;
+  padding: 0.82rem 0 0.3rem;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 12%, transparent), transparent 48%),
     color-mix(in srgb, var(--surface-strong) 92%, var(--panel) 8%);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
   box-shadow: 0 8px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+.export-head-copy {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.export-head h3 {
+  font-size: 0.98rem;
+  line-height: 1.1;
+}
+
+.export-head p {
+  font-size: 0.82rem;
+  line-height: 1.3;
 }
 
 .export-head h3,
@@ -5860,9 +5976,9 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .export-breakdown-live-card {
   display: grid;
-  gap: 0.42rem;
-  margin-top: 0.28rem;
-  padding: 0.7rem 0.78rem;
+  gap: 0.34rem;
+  margin-top: 0.22rem;
+  padding: 0.52rem 0.68rem;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 16%);
   background: color-mix(in srgb, var(--panel) 82%, white 18%);
@@ -5932,27 +6048,41 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 
 .export-breakdown-live-head {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: 0.65rem;
+}
+
+.export-breakdown-live-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .export-breakdown-live-head strong,
 .export-breakdown-live-head span {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .export-breakdown-live-head span {
+  display: block;
   color: var(--muted);
   font-style: italic;
+  line-height: 1.15;
 }
 
 .export-breakdown-live-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.4rem;
+  align-self: flex-start;
+  gap: 0.3rem;
   opacity: 1;
+  flex-wrap: wrap;
+  margin-top: 0;
 }
 
 .export-breakdown-live-actions .ghost-button:disabled,
@@ -5977,6 +6107,79 @@ html[data-theme="navy"] .section-scenes .list-item-title {
 .export-report-editor .note-toolbar {
   border-bottom: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 10%);
   background: color-mix(in srgb, var(--panel) 88%, white 12%);
+}
+
+.export-report-editor .note-toolbar,
+.export-report-editor .note-editor .note-toolbar,
+.export-report-editor .note-toolbar .note-btn-group {
+  color: var(--ink) !important;
+}
+
+.export-report-editor .note-editor .note-toolbar,
+.export-report-editor .note-toolbar.card-header {
+  background: color-mix(in srgb, var(--panel) 88%, white 12%) !important;
+  border-color: color-mix(in srgb, var(--line) 84%, var(--accent) 10%) !important;
+}
+
+.export-report-editor .note-editor .note-toolbar .note-btn,
+.export-report-editor .note-editor .note-toolbar .note-btn.btn-light,
+.export-report-editor .note-editor .note-toolbar .btn.btn-light,
+.export-report-editor .note-editor .note-toolbar .dropdown-toggle,
+.export-report-editor .note-editor .note-toolbar .note-color .dropdown-toggle,
+.export-report-editor .note-editor .note-toolbar .note-color-all .dropdown-toggle,
+.export-report-editor .note-editor .note-toolbar .note-select,
+.export-report-editor .note-editor .note-toolbar select,
+.export-report-editor .note-editor .note-toolbar .form-control,
+.export-report-editor .note-editor .note-toolbar .custom-select {
+  background: color-mix(in srgb, var(--surface-strong) 92%, black 8%) !important;
+  border-color: color-mix(in srgb, var(--line) 82%, var(--accent) 18%) !important;
+  color: var(--ink) !important;
+}
+
+.export-report-editor .note-editor .note-toolbar .note-btn:hover,
+.export-report-editor .note-editor .note-toolbar .note-btn.btn-light:hover,
+.export-report-editor .note-editor .note-toolbar .btn.btn-light:hover,
+.export-report-editor .note-editor .note-toolbar .dropdown-toggle:hover,
+.export-report-editor .note-editor .note-toolbar .note-select:hover,
+.export-report-editor .note-editor .note-toolbar select:hover {
+  background: color-mix(in srgb, var(--surface) 72%, var(--accent) 28%) !important;
+  color: var(--ink-strong, var(--ink)) !important;
+}
+
+.export-report-editor .note-editor .note-toolbar .note-btn:focus,
+.export-report-editor .note-editor .note-toolbar .dropdown-toggle:focus,
+.export-report-editor .note-editor .note-toolbar .note-select:focus,
+.export-report-editor .note-editor .note-toolbar select:focus {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 46%, transparent) !important;
+}
+
+.export-report-editor .note-editor .note-toolbar .dropdown-toggle::after,
+.export-report-editor .note-editor .note-toolbar .note-icon-caret,
+.export-report-editor .note-editor .note-toolbar .note-current-fontname,
+.export-report-editor .note-editor .note-toolbar .caret {
+  color: var(--ink) !important;
+}
+
+.export-report-editor .note-editor .note-toolbar .dropdown-menu,
+.export-report-editor .note-editor .note-toolbar .note-dropdown-menu {
+  padding: 0.35rem;
+  border-radius: 12px;
+  box-shadow: 0 16px 32px rgba(6, 12, 24, 0.28);
+  background: color-mix(in srgb, var(--surface-strong) 94%, black 6%) !important;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, var(--accent) 18%) !important;
+}
+
+.export-report-editor .note-editor .note-toolbar .dropdown-item,
+.export-report-editor .note-editor .note-toolbar .note-dropdown-item {
+  color: var(--ink) !important;
+}
+
+.export-report-editor .note-editor .note-toolbar .dropdown-item:hover,
+.export-report-editor .note-editor .note-toolbar .note-dropdown-item:hover,
+.export-report-editor .note-editor .note-toolbar .dropdown-item:focus,
+.export-report-editor .note-editor .note-toolbar .note-dropdown-item:focus {
+  background: color-mix(in srgb, var(--surface) 76%, var(--accent) 24%) !important;
+  color: var(--ink) !important;
 }
 
 .export-report-editor .note-editing-area .note-editable {
@@ -8061,33 +8264,67 @@ kbd {
 
 .workspace-popup {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  column-gap: 14px;
-  row-gap: 14px;
+  align-items: stretch;
+  column-gap: 10px;
+  row-gap: 10px;
+}
+
+.workspace-popup-card,
+.workspace-popup-section {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent), color-mix(in srgb, var(--surface-strong) 94%, transparent)),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent-soft) 12%, transparent), transparent 58%);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.18);
 }
 
 .workspace-popup-hero {
   grid-column: 1 / -1;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 4px;
 }
 
 .workspace-popup-hero-copy {
   display: grid;
-  gap: 4px;
+  gap: 0;
 }
 
-.workspace-popup-kicker {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent-strong);
+.workspace-popup-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workspace-popup-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workspace-popup-context-pill,
+.workspace-popup-context-meta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--line));
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  font-size: 0.72rem;
+  color: color-mix(in srgb, var(--ink) 78%, var(--muted));
 }
 
 .workspace-popup-hero h4 {
-  font-size: 1rem;
+  margin: 0;
+  font-size: 0.96rem;
   letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .workspace-popup-section-head {
@@ -8095,6 +8332,12 @@ kbd {
   align-items: start;
   justify-content: space-between;
   gap: 10px;
+}
+
+.workspace-popup-section-head-compact {
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .modal-copy {
@@ -8116,30 +8359,24 @@ kbd {
 .workspace-popup-section {
   display: grid;
   gap: var(--space-3);
+  align-self: stretch;
 }
 
 .workspace-popup-section:first-child {
   grid-column: 1 / -1;
 }
 
-.workspace-popup-section {
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface-strong) 98%, transparent);
-}
-
 .story-memory-popup-group h4,
 .workspace-popup-section h4 {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.9rem;
 }
 
 .workspace-popup-section p {
   margin: 0;
   color: color-mix(in srgb, var(--ink) 72%, var(--muted));
-  line-height: 1.38;
-  font-size: 0.78rem;
+  line-height: 1.22;
+  font-size: 0.74rem;
 }
 
 .workspace-metric-columns {
@@ -8171,19 +8408,29 @@ kbd {
 .workspace-title-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 6px;
   align-items: center;
+}
+
+.workspace-popup-hero-copy p {
+  max-width: none;
+  font-size: 0.7rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
 }
 
 .workspace-popup .modal-input,
 .workspace-popup .comment-filter-select {
-  min-height: 38px;
-  padding: 8px 12px;
-  border-radius: 12px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
   background: color-mix(in srgb, var(--panel) 98%, transparent);
   color: var(--ink);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
 }
 
 .workspace-popup .modal-input::placeholder {
@@ -8207,42 +8454,75 @@ kbd {
 }
 
 .workspace-share-row-compact {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) 130px auto;
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+}
+
+.workspace-invite-inline-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
 }
 
 .workspace-inline-role {
-  min-width: 108px;
+  min-width: 0;
+  width: 96px;
+  flex: 0 0 96px;
 }
 
 .workspace-inline-button {
   white-space: nowrap;
-  min-height: 38px;
-  border-radius: 12px;
+  min-height: 32px;
+  border-radius: 999px;
+  padding-inline: 10px;
+  font-size: 0.72rem;
+}
+
+.workspace-share-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.workspace-inline-button-copy {
+  min-width: 72px;
+}
+
+.workspace-popup-section-sharing [data-workspace-action="invite"] {
+  width: 116px;
+  flex: 0 0 116px;
+}
+
+.workspace-share-row-compact > .modal-input,
+.workspace-invite-inline-row > .modal-input {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .workspace-member-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+  gap: 6px;
   align-items: start;
-  padding: 9px 11px;
+  padding: 9px 10px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 7%, var(--line));
-  background: color-mix(in srgb, var(--panel) 98%, var(--surface-strong));
+  border: 1px solid color-mix(in srgb, var(--accent) 9%, var(--line));
+  background: color-mix(in srgb, var(--panel) 90%, var(--surface-strong));
 }
 
 .workspace-member-copy {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .workspace-member-meta-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -8253,7 +8533,7 @@ kbd {
   color: var(--ink);
   border-radius: 999px;
   padding: 5px 10px;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   line-height: 1;
   cursor: pointer;
   text-decoration: none;
@@ -8281,8 +8561,8 @@ kbd {
 .workspace-action-row .ghost-button,
 .workspace-title-row .ghost-button,
 .workspace-share-row .ghost-button {
-  min-height: 38px;
-  border-radius: 12px;
+  min-height: 34px;
+  border-radius: 999px;
 }
 
 .workspace-reminder-item {
@@ -8321,7 +8601,27 @@ kbd {
 }
 
 .workspace-popup .list-stack {
-  gap: 8px;
+  gap: 6px;
+}
+
+.workspace-member-list {
+  max-height: min(44vh, 360px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.workspace-popup-section-sharing,
+.workspace-popup-section-roles {
+  height: 100%;
+}
+
+.workspace-member-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.workspace-member-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  border-radius: 999px;
 }
 
 .analytics-toolbar {
@@ -9119,6 +9419,11 @@ body.outline-hidden .section-scenes {
   .workspace-title-row,
   .workspace-metric-columns {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-popup-card-head,
+  .workspace-popup-section-head-compact {
+    align-items: flex-start;
   }
 
   .workspace-task-field-title,
