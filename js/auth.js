@@ -124,10 +124,13 @@ export const Auth = (() => {
 
   async function beginGoogleSignIn() {
     if (isEmbeddedBrowser() && !isLocalDevHost()) {
-      customAlert(
-        getHostedGoogleBrowserWarning(),
-        'Open in Browser'
-      );
+      try {
+        await startGoogleRedirect('Opening Google sign-in...');
+      } catch (redirectErr) {
+        setAuthPending(false);
+        console.error('Google redirect error:', redirectErr.code, redirectErr);
+        customAlert(describeGoogleAuthError(redirectErr), shouldShowHostedGoogleBrowserWarning(redirectErr) ? 'Open in Browser' : 'Alert');
+      }
       return;
     }
 
@@ -151,19 +154,6 @@ export const Auth = (() => {
     } catch (err) {
       setAuthPending(false);
       console.error('Google sign-in error:', err.code, err);
-      if (isHostedCustomDomain()) {
-        if (
-          err.code === 'auth/popup-blocked' ||
-          err.code === 'auth/cancelled-popup-request' ||
-          err.code === 'auth/web-storage-unsupported' ||
-          err.code === 'auth/operation-not-supported-in-this-environment' ||
-          err.code === 'auth/popup-timeout' ||
-          err.code === 'auth/internal-error'
-        ) {
-          customAlert(getHostedGooglePopupWarning(), 'Allow Popup');
-          return;
-        }
-      }
       if (
         err.code === 'auth/popup-blocked' ||
         err.code === 'auth/cancelled-popup-request' ||
