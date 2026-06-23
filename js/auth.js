@@ -112,13 +112,10 @@ export const Auth = (() => {
 
   async function beginGoogleSignIn() {
     if (isEmbeddedBrowser() && !isLocalDevHost()) {
-      try {
-        await startGoogleRedirect('Opening Google sign-in...');
-      } catch (redirectErr) {
-        setAuthPending(false);
-        console.error('Google redirect error:', redirectErr.code, redirectErr);
-        customAlert(describeGoogleAuthError(redirectErr), 'Alert');
-      }
+      customAlert(
+        'Google sign-in must be completed in Chrome, Edge, or Safari. Please open Wraita in a standard browser and try again.',
+        'Open in Browser'
+      );
       return;
     }
 
@@ -142,6 +139,17 @@ export const Auth = (() => {
     } catch (err) {
       setAuthPending(false);
       console.error('Google sign-in error:', err.code, err);
+      if (isHostedCustomDomain()) {
+        if (err.code === 'auth/popup-blocked') {
+          customAlert('Allow popups for Wraita and try Google sign-in again.', 'Allow Popup');
+          return;
+        }
+        if (err.code === 'auth/popup-closed-by-user') {
+          return;
+        }
+        customAlert(describeGoogleAuthError(err), 'Alert');
+        return;
+      }
       if (
         err.code === 'auth/popup-blocked' ||
         err.code === 'auth/cancelled-popup-request' ||
