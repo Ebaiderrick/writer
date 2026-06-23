@@ -87,17 +87,8 @@ export const Auth = (() => {
     }
   }
 
-  function getHostedGoogleBrowserWarning() {
-    return 'Google sign-in is not stable in this in-app browser. Please open Wraita in Chrome, Edge, or Safari and continue there.';
-  }
-
-  function getHostedGooglePopupWarning() {
-    return 'Google sign-in needs a standard browser popup here. Please allow popups for Wraita and try again.';
-  }
-
   function shouldShowHostedGoogleBrowserWarning(err) {
-    if (isLocalDevHost()) return false;
-    return err?.code === 'auth/internal-error' || err?.code === 'auth/popup-timeout';
+    return false;
   }
 
   async function startGoogleRedirect(message = 'Redirecting to Google...') {
@@ -106,9 +97,6 @@ export const Auth = (() => {
   }
 
   function describeGoogleAuthError(err) {
-    if (shouldShowHostedGoogleBrowserWarning(err)) {
-      return getHostedGoogleBrowserWarning();
-    }
     const map = {
       'auth/popup-blocked': 'Google sign-in pop-up was blocked. We can continue with redirect sign-in instead.',
       'auth/popup-closed-by-user': 'Google sign-in was closed before completion.',
@@ -129,7 +117,7 @@ export const Auth = (() => {
       } catch (redirectErr) {
         setAuthPending(false);
         console.error('Google redirect error:', redirectErr.code, redirectErr);
-        customAlert(describeGoogleAuthError(redirectErr), shouldShowHostedGoogleBrowserWarning(redirectErr) ? 'Open in Browser' : 'Alert');
+        customAlert(describeGoogleAuthError(redirectErr), 'Alert');
       }
       return;
     }
@@ -140,7 +128,7 @@ export const Auth = (() => {
       } catch (redirectErr) {
         setAuthPending(false);
         console.error('Google redirect error:', redirectErr.code, redirectErr);
-        customAlert(describeGoogleAuthError(redirectErr), shouldShowHostedGoogleBrowserWarning(redirectErr) ? 'Open in Browser' : 'Alert');
+        customAlert(describeGoogleAuthError(redirectErr), 'Alert');
       }
       return;
     }
@@ -166,12 +154,12 @@ export const Auth = (() => {
         } catch (redirectErr) {
           setAuthPending(false);
           console.error('Google redirect error:', redirectErr.code, redirectErr);
-          customAlert(describeGoogleAuthError(redirectErr), shouldShowHostedGoogleBrowserWarning(redirectErr) ? 'Open in Browser' : 'Alert');
+          customAlert(describeGoogleAuthError(redirectErr), 'Alert');
         }
         return;
       }
       if (err.code !== 'auth/popup-closed-by-user') {
-        customAlert(describeGoogleAuthError(err), shouldShowHostedGoogleBrowserWarning(err) ? 'Open in Browser' : 'Alert');
+        customAlert(describeGoogleAuthError(err), 'Alert');
       }
     }
   }
@@ -245,7 +233,7 @@ export const Auth = (() => {
         return;
       }
       if (err.code && err.code !== 'auth/cancelled-popup-request') {
-        customAlert(describeGoogleAuthError(err), shouldShowHostedGoogleBrowserWarning(err) ? 'Open in Browser' : 'Alert');
+        customAlert(describeGoogleAuthError(err), 'Alert');
       }
     });
 
