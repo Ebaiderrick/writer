@@ -59,7 +59,7 @@ export const Auth = (() => {
 
   function shouldPreferGoogleRedirect() {
     const ua = navigator.userAgent || '';
-    const inAppBrowser = /FBAN|FBAV|Instagram|Line|LinkedInApp|wv\)|; wv|WebView/i.test(ua);
+    const inAppBrowser = /Electron|FBAN|FBAV|Instagram|Line|LinkedInApp|wv\)|; wv|WebView/i.test(ua);
     return inAppBrowser;
   }
 
@@ -70,6 +70,17 @@ export const Auth = (() => {
 
   function isLocalDevHost() {
     return window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+  }
+
+  function getAppHomePath() {
+    return isLocalDevHost() ? '/' : '/app';
+  }
+
+  function replaceWithAppHomePath() {
+    const nextPath = getAppHomePath();
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState({}, '', nextPath);
+    }
   }
 
   async function startGoogleRedirect(message = 'Redirecting to Google...') {
@@ -92,17 +103,9 @@ export const Auth = (() => {
   }
 
   async function beginGoogleSignIn() {
-    if (isEmbeddedBrowser() && !isLocalDevHost()) {
-      customAlert(
-        'Google sign-in should be opened in Chrome, Edge, or Safari for this site. This in-app browser can fail on the return step. Please open wraita.netlify.app in a standard browser and try again.',
-        'Open in Browser'
-      );
-      return;
-    }
-
     if (shouldPreferGoogleRedirect()) {
       try {
-        await startGoogleRedirect();
+        await startGoogleRedirect(isLocalDevHost() ? 'Redirecting to Google...' : 'Opening Google sign-in...');
       } catch (redirectErr) {
         setAuthPending(false);
         console.error('Google redirect error:', redirectErr.code, redirectErr);
@@ -113,7 +116,10 @@ export const Auth = (() => {
 
     try {
       setAuthPending(true, 'Signing you in...');
-      await signInWithPopup(auth, googleProvider);
+      await Promise.race([
+        signInWithPopup(auth, googleProvider),
+        new Promise((_, reject) => window.setTimeout(() => reject({ code: 'auth/popup-timeout' }), 4000))
+      ]);
     } catch (err) {
       setAuthPending(false);
       console.error('Google sign-in error:', err.code, err);
@@ -121,7 +127,8 @@ export const Auth = (() => {
         err.code === 'auth/popup-blocked' ||
         err.code === 'auth/cancelled-popup-request' ||
         err.code === 'auth/web-storage-unsupported' ||
-        err.code === 'auth/operation-not-supported-in-this-environment'
+        err.code === 'auth/operation-not-supported-in-this-environment' ||
+        err.code === 'auth/popup-timeout'
       ) {
         try {
           await startGoogleRedirect();
@@ -323,7 +330,7 @@ export const Auth = (() => {
         if (window.location.pathname === '/admin') {
           const opened = await Admin.show();
           if (!opened) {
-            window.history.replaceState({}, '', '/');
+            replaceWithAppHomePath();
             showHome();
           }
         } else if (window.location.pathname === '/settings') {
@@ -345,7 +352,7 @@ export const Auth = (() => {
           await settleAuthTransition();
         } else {
           if (window.location.pathname === '/admin') {
-            window.history.replaceState({}, '', '/');
+            replaceWithAppHomePath();
           }
           await loadUserProfile();
           updateTriggerUI({ photoURL: session.photoURL, displayName: session.name });
@@ -523,9 +530,7 @@ export const Auth = (() => {
       section.hidden = true;
     });
     refs.homeView.hidden = false;
-    if (window.location.pathname !== '/') {
-      window.history.replaceState({}, '', '/');
-    }
+    replaceWithAppHomePath();
   }
 
   async function settleAuthTransition() {
@@ -541,7 +546,7 @@ export const Auth = (() => {
     clearSession();
     try { await firebaseSignOut(auth); } catch { /* ignore */ }
     if (window.location.pathname === '/admin' || window.location.pathname === '/settings') {
-      window.history.replaceState({}, '', '/');
+      replaceWithAppHomePath();
     }
     showAuth();
   }
