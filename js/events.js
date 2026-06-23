@@ -498,6 +498,42 @@ function buildBreakdownPrompt(project, selection, customPrompt = "") {
   };
 }
 
+function isAiConfigurationError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("api key")
+    || message.includes("openrouter")
+    || message.includes("insufficient credits")
+    || message.includes("access forbidden")
+    || message.includes("rate limit")
+    || message.includes("failed to fetch");
+}
+
+function buildLocalBreakdownFallback(project, selection, customPrompt = "") {
+  const lines = Array.isArray(project?.lines) ? project.lines : [];
+  const title = project?.title || "Untitled Script";
+  const wordCount = (lines.map((line) => `${line?.text || ""} ${line?.secondary || ""}`).join(" ").match(/\b[\w'-]+\b/g) || []).length;
+  const sceneLines = lines.filter((line) => line?.type === "scene" && String(line.text || "").trim());
+  const dialogueLines = lines.filter((line) => line?.type === "dialogue" && String(line.text || "").trim());
+  const actionLines = lines.filter((line) => line?.type === "action" && String(line.text || "").trim());
+  const characterNames = [...new Set(lines.filter((line) => line?.type === "character").map((line) => String(line.text || "").trim()).filter(Boolean))];
+  const locationNames = [...new Set(sceneLines.map((line) => String(line.text || "").split(" - ")[0].trim()).filter(Boolean))];
+  const firstScene = sceneLines[0]?.text || "No clear opening scene yet.";
+  const lastScene = sceneLines[sceneLines.length - 1]?.text || "No clear closing scene yet.";
+  const promptNote = String(customPrompt || "").trim();
+
+  const templates = {
+    characters: `${title} currently surfaces ${characterNames.length} distinct speaking character${characterNames.length === 1 ? "" : "s"}, with ${dialogueLines.length} dialogue block${dialogueLines.length === 1 ? "" : "s"} carrying most of the interpersonal weight. The most visible names so far are ${characterNames.slice(0, 6).join(", ") || "not yet clearly established"}, which suggests the cast focus is still forming around the voices already on the page. As you refine the draft, check whether each recurring speaker has a distinct emotional function, a visual identity in action lines, and enough contrast in rhythm or vocabulary to remain memorable. ${promptNote ? `Keep in mind this extra guidance: ${promptNote}` : ""}`.trim(),
+    locations: `${title} moves through ${locationNames.length} identifiable location cue${locationNames.length === 1 ? "" : "s"}, anchored by scene headings such as ${locationNames.slice(0, 5).join(", ") || "the current draft’s early settings"}. This gives the script a spatial framework, but the strongest pages will be the ones where each place feels dramatically specific rather than only functional. Review whether the repeated spaces evolve in mood, pressure, or symbolic meaning as scenes progress, and whether transitions between settings feel intentional. ${promptNote ? `Additional request noted: ${promptNote}` : ""}`.trim(),
+    scenes: `${title} currently contains ${sceneLines.length} scene heading${sceneLines.length === 1 ? "" : "s"} across roughly ${wordCount.toLocaleString()} word${wordCount === 1 ? "" : "s"}. The draft opens around ${firstScene} and currently lands on ${lastScene}, which gives a visible beginning-to-current-end pathway even before fine structure is polished. As a next pass, check whether each scene changes the dramatic temperature, whether scene turns arrive soon enough, and whether action blocks are earning their place between dialogue beats. ${promptNote ? `The requested lens for this reading is: ${promptNote}` : ""}`.trim(),
+    "storyline-theme": `${title} reads like a draft that is already building a defined dramatic spine through ${sceneLines.length} scene${sceneLines.length === 1 ? "" : "s"}, ${dialogueLines.length} dialogue block${dialogueLines.length === 1 ? "" : "s"}, and a steady interplay between spoken conflict and action description. The opening movement at ${firstScene} sets the story in motion, while the latest material at ${lastScene} suggests where the emotional or thematic pressure is currently landing. On the next rewrite, focus on whether the central idea is visible not just in what characters say, but in the repeated choices, reversals, settings, and consequences that keep returning on the page.`.trim(),
+    style: `${title} is currently written with ${actionLines.length} action block${actionLines.length === 1 ? "" : "s"} and ${dialogueLines.length} dialogue block${dialogueLines.length === 1 ? "" : "s"}, which makes it possible to assess its style from both narrative texture and spoken rhythm. The writing will feel stronger when action remains visual and economical, dialogue sounds character-specific rather than interchangeable, and the scene headings guide pace without becoming repetitive. A useful polish pass here is to trim any generic phrasing, sharpen verbs inside action lines, and make sure emotional subtext is carried by behavior as much as by spoken explanation.`.trim(),
+    scenery: `${title} already establishes a visible scenic frame through headings like ${sceneLines.slice(0, 4).map((line) => line.text).join(", ") || "the current scene structure"}, but the next level of polish is making each environment feel dramatically alive. Strong scenery development does more than tell us where we are; it shapes tension, rhythm, and emotional temperature. Revisit whether the environment is interacting with the characters, whether repeated spaces change across the story, and whether key images from the world of the script are strong enough to stay in the reader’s memory.`.trim(),
+    props: `${title} is far enough along to begin noticing concrete repeated objects, gestures, and situational anchors even without a full AI pass. In screenplay terms, the strongest props are not just visual clutter; they become memory hooks, emotional triggers, or plot devices. As you revise, look for objects that recur in action and dialogue, make sure they are introduced clearly when they matter, and check whether any useful symbolic or practical props can be emphasized more consistently across scenes. ${promptNote ? `Extra focus requested: ${promptNote}` : ""}`.trim()
+  };
+
+  return templates[selection.key] || `${title} currently contains ${sceneLines.length} scene${sceneLines.length === 1 ? "" : "s"}, ${characterNames.length} speaking character${characterNames.length === 1 ? "" : "s"}, and about ${wordCount.toLocaleString()} word${wordCount === 1 ? "" : "s"}. This fallback report was generated locally because the AI service is not currently available, but it still gives you a grounded overview of the present draft and where the next rewrite pass can focus.`.trim();
+}
+
 async function typeBreakdownText(node, text) {
   const words = String(text || "").split(/\s+/).filter(Boolean);
   let buffer = "";
@@ -547,10 +583,21 @@ async function generateBreakdownSections(project, request) {
     if (progressDetail) progressDetail.textContent = `Building section ${index + 1} of ${selections.length}.`;
     if (progressFill) progressFill.style.width = `${percent}%`;
     const bodyEl = appendReportSectionShell(selection);
-    const text = await AI.generateText({
-      ...buildBreakdownPrompt(project, selection, customPrompt),
-      signal: reportGenerationController.signal
-    });
+    let text = "";
+    try {
+      text = await AI.generateText({
+        ...buildBreakdownPrompt(project, selection, customPrompt),
+        signal: reportGenerationController.signal
+      });
+    } catch (error) {
+      if (!isAiConfigurationError(error)) {
+        throw error;
+      }
+      text = buildLocalBreakdownFallback(project, selection, customPrompt);
+      if (progressDetail) {
+        progressDetail.textContent = "AI service is unavailable, so Wraita is building a local fallback report from the script.";
+      }
+    }
     if (bodyEl) {
       await typeBreakdownText(bodyEl, text);
     }
