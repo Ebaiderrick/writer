@@ -72,6 +72,10 @@ export const Auth = (() => {
     return window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
   }
 
+  function isHostedCustomDomain() {
+    return !isLocalDevHost() && window.location.hostname !== 'eya-writer.firebaseapp.com' && window.location.hostname !== 'eya-writer.web.app';
+  }
+
   function getAppHomePath() {
     return isLocalDevHost() ? '/' : '/app';
   }
@@ -83,12 +87,28 @@ export const Auth = (() => {
     }
   }
 
+  function getHostedGoogleBrowserWarning() {
+    return 'Google sign-in is not stable in this in-app browser. Please open Wraita in Chrome, Edge, or Safari and continue there.';
+  }
+
+  function getHostedGooglePopupWarning() {
+    return 'Google sign-in needs a standard browser popup here. Please allow popups for Wraita and try again.';
+  }
+
+  function shouldShowHostedGoogleBrowserWarning(err) {
+    if (isLocalDevHost()) return false;
+    return err?.code === 'auth/internal-error' || err?.code === 'auth/popup-timeout';
+  }
+
   async function startGoogleRedirect(message = 'Redirecting to Google...') {
     setAuthPending(true, message);
     await signInWithRedirect(auth, googleProvider);
   }
 
   function describeGoogleAuthError(err) {
+    if (shouldShowHostedGoogleBrowserWarning(err)) {
+      return getHostedGoogleBrowserWarning();
+    }
     const map = {
       'auth/popup-blocked': 'Google sign-in pop-up was blocked. We can continue with redirect sign-in instead.',
       'auth/popup-closed-by-user': 'Google sign-in was closed before completion.',
@@ -105,7 +125,7 @@ export const Auth = (() => {
   async function beginGoogleSignIn() {
     if (isEmbeddedBrowser() && !isLocalDevHost()) {
       customAlert(
-        'Google sign-in is not stable inside this in-app browser yet. Please open Wraita in Chrome, Edge, or Safari and continue there.',
+        getHostedGoogleBrowserWarning(),
         'Open in Browser'
       );
       return;
@@ -117,7 +137,7 @@ export const Auth = (() => {
       } catch (redirectErr) {
         setAuthPending(false);
         console.error('Google redirect error:', redirectErr.code, redirectErr);
-        customAlert(describeGoogleAuthError(redirectErr));
+        customAlert(describeGoogleAuthError(redirectErr), shouldShowHostedGoogleBrowserWarning(redirectErr) ? 'Open in Browser' : 'Alert');
       }
       return;
     }
@@ -131,6 +151,19 @@ export const Auth = (() => {
     } catch (err) {
       setAuthPending(false);
       console.error('Google sign-in error:', err.code, err);
+      if (isHostedCustomDomain()) {
+        if (
+          err.code === 'auth/popup-blocked' ||
+          err.code === 'auth/cancelled-popup-request' ||
+          err.code === 'auth/web-storage-unsupported' ||
+          err.code === 'auth/operation-not-supported-in-this-environment' ||
+          err.code === 'auth/popup-timeout' ||
+          err.code === 'auth/internal-error'
+        ) {
+          customAlert(getHostedGooglePopupWarning(), 'Allow Popup');
+          return;
+        }
+      }
       if (
         err.code === 'auth/popup-blocked' ||
         err.code === 'auth/cancelled-popup-request' ||
@@ -143,12 +176,12 @@ export const Auth = (() => {
         } catch (redirectErr) {
           setAuthPending(false);
           console.error('Google redirect error:', redirectErr.code, redirectErr);
-          customAlert(describeGoogleAuthError(redirectErr));
+          customAlert(describeGoogleAuthError(redirectErr), shouldShowHostedGoogleBrowserWarning(redirectErr) ? 'Open in Browser' : 'Alert');
         }
         return;
       }
       if (err.code !== 'auth/popup-closed-by-user') {
-        customAlert(describeGoogleAuthError(err));
+        customAlert(describeGoogleAuthError(err), shouldShowHostedGoogleBrowserWarning(err) ? 'Open in Browser' : 'Alert');
       }
     }
   }
@@ -218,8 +251,11 @@ export const Auth = (() => {
     // Handle Google redirect result
     getRedirectResult(auth).catch(err => {
       console.error('Google redirect result error:', err.code, err);
+      if (isHostedCustomDomain() && (err?.code === 'auth/internal-error' || err?.code === 'auth/popup-timeout')) {
+        return;
+      }
       if (err.code && err.code !== 'auth/cancelled-popup-request') {
-        customAlert(describeGoogleAuthError(err));
+        customAlert(describeGoogleAuthError(err), shouldShowHostedGoogleBrowserWarning(err) ? 'Open in Browser' : 'Alert');
       }
     });
 
