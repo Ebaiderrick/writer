@@ -488,6 +488,20 @@ export function createProject() {
   return createProjectWithOptions();
 }
 
+function normalizeProjectTitleForCompare(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
+export function hasProjectNameConflict(title, { excludeProjectId = "", isShared = false } = {}) {
+  const nextTitle = normalizeProjectTitleForCompare(title);
+  if (!nextTitle || isShared) return false;
+  return state.projects.some((project) => {
+    if (!project || project.id === excludeProjectId) return false;
+    if (project.isShared) return false;
+    return normalizeProjectTitleForCompare(project.title) === nextTitle;
+  });
+}
+
 export function createProjectWithOptions(options = {}) {
   const creationKind = options.creationKind === "workspace" ? "workspace" : "project";
   const workType = options.workType === "prose-poetry" ? "prose-poetry" : "film-script";
@@ -506,9 +520,13 @@ export function createProjectWithOptions(options = {}) {
   const defaultTitle = creationKind === "workspace"
     ? `Film Workspace ${index}`
     : `Film Script ${index}`;
+  const requestedTitle = options.title || defaultTitle;
+  if (hasProjectNameConflict(requestedTitle, { isShared: Boolean(options.isShared) })) {
+    throw new Error(`You already have a project named "${String(requestedTitle).trim()}". Use a different name or open the existing one.`);
+  }
   const project = sanitizeProject({
     id: uid("project"),
-    title: options.title || defaultTitle,
+    title: requestedTitle,
     workType,
     creationKind,
     isWorkspaceRoot,

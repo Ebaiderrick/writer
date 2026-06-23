@@ -4,6 +4,7 @@ import { ContextMenu } from './contextMenu.js';
 import {
   getCurrentProject, getLine, getLineIndex, persistProjects, queueSave,
   createProject, createProjectWithOptions, upsertProject, sanitizeProject, cloneProject,
+  hasProjectNameConflict,
   getWorkspaceProjects, getWorkspaceRootProject, updateWorkspaceAcrossProjects,
   syncProjectFromInputs,
   getDefaultText, pushHistory, undo, redo, getSuggestedNextSpeaker,
@@ -2360,19 +2361,25 @@ async function launchNewCreationFlow() {
     return;
   }
   const workspaceRoot = ensureDefaultWorkspaceRoot();
-  const project = createProjectWithOptions({
-    creationKind: "project",
-    workType: selection.workType,
-    title: setup.projectName.trim(),
-    workspace: {
-      id: workspaceRoot.workspace?.id || workspaceRoot.id,
-      name: workspaceRoot.workspace?.name || workspaceRoot.title,
-      inviteCode: workspaceRoot.workspace?.inviteCode,
-      reminders: workspaceRoot.workspace?.reminders || [],
-      targets: workspaceRoot.workspace?.targets || {},
-      tasks: workspaceRoot.workspace?.tasks || []
-    }
-  });
+  let project;
+  try {
+    project = createProjectWithOptions({
+      creationKind: "project",
+      workType: selection.workType,
+      title: setup.projectName.trim(),
+      workspace: {
+        id: workspaceRoot.workspace?.id || workspaceRoot.id,
+        name: workspaceRoot.workspace?.name || workspaceRoot.title,
+        inviteCode: workspaceRoot.workspace?.inviteCode,
+        reminders: workspaceRoot.workspace?.reminders || [],
+        targets: workspaceRoot.workspace?.targets || {},
+        tasks: workspaceRoot.workspace?.tasks || []
+      }
+    });
+  } catch (error) {
+    await customAlert(error?.message || "This project name is already in use in your account.", "Project Not Created");
+    return;
+  }
 
   if (setup.action === "convert-import") {
     pendingConvertImportProjectId = project.id;
@@ -2458,29 +2465,35 @@ async function createProjectInsideCurrentWorkspace() {
     await customAlert("A project name is required before creation.", "Project Not Created");
     return;
   }
-  const project = createProjectWithOptions({
-    creationKind: "project",
-    workType: "film-script",
-    title: projectName.trim(),
-    isShared: workspaceProject.isShared,
-    ownerId: workspaceProject.ownerId,
-    ownerName: workspaceProject.ownerName,
-    ownerEmail: workspaceProject.ownerEmail,
-    ownerPhotoURL: workspaceProject.ownerPhotoURL,
-    collaborators: workspaceProject.collaborators,
-    activityLog: workspaceProject.activityLog,
-    lastEditorName: workspaceProject.lastEditorName,
-    lastActivityAt: workspaceProject.lastActivityAt,
-    workspace: {
-      id: workspaceProject.workspace?.id,
-      name: workspaceProject.workspace?.name || workspaceProject.title,
-      inviteCode: workspaceProject.workspace?.inviteCode,
-      reminders: workspaceProject.workspace?.reminders || [],
-      commentingEnabled: Boolean(workspaceProject.workspace?.commentingEnabled),
-      targets: workspaceProject.workspace?.targets || {},
-      tasks: workspaceProject.workspace?.tasks || []
-    }
-  });
+  let project;
+  try {
+    project = createProjectWithOptions({
+      creationKind: "project",
+      workType: "film-script",
+      title: projectName.trim(),
+      isShared: workspaceProject.isShared,
+      ownerId: workspaceProject.ownerId,
+      ownerName: workspaceProject.ownerName,
+      ownerEmail: workspaceProject.ownerEmail,
+      ownerPhotoURL: workspaceProject.ownerPhotoURL,
+      collaborators: workspaceProject.collaborators,
+      activityLog: workspaceProject.activityLog,
+      lastEditorName: workspaceProject.lastEditorName,
+      lastActivityAt: workspaceProject.lastActivityAt,
+      workspace: {
+        id: workspaceProject.workspace?.id,
+        name: workspaceProject.workspace?.name || workspaceProject.title,
+        inviteCode: workspaceProject.workspace?.inviteCode,
+        reminders: workspaceProject.workspace?.reminders || [],
+        commentingEnabled: Boolean(workspaceProject.workspace?.commentingEnabled),
+        targets: workspaceProject.workspace?.targets || {},
+        tasks: workspaceProject.workspace?.tasks || []
+      }
+    });
+  } catch (error) {
+    await customAlert(error?.message || "This project name is already in use in your account.", "Project Not Created");
+    return;
+  }
   openProject(project.id, { silentLoadToast: true });
   showToast("Project created.", "success");
 }
@@ -6712,7 +6725,12 @@ async function renameCurrentProject() {
   if (!project) return;
   const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (nextTitle === null) return;
-  project.title = nextTitle.trim() || "Untitled Script";
+  const trimmedTitle = nextTitle.trim() || "Untitled Script";
+  if (hasProjectNameConflict(trimmedTitle, { excludeProjectId: project.id, isShared: Boolean(project.isShared) })) {
+    await customAlert(`You already have a project named "${trimmedTitle}". Choose a different name.`, "Rename Project");
+    return;
+  }
+  project.title = trimmedTitle;
   project.updatedAt = new Date().toISOString();
   syncInputsFromProject(project);
   renderStudio();
@@ -6721,7 +6739,12 @@ async function renameCurrentProject() {
 
 function duplicateProject() {
   const current = getCurrentProject();
-  const copy = cloneProject({ ...current, title: `${current.title} Copy` }, true);
+  const nextTitle = `${current.title} Copy`;
+  if (hasProjectNameConflict(nextTitle, { isShared: Boolean(current?.isShared) })) {
+    customAlert(`You already have a project named "${nextTitle}". Rename the existing one first or choose another name.`, "Duplicate Project");
+    return;
+  }
+  const copy = cloneProject({ ...current, title: nextTitle }, true);
   upsertProject(copy);
   openProject(copy.id);
   persistProjects(true);
@@ -6732,7 +6755,12 @@ async function renameProjectById(projectId) {
   if (!project) return;
   const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
   if (!nextTitle || !nextTitle.trim()) return;
-  project.title = nextTitle.trim();
+  const trimmedTitle = nextTitle.trim();
+  if (hasProjectNameConflict(trimmedTitle, { excludeProjectId: project.id, isShared: Boolean(project.isShared) })) {
+    await customAlert(`You already have a project named "${trimmedTitle}". Choose a different name.`, "Rename Project");
+    return;
+  }
+  project.title = trimmedTitle;
   project.updatedAt = new Date().toISOString();
   upsertProject(project);
   persistProjects(true, { syncInputs: false });
@@ -6745,7 +6773,12 @@ async function renameProjectById(projectId) {
 function duplicateProjectById(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
-  const copy = cloneProject({ ...project, title: `${project.title} Copy` }, true);
+  const nextTitle = `${project.title} Copy`;
+  if (hasProjectNameConflict(nextTitle, { isShared: Boolean(project.isShared) })) {
+    customAlert(`You already have a project named "${nextTitle}". Rename the existing one first or choose another name.`, "Duplicate Project");
+    return;
+  }
+  const copy = cloneProject({ ...project, title: nextTitle }, true);
   upsertProject(copy);
   persistProjects(true, { syncInputs: false });
   renderHome();
