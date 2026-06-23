@@ -103,6 +103,14 @@ export const Auth = (() => {
   }
 
   async function beginGoogleSignIn() {
+    if (isEmbeddedBrowser() && !isLocalDevHost()) {
+      customAlert(
+        'Google sign-in is not stable inside this in-app browser yet. Please open Wraita in Chrome, Edge, or Safari and continue there.',
+        'Open in Browser'
+      );
+      return;
+    }
+
     if (shouldPreferGoogleRedirect()) {
       try {
         await startGoogleRedirect(isLocalDevHost() ? 'Redirecting to Google...' : 'Opening Google sign-in...');
