@@ -20,12 +20,6 @@
   status = 200
   force = true
 
-[[redirects]]
-  from = "/__/firebase/init.json"
-  to = "https://eya-writer.firebaseapp.com/__/firebase/init.json"
-  status = 200
-  force = true
-
 # Marketing pages (clean URLs)
 [[redirects]]
   from = "/"
