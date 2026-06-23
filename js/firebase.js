@@ -3,9 +3,12 @@ import { getAuth } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-aut
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getStorage } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
+const hostname = window.location.hostname;
+const useCustomHostedAuthDomain = hostname === 'wraita.netlify.app';
+
 const firebaseConfig = {
   apiKey: "AIzaSyC6gi34BQRKkxQ77A50KPvQRIhNWcrWpmo",
-  authDomain: "eya-writer.firebaseapp.com",
+  authDomain: useCustomHostedAuthDomain ? "wraita.netlify.app" : "eya-writer.firebaseapp.com",
   projectId: "eya-writer",
   storageBucket: "eya-writer.firebasestorage.app",
   messagingSenderId: "131351915808",
