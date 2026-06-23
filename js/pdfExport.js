@@ -129,8 +129,8 @@ function drawCoverPage(doc, exportDocument) {
 function drawScriptPage(doc, pageLines, exportDocument, pageNumber) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const topMargin = pointsFromCm(1.5);
-  const bottomMargin = pageHeight - pointsFromCm(1.5);
+  const topMargin = pointsFromCm(2.0);
+  const bottomMargin = pageHeight - pointsFromCm(2.0);
   const baseLineHeight = 13.4;
   let y = topMargin;
 

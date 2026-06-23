@@ -262,7 +262,7 @@ function getPrintableStyles(exportType = 'full') {
       width: 8.5in;
       min-height: 11in;
       margin: 0 auto;
-      padding: 1.5cm 0.8in 1.5cm 1.18in;
+      padding: 2cm 0.8in 2cm 1.18in;
       background: #fff;
       color: #111;
       page-break-after: always;
@@ -280,14 +280,14 @@ function getPrintableStyles(exportType = 'full') {
       justify-content: center;
       padding-left: 1in;
       padding-right: 1in;
-      padding-top: 1.5cm;
-      padding-bottom: 1.5cm;
+      padding-top: 2cm;
+      padding-bottom: 2cm;
       page-break-after: always !important;
       break-after: page !important;
     }
     .production-cover-page {
-      padding-top: 1.5cm;
-      padding-bottom: 1.5cm;
+      padding-top: 2cm;
+      padding-bottom: 2cm;
     }
     .script-page-first {
       page-break-before: always !important;

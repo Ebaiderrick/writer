@@ -18,7 +18,7 @@ import {
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
 import { DOCX_MIME_TYPE } from './docxExport.js';
-import { ExportService } from './exportService.js?v=20260622c';
+import { ExportService } from './exportService.js?v=20260622d';
 import {
   buildCharacterExportDocument,
   buildCharacterPacketExportDocument,
@@ -48,7 +48,7 @@ import {
   renderCurrentScriptId, renderStoryMemory, openStoryMemory, showEditStoryElementModal,
   renderAnalytics, openAnalytics, showStoryMemoryPicker, showCustomizeActiveBlocksModal, renderWorkspaceView, renderStudioProjectContext,
   showStoryMemoryPopup, showWorkspacePopup, showCharactersInterface, showStoryMemoryBuilder, showNewCreationFlow, showFilmProjectSetupFlow, renderWorkspaceInboxPopup
-} from './ui.js?v=20260622c';
+} from './ui.js?v=20260622d';
 import { AI } from './ai.js';
 import {
   normalizeLineText, stripWrapperChars, buildContinuedSceneSuggestions,
@@ -8334,21 +8334,21 @@ function updateExportDialogState() {
     generateBtn.textContent = exportDialogMode === "report"
       ? "Build AI Report"
       : exportType === "production"
-      ? (format === "pdf" ? "Open Production PDF" : "Download Production DOCX")
+      ? (format === "pdf" ? "Download Production PDF" : "Download Production DOCX")
       : exportType === "collaborative"
-      ? (format === "pdf" ? "Open Collaborative PDF" : "Download Collaborative DOCX")
+      ? (format === "pdf" ? "Download Collaborative PDF" : "Download Collaborative DOCX")
       : exportType === "location"
-        ? (format === "pdf" ? "Open Location PDF" : "Download Location DOCX")
+        ? (format === "pdf" ? "Download Location PDF" : "Download Location DOCX")
       : exportType === "revision"
-        ? (format === "pdf" ? "Open Revision PDF" : "Download Revision DOCX")
+        ? (format === "pdf" ? "Download Revision PDF" : "Download Revision DOCX")
       : exportType === "character-packet"
-        ? (format === "pdf" ? "Open Character Packet PDF" : "Download Character Packet DOCX")
+        ? (format === "pdf" ? "Download Character Packet PDF" : "Download Character Packet DOCX")
       : exportType === "breakdown"
-        ? (format === "pdf" ? "Open Report PDF" : "Download Report DOCX")
+        ? (format === "pdf" ? "Download Report PDF" : "Download Report DOCX")
       : exportType === "shooting"
-        ? (format === "pdf" ? "Open Shooting Script PDF" : "Download Shooting Script DOCX")
+        ? (format === "pdf" ? "Download Shooting Script PDF" : "Download Shooting Script DOCX")
       : format === "pdf"
-        ? "Open PDF Export"
+        ? "Download"
         : format === "docx"
           ? "Download DOCX"
           : format === "fdx"

@@ -15,7 +15,7 @@ import {
   getDefaultExportOptions
 } from './exportModel.js';
 import { buildWordDocxBlobFromExportDocument, DOCX_MIME_TYPE } from './docxExport.js';
-import { buildPdfBlobFromExportDocument } from './pdfExport.js?v=20260622c';
+import { buildPdfBlobFromExportDocument } from './pdfExport.js?v=20260622d';
 
 const PDF_MIME_TYPE = 'application/pdf';
 const FOUNTAIN_MIME_TYPE = 'text/plain;charset=utf-8';
