@@ -966,12 +966,15 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-home-hero-copy p {
-  margin: 0;
-  max-width: 58ch;
-  color: color-mix(in srgb, var(--ink) 76%, var(--muted));
-  line-height: 1.4;
-  font-size: var(--text-meta);
-}
+    margin: 0;
+    max-width: none;
+    color: color-mix(in srgb, var(--ink) 76%, var(--muted));
+    line-height: 1.15;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
 .workspace-home-hero-summary {
   max-width: none;
@@ -1605,8 +1608,8 @@ html[data-theme="rose"] .mesh-background {
 .workspace-task-composer {
   order: 3;
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  gap: 6px;
+  padding: 8px;
   border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line));
   border-radius: 16px;
   background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
@@ -1619,13 +1622,8 @@ html[data-theme="rose"] .mesh-background {
 }
 
 .workspace-task-composer-head {
-  display: grid;
-  gap: 3px;
-}
-
-.workspace-task-composer-head strong {
-  font-size: 0.86rem;
-  color: var(--ink);
+  display: flex;
+  align-items: center;
 }
 
 .workspace-task-composer-kicker {

@@ -428,3 +428,59 @@ test('export service handles large structured scripts without failing on product
   expect(result.containsSceneHeading).toBeTruthy();
   expect(result.durationMs).toBeLessThan(30000);
 });
+
+test('screenplay export preserves dual dialogue rows and paginates them using the taller side', async ({ page }) => {
+  test.setTimeout(120000);
+  await page.goto('http://localhost:4173/', { waitUntil: 'commit', timeout: 20000 });
+
+  const result = await page.evaluate(async () => {
+    const { buildFullScriptExportDocument } = await import('/js/exportModel.js');
+    const { buildPreviewDataFromExportDocument, buildPrintableDocumentFromExportDocument } = await import('/js/printExport.js');
+
+    const project = {
+      id: 'project-dual-export-test',
+      title: 'Dual Dialogue Test',
+      author: 'Lenon',
+      lines: [
+        { id: 'scene-1', type: 'scene', text: 'INT. OFFICE - DAY' },
+        { id: 'line-1', type: 'action', text: 'Two speakers overlap while the pressure rises.' },
+        { id: 'line-2', type: 'character', text: 'MAYA', secondary: 'JONATHAN' },
+        { id: 'line-3', type: 'dialogue', text: 'We need to leave right now before the doors seal.', secondary: 'No, we stay and hold the corridor until backup arrives, even if it costs us.' },
+        { id: 'line-4', type: 'parenthetical', text: '(urgent)', secondary: '(firm, unblinking)' },
+        { id: 'line-5', type: 'dialogue', text: 'They are already here.', secondary: 'Then we face them together.' },
+        { id: 'line-6', type: 'transition', text: 'CUT TO:' }
+      ]
+    };
+
+    const exportDocument = buildFullScriptExportDocument(project, {
+      includeMetadata: true,
+      includeTitlePage: false,
+      includePageNumbers: true,
+      includeSceneNumbers: false,
+      exportMode: 'spec'
+    });
+
+    const previewData = buildPreviewDataFromExportDocument(exportDocument);
+    const html = buildPrintableDocumentFromExportDocument(exportDocument, false);
+    const dualLines = exportDocument.lines.filter((line) => line.secondary !== undefined && String(line.secondary || '').trim());
+
+    return {
+      dualLineTypes: dualLines.map((line) => line.type),
+      pageCount: previewData.scriptPages.length,
+      html,
+      hasCharacterDualRow: html.includes('print-dual-row character'),
+      hasDialogueDualRow: html.includes('print-dual-row dialogue'),
+      hasParentheticalDualRow: html.includes('print-dual-row parenthetical'),
+      usesFlexDualLayout: html.includes('.print-dual-row {\n      display: flex;') || html.includes('.print-dual-row {') && html.includes('justify-content: center;') && html.includes('flex: 0 0 2.45in;'),
+      preservesLongerSecondaryText: html.includes('hold the corridor until backup arrives')
+    };
+  });
+
+  expect(result.dualLineTypes).toEqual(['character', 'dialogue', 'parenthetical', 'dialogue']);
+  expect(result.pageCount).toBeGreaterThan(0);
+  expect(result.hasCharacterDualRow).toBeTruthy();
+  expect(result.hasDialogueDualRow).toBeTruthy();
+  expect(result.hasParentheticalDualRow).toBeTruthy();
+  expect(result.usesFlexDualLayout).toBeTruthy();
+  expect(result.preservesLongerSecondaryText).toBeTruthy();
+});

@@ -224,6 +224,119 @@ function getBreakdownLiveNodes() {
   };
 }
 
+let reportEditorThemeObserver = null;
+
+function applySummernoteTheme(editorId) {
+  const editor = document.getElementById(editorId);
+  if (!editor) return;
+  const noteEditor = editor.nextElementSibling;
+  if (!noteEditor || !noteEditor.classList.contains("note-editor")) return;
+  const paint = (el, property, value) => {
+    if (!el) return;
+    el.style.setProperty(property, value, "important");
+  };
+
+  const rootStyle = getComputedStyle(document.documentElement);
+  const ink = rootStyle.getPropertyValue("--ink").trim() || "#f0f0f0";
+  const inkMuted = rootStyle.getPropertyValue("--ink-muted").trim() || ink;
+  const panel = rootStyle.getPropertyValue("--panel").trim() || "rgba(40,40,40,0.85)";
+  const surfaceStrong = rootStyle.getPropertyValue("--surface-strong").trim() || "#111111";
+  const line = rootStyle.getPropertyValue("--line").trim() || "rgba(255,255,255,0.12)";
+  const accentSoft = rootStyle.getPropertyValue("--accent-soft").trim() || "rgba(79,209,197,0.15)";
+  const toolbarBg = `color-mix(in srgb, ${panel} 94%, ${surfaceStrong})`;
+  const controlBg = `color-mix(in srgb, ${surfaceStrong} 88%, ${panel})`;
+  const hoverBg = `color-mix(in srgb, ${accentSoft} 68%, ${surfaceStrong})`;
+
+  paint(noteEditor, "background", surfaceStrong);
+  paint(noteEditor, "border-color", line);
+  paint(noteEditor, "color", ink);
+
+  const toolbar = noteEditor.querySelector(".note-toolbar");
+  if (toolbar) {
+    paint(toolbar, "background", toolbarBg);
+    paint(toolbar, "border-bottom-color", line);
+    paint(toolbar, "color", ink);
+  }
+
+  noteEditor.querySelectorAll(".note-toolbar .note-btn, .note-toolbar .btn, .note-toolbar .dropdown-toggle, .note-toolbar select, .note-toolbar .form-control, .note-toolbar .custom-select").forEach((el) => {
+    paint(el, "background", controlBg);
+    paint(el, "border-color", line);
+    paint(el, "color", ink);
+    paint(el, "box-shadow", "none");
+  });
+
+  noteEditor.querySelectorAll(".note-toolbar .note-btn-group").forEach((el) => {
+    paint(el, "color", ink);
+  });
+
+  noteEditor.querySelectorAll(".note-toolbar .note-current-fontname, .note-toolbar .caret, .note-toolbar .note-icon-caret, .note-toolbar .note-icon-menu-check").forEach((el) => {
+    paint(el, "color", ink);
+    paint(el, "fill", ink);
+  });
+
+  noteEditor.querySelectorAll(".note-toolbar .dropdown-menu, .note-toolbar .note-dropdown-menu").forEach((el) => {
+    paint(el, "background", controlBg);
+    paint(el, "border-color", line);
+    paint(el, "color", ink);
+  });
+
+  noteEditor.querySelectorAll(".note-placeholder").forEach((el) => {
+    paint(el, "color", inkMuted);
+  });
+
+  noteEditor.querySelectorAll(".note-editing-area, .note-statusbar").forEach((el) => {
+    paint(el, "background", surfaceStrong);
+    paint(el, "border-color", line);
+  });
+
+  noteEditor.querySelectorAll(".note-editable, .note-codable").forEach((el) => {
+    paint(el, "background", surfaceStrong);
+    paint(el, "color", ink);
+    paint(el, "caret-color", ink);
+  });
+
+  if (!noteEditor.dataset.themeHoverBound) {
+    noteEditor.dataset.themeHoverBound = "true";
+    noteEditor.addEventListener("mouseover", (event) => {
+      const target = event.target?.closest?.(".note-toolbar .note-btn, .note-toolbar .btn, .note-toolbar .dropdown-toggle");
+      if (target) {
+        paint(target, "background", hoverBg);
+        paint(target, "color", ink);
+        paint(target, "border-color", line);
+      }
+    });
+
+    noteEditor.addEventListener("mouseout", (event) => {
+      const target = event.target?.closest?.(".note-toolbar .note-btn, .note-toolbar .btn, .note-toolbar .dropdown-toggle");
+      if (target) {
+        paint(target, "background", controlBg);
+        paint(target, "color", ink);
+        paint(target, "border-color", line);
+      }
+    });
+  }
+}
+
+function applyReportEditorTheme() {
+  applySummernoteTheme("exportReportEditor");
+}
+
+function applyNotepadEditorTheme() {
+  applySummernoteTheme("summernote");
+}
+
+function ensureReportEditorThemeObserver() {
+  if (reportEditorThemeObserver) return;
+  reportEditorThemeObserver = new MutationObserver(() => {
+    applyReportEditorTheme();
+    applyNotepadEditorTheme();
+  });
+  reportEditorThemeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"]
+  });
+}
+
 function ensureReportEditor() {
   const editor = document.getElementById("exportReportEditor");
   if (!editor || typeof window.$ !== "function") return null;
@@ -244,6 +357,11 @@ function ensureReportEditor() {
         ['view', ['fullscreen', 'codeview', 'help']]
       ]
     });
+    applyReportEditorTheme();
+    ensureReportEditorThemeObserver();
+    window.setTimeout(() => applyReportEditorTheme(), 0);
+    window.setTimeout(() => applyReportEditorTheme(), 120);
+    window.setTimeout(() => applyReportEditorTheme(), 320);
     const editable = $editor.next(".note-editor").find(".note-editable")[0];
     if (editable && !editable.dataset.reportAutosaveBound) {
       editable.dataset.reportAutosaveBound = "true";
@@ -251,6 +369,9 @@ function ensureReportEditor() {
         queueReportAutosave();
       });
     }
+  } else {
+    applyReportEditorTheme();
+    ensureReportEditorThemeObserver();
   }
   return $editor;
 }
@@ -525,7 +646,7 @@ function buildLocalBreakdownFallback(project, selection, customPrompt = "") {
     characters: `${title} currently surfaces ${characterNames.length} distinct speaking character${characterNames.length === 1 ? "" : "s"}, with ${dialogueLines.length} dialogue block${dialogueLines.length === 1 ? "" : "s"} carrying most of the interpersonal weight. The most visible names so far are ${characterNames.slice(0, 6).join(", ") || "not yet clearly established"}, which suggests the cast focus is still forming around the voices already on the page. As you refine the draft, check whether each recurring speaker has a distinct emotional function, a visual identity in action lines, and enough contrast in rhythm or vocabulary to remain memorable. ${promptNote ? `Keep in mind this extra guidance: ${promptNote}` : ""}`.trim(),
     locations: `${title} moves through ${locationNames.length} identifiable location cue${locationNames.length === 1 ? "" : "s"}, anchored by scene headings such as ${locationNames.slice(0, 5).join(", ") || "the current draft’s early settings"}. This gives the script a spatial framework, but the strongest pages will be the ones where each place feels dramatically specific rather than only functional. Review whether the repeated spaces evolve in mood, pressure, or symbolic meaning as scenes progress, and whether transitions between settings feel intentional. ${promptNote ? `Additional request noted: ${promptNote}` : ""}`.trim(),
     scenes: `${title} currently contains ${sceneLines.length} scene heading${sceneLines.length === 1 ? "" : "s"} across roughly ${wordCount.toLocaleString()} word${wordCount === 1 ? "" : "s"}. The draft opens around ${firstScene} and currently lands on ${lastScene}, which gives a visible beginning-to-current-end pathway even before fine structure is polished. As a next pass, check whether each scene changes the dramatic temperature, whether scene turns arrive soon enough, and whether action blocks are earning their place between dialogue beats. ${promptNote ? `The requested lens for this reading is: ${promptNote}` : ""}`.trim(),
-    "storyline-theme": `${title} reads like a draft that is already building a defined dramatic spine through ${sceneLines.length} scene${sceneLines.length === 1 ? "" : "s"}, ${dialogueLines.length} dialogue block${dialogueLines.length === 1 ? "" : "s"}, and a steady interplay between spoken conflict and action description. The opening movement at ${firstScene} sets the story in motion, while the latest material at ${lastScene} suggests where the emotional or thematic pressure is currently landing. On the next rewrite, focus on whether the central idea is visible not just in what characters say, but in the repeated choices, reversals, settings, and consequences that keep returning on the page.`.trim(),
+    theme: `${title} reads like a draft that is already building a defined dramatic spine through ${sceneLines.length} scene${sceneLines.length === 1 ? "" : "s"}, ${dialogueLines.length} dialogue block${dialogueLines.length === 1 ? "" : "s"}, and a steady interplay between spoken conflict and action description. The opening movement at ${firstScene} sets the story in motion, while the latest material at ${lastScene} suggests where the emotional or thematic pressure is currently landing. On the next rewrite, focus on whether the central idea is visible not just in what characters say, but in the repeated choices, reversals, settings, and consequences that keep returning on the page.`.trim(),
     style: `${title} is currently written with ${actionLines.length} action block${actionLines.length === 1 ? "" : "s"} and ${dialogueLines.length} dialogue block${dialogueLines.length === 1 ? "" : "s"}, which makes it possible to assess its style from both narrative texture and spoken rhythm. The writing will feel stronger when action remains visual and economical, dialogue sounds character-specific rather than interchangeable, and the scene headings guide pace without becoming repetitive. A useful polish pass here is to trim any generic phrasing, sharpen verbs inside action lines, and make sure emotional subtext is carried by behavior as much as by spoken explanation.`.trim(),
     scenery: `${title} already establishes a visible scenic frame through headings like ${sceneLines.slice(0, 4).map((line) => line.text).join(", ") || "the current scene structure"}, but the next level of polish is making each environment feel dramatically alive. Strong scenery development does more than tell us where we are; it shapes tension, rhythm, and emotional temperature. Revisit whether the environment is interacting with the characters, whether repeated spaces change across the story, and whether key images from the world of the script are strong enough to stay in the reader’s memory.`.trim(),
     props: `${title} is far enough along to begin noticing concrete repeated objects, gestures, and situational anchors even without a full AI pass. In screenplay terms, the strongest props are not just visual clutter; they become memory hooks, emotional triggers, or plot devices. As you revise, look for objects that recur in action and dialogue, make sure they are introduced clearly when they matter, and check whether any useful symbolic or practical props can be emphasized more consistently across scenes. ${promptNote ? `Extra focus requested: ${promptNote}` : ""}`.trim()
@@ -620,6 +741,10 @@ async function generateBreakdownSections(project, request) {
   request.includeCharacters = generatedSections.some((item) => item.key === "characters");
   request.includeLocations = generatedSections.some((item) => item.key === "locations");
   request.includeScenes = generatedSections.some((item) => item.key === "scenes");
+  request.includeTheme = generatedSections.some((item) => item.key === "theme");
+  request.includeStyle = generatedSections.some((item) => item.key === "style");
+  request.includeScenery = generatedSections.some((item) => item.key === "scenery");
+  request.includeProps = generatedSections.some((item) => item.key === "props");
   request.customPrompt = customPrompt;
   reportGenerationController = null;
   return request;
@@ -705,10 +830,9 @@ function buildExportHistorySummary(request) {
     return bits.join(" Â· ") || "Collaborative scene packet";
   }
   if (request.exportType === "breakdown") {
-    const bits = [];
-    if (request.includeCharacters) bits.push("Characters");
-    if (request.includeLocations) bits.push("Locations");
-    if (request.includeScenes) bits.push("Scenes");
+    const bits = Array.isArray(request.generatedSections) && request.generatedSections.length
+      ? request.generatedSections.map((section) => section.label).filter(Boolean)
+      : getBreakdownSelections().map((section) => section.label).filter(Boolean);
     return bits.join(" | ") || "AI report";
   }
   return "Whole screenplay";
@@ -993,9 +1117,13 @@ function applyExportRequestToDialog(request = {}) {
   setChecked("exportEnableWatermarkSettings", options.enableWatermarkSettings);
   setChecked("exportIncludeRevisions", options.includeRevisions);
   setChecked("exportIncludeSceneDescriptions", options.includeSceneDescriptions);
-  setChecked("exportBreakdownCharacters", request.includeCharacters !== false);
-  setChecked("exportBreakdownLocations", request.includeLocations !== false);
-  setChecked("exportBreakdownScenes", request.includeScenes !== false);
+  setChecked("exportBreakdownCharacters", Boolean(request.includeCharacters));
+  setChecked("exportBreakdownLocations", Boolean(request.includeLocations));
+  setChecked("exportBreakdownScenes", Boolean(request.includeScenes));
+  setChecked("exportBreakdownTheme", Boolean(request.includeTheme));
+  setChecked("exportBreakdownStyle", Boolean(request.includeStyle));
+  setChecked("exportBreakdownScenery", Boolean(request.includeScenery));
+  setChecked("exportBreakdownProps", Boolean(request.includeProps));
   setValue("exportBreakdownPrompt", request.breakdownPrompt || "", "");
   setValue("exportBreakdownCharactersMin", request.breakdownWords?.characters?.min || 120, 120);
   setValue("exportBreakdownCharactersMax", request.breakdownWords?.characters?.max || 220, 220);
@@ -1003,6 +1131,14 @@ function applyExportRequestToDialog(request = {}) {
   setValue("exportBreakdownLocationsMax", request.breakdownWords?.locations?.max || 220, 220);
   setValue("exportBreakdownScenesMin", request.breakdownWords?.scenes?.min || 160, 160);
   setValue("exportBreakdownScenesMax", request.breakdownWords?.scenes?.max || 280, 280);
+  setValue("exportBreakdownThemeMin", request.breakdownWords?.theme?.min || 140, 140);
+  setValue("exportBreakdownThemeMax", request.breakdownWords?.theme?.max || 260, 260);
+  setValue("exportBreakdownStyleMin", request.breakdownWords?.style?.min || 120, 120);
+  setValue("exportBreakdownStyleMax", request.breakdownWords?.style?.max || 220, 220);
+  setValue("exportBreakdownSceneryMin", request.breakdownWords?.scenery?.min || 120, 120);
+  setValue("exportBreakdownSceneryMax", request.breakdownWords?.scenery?.max || 220, 220);
+  setValue("exportBreakdownPropsMin", request.breakdownWords?.props?.min || 100, 100);
+  setValue("exportBreakdownPropsMax", request.breakdownWords?.props?.max || 180, 180);
 
   setValue("exportWatermarkPreset", options.watermarkPreset || "", "");
   setValue("exportWatermarkPosition", options.watermarkPosition || "diagonal", "diagonal");
@@ -1280,6 +1416,10 @@ function buildExportRequestFromDialog(project) {
     request.includeCharacters = Boolean(document.getElementById("exportBreakdownCharacters")?.checked);
     request.includeLocations = Boolean(document.getElementById("exportBreakdownLocations")?.checked);
     request.includeScenes = Boolean(document.getElementById("exportBreakdownScenes")?.checked);
+    request.includeTheme = Boolean(document.getElementById("exportBreakdownTheme")?.checked);
+    request.includeStyle = Boolean(document.getElementById("exportBreakdownStyle")?.checked);
+    request.includeScenery = Boolean(document.getElementById("exportBreakdownScenery")?.checked);
+    request.includeProps = Boolean(document.getElementById("exportBreakdownProps")?.checked);
     request.breakdownPrompt = document.getElementById("exportBreakdownPrompt")?.value || "";
     request.breakdownWords = {
       characters: {
@@ -1293,6 +1433,22 @@ function buildExportRequestFromDialog(project) {
       scenes: {
         min: Number(document.getElementById("exportBreakdownScenesMin")?.value || 160),
         max: Number(document.getElementById("exportBreakdownScenesMax")?.value || 280)
+      },
+      theme: {
+        min: Number(document.getElementById("exportBreakdownThemeMin")?.value || 140),
+        max: Number(document.getElementById("exportBreakdownThemeMax")?.value || 260)
+      },
+      style: {
+        min: Number(document.getElementById("exportBreakdownStyleMin")?.value || 120),
+        max: Number(document.getElementById("exportBreakdownStyleMax")?.value || 220)
+      },
+      scenery: {
+        min: Number(document.getElementById("exportBreakdownSceneryMin")?.value || 120),
+        max: Number(document.getElementById("exportBreakdownSceneryMax")?.value || 220)
+      },
+      props: {
+        min: Number(document.getElementById("exportBreakdownPropsMin")?.value || 100),
+        max: Number(document.getElementById("exportBreakdownPropsMax")?.value || 180)
       }
     };
   }
@@ -1628,6 +1784,10 @@ async function executeExportRequest(project, request) {
         includeCharacters: request.includeCharacters,
         includeLocations: request.includeLocations,
         includeScenes: request.includeScenes,
+        includeTheme: request.includeTheme,
+        includeStyle: request.includeStyle,
+        includeScenery: request.includeScenery,
+        includeProps: request.includeProps,
         generatedSections: request.generatedSections || [],
         customPrompt: request.customPrompt || "",
         options: request.options
@@ -2434,21 +2594,14 @@ async function launchNewCreationFlow() {
   if (!setup?.projectName || !setup.action) {
     return;
   }
-  const workspaceRoot = ensureDefaultWorkspaceRoot();
+  const projectTitle = setup.projectName.trim();
   let project;
   try {
     project = createProjectWithOptions({
       creationKind: "project",
       workType: selection.workType,
-      title: setup.projectName.trim(),
-      workspace: {
-        id: workspaceRoot.workspace?.id || workspaceRoot.id,
-        name: workspaceRoot.workspace?.name || workspaceRoot.title,
-        inviteCode: workspaceRoot.workspace?.inviteCode,
-        reminders: workspaceRoot.workspace?.reminders || [],
-        targets: workspaceRoot.workspace?.targets || {},
-        tasks: workspaceRoot.workspace?.tasks || []
-      }
+      title: projectTitle,
+      workspaceName: projectTitle
     });
   } catch (error) {
     await customAlert(error?.message || "This project name is already in use in your account.", "Project Not Created");
@@ -7516,12 +7669,17 @@ function openExportDialog(prefill = {}) {
   if (includeTitlePage) includeTitlePage.checked = defaults.includeTitlePage !== false;
   if (includePageNumbers) includePageNumbers.checked = state.viewOptions.pageNumbers;
   if (includeRevisions) includeRevisions.checked = false;
-  if (breakdownCharacters) breakdownCharacters.checked = true;
-  if (breakdownLocations) breakdownLocations.checked = true;
-  if (breakdownScenes) breakdownScenes.checked = true;
-  if (breakdownCharacters) breakdownCharacters.checked = true;
-  if (breakdownLocations) breakdownLocations.checked = true;
-  if (breakdownScenes) breakdownScenes.checked = true;
+  if (breakdownCharacters) breakdownCharacters.checked = false;
+  if (breakdownLocations) breakdownLocations.checked = false;
+  if (breakdownScenes) breakdownScenes.checked = false;
+  const breakdownTheme = document.getElementById("exportBreakdownTheme");
+  const breakdownStyle = document.getElementById("exportBreakdownStyle");
+  const breakdownScenery = document.getElementById("exportBreakdownScenery");
+  const breakdownProps = document.getElementById("exportBreakdownProps");
+  if (breakdownTheme) breakdownTheme.checked = false;
+  if (breakdownStyle) breakdownStyle.checked = false;
+  if (breakdownScenery) breakdownScenery.checked = false;
+  if (breakdownProps) breakdownProps.checked = false;
   if (enableWatermarkSettings) enableWatermarkSettings.checked = false;
   if (enableWatermarkSettings && !enableWatermarkSettings.dataset.exportBound) {
     enableWatermarkSettings.addEventListener("change", () => updateExportDialogState());
@@ -8005,6 +8163,7 @@ function stopReportGeneration() {
 }
 
 function updateExportDialogState() {
+  applyReportEditorTheme();
   const exportTypeSelect = document.getElementById("exportTypeSelect");
   const exportFormatSelect = document.getElementById("exportFormatSelect");
   const exportType = exportTypeSelect?.value || "full";
@@ -9142,6 +9301,14 @@ function openNotepad() {
         ['view', ['fullscreen', 'codeview', 'help']]
       ]
     });
+    applyNotepadEditorTheme();
+    ensureReportEditorThemeObserver();
+    window.setTimeout(() => applyNotepadEditorTheme(), 0);
+    window.setTimeout(() => applyNotepadEditorTheme(), 120);
+    window.setTimeout(() => applyNotepadEditorTheme(), 320);
+  } else {
+    applyNotepadEditorTheme();
+    ensureReportEditorThemeObserver();
   }
 
   dialog.showModal();

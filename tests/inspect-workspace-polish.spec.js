@@ -19,7 +19,7 @@ test('workspace dashboard renders with softer unified cards', async ({ page }) =
         <section class="workspace-home-hero-card">
           <div class="workspace-home-hero-copy">
             <h3>The Hill at First Light</h3>
-            <p>Shape scripts, story memory, comments, and teamwork from one shared writing space.</p>
+            <p>Shape scripts, story memory, comments, and teamwork in one shared writing space.</p>
           </div>
           <div class="workspace-home-hero-insight">
             <div class="workspace-home-insight-head">

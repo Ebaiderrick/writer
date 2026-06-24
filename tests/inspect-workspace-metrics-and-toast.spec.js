@@ -19,7 +19,7 @@ test('workspace metrics and toast close button render correctly', async ({ page 
         <section class="workspace-home-hero-card">
           <div class="workspace-home-hero-copy">
             <h3>Untitled Script</h3>
-            <p>Shape scripts, story memory, comments, and teamwork from one shared writing space.</p>
+            <p>Shape scripts, story memory, comments, and teamwork in one shared writing space.</p>
           </div>
           <div class="workspace-home-metric"><span>Projects</span><strong>1</strong></div>
           <div class="workspace-home-metric"><span>Members</span><strong>1</strong></div>

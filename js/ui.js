@@ -955,7 +955,6 @@ export function renderWorkspaceView() {
           <div class="workspace-task-composer">
             <div class="workspace-task-composer-head">
               <span class="workspace-task-composer-kicker">Quick assign</span>
-              <strong>Turn the next writing step into a trackable task.</strong>
             </div>
             <div class="workspace-task-form">
               <label class="workspace-task-field workspace-task-field-title">
@@ -1269,7 +1268,7 @@ export function renderHome() {
         <section class="workspace-home-hero-card">
           <div class="workspace-home-hero-copy">
           <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
-          <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
+          <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork in one shared writing space.")}</p>
         </div>
           <div class="workspace-home-hero-metrics">
             <div class="workspace-home-metric">

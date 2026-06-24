@@ -1192,6 +1192,10 @@ function buildBreakdownDocument(baseDocument, request = {}) {
         includeCharacters: Boolean(request.includeCharacters),
         includeLocations: Boolean(request.includeLocations),
         includeScenes: Boolean(request.includeScenes),
+        includeTheme: Boolean(request.includeTheme),
+        includeStyle: Boolean(request.includeStyle),
+        includeScenery: Boolean(request.includeScenery),
+        includeProps: Boolean(request.includeProps),
         customPrompt: String(request.customPrompt || '').trim()
       },
       breakdownSummary: {
@@ -1244,6 +1248,10 @@ function buildBreakdownDocument(baseDocument, request = {}) {
         includeCharacters: Boolean(request.includeCharacters),
         includeLocations: Boolean(request.includeLocations),
         includeScenes: Boolean(request.includeScenes),
+        includeTheme: Boolean(request.includeTheme),
+        includeStyle: Boolean(request.includeStyle),
+        includeScenery: Boolean(request.includeScenery),
+        includeProps: Boolean(request.includeProps),
         customPrompt: String(request.customPrompt || '').trim()
       },
       breakdownSummary: {
@@ -1257,6 +1265,10 @@ function buildBreakdownDocument(baseDocument, request = {}) {
   const includeCharacters = request.includeCharacters !== false;
   const includeLocations = request.includeLocations !== false;
   const includeScenes = request.includeScenes !== false;
+  const includeTheme = Boolean(request.includeTheme);
+  const includeStyle = Boolean(request.includeStyle);
+  const includeScenery = Boolean(request.includeScenery);
+  const includeProps = Boolean(request.includeProps);
   const reportLines = [{
     id: 'breakdown-report-heading',
     type: 'scene',
@@ -1329,6 +1341,37 @@ function buildBreakdownDocument(baseDocument, request = {}) {
     }
   }
 
+  if (includeTheme) {
+    const firstScene = baseDocument.scenes[0]?.heading || 'the opening scene';
+    const lastScene = baseDocument.scenes[baseDocument.scenes.length - 1]?.heading || 'the latest visible beat';
+    pushLine('action', 'Storyline & Theme');
+    pushLine('note', `${baseDocument.metadata?.title || 'This script'} currently moves from ${firstScene} toward ${lastScene}, with the strongest thematic signals living in repeated choices, consequences, and emotional reversals rather than in dialogue alone.`);
+  }
+
+  if (includeStyle) {
+    const actionCount = baseDocument.lines.filter((line) => line.type === 'action').length;
+    const dialogueCount = baseDocument.lines.filter((line) => line.type === 'dialogue').length;
+    pushLine('action', 'Writing Style');
+    pushLine('note', `The draft is presently balancing ${actionCount} action block${actionCount === 1 ? '' : 's'} with ${dialogueCount} dialogue line${dialogueCount === 1 ? '' : 's'}, so the strongest polish pass is to keep action visual, dialogue character-specific, and pacing clean between scene turns.`);
+  }
+
+  if (includeScenery) {
+    const headings = baseDocument.scenes.slice(0, 4).map((scene) => scene.heading).filter(Boolean);
+    pushLine('action', 'Scenery Development');
+    pushLine('note', `The current scenic identity is rooted in headings such as ${headings.join(', ') || 'the visible scene set'}, and the next level of development is making those environments actively shape mood, tension, and dramatic movement.`);
+  }
+
+  if (includeProps) {
+    const propCandidates = [...new Set(baseDocument.lines
+      .filter((line) => line.type === 'action')
+      .flatMap((line) => String(line.text || '').split(/[^A-Za-z0-9'-]+/))
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 5)
+      .slice(0, 8))];
+    pushLine('action', 'Props & Objects');
+    pushLine('note', `The present draft already hints at useful recurring objects and visual anchors${propCandidates.length ? `, including ${propCandidates.join(', ')}` : ''}. Strengthen any prop that carries memory, symbolism, or plot leverage by introducing it clearly and repeating it with intent.`);
+  }
+
   return {
     ...baseDocument,
     exportType: 'breakdown',
@@ -1338,7 +1381,11 @@ function buildBreakdownDocument(baseDocument, request = {}) {
     selection: {
       includeCharacters,
       includeLocations,
-      includeScenes
+      includeScenes,
+      includeTheme,
+      includeStyle,
+      includeScenery,
+      includeProps
     },
     breakdownSummary: {
       characterCount: includeCharacters ? baseDocument.characters.length : 0,

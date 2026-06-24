@@ -522,6 +522,9 @@ export function createProjectWithOptions(options = {}) {
     ? `Film Workspace ${index}`
     : `Film Script ${index}`;
   const requestedTitle = options.title || defaultTitle;
+  const defaultWorkspaceName = options.workspaceName
+    || workspaceSeed?.name
+    || requestedTitle;
   if (hasProjectNameConflict(requestedTitle, { isShared: Boolean(options.isShared) })) {
     throw new Error(`You already have a project named "${String(requestedTitle).trim()}". Use a different name or open the existing one.`);
   }
@@ -534,9 +537,9 @@ export function createProjectWithOptions(options = {}) {
     isWorkspaceRoot,
     workspace: workspaceSeed ? {
       ...workspaceSeed,
-      name: options.workspaceName || workspaceSeed.name || `Workspace ${index}`
+      name: defaultWorkspaceName
     } : {
-      name: options.workspaceName || (creationKind === "workspace" ? defaultTitle : `Workspace ${index}`)
+      name: defaultWorkspaceName
     },
     lines: [{ id: uid(), type: "action", text: "" }]
   });
