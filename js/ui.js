@@ -1,6 +1,6 @@
 ﻿import { state, LEFT_PANE_BLOCK_DEFS, WORKSPACE_TASK_TEMPLATES } from './config.js';
 import { refs } from './dom.js';
-import { getCurrentProject, getWorkspaceRootProject, persistProjects, serializeScript } from './project.js';
+import { getCurrentProject, getWorkspaceRootProject, persistProjects, serializeScript, getProjectDisplayName } from './project.js';
 import { escapeHtml, formatDateTime, normalizeLineText, formatLineText, createTextNode, uid } from './utils.js';
 import { updateBackground, setBackgroundAnimationEnabled } from './background.js';
 import { applyTranslations, t } from './i18n.js';
@@ -254,7 +254,7 @@ function renderWorkspaceProjectCards(projects, collaborationLabel) {
     const lines = Array.isArray(project.lines) ? project.lines : [];
     const sceneCount = lines.filter((line) => line.type === "scene" && line.text.trim()).length;
     const characterCount = new Set(lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
-    node.querySelector(".project-card-title").textContent = project.title;
+    node.querySelector(".project-card-title").textContent = getProjectDisplayName(project);
     node.querySelector(".project-script-id").textContent = project.scriptId;
     node.querySelector(".project-card-context").textContent = "Workspace script";
     const workspaceAction = node.querySelector(".project-card-context-action");
@@ -667,7 +667,7 @@ export function renderWorkspaceView() {
     const projectTasks = allTaskItems.filter((task) => task.projectId === project.id);
     return {
       id: project.id,
-      title: project.title,
+      title: project.name || project.title,
       openCount: projectTasks.filter((task) => task.status !== "done").length,
       doneCount: projectTasks.filter((task) => task.status === "done").length,
       dueSoonCount: projectTasks.filter((task) => task.dueAt && task.status !== "done" && (new Date(task.dueAt).getTime() - Date.now()) <= (48 * 60 * 60 * 1000)).length
@@ -708,7 +708,7 @@ export function renderWorkspaceView() {
       key: "activity",
       label: "Last activity",
       value: formatDateTime(workspaceLead.lastActivityAt || workspaceLead.updatedAt),
-      meta: latestProject ? latestProject.title : "No script opened yet",
+      meta: latestProject ? getProjectDisplayName(latestProject) : "No script opened yet",
       note: "Most recent workspace movement and the latest script touched."
     },
     {
@@ -757,15 +757,20 @@ export function renderWorkspaceView() {
       <section class="workspace-home-hero-card">
         <div class="workspace-home-hero-copy">
           <span class="workspace-home-hero-eyebrow">Team writing workspace</span>
-          <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
-          <p>${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
+          <div class="workspace-home-hero-title-row">
+            <h3>${escapeHtml(workspaceLead.workspace?.name || workspaceLead.title || "Workspace")}</h3>
+            <button class="primary-button btn-sm workspace-home-hero-primary" type="button" data-workspace-home-action="continue-writing">${latestProject ? "Continue Writing" : "Create Script"}</button>
+          </div>
+          <p class="workspace-home-hero-summary">${escapeHtml(workspaceLead.logline || "Shape scripts, story memory, comments, and teamwork from one shared writing space.")}</p>
           <div class="workspace-home-hero-actions">
-            <button class="primary-button btn-sm" type="button" data-workspace-home-action="continue-writing">${latestProject ? "Continue Writing" : "Create Script"}</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-export">Screenplay Export</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="focus-task-form">Assign Task</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-notepad">Notepad</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-story-memory">Story Memory</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-review-center">Review Center</button>
+            ${workspaceLead.ownerId && workspaceLead.ownerId !== currentUid && workspaceLead.collaborators?.[currentUid]
+              ? '<button class="ghost-button btn-sm danger-text" type="button" data-workspace-home-action="leave-workspace">Leave Collaboration</button>'
+              : ''}
           </div>
           ${workspaceOptions.length > 1 ? `
             <div class="workspace-switch-row">
@@ -1289,7 +1294,7 @@ export function renderHome() {
           <div class="workspace-flow-step is-active">
             <span>1</span>
             <strong>Write</strong>
-            <small>${latestProject ? `Continue ${escapeHtml(latestProject.title)}` : "Create the first script"}</small>
+            <small>${latestProject ? `Continue ${escapeHtml(getProjectDisplayName(latestProject))}` : "Create the first script"}</small>
           </div>
           <div class="workspace-flow-step">
             <span>2</span>
@@ -1306,6 +1311,9 @@ export function renderHome() {
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="open-export">Screenplay Export</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="focus-task-form">Add Task</button>
             <button class="ghost-button btn-sm" type="button" data-workspace-home-action="new-project">New Script</button>
+            ${workspaceLead.ownerId && workspaceLead.ownerId !== currentUid && workspaceLead.collaborators?.[currentUid]
+              ? '<button class="ghost-button btn-sm danger-text" type="button" data-workspace-home-action="leave-workspace">Leave Collaboration</button>'
+              : ''}
           </div>
         </section>
         <div class="workspace-home-grid">
@@ -1432,7 +1440,7 @@ export function renderHome() {
       const workspaceLabel = project.workspace?.name || "Personal Workspace";
       const collaborationLabel = getProjectCollaborationLabel(project);
 
-      node.querySelector(".project-card-title").textContent = project.title;
+      node.querySelector(".project-card-title").textContent = getProjectDisplayName(project);
       node.querySelector(".project-script-id").textContent = project.scriptId;
       node.querySelector(".project-card-context-action").dataset.openWorkspaceId = project.workspace?.id || project.id;
       node.querySelector(".project-card-context").textContent = workspaceLabel;
@@ -1470,7 +1478,7 @@ export function renderHome() {
       ? "Shared"
       : "Private";
 
-    node.querySelector(".project-card-title").textContent = project.title;
+    node.querySelector(".project-card-title").textContent = getProjectDisplayName(project);
     node.querySelector(".project-script-id").textContent = project.scriptId;
     node.querySelector(".project-card-context-action").dataset.openWorkspaceId = project.workspace?.id || project.id;
     node.querySelector(".project-card-context").textContent = workspaceLabel;
@@ -1508,7 +1516,7 @@ export function renderRecentProjectMenus() {
       button.type = "button";
       button.className = "nav-menu-button recent-project-button";
       button.dataset.projectId = project.id;
-      button.innerHTML = `<span>${escapeHtml(project.title)}</span><small>${escapeHtml(formatDateTime(project.updatedAt))}</small>`;
+      button.innerHTML = `<span>${escapeHtml(getProjectDisplayName(project))}</span><small>${escapeHtml(formatDateTime(project.updatedAt))}</small>`;
       container.appendChild(button);
     });
   });
@@ -1524,7 +1532,7 @@ export function renderStudioProjectContext() {
   const lastEdited = project.lastEditorName || project.ownerName || project.ownerEmail || project.author || "You";
 
   if (refs.studioProjectTitle) {
-    refs.studioProjectTitle.textContent = project.title || "Untitled Project";
+    refs.studioProjectTitle.textContent = getProjectDisplayName(project);
   }
   if (refs.studioProjectMeta) {
     refs.studioProjectMeta.textContent = `${workspaceLabel} Â· ${project.scriptId || "Draft"} Â· ${collaborationLabel} Â· Last edited by ${lastEdited}`;
@@ -2616,7 +2624,7 @@ function getWorkspacePopupAssignableRoles(project, collaboratorUid = null) {
     ? normalizeWorkspacePopupRole(project?.collaborators?.[collaboratorUid]?.role)
     : null;
 
-  return targetRole === "admin" ? [] : ["editor", "viewer"];
+  return targetRole === "owner" ? [] : ["admin", "editor", "viewer"];
 }
 
 function canWorkspacePopupRemoveMember(project, collaboratorUid) {
@@ -2625,7 +2633,7 @@ function canWorkspacePopupRemoveMember(project, collaboratorUid) {
 
   if (permissions.isOwner) return true;
   if (!permissions.isAdmin) return false;
-  return targetRole !== "admin";
+  return targetRole !== "owner";
 }
 
 export async function showWorkspacePopup() {
@@ -2644,6 +2652,8 @@ export async function showWorkspacePopup() {
   const inviteRoleOptions = getWorkspacePopupAssignableRoles(project);
   const memberCount = collaborators.length + 1;
   const workspaceCode = workspace.inviteCode || project.scriptId || project.id || "";
+  const currentUid = auth.currentUser?.uid || "";
+  const canLeaveWorkspace = Boolean(currentUid && project.ownerId !== currentUid && project.collaborators?.[currentUid]);
 
   const container = document.createElement("div");
   container.className = "workspace-popup";
@@ -2664,6 +2674,17 @@ export async function showWorkspacePopup() {
         ${permissions.canManageSettings ? '<button class="ghost-button workspace-inline-button" type="button" data-workspace-action="rename">Save Name</button>' : ''}
       </div>
     </section>
+    ${canLeaveWorkspace ? `
+    <section class="workspace-popup-card workspace-popup-section">
+      <div class="workspace-popup-section-head workspace-popup-section-head-compact">
+        <h4>Leave Collaboration</h4>
+        <p>Exit this shared workspace and remove it from your library until someone invites you back.</p>
+      </div>
+      <div class="workspace-share-row">
+        <button class="ghost-button danger-text workspace-inline-button" type="button" data-workspace-action="leave-workspace">Leave collaboration</button>
+      </div>
+    </section>
+    ` : ""}
     <section class="workspace-popup-card workspace-popup-section workspace-popup-section-sharing">
       <div class="workspace-popup-section-head workspace-popup-section-head-compact">
         <h4>Sharing</h4>
@@ -2690,12 +2711,9 @@ export async function showWorkspacePopup() {
       </div>
       <div class="list-stack workspace-member-list">
         <div class="list-item workspace-member-row">
-          <div class="workspace-member-copy">
-            <span class="list-item-title">Owner</span>
-            <div class="workspace-member-meta-row">
-              ${buildProfileTriggerMarkup({ uid: project.ownerId || "", name: ownerLabel, email: project.ownerEmail || "", photoURL: project.ownerPhotoURL || "", className: "workspace-member-button" })}
-              <span class="role-badge">Owner</span>
-            </div>
+          <div class="workspace-member-meta-row">
+            ${buildProfileTriggerMarkup({ uid: project.ownerId || "", name: ownerLabel, email: project.ownerEmail || "", photoURL: project.ownerPhotoURL || "", className: "workspace-member-button" })}
+            <span class="role-badge">Owner</span>
           </div>
         </div>
         ${collaborators.map(([uid, person]) => {
@@ -2703,17 +2721,14 @@ export async function showWorkspacePopup() {
           const roleOptions = getWorkspacePopupAssignableRoles(project, uid);
           return `
           <div class="list-item workspace-member-row">
-            <div class="workspace-member-copy">
-              <span class="list-item-title">${escapeHtml(getUserHandle(getMemberDisplayName(person), "user"))}</span>
-              <div class="workspace-member-meta-row">
-                ${buildProfileTriggerMarkup({ uid, name: getMemberDisplayName(person), email: person.email || "", photoURL: person.photoURL || "", className: "workspace-member-button" })}
-                ${roleOptions.length ? `
-                  <select class="comment-filter-select workspace-role-select" data-member-role="${escapeHtml(uid)}">
-                    ${roleOptions.map((role) => `<option value="${escapeHtml(role)}" ${memberRole === role ? 'selected' : ''}>${escapeHtml(WORKSPACE_POPUP_ROLE_LABELS[role])}</option>`).join("")}
-                  </select>
-                ` : `<span class="role-badge">${escapeHtml(WORKSPACE_POPUP_ROLE_LABELS[memberRole] || 'Editor')}</span>`}
-                ${canWorkspacePopupRemoveMember(project, uid) ? `<button class="ghost-button danger-text workspace-inline-button" type="button" data-member-remove="${escapeHtml(uid)}">Remove</button>` : ''}
-              </div>
+            <div class="workspace-member-meta-row">
+              ${buildProfileTriggerMarkup({ uid, name: getMemberDisplayName(person), email: person.email || "", photoURL: person.photoURL || "", className: "workspace-member-button" })}
+              ${roleOptions.length ? `
+                <select class="comment-filter-select workspace-role-select" data-member-role="${escapeHtml(uid)}">
+                  ${roleOptions.map((role) => `<option value="${escapeHtml(role)}" ${memberRole === role ? 'selected' : ''}>${escapeHtml(WORKSPACE_POPUP_ROLE_LABELS[role])}</option>`).join("")}
+                </select>
+              ` : `<span class="role-badge">${escapeHtml(WORKSPACE_POPUP_ROLE_LABELS[memberRole] || 'Editor')}</span>`}
+              ${canWorkspacePopupRemoveMember(project, uid) ? `<button class="ghost-button danger-text workspace-inline-button" type="button" data-member-remove="${escapeHtml(uid)}">Remove</button>` : ''}
             </div>
           </div>
         `;
@@ -2755,6 +2770,14 @@ export async function showWorkspacePopup() {
       if (status) status.textContent = "Saving workspace name...";
       window.dispatchEvent(new CustomEvent("workspaceRenameRequested", {
         detail: { projectId: project.id, name }
+      }));
+      return;
+    }
+
+    if (action === "leave-workspace") {
+      modalRefs.dialog?.close();
+      window.dispatchEvent(new CustomEvent("workspaceLeaveRequested", {
+        detail: { workspaceId: workspace.id || project.workspace?.id || project.id }
       }));
       return;
     }

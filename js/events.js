@@ -2149,6 +2149,33 @@ function openWorkspaceDashboardOrNotify(workspaceId) {
   openWorkspaceDashboard(workspaceId);
 }
 
+async function requestLeaveWorkspace(workspaceId = state.currentWorkspaceId) {
+  if (!workspaceId) {
+    showToast("Open the shared workspace first, then try leaving again.", "error", { duration: 3600 });
+    return false;
+  }
+  const workspaceProject = getWorkspaceRootProject(workspaceId)
+    || state.projects.find((project) => project.workspace?.id === workspaceId)
+    || null;
+  if (!workspaceProject) {
+    showToast("We could not find that shared workspace in your library.", "error", { duration: 4200 });
+    return false;
+  }
+  const leaveMessage = `Leave "${workspaceProject.workspace?.name || workspaceProject.title}"? You will lose access to its projects until someone invites you back.`;
+  const confirmed = typeof window !== "undefined" && typeof window.confirm === "function"
+    ? window.confirm(leaveMessage)
+    : await customConfirm(leaveMessage, "Leave Workspace");
+  if (!confirmed) return false;
+  const result = await leaveWorkspace(workspaceId);
+  if (!result.ok) {
+    await customAlert(result.reason || "Unable to leave the workspace right now.", "Leave Workspace");
+    return false;
+  }
+  showToast("You left the workspace.", "success");
+  syncWorkspaceHeaderActions();
+  return true;
+}
+
 function openProjectOrNotify(projectId, options = {}) {
   if (!projectId) {
     showToast("This project link is missing. Refresh the project list and try again.", "error", { duration: 4200 });
@@ -4143,24 +4170,7 @@ export function bindEvents() {
   });
 
   document.getElementById("workspaceLeaveBtn")?.addEventListener("click", async () => {
-    const workspaceId = state.currentWorkspaceId;
-    if (!workspaceId) return;
-    const workspaceProject = getWorkspaceRootProject(workspaceId)
-      || state.projects.find((project) => project.workspace?.id === workspaceId)
-      || null;
-    if (!workspaceProject) return;
-    const confirmed = await customConfirm(
-      `Leave "${workspaceProject.workspace?.name || workspaceProject.title}"? You will lose access to its projects until someone invites you back.`,
-      "Leave Workspace"
-    );
-    if (!confirmed) return;
-    const result = await leaveWorkspace(workspaceId);
-    if (!result.ok) {
-      await customAlert(result.reason || "Unable to leave the workspace right now.", "Leave Workspace");
-      return;
-    }
-    showToast("You left the workspace.", "success");
-    syncWorkspaceHeaderActions();
+    await requestLeaveWorkspace();
   });
 
   document.getElementById("workspaceDeleteBtn")?.addEventListener("click", async () => {
@@ -4181,6 +4191,10 @@ export function bindEvents() {
   window.addEventListener("sharedProjectUpdated", () => {
     if (!state.currentWorkspaceId) return;
     syncWorkspaceHeaderActions();
+  });
+
+  window.addEventListener("workspaceLeaveRequested", async (event) => {
+    await requestLeaveWorkspace(event.detail?.workspaceId || state.currentWorkspaceId);
   });
 
   refs.homeWorkspaceDashboard?.addEventListener("click", (event) => {
@@ -4211,6 +4225,10 @@ export function bindEvents() {
       event.preventDefault();
       event.stopPropagation();
       addWorkspaceTaskFromDashboard(event.target);
+      return;
+    }
+    if (action === "leave-workspace") {
+      void requestLeaveWorkspace();
       return;
     }
   });
@@ -4302,6 +4320,10 @@ export function bindEvents() {
     }
     if (action === "open-review-center") {
       showWorkspaceReviewCenter();
+      return;
+    }
+    if (action === "leave-workspace") {
+      void requestLeaveWorkspace();
       return;
     }
     if (action === "add-task") {
@@ -6770,14 +6792,14 @@ function setButtonGlyph(button, entity) {
 async function renameCurrentProject() {
   const project = getCurrentProject();
   if (!project) return;
-  const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
+  const nextTitle = await customPrompt("Rename this project:", project.name || project.title, "Rename Project");
   if (nextTitle === null) return;
   const trimmedTitle = nextTitle.trim() || "Untitled Script";
   if (hasProjectNameConflict(trimmedTitle, { excludeProjectId: project.id, isShared: Boolean(project.isShared) })) {
     await customAlert(`You already have a project named "${trimmedTitle}". Choose a different name.`, "Rename Project");
     return;
   }
-  project.title = trimmedTitle;
+  project.name = trimmedTitle;
   project.updatedAt = new Date().toISOString();
   syncInputsFromProject(project);
   renderStudio();
@@ -6786,12 +6808,12 @@ async function renameCurrentProject() {
 
 function duplicateProject() {
   const current = getCurrentProject();
-  const nextTitle = `${current.title} Copy`;
+  const nextTitle = `${current.name || current.title} Copy`;
   if (hasProjectNameConflict(nextTitle, { isShared: Boolean(current?.isShared) })) {
     customAlert(`You already have a project named "${nextTitle}". Rename the existing one first or choose another name.`, "Duplicate Project");
     return;
   }
-  const copy = cloneProject({ ...current, title: nextTitle }, true);
+  const copy = cloneProject({ ...current, name: nextTitle }, true);
   upsertProject(copy);
   openProject(copy.id);
   persistProjects(true);
@@ -6800,14 +6822,14 @@ function duplicateProject() {
 async function renameProjectById(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
-  const nextTitle = await customPrompt("Rename this project:", project.title, "Rename Project");
+  const nextTitle = await customPrompt("Rename this project:", project.name || project.title, "Rename Project");
   if (!nextTitle || !nextTitle.trim()) return;
   const trimmedTitle = nextTitle.trim();
   if (hasProjectNameConflict(trimmedTitle, { excludeProjectId: project.id, isShared: Boolean(project.isShared) })) {
     await customAlert(`You already have a project named "${trimmedTitle}". Choose a different name.`, "Rename Project");
     return;
   }
-  project.title = trimmedTitle;
+  project.name = trimmedTitle;
   project.updatedAt = new Date().toISOString();
   upsertProject(project);
   persistProjects(true, { syncInputs: false });
@@ -6820,12 +6842,12 @@ async function renameProjectById(projectId) {
 function duplicateProjectById(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
-  const nextTitle = `${project.title} Copy`;
+  const nextTitle = `${project.name || project.title} Copy`;
   if (hasProjectNameConflict(nextTitle, { isShared: Boolean(project.isShared) })) {
     customAlert(`You already have a project named "${nextTitle}". Rename the existing one first or choose another name.`, "Duplicate Project");
     return;
   }
-  const copy = cloneProject({ ...project, title: nextTitle }, true);
+  const copy = cloneProject({ ...project, name: nextTitle }, true);
   upsertProject(copy);
   persistProjects(true, { syncInputs: false });
   renderHome();

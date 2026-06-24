@@ -182,7 +182,7 @@ async function syncCurrentProjectToFirestore() {
     await setDoc(doc(db, 'users', userId, 'projects', project.id), payload);
     if (project.isShared) {
       // Only sync content fields — never overwrite ownership/membership on the shared doc.
-      const CONTENT_KEYS = ['title', 'subtitle', 'author', 'coWriters', 'contact', 'company', 'coverVersion', 'draftDate', 'copyrightNotice', 'details', 'logline',
+      const CONTENT_KEYS = ['name', 'title', 'subtitle', 'author', 'coWriters', 'contact', 'company', 'coverVersion', 'draftDate', 'copyrightNotice', 'details', 'logline',
       'lines', 'collapsedSceneIds', 'updatedAt', 'scriptId', 'wordCountHistory', 'storyMemory',
       'activityLog', 'exportHistory', 'lastEditorName', 'lastActivityAt', 'workspace', 'version',
       'conversionJobId', 'conversionSourceFileName'];
@@ -397,6 +397,7 @@ export function sanitizeProject(project) {
   return {
     id: project.id || uid("project"),
     scriptId: normalizeScriptId(project.scriptId),
+    name: project.name || project.title || "Untitled Script",
     title: project.title || "Untitled Script",
     subtitle: project.subtitle || "",
     workType: project.workType === "prose-poetry" ? "prose-poetry" : "film-script",
@@ -498,7 +499,7 @@ export function hasProjectNameConflict(title, { excludeProjectId = "", isShared 
   return state.projects.some((project) => {
     if (!project || project.id === excludeProjectId) return false;
     if (project.isShared) return false;
-    return normalizeProjectTitleForCompare(project.title) === nextTitle;
+    return normalizeProjectTitleForCompare(project.name || project.title) === nextTitle;
   });
 }
 
@@ -526,6 +527,7 @@ export function createProjectWithOptions(options = {}) {
   }
   const project = sanitizeProject({
     id: uid("project"),
+    name: requestedTitle,
     title: requestedTitle,
     workType,
     creationKind,
@@ -545,6 +547,10 @@ export function createProjectWithOptions(options = {}) {
 
 export function getCurrentProject() {
   return state.projects.find((project) => project.id === state.currentProjectId) || null;
+}
+
+export function getProjectDisplayName(project) {
+  return project?.name || project?.title || "Untitled Script";
 }
 
 export function getWorkspaceProjects(workspaceId) {

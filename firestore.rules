@@ -43,10 +43,11 @@ service cloud.firestore {
         request.resource.data.ownerId == resource.data.ownerId &&
         request.resource.data.ownerName == resource.data.ownerName &&
         request.resource.data.ownerEmail == resource.data.ownerEmail &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['collaborators', 'updatedBy', 'lastEditorName', 'pendingInviteId']) &&
         request.resource.data.updatedBy == request.auth.uid &&
         request.resource.data.pendingInviteId is string &&
         request.resource.data.collaborators[request.auth.uid] != null &&
-        request.resource.data.collaborators[request.auth.uid].email == request.auth.token.email &&
         request.resource.data.collaborators[request.auth.uid].name is string &&
         request.resource.data.collaborators[request.auth.uid].role in ['admin', 'editor', 'viewer'] &&
         (
