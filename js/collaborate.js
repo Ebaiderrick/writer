@@ -832,7 +832,10 @@ export async function acceptInvitation(inviteId) {
     }
 
     upsertProject(projectForUser);
+    state.currentProjectId = projectForUser.id;
+    state.currentWorkspaceId = projectForUser.workspace?.id || projectForUser.id || null;
     persistProjects(false);
+    showHome();
     renderHome();
     syncSharedProjectWatchers();
     subscribeToSharedProject(inv.projectId);

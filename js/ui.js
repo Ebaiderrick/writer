@@ -163,6 +163,19 @@ function sortProjectsForHome(projects) {
   return sorted;
 }
 
+function getLibraryVisibleProjects(projects) {
+  const workspaceIdsWithScripts = new Set(
+    projects
+      .filter((project) => !project.isWorkspaceRoot)
+      .map((project) => project.workspace?.id || project.id)
+  );
+
+  return projects.filter((project) => (
+    !project.isWorkspaceRoot
+    || !workspaceIdsWithScripts.has(project.workspace?.id || project.id)
+  ));
+}
+
 function buildProjectGroups(projects) {
   const grouped = new Map();
   projects.forEach((project) => {
@@ -542,7 +555,7 @@ export function renderWorkspaceView() {
   state.workspaceStoryMemoryFilter = state.workspaceStoryMemoryFilter || "all";
   state.workspaceCompletedFilter = state.workspaceCompletedFilter || "all";
   const allProjects = [...state.projects].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-  const workspaceOptions = buildProjectGroups(allProjects.filter((project) => !project.isWorkspaceRoot));
+  const workspaceOptions = buildProjectGroups(getLibraryVisibleProjects(allProjects));
   const workspaceLead = allProjects.find((project) => project.workspace?.id === workspaceId && project.isWorkspaceRoot)
     || allProjects.find((project) => project.workspace?.id === workspaceId)
     || null;
@@ -1184,10 +1197,12 @@ export function renderHome() {
   state.homeProjectSort = state.homeProjectSort || "latest";
   state.homeProjectFormat = state.homeProjectFormat || "all";
   state.homeWorkspaceFilter = state.homeWorkspaceFilter || "all";
-  let projects = sortProjectsForHome(state.projects);
+  const allProjects = sortProjectsForHome(state.projects);
+  const libraryProjects = getLibraryVisibleProjects(allProjects);
+  let projects = allProjects;
   let workspaceLead = null;
   const currentUid = auth.currentUser?.uid || "";
-  const workspaceOptions = buildProjectGroups(state.projects.filter((project) => !project.isWorkspaceRoot));
+  const workspaceOptions = buildProjectGroups(libraryProjects);
   if (state.homeWorkspaceFilter !== "all" && !workspaceOptions.some((group) => group.workspaceId === state.homeWorkspaceFilter)) {
     state.homeWorkspaceFilter = "all";
   }
@@ -1202,7 +1217,7 @@ export function renderHome() {
       if (refs.homeWorkspaceDashboard) refs.homeWorkspaceDashboard.hidden = true;
     }
   } else {
-    projects = projects.filter((project) => !project.isWorkspaceRoot);
+    projects = libraryProjects;
     if (state.homeProjectFilter === "mine") {
       projects = projects.filter((project) => {
         const ownerId = project.ownerId || "";
@@ -1481,8 +1496,7 @@ export function renderRecentProjectMenus() {
     return;
   }
 
-  const projects = [...state.projects]
-    .filter((project) => !project.isWorkspaceRoot)
+  const projects = getLibraryVisibleProjects([...state.projects])
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
     .slice(0, 5);
 
