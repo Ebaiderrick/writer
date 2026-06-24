@@ -30,7 +30,9 @@ function normalizeScriptId(scriptId) {
 
 function queueFirestoreSync() {
   clearTimeout(firestoreSyncTimer);
-  firestoreSyncTimer = setTimeout(syncCurrentProjectToFirestore, 1500);
+  const project = getCurrentProject();
+  const delay = project?.isShared ? 250 : 1500;
+  firestoreSyncTimer = setTimeout(syncCurrentProjectToFirestore, delay);
 }
 
 function buildPersistencePayload(savedAt = new Date().toISOString()) {
@@ -219,6 +221,9 @@ async function syncCurrentProjectToFirestore() {
     state.lastSaveSource = "remote";
     updateSaveBadge("saved", state.lastSavedAt || now);
     window.dispatchEvent(new CustomEvent('scriptIdUpdated', { detail: { projectId: project.id, scriptId: project.scriptId } }));
+    if (project.isShared) {
+      window.dispatchEvent(new CustomEvent('sharedProjectLocalSyncComplete', { detail: { projectId: project.id } }));
+    }
 
   } catch (err) {
     console.error('Firestore sync failed', err);
@@ -616,10 +621,13 @@ export function queueSave() {
   updateSaveBadge("saving");
   writeRecoverySnapshot();
   clearTimeout(state.saveTimer);
+  const project = getCurrentProject();
+  const delay = project?.isShared ? 250 : 1200;
   state.saveTimer = window.setTimeout(() => {
+    state.saveTimer = null;
     persistProjects(false);
     pushHistory();
-  }, 1200);
+  }, delay);
 }
 
 export function pushHistory() {

@@ -88,7 +88,7 @@ import {
   updateCollaboratorRole, addWorkspaceReminder, kickCollaborator,
   toggleWorkspaceReminder, deleteWorkspaceReminder, renameWorkspace,
   showCollabProfile, noteRealtimeActivity, syncWorkspaceState,
-  leaveWorkspace, deleteWorkspaceData
+  leaveWorkspace, deleteWorkspaceData, flushDeferredSharedProjectUpdate
 } from './collaborate.js';
 import { getConversionJobRecord, listConversionJobRecords, patchConversionJobRecord } from './conversionJobStore.js';
 
@@ -4346,6 +4346,10 @@ export function bindEvents() {
     syncWorkspaceHeaderActions();
   });
 
+  window.addEventListener("sharedProjectLocalSyncComplete", (event) => {
+    flushDeferredSharedProjectUpdate(event.detail?.projectId || state.currentProjectId);
+  });
+
   window.addEventListener("workspaceLeaveRequested", async (event) => {
     await requestLeaveWorkspace(event.detail?.workspaceId || state.currentWorkspaceId);
   });
@@ -5415,6 +5419,21 @@ export function bindEvents() {
       }
   });
 
+  refs.screenplayEditor.addEventListener("focusout", (e) => {
+      if (!e.target.classList.contains("script-block")) {
+          return;
+      }
+      const line = getLine(e.target.dataset.id);
+      const project = getCurrentProject();
+      if (line && project) {
+          refreshEditableBlockDisplay(e.target, line, project);
+      }
+      noteRealtimeActivity(e.target.dataset.id, { isTyping: false });
+      window.setTimeout(() => {
+          flushDeferredSharedProjectUpdate(project?.id || state.currentProjectId);
+      }, 0);
+  });
+
   refs.screenplayEditor.addEventListener("click", async (e) => {
     const taskMarker = e.target.closest("[data-script-task-target]");
     if (taskMarker) {
@@ -5983,15 +6002,6 @@ function handleBlockInput(id, element) {
   line.text = normalized;
   project.updatedAt = new Date().toISOString();
   clearSuggestionContext();
-
-  const shouldRefreshSpelling = state.grammarCheck
-    && hasLanguageDictionary(state.writingLanguage)
-    && Boolean(window.getSelection()?.isCollapsed);
-  const caretOffset = shouldRefreshSpelling ? getCaretOffset(element) : 0;
-  if (shouldRefreshSpelling) {
-    refreshEditableBlockDisplay(element, line, project);
-    setCaretOffset(element, Math.min(caretOffset, element.textContent.length));
-  }
 
   setActiveBlock(id);
   schedulePreviewRefresh();

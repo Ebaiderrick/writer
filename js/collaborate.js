@@ -74,6 +74,7 @@ let presenceHeartbeatTimer = 0;
 let typingPresenceTimer = 0;
 let activePresenceProjectId = '';
 const realtimePresenceByProject = new Map();
+const deferredSharedProjectUpdates = new Map();
 
 // ── Comments collection path ──────────────────────────────────
 // Personal projects → users/{uid}/projects/{id}/comments
@@ -312,6 +313,78 @@ function subscribeToPresence(projectId) {
       renderCollaboratorList();
     }
   }, (error) => console.error('[presence]', error));
+}
+
+function getProjectTimestamp(project) {
+  const value = Date.parse(project?.updatedAt || project?.lastActivityAt || 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function hasPendingLocalSharedEdits(projectId) {
+  if (state.currentProjectId !== projectId) {
+    return false;
+  }
+  const activeElement = document.activeElement;
+  const isTypingIntoScript = Boolean(activeElement?.closest?.(".script-block"));
+  return isTypingIntoScript || Boolean(state.saveTimer) || state.lastSaveSource === "local";
+}
+
+function shouldSkipIncomingSharedProject(projectId, incomingProject) {
+  const localProject = state.projects.find((project) => project.id === projectId);
+  if (!localProject) {
+    return false;
+  }
+
+  if (hasPendingLocalSharedEdits(projectId)) {
+    deferredSharedProjectUpdates.set(projectId, incomingProject);
+    return true;
+  }
+
+  const localVersion = Number(localProject.version || 0);
+  const remoteVersion = Number(incomingProject.version || 0);
+  const localUpdatedAt = getProjectTimestamp(localProject);
+  const remoteUpdatedAt = getProjectTimestamp(incomingProject);
+
+  if (localVersion > remoteVersion) {
+    return true;
+  }
+
+  return localVersion === remoteVersion && localUpdatedAt > remoteUpdatedAt;
+}
+
+function applyIncomingSharedProject(projectId, incomingProject, { updateStudio = false } = {}) {
+  if (shouldSkipIncomingSharedProject(projectId, incomingProject)) {
+    return false;
+  }
+
+  deferredSharedProjectUpdates.delete(projectId);
+  upsertProject(incomingProject);
+  persistProjects(false, { syncInputs: false });
+  renderHome();
+  if (state.currentWorkspaceId === incomingProject.workspace?.id) {
+    if (shouldDeferWorkspaceRender(incomingProject.workspace?.id)) {
+      state.workspaceRefreshPending = true;
+    } else {
+      state.workspaceRefreshPending = false;
+      renderWorkspaceView();
+    }
+  }
+  if (updateStudio && state.currentProjectId === projectId) {
+    renderCollaboratorList();
+    window.dispatchEvent(new CustomEvent('sharedProjectUpdated', { detail: { projectId } }));
+  }
+  return true;
+}
+
+export function flushDeferredSharedProjectUpdate(projectId = state.currentProjectId) {
+  if (!projectId || hasPendingLocalSharedEdits(projectId)) {
+    return false;
+  }
+  const pending = deferredSharedProjectUpdates.get(projectId);
+  if (!pending) {
+    return false;
+  }
+  return applyIncomingSharedProject(projectId, pending, { updateStudio: true });
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────
@@ -1429,22 +1502,8 @@ export function subscribeToSharedProject(projectId) {
       if (!snap.exists()) return;
       if (snap.data().updatedBy === auth.currentUser?.uid) return;
       const updated = sanitizeProject(snap.data());
-      upsertProject(updated);
-      persistProjects(false);
-      renderCollaboratorList();
-      renderHome();
-      if (state.currentWorkspaceId === updated.workspace?.id) {
-        if (shouldDeferWorkspaceRender(updated.workspace?.id)) {
-          state.workspaceRefreshPending = true;
-        } else {
-          state.workspaceRefreshPending = false;
-          renderWorkspaceView();
-        }
-      }
+      applyIncomingSharedProject(projectId, updated, { updateStudio: true });
       syncSharedProjectWatchers();
-      if (state.currentProjectId === projectId) {
-        window.dispatchEvent(new CustomEvent('sharedProjectUpdated', { detail: { projectId } }));
-      }
     },
     err => {
       if (err.code === 'permission-denied') {
@@ -1488,21 +1547,7 @@ function syncSharedProjectWatchers() {
         }
 
         if (snap.data().updatedBy === user.uid) return;
-        upsertProject(sharedProject);
-        persistProjects(false);
-        renderHome();
-        if (state.currentWorkspaceId === sharedProject.workspace?.id) {
-          if (shouldDeferWorkspaceRender(sharedProject.workspace?.id)) {
-            state.workspaceRefreshPending = true;
-          } else {
-            state.workspaceRefreshPending = false;
-            renderWorkspaceView();
-          }
-        }
-        if (state.currentProjectId === projectId) {
-          renderCollaboratorList();
-          window.dispatchEvent(new CustomEvent('sharedProjectUpdated', { detail: { projectId } }));
-        }
+        applyIncomingSharedProject(projectId, sharedProject, { updateStudio: state.currentProjectId === projectId });
       },
       err => {
         if (err.code === 'permission-denied') handleSharedProjectPermissionIssue(projectId);

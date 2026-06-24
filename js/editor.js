@@ -390,8 +390,16 @@ export function refreshEditableBlockDisplay(block, line = getLine(block?.dataset
 
 function renderBlockContent(block, line, project, spellingLexicon = null) {
   const text = block.dataset.secondary === "true" ? line.secondary : line.text;
+  const display = formatLineText(text, line.type, true);
+  const keepPlainWhileEditing = document.activeElement === block;
   if (!state.grammarCheck || !hasLanguageDictionary(state.writingLanguage)) {
-    const display = formatLineText(text, line.type, true);
+    if (block.textContent !== display) {
+      block.textContent = display;
+    }
+    return;
+  }
+
+  if (keepPlainWhileEditing) {
     if (block.textContent !== display) {
       block.textContent = display;
     }
