@@ -311,6 +311,7 @@ function subscribeToPresence(projectId) {
     realtimePresenceByProject.set(projectId, entries);
     if (state.currentProjectId === projectId) {
       renderCollaboratorList();
+      window.dispatchEvent(new CustomEvent('sharedPresenceUpdated', { detail: { projectId } }));
     }
   }, (error) => console.error('[presence]', error));
 }

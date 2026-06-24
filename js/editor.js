@@ -1,5 +1,6 @@
 import { state, DEFAULT_SUGGESTIONS } from './config.js';
 import { refs } from './dom.js';
+import { auth } from './firebase.js';
 import {
   getCurrentProject, getLine, getLineIndex, queueSave,
   getSuggestedNextSpeaker
@@ -14,7 +15,7 @@ import {
   buildProjectLexicon, buildSpellingIssues, buildGrammarIssues, clearSpellingHighlights,
   hasLanguageDictionary, renderSpellingIssues
 } from './spelling.js';
-import { canEditProject } from './collaborate.js';
+import { canEditProject, getRealtimePresence } from './collaborate.js';
 
 let _renderingEditor = false;
 
@@ -35,6 +36,7 @@ export function renderEditor() {
   _renderingEditor = true;
   try {
     _renderEditorInner();
+    syncRealtimeLinePresence();
   } finally {
     _renderingEditor = false;
   }
@@ -214,6 +216,104 @@ export function updateSuggestions() {
   const type = line.type;
   const suggestions = buildSuggestions(type, text);
   renderSuggestionTray(t("editor.suggestions", { type: getTypeLabel(type) }), suggestions, getActiveBlockSuggestionAnchor());
+}
+
+function getLinePresenceEntries(project = getCurrentProject()) {
+  if (!project?.isShared) {
+    return new Map();
+  }
+
+  const currentUid = auth.currentUser?.uid || "";
+  const presenceByUid = getRealtimePresence(project.id);
+  const byLine = new Map();
+
+  Object.entries(presenceByUid).forEach(([uid, presence]) => {
+    if (!presence?.isTyping || !presence?.lineId || uid === currentUid) {
+      return;
+    }
+
+    const collaborator = uid === project.ownerId
+      ? {
+          name: project.ownerName || project.ownerEmail || "Owner",
+          email: project.ownerEmail || "",
+          photoURL: project.ownerPhotoURL || ""
+        }
+      : (project.collaborators?.[uid] || null);
+
+    const label = collaborator?.name || collaborator?.email || presence.name || presence.email || "Workspace member";
+    const avatar = {
+      uid,
+      name: label,
+      photoURL: collaborator?.photoURL || presence.photoURL || "",
+      lineId: presence.lineId
+    };
+
+    if (!byLine.has(presence.lineId)) {
+      byLine.set(presence.lineId, []);
+    }
+    byLine.get(presence.lineId).push(avatar);
+  });
+
+  byLine.forEach((entries) => {
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+  });
+
+  return byLine;
+}
+
+export function syncRealtimeLinePresence(project = getCurrentProject()) {
+  if (!refs.screenplayEditor) {
+    return;
+  }
+
+  refs.screenplayEditor.querySelectorAll(".script-line-presence").forEach((node) => node.remove());
+  if (!project?.isShared) {
+    return;
+  }
+
+  const presenceByLine = getLinePresenceEntries(project);
+  presenceByLine.forEach((entries, lineId) => {
+    const row = refs.screenplayEditor.querySelector(`.script-block-row[data-id="${lineId}"]`);
+    if (!row || !entries.length) {
+      return;
+    }
+
+    const cluster = document.createElement("div");
+    cluster.className = "script-line-presence";
+    cluster.setAttribute("aria-hidden", "true");
+
+    entries.slice(0, 3).forEach((entry) => {
+      const avatar = document.createElement(entry.photoURL ? "img" : "span");
+      avatar.className = "script-line-presence-avatar";
+      avatar.title = `${entry.name} is typing here`;
+      if (entry.photoURL) {
+        avatar.src = entry.photoURL;
+        avatar.alt = `${entry.name} profile photo`;
+        avatar.loading = "lazy";
+        avatar.onerror = () => {
+          avatar.onerror = null;
+          avatar.replaceWith(Object.assign(document.createElement("span"), {
+            className: "script-line-presence-avatar",
+            textContent: entry.name.trim().charAt(0).toUpperCase() || "U",
+            title: `${entry.name} is typing here`
+          }));
+        };
+      } else {
+        avatar.textContent = entry.name.trim().charAt(0).toUpperCase() || "U";
+      }
+      cluster.appendChild(avatar);
+    });
+
+    if (entries.length > 3) {
+      const more = document.createElement("span");
+      more.className = "script-line-presence-more";
+      more.textContent = `+${entries.length - 3}`;
+      more.title = `${entries.length - 3} more collaborators typing here`;
+      cluster.appendChild(more);
+    }
+
+    row.appendChild(cluster);
+  });
 }
 
 export function buildSuggestions(type, currentText) {

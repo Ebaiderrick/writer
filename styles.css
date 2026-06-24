@@ -4258,6 +4258,60 @@ html[data-theme="navy"] .section-scenes .list-item-title {
   padding-left: 1ch;
 }
 
+.script-line-presence {
+  position: absolute;
+  top: 7px;
+  right: 26px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.script-line-presence-avatar,
+.script-line-presence-more {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--surface-strong) 88%, white);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.16);
+}
+
+.script-line-presence-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent-soft) 72%, white);
+  color: var(--ink);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.script-line-presence-avatar + .script-line-presence-avatar {
+  margin-left: -8px;
+}
+
+.script-line-presence-avatar img,
+img.script-line-presence-avatar {
+  object-fit: cover;
+}
+
+.script-line-presence-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -4px;
+  background: color-mix(in srgb, var(--surface-strong) 88%, var(--accent-soft));
+  color: var(--muted);
+  font-size: 0.55rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 /* Image upload placeholder */
 .script-block[data-type="image"]:empty::before {
   content: "Tap '=' to upload";

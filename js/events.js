@@ -14,7 +14,7 @@ import {
 import {
   renderEditor, setActiveBlock, focusBlock, focusSecondaryBlock, getActiveEditableBlock,
   getOwningSceneId, getCharacterAutocomplete, updateSuggestions,
-  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray,
+  showSpellingSuggestions, clearSuggestionContext, refreshEditableBlockDisplay, hideSuggestionTray, syncRealtimeLinePresence,
   getSceneIdForIndex
 } from './editor.js';
 import { renderPreview, renderCoverPreview, buildPrintableDocument } from './preview.js';
@@ -5714,6 +5714,12 @@ export function bindEvents() {
   // Re-render studio when a remote collaborator updates the shared project
   window.addEventListener('sharedProjectUpdated', () => {
     if (!refs.studioView?.hidden) renderStudio();
+  });
+
+  window.addEventListener("sharedPresenceUpdated", (event) => {
+    if (refs.studioView?.hidden) return;
+    if (event.detail?.projectId && event.detail.projectId !== state.currentProjectId) return;
+    syncRealtimeLinePresence();
   });
 
   // Comment compose overlay
