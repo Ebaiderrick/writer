@@ -13,6 +13,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800;900&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
 </head>
@@ -30,9 +33,242 @@
         <button class="theme-btn" data-theme="navy">🌊</button>
       </div>
 
+      <div class="marketing-shell">
+        <header class="marketing-nav" id="marketingNav">
+          <a href="#landingHero" class="marketing-logo">Eya<span>Writer</span></a>
+          <nav class="marketing-nav-links" aria-label="Marketing navigation">
+            <a href="#landingFeatures">Features</a>
+            <a href="#landingCollab">Workspace</a>
+            <a href="#landingPricing">Pricing</a>
+            <a href="#landingFaq">FAQ</a>
+          </nav>
+          <div class="marketing-nav-actions">
+            <button class="marketing-btn marketing-btn-ghost" type="button" data-auth-open="login">Sign In</button>
+            <button class="marketing-btn marketing-btn-primary" type="button" data-auth-open="signup">Start Free</button>
+          </div>
+        </header>
+
+        <main class="marketing-main">
+          <section id="landingHero" class="marketing-hero">
+            <div class="marketing-hero-copy">
+              <span class="marketing-kicker">Professional screenplay writing, reimagined</span>
+              <h1>Write bold <span>scripts</span> with AI, memory, and live collaboration.</h1>
+              <p>
+                EyaWriter keeps your screenplay formatted, your collaborators in sync, and your story world consistent,
+                all inside one working studio.
+              </p>
+              <div class="marketing-hero-actions">
+                <button class="marketing-btn marketing-btn-primary" type="button" data-auth-open="signup">Create Free Account</button>
+                <button class="marketing-btn marketing-btn-ghost" type="button" data-auth-open="demo">Try Demo</button>
+              </div>
+              <div class="marketing-stats" aria-label="Product stats">
+                <div>
+                  <strong>10k+</strong>
+                  <span>scripts created</span>
+                </div>
+                <div>
+                  <strong>Real-time</strong>
+                  <span>collaboration sync</span>
+                </div>
+                <div>
+                  <strong>Free</strong>
+                  <span>core writing tools</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="marketing-editor-card" aria-label="Editor preview">
+              <div class="marketing-editor-toolbar">
+                <span></span>
+                <span></span>
+                <span></span>
+                <small>EYAWRITER / LIVE DRAFT</small>
+              </div>
+              <div class="marketing-editor-body">
+                <div class="marketing-editor-script">
+                  <div class="marketing-script-line marketing-script-scene">INT. ROOFTOP GREENHOUSE - NIGHT</div>
+                  <div class="marketing-script-line">Rain freckles the glass above them. The city hums below.</div>
+                  <div class="marketing-script-line marketing-script-character">AMARA</div>
+                  <div class="marketing-script-line marketing-script-dialogue">If the story remembers what we planted here, it won't let us lie later.</div>
+                  <div class="marketing-script-line marketing-script-character">JONAH</div>
+                  <div class="marketing-script-line marketing-script-dialogue">Then let the story watch.</div>
+                </div>
+                <aside class="marketing-editor-side">
+                  <div class="marketing-side-panel">
+                    <span class="marketing-side-label">AI Actions</span>
+                    <button class="marketing-side-chip is-active" type="button">Rewrite with tension</button>
+                    <button class="marketing-side-chip" type="button">Add emotional edge</button>
+                    <button class="marketing-side-chip" type="button">Suggest next beat</button>
+                  </div>
+                  <div class="marketing-side-panel">
+                    <span class="marketing-side-label">Story Memory</span>
+                    <div class="marketing-memory-tag">Amara fears betrayal</div>
+                    <div class="marketing-memory-tag">Jonah hides the map</div>
+                    <div class="marketing-memory-tag">Greenhouse = secret meeting point</div>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </section>
+
+          <section class="marketing-marquee" aria-label="Highlights">
+            <div class="marketing-marquee-track">
+              <span>AI rewrites</span>
+              <span>Story memory</span>
+              <span>Shared workspaces</span>
+              <span>Scene-aware editing</span>
+              <span>Proofreading</span>
+              <span>DOCX · PDF · TXT export</span>
+              <span>AI rewrites</span>
+              <span>Story memory</span>
+              <span>Shared workspaces</span>
+              <span>Scene-aware editing</span>
+              <span>Proofreading</span>
+              <span>DOCX · PDF · TXT export</span>
+            </div>
+          </section>
+
+          <section id="landingFeatures" class="marketing-section">
+            <div class="marketing-section-head">
+              <span class="marketing-pill">Features</span>
+              <h2>Everything that keeps a modern screenplay moving.</h2>
+              <p>These surfaces are wired to the existing app flow, so what you see here maps directly to the editor, workspace, and export tools already in the product.</p>
+            </div>
+            <div class="marketing-feature-grid">
+              <article class="marketing-feature-card">
+                <strong>AI Writing Assistance</strong>
+                <p>Trigger rewrites, emotional sharpening, and next-beat ideas without leaving the script.</p>
+              </article>
+              <article class="marketing-feature-card">
+                <strong>Story Memory</strong>
+                <p>Characters, places, themes, and running facts stay available as live creative context.</p>
+              </article>
+              <article class="marketing-feature-card">
+                <strong>Real-Time Collaboration</strong>
+                <p>Invite teammates, share projects, and work across one script with presence and permissions.</p>
+              </article>
+              <article class="marketing-feature-card">
+                <strong>Professional Import / Export</strong>
+                <p>Bring scripts in, refine them, and send them out in the formats a working writer actually needs.</p>
+              </article>
+            </div>
+          </section>
+
+          <section id="landingCollab" class="marketing-section marketing-section-alt">
+            <div class="marketing-collab-grid">
+              <div class="marketing-section-head marketing-section-head-tight">
+                <span class="marketing-pill">Workspace</span>
+                <h2>Your project room, not just a blank page.</h2>
+                <p>Team assembly, role assignment, inbox activity, and workspace entry all live in the same product flow behind this front page.</p>
+                <div class="marketing-hero-actions">
+                  <button class="marketing-btn marketing-btn-primary" type="button" data-auth-open="signup">Open the App</button>
+                </div>
+              </div>
+              <div class="marketing-collab-card">
+                <div class="marketing-collab-member">
+                  <div class="marketing-avatar is-owner">EG</div>
+                  <div>
+                    <strong>Ebaid</strong>
+                    <span>Owner · full control</span>
+                  </div>
+                </div>
+                <div class="marketing-collab-member">
+                  <div class="marketing-avatar is-admin">NK</div>
+                  <div>
+                    <strong>Nkede</strong>
+                    <span>Admin · project management</span>
+                  </div>
+                </div>
+                <div class="marketing-collab-member">
+                  <div class="marketing-avatar is-editor">AM</div>
+                  <div>
+                    <strong>Amara</strong>
+                    <span>Editor · active in scene 12</span>
+                  </div>
+                </div>
+                <div class="marketing-collab-feed">
+                  <div><strong>Accepted invite</strong><span>Project appeared instantly in workspace</span></div>
+                  <div><strong>Comment resolved</strong><span>Dialogue polish applied to rooftop scene</span></div>
+                  <div><strong>Live typing detected</strong><span>Current line marker updated in editor</span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="landingPricing" class="marketing-section">
+            <div class="marketing-section-head">
+              <span class="marketing-pill">Pricing</span>
+              <h2>Start free, then scale when the writing room grows.</h2>
+            </div>
+            <div class="marketing-pricing-grid">
+              <article class="marketing-price-card">
+                <span class="marketing-price-tier">Free</span>
+                <strong>$0</strong>
+                <p>Unlimited scripts, core writing tools, collaboration, and cloud sync.</p>
+              </article>
+              <article class="marketing-price-card is-featured">
+                <span class="marketing-price-tier">Pro</span>
+                <strong>$12/mo</strong>
+                <p>Priority AI, richer exports, team workspaces, and advanced script support.</p>
+              </article>
+              <article class="marketing-price-card">
+                <span class="marketing-price-tier">Enterprise</span>
+                <strong>Custom</strong>
+                <p>For studios and production teams that need custom workflows and control.</p>
+              </article>
+            </div>
+          </section>
+
+          <section id="landingFaq" class="marketing-section marketing-section-faq">
+            <div class="marketing-section-head">
+              <span class="marketing-pill">FAQ</span>
+              <h2>Questions, answered clearly.</h2>
+            </div>
+            <div class="marketing-faq-list">
+              <details open>
+                <summary>Is EyaWriter really free to start?</summary>
+                <p>Yes. The signed-in app already supports the free core workflow: writing, saving, collaboration, and workspace management.</p>
+              </details>
+              <details>
+                <summary>Does this landing page connect to the real app?</summary>
+                <p>Yes. The buttons here now open the existing login, signup, and demo flows instead of leading nowhere.</p>
+              </details>
+              <details>
+                <summary>Will this replace the editor and workspace logic?</summary>
+                <p>No. This front page is the new signed-out entry surface. The existing editor, workspace, settings, and collaboration logic stay wired behind it.</p>
+              </details>
+            </div>
+          </section>
+
+          <section class="marketing-cta">
+            <span class="marketing-pill">Start writing</span>
+            <h2>Your next script can start right now.</h2>
+            <p>Use the live app behind this page, create an account, or jump into the demo flow.</p>
+            <div class="marketing-hero-actions">
+              <button class="marketing-btn marketing-btn-primary" type="button" data-auth-open="signup">Create Account</button>
+              <button class="marketing-btn marketing-btn-ghost" type="button" data-auth-open="login">Sign In</button>
+            </div>
+          </section>
+        </main>
+
+        <footer class="marketing-footer">
+          <div>
+            <a href="#landingHero" class="marketing-logo">Eya<span>Writer</span></a>
+            <p>Professional screenplay writing with AI, story memory, and collaboration.</p>
+          </div>
+          <div class="marketing-footer-links">
+            <a href="#landingFeatures">Features</a>
+            <a href="#landingPricing">Pricing</a>
+            <a href="#landingFaq">FAQ</a>
+            <button type="button" class="marketing-footer-link-button" data-auth-open="signup">Open App</button>
+          </div>
+        </footer>
+      </div>
+
       <!-- Auth Container -->
-      <div class="auth-wrapper">
+      <div class="auth-wrapper" hidden>
         <div class="auth-card">
+          <button class="auth-close-btn" id="authCloseBtn" type="button" aria-label="Close sign in dialog">×</button>
           <div id="authPendingState" class="auth-pending-state" hidden aria-live="polite" aria-busy="true">
             <div class="auth-pending-spinner" aria-hidden="true"></div>
             <p id="authPendingMessage" class="auth-pending-message">Signing you in...</p>
@@ -154,9 +390,6 @@
           <nav class="home-nav" aria-label="Primary navigation">
             <button class="nav-link" type="button" data-home-nav="file" data-menu-trigger="homeFileMenu">File</button>
             <button class="nav-link" type="button" data-home-nav="view" data-menu-trigger="homeThemeMenu">View</button>
-            <button class="nav-link" type="button" data-home-nav="format">Format</button>
-            <button class="nav-link" type="button" data-home-nav="metrics">Metrics</button>
-            <button class="nav-link" type="button" data-home-nav="revision">Revision</button>
             <button class="nav-link" type="button" data-menu-trigger="homeCollabMenu">Collaborate</button>
             <button class="nav-link" type="button" data-menu-trigger="homeHelpMenu">Help</button>
             <button class="nav-link" type="button" data-home-nav="shortcuts">Shortcuts</button>

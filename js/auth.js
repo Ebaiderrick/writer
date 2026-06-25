@@ -38,6 +38,7 @@ export const Auth = (() => {
   let signupNameInput, signupEmailInput, signupPassInput, signupPass2Input;
   let loginEmailInput, loginPassInput;
   let authPendingState, authPendingMessage;
+  let authWrapper, authCloseBtn, marketingAuthTriggers;
 
   // Profile Popup Elements
   let profilePopup, profileClose, profileTriggerBtns;
@@ -56,6 +57,28 @@ export const Auth = (() => {
 
   let generatedOTP = '';
   let pendingSignup = null;
+
+  function setAuthTab(tab = 'login') {
+    tabBtns?.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    forms?.forEach((form) => {
+      form.classList.toggle('active', form.id === `${tab}-form`);
+    });
+  }
+
+  function openAuthOverlay(tab = 'login') {
+    if (!authWrapper) return;
+    setAuthTab(tab);
+    authWrapper.hidden = false;
+    authWrapper.classList.add('is-open');
+  }
+
+  function closeAuthOverlay() {
+    if (!authWrapper) return;
+    authWrapper.classList.remove('is-open');
+    authWrapper.hidden = true;
+  }
 
   function shouldPreferGoogleRedirect() {
     const ua = navigator.userAgent || '';
@@ -202,6 +225,9 @@ export const Auth = (() => {
     loginPassInput = document.getElementById('login-pass');
     authPendingState = document.getElementById('authPendingState');
     authPendingMessage = document.getElementById('authPendingMessage');
+    authWrapper = document.querySelector('.auth-wrapper');
+    authCloseBtn = document.getElementById('authCloseBtn');
+    marketingAuthTriggers = document.querySelectorAll('[data-auth-open]');
 
     // Profile Elements
     profilePopup = document.getElementById('profile-popup');
@@ -249,13 +275,25 @@ export const Auth = (() => {
     tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
-        tabBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        forms.forEach(form => {
-          form.classList.remove('active');
-          if (form.id === `${tab}-form`) form.classList.add('active');
-        });
+        setAuthTab(tab);
       });
+    });
+
+    marketingAuthTriggers.forEach((trigger) => {
+      trigger.addEventListener('click', () => {
+        const mode = trigger.dataset.authOpen;
+        if (mode === 'demo') {
+          handleDemoLogin();
+          return;
+        }
+        if (mode === 'signup' || mode === 'login') {
+          openAuthOverlay(mode);
+        }
+      });
+    });
+    authCloseBtn?.addEventListener('click', closeAuthOverlay);
+    authWrapper?.addEventListener('click', (event) => {
+      if (event.target === authWrapper) closeAuthOverlay();
     });
 
     // Theme switching logic
@@ -304,6 +342,7 @@ export const Auth = (() => {
 
     forgotLink.addEventListener('click', e => {
       e.preventDefault();
+      openAuthOverlay('login');
       forgotOverlay.classList.add('active');
     });
     forgotCancel.addEventListener('click', () => forgotOverlay.classList.remove('active'));
@@ -345,6 +384,7 @@ export const Auth = (() => {
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && profilePopup?.classList.contains('active')) closeProfilePopup();
+      if (e.key === 'Escape' && authWrapper?.classList.contains('is-open')) closeAuthOverlay();
     });
 
     onAuthStateChanged(auth, async firebaseUser => {
