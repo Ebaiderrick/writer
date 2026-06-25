@@ -228,7 +228,7 @@ function getLinePresenceEntries(project = getCurrentProject()) {
   const byLine = new Map();
 
   Object.entries(presenceByUid).forEach(([uid, presence]) => {
-    if (!presence?.isTyping || !presence?.lineId || uid === currentUid) {
+    if (!presence?.lineId || uid === currentUid) {
       return;
     }
 
@@ -245,7 +245,8 @@ function getLinePresenceEntries(project = getCurrentProject()) {
       uid,
       name: label,
       photoURL: collaborator?.photoURL || presence.photoURL || "",
-      lineId: presence.lineId
+      lineId: presence.lineId,
+      isTyping: Boolean(presence.isTyping)
     };
 
     if (!byLine.has(presence.lineId)) {
@@ -285,18 +286,20 @@ export function syncRealtimeLinePresence(project = getCurrentProject()) {
     entries.slice(0, 3).forEach((entry) => {
       const avatar = document.createElement(entry.photoURL ? "img" : "span");
       avatar.className = "script-line-presence-avatar";
-      avatar.title = `${entry.name} is typing here`;
+      avatar.dataset.typingActive = entry.isTyping ? "true" : "false";
+      avatar.title = entry.isTyping ? `${entry.name} is typing here` : `${entry.name} is here`;
       if (entry.photoURL) {
         avatar.src = entry.photoURL;
         avatar.alt = `${entry.name} profile photo`;
         avatar.loading = "lazy";
         avatar.onerror = () => {
           avatar.onerror = null;
-          avatar.replaceWith(Object.assign(document.createElement("span"), {
-            className: "script-line-presence-avatar",
-            textContent: entry.name.trim().charAt(0).toUpperCase() || "U",
-            title: `${entry.name} is typing here`
-          }));
+          const fallbackAvatar = document.createElement("span");
+          fallbackAvatar.className = "script-line-presence-avatar";
+          fallbackAvatar.dataset.typingActive = entry.isTyping ? "true" : "false";
+          fallbackAvatar.textContent = entry.name.trim().charAt(0).toUpperCase() || "U";
+          fallbackAvatar.title = entry.isTyping ? `${entry.name} is typing here` : `${entry.name} is here`;
+          avatar.replaceWith(fallbackAvatar);
         };
       } else {
         avatar.textContent = entry.name.trim().charAt(0).toUpperCase() || "U";
