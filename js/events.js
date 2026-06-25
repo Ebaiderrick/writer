@@ -5194,7 +5194,7 @@ export function bindEvents() {
 
   refs.aiAssistToggle.addEventListener("change", () => {
     state.aiAssist = refs.aiAssistToggle.checked;
-    refs.aiPanel.hidden = !state.aiAssist;
+    if (refs.aiPanel) refs.aiPanel.hidden = !state.aiAssist;
     applyToolbarState();
     queueSave();
     updateSelectionToolbar();
@@ -5206,7 +5206,7 @@ export function bindEvents() {
     updateSelectionToolbar();
   });
 
-  refs.aiSuggestBtn.addEventListener("click", insertAiAssistNote);
+  refs.aiSuggestBtn?.addEventListener("click", insertAiAssistNote);
 
   // Layout Toggles
   refs.leftRailToggle?.addEventListener("click", () => {
@@ -5775,7 +5775,7 @@ export function openProject(projectId, options = {}) {
   if (refs.bgAnimationToggle) {
     refs.bgAnimationToggle.checked = state.backgroundAnimation;
   }
-  refs.aiPanel.hidden = !state.aiAssist;
+  if (refs.aiPanel) refs.aiPanel.hidden = !state.aiAssist;
 
   syncInputsFromProject(project);
   showStudio();
@@ -6589,7 +6589,7 @@ function handleMenuAction(action) {
     case "toggle-ai-assistant":
       state.aiAssist = true;
       refs.aiAssistToggle.checked = state.aiAssist;
-      refs.aiPanel.hidden = !state.aiAssist;
+      if (refs.aiPanel) refs.aiPanel.hidden = !state.aiAssist;
       applyToolbarState();
       updateMenuStateButtons();
       showModal({
