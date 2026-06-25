@@ -101,6 +101,7 @@ function _activateTab(name) {
   const loaders = {
     overview: _loadOverview,
     analytics: _loadAnalytics,
+    support: _loadSupportSnapshot,
     users: _loadUsers,
     feedback: _loadFeedback,
     flags: _loadFlags,
@@ -433,6 +434,149 @@ async function _loadAnalytics() {
   }
 }
 
+async function _loadSupportSnapshot() {
+  const panel = document.getElementById('adminSupportPanel');
+  if (!panel) return;
+  panel.innerHTML = '<p class="admin-loading">Loading...</p>';
+
+  try {
+    const [feedbackSnap, incidentsSnap, profileSnap, waitlistSnap] = await Promise.all([
+      getDocs(query(collection(db, 'adminFeedback'), orderBy('timestamp', 'desc'), limit(100))),
+      getDocs(query(collection(db, 'incidents'), orderBy('createdAt', 'desc'), limit(50))),
+      getDocs(query(collectionGroup(db, 'profile'))),
+      getDocs(query(collection(db, 'waitlist'), orderBy('createdAt', 'desc'), limit(500)))
+    ]);
+
+    const feedback = feedbackSnap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+    const incidents = incidentsSnap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+    const profiles = profileSnap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+    const waitlist = waitlistSnap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+    const tickets = [
+      ...feedback.map((item) => ({
+        id: item.id,
+        title: item.subject || item.type || 'Support request',
+        reason: item.body || 'User feedback captured',
+        priority: _ticketPriorityFromType(item.type || ''),
+        source: 'Feedback',
+        createdAt: item.timestamp
+      })),
+      ...incidents.map((item) => ({
+        id: item.id,
+        title: item.title || 'Incident',
+        reason: item.body || 'Operational incident',
+        priority: _ticketPriorityFromSeverity(item.severity),
+        source: 'Incident',
+        createdAt: item.createdAt
+      }))
+    ].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+    const planSummary = _summarizePlans(profiles);
+    const supportCounts = {
+      open: tickets.filter((item) => item.priority === 'critical' || item.priority === 'high').length,
+      medium: tickets.filter((item) => item.priority === 'medium').length,
+      low: tickets.filter((item) => item.priority === 'low').length
+    };
+    const latestResolved = incidents.filter((item) => _normalizeStatus(item.status) === 'resolved').slice(0, 5);
+    const founderSnapshot = {
+      newUsers: waitlist.filter((item) => _isWithinDays(item.createdAt, 7)).length,
+      activeUsers: profiles.filter((item) => _isWithinDays(item.updatedAt || item.createdAt, 7)).length,
+      proUsers: planSummary.pro,
+      freeUsers: planSummary.free,
+      enterpriseUsers: planSummary.enterprise,
+      openTickets: supportCounts.open + supportCounts.medium,
+      failures: incidents.filter((item) => _normalizeStatus(item.status) !== 'resolved').length
+    };
+
+    panel.innerHTML = `
+      <div class="admin-overview-grid">
+        <section class="admin-overview-card">
+          <div class="admin-card-head">
+            <div>
+              <h3>Support center</h3>
+              <p class="admin-card-subtitle">Use existing feedback and incident records as the current support queue.</p>
+            </div>
+            <span class="admin-muted">${tickets.length} tickets</span>
+          </div>
+          <div class="admin-stats-grid admin-analytics-stats">
+            ${_statCard('Critical', supportCounts.open)}
+            ${_statCard('Medium', supportCounts.medium)}
+            ${_statCard('Low', supportCounts.low)}
+            ${_statCard('Resolved', latestResolved.length)}
+          </div>
+          <div class="admin-table-shell">
+            <table class="admin-simple-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Priority</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tickets.slice(0, 8).map((ticket) => `
+                  <tr>
+                    <td>${_esc(ticket.title)}</td>
+                    <td><span class="admin-badge ${_ticketBadgeClass(ticket.priority)}">${_esc(ticket.priority)}</span></td>
+                    <td>${_esc(ticket.source)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="admin-overview-card">
+          <div class="admin-card-head">
+            <div>
+              <h3>Subscription snapshot</h3>
+              <p class="admin-card-subtitle">Plan counts are inferred from profile records when plan data is present.</p>
+            </div>
+            <span class="admin-muted">${profiles.length} profiles</span>
+          </div>
+          <div class="admin-stats-grid admin-analytics-stats">
+            ${_statCard('Free', planSummary.free)}
+            ${_statCard('Pro', planSummary.pro)}
+            ${_statCard('Enterprise', planSummary.enterprise)}
+            ${_statCard('Unspecified', planSummary.unspecified)}
+          </div>
+          <div class="admin-health-grid">
+            <article class="admin-health-item admin-health-ok">
+              <span class="admin-health-label">Billing connector</span>
+              <strong>Not wired</strong>
+              <p>Subscription rows are ready to connect when payment data exists.</p>
+            </article>
+            <article class="admin-health-item admin-health-warning">
+              <span class="admin-health-label">Renewals</span>
+              <strong>Manual review</strong>
+              <p>No automated payment renewal feed is connected yet.</p>
+            </article>
+          </div>
+        </section>
+      </div>
+
+      <section class="admin-overview-card">
+        <div class="admin-card-head">
+          <div>
+            <h3>Founder command center</h3>
+            <p class="admin-card-subtitle">A fast snapshot for the owner without any extra navigation.</p>
+          </div>
+          <span class="admin-live-pill">Today</span>
+        </div>
+        <div class="admin-stats-grid admin-ops-stats">
+          ${_statCard('New Users', founderSnapshot.newUsers)}
+          ${_statCard('Active Users', founderSnapshot.activeUsers)}
+          ${_statCard('Pro Users', founderSnapshot.proUsers)}
+          ${_statCard('Open Tickets', founderSnapshot.openTickets)}
+          ${_statCard('Failures', founderSnapshot.failures)}
+          ${_statCard('Enterprise', founderSnapshot.enterpriseUsers)}
+        </div>
+      </section>
+    `;
+  } catch (err) {
+    panel.innerHTML = `<p class="admin-error">Failed to load: ${err.message}</p>`;
+  }
+}
+
 async function _loadConversionJobs() {
   try {
     const snap = await getDocs(query(collectionGroup(db, 'conversionJobs'), orderBy('updatedAt', 'desc'), limit(120)));
@@ -507,6 +651,42 @@ function _jobBadgeClass(status) {
   if (normalized === 'running') return 'admin-badge-sev-medium';
   if (normalized === 'completed' || normalized === 'imported' || normalized === 'imported-with-fallback') return 'admin-badge-ok';
   return 'admin-badge-type';
+}
+
+function _ticketPriorityFromType(type) {
+  const normalized = String(type || '').trim().toLowerCase();
+  if (normalized === 'bug') return 'high';
+  if (normalized === 'question') return 'low';
+  if (normalized === 'feature') return 'medium';
+  return 'medium';
+}
+
+function _ticketPriorityFromSeverity(severity) {
+  const normalized = _normalizeSeverity(severity);
+  if (normalized === 'critical') return 'critical';
+  if (normalized === 'high') return 'high';
+  if (normalized === 'medium') return 'medium';
+  return 'low';
+}
+
+function _ticketBadgeClass(priority) {
+  const normalized = String(priority || 'low').trim().toLowerCase();
+  if (normalized === 'critical') return 'admin-badge-danger';
+  if (normalized === 'high') return 'admin-badge-sev-high';
+  if (normalized === 'medium') return 'admin-badge-sev-medium';
+  return 'admin-badge-ok';
+}
+
+function _summarizePlans(profiles) {
+  const summary = { free: 0, pro: 0, enterprise: 0, unspecified: 0 };
+  profiles.forEach((profile) => {
+    const plan = String(profile.plan || profile.subscriptionPlan || profile.billingPlan || '').trim().toLowerCase();
+    if (plan === 'pro' || plan === 'premium') summary.pro += 1;
+    else if (plan === 'enterprise') summary.enterprise += 1;
+    else if (plan === 'free') summary.free += 1;
+    else summary.unspecified += 1;
+  });
+  return summary;
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────
