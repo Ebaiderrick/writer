@@ -1,10 +1,12 @@
 import { auth, db } from './firebase.js';
 import {
-  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+  collection, collectionGroup, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   query, orderBy, limit, addDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { showToast, renderHome } from './ui.js';
+import { state } from './config.js';
 import { FeatureFlags } from './featureFlags.js';
+import { listConversionJobRecords } from './conversionJobStore.js';
 
 let _view = null;
 let _isAdmin = false;
@@ -98,6 +100,7 @@ function _activateTab(name) {
 
   const loaders = {
     overview: _loadOverview,
+    analytics: _loadAnalytics,
     users: _loadUsers,
     feedback: _loadFeedback,
     flags: _loadFlags,
@@ -293,6 +296,217 @@ function _normalizeStatus(value) {
 
 function _normalizeSeverity(value) {
   return String(value || 'low').trim().toLowerCase();
+}
+
+async function _loadAnalytics() {
+  const panel = document.getElementById('adminAnalyticsPanel');
+  if (!panel) return;
+  panel.innerHTML = '<p class="admin-loading">Loading...</p>';
+
+  try {
+    const [jobs, projectTasks] = await Promise.all([
+      _loadConversionJobs(),
+      Promise.resolve(_collectSystemTasks())
+    ]);
+    const groupedByStatus = {
+      queued: jobs.filter((job) => _normalizeStatus(job.status) === 'queued').length,
+      running: jobs.filter((job) => _normalizeStatus(job.status) === 'running').length,
+      success: jobs.filter((job) => ['completed', 'imported', 'imported-with-fallback'].includes(_normalizeStatus(job.status))).length,
+      failed: jobs.filter((job) => _normalizeStatus(job.status) === 'failed').length
+    };
+    const fallbackCount = jobs.filter((job) => _normalizeStatus(job.status) === 'imported-with-fallback').length;
+    const typeBuckets = _bucketJobsByType(jobs);
+    const latestFailures = jobs
+      .filter((job) => _normalizeStatus(job.status) === 'failed')
+      .slice(0, 5);
+    const latestJobs = jobs.slice(0, 6);
+    const aiTaskSummary = _summarizeSystemTasks(projectTasks);
+    const maxBucket = Math.max(...Object.values(typeBuckets).map((count) => count || 0), 1);
+
+    panel.innerHTML = `
+      <div class="admin-analytics-grid">
+        <section class="admin-overview-card">
+          <div class="admin-card-head">
+            <div>
+              <h3>Conversion pipeline</h3>
+              <p class="admin-card-subtitle">Cross-user conversion jobs, with local fallback if the global query is restricted.</p>
+            </div>
+            <span class="admin-muted">${jobs.length} jobs</span>
+          </div>
+          <div class="admin-stats-grid admin-analytics-stats">
+            ${_statCard('Queued', groupedByStatus.queued)}
+            ${_statCard('Running', groupedByStatus.running)}
+            ${_statCard('Succeeded', groupedByStatus.success)}
+            ${_statCard('Failed', groupedByStatus.failed)}
+          </div>
+          <div class="admin-failure-note">
+            <strong>Fallback imports:</strong> ${fallbackCount}
+          </div>
+          <div class="admin-bar-chart" aria-label="Conversion job types">
+            ${Object.entries(typeBuckets).map(([label, count]) => `
+              <div class="admin-bar-row">
+                <span>${_esc(label)}</span>
+                <div class="admin-bar-track"><div class="admin-bar-fill" style="width:${Math.max(8, Math.round((count / maxBucket) * 100))}%"></div></div>
+                <strong>${count}</strong>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+
+        <section class="admin-overview-card">
+          <div class="admin-card-head">
+            <div>
+              <h3>AI workload</h3>
+              <p class="admin-card-subtitle">System-generated workspace task activity in the current session.</p>
+            </div>
+            <span class="admin-muted">${aiTaskSummary.total} tasks</span>
+          </div>
+          <div class="admin-stats-grid admin-analytics-stats">
+            ${_statCard('Review', aiTaskSummary.review)}
+            ${_statCard('Retry', aiTaskSummary.failed)}
+            ${_statCard('Scheduled', aiTaskSummary.scheduled)}
+            ${_statCard('Applied', aiTaskSummary.applied)}
+          </div>
+          <div class="admin-health-grid">
+            <article class="admin-health-item admin-health-ok">
+              <span class="admin-health-label">AI success ratio</span>
+              <strong>${aiTaskSummary.total ? Math.round((aiTaskSummary.applied / aiTaskSummary.total) * 100) : 0}%</strong>
+              <p>Applied tasks versus total AI tasks in memory.</p>
+            </article>
+            <article class="admin-health-item admin-health-warning">
+              <span class="admin-health-label">Attention queue</span>
+              <strong>${aiTaskSummary.review + aiTaskSummary.failed}</strong>
+              <p>Tasks still waiting on review or retry.</p>
+            </article>
+          </div>
+          <div class="admin-activity-list admin-analytics-activity">
+            ${latestJobs.length ? latestJobs.map((job) => `
+              <div class="admin-activity-row">
+                <span class="admin-badge ${_jobBadgeClass(job.status)}">${_esc(job.status || 'queued')}</span>
+                <div class="admin-activity-copy">
+                  <strong>${_esc(job.fileName || 'Untitled conversion')}</strong>
+                  <p>${_esc(job.stageLabel || 'No stage available')} • ${_esc(job.projectId || 'No project')}</p>
+                </div>
+                <small>${_formatTime(job.updatedAt || job.createdAt)}</small>
+              </div>
+            `).join('') : '<p class="admin-loading">No conversion jobs available.</p>'}
+          </div>
+        </section>
+      </div>
+
+      <section class="admin-overview-card">
+        <div class="admin-card-head">
+          <div>
+            <h3>Recent failures</h3>
+            <p class="admin-card-subtitle">These should surface immediately so you can see broken conversion flows.</p>
+          </div>
+          <span class="admin-muted">${latestFailures.length} failures</span>
+        </div>
+        <div class="admin-table-shell">
+          <table class="admin-simple-table">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Reason</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${latestFailures.length ? latestFailures.map((job) => `
+                <tr>
+                  <td>${_esc(job.fileName || 'Untitled file')}</td>
+                  <td>${_esc((job.warnings && job.warnings[0]) || job.stageLabel || 'Conversion failed')}</td>
+                  <td>${_formatTime(job.updatedAt || job.createdAt)}</td>
+                </tr>
+              `).join('') : `
+                <tr>
+                  <td colspan="3">No failed conversions yet.</td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  } catch (err) {
+    panel.innerHTML = `<p class="admin-error">Failed to load: ${err.message}</p>`;
+  }
+}
+
+async function _loadConversionJobs() {
+  try {
+    const snap = await getDocs(query(collectionGroup(db, 'conversionJobs'), orderBy('updatedAt', 'desc'), limit(120)));
+    const jobs = snap.docs.map((entry) => entry.data()).filter((job) => job?.id);
+    if (jobs.length) return jobs;
+  } catch (error) {
+    console.warn('Admin conversion job aggregate failed; falling back to current session jobs.', error);
+  }
+
+  try {
+    const localJobs = await listConversionJobRecords();
+    return Array.isArray(localJobs) ? localJobs : [];
+  } catch {
+    return [];
+  }
+}
+
+function _collectSystemTasks() {
+  const tasks = (state.projects || []).flatMap((project) => Array.isArray(project?.workspace?.tasks) ? project.workspace.tasks : []);
+  return tasks.filter((task) => task?.assigneeType === 'system');
+}
+
+function _summarizeSystemTasks(tasks) {
+  const summary = {
+    total: tasks.length,
+    review: 0,
+    failed: 0,
+    scheduled: 0,
+    applied: 0
+  };
+  tasks.forEach((task) => {
+    const stateLabel = _normalizeStatus(task.aiState);
+    if (stateLabel === 'review') summary.review += 1;
+    else if (stateLabel === 'failed') summary.failed += 1;
+    else if (stateLabel === 'scheduled' || stateLabel === 'ready' || stateLabel === 'running') summary.scheduled += 1;
+    else if (stateLabel === 'applied' || stateLabel === 'dismissed') summary.applied += 1;
+  });
+  return summary;
+}
+
+function _bucketJobsByType(jobs) {
+  const buckets = {
+    "PDF -> Wraita": 0,
+    "DOCX -> Wraita": 0,
+    "Export PDF": 0,
+    "Export DOCX": 0,
+    "Other": 0
+  };
+
+  jobs.forEach((job) => {
+    const name = String(job.fileName || job.sourceFile?.name || '').toLowerCase();
+    const stage = String(job.stageLabel || '').toLowerCase();
+    if (name.endsWith('.pdf') || stage.includes('pdf')) {
+      buckets["PDF -> Wraita"] += 1;
+    } else if (name.endsWith('.docx') || stage.includes('docx')) {
+      buckets["DOCX -> Wraita"] += 1;
+    } else if (stage.includes('export pdf')) {
+      buckets["Export PDF"] += 1;
+    } else if (stage.includes('export docx')) {
+      buckets["Export DOCX"] += 1;
+    } else {
+      buckets["Other"] += 1;
+    }
+  });
+
+  return buckets;
+}
+
+function _jobBadgeClass(status) {
+  const normalized = _normalizeStatus(status);
+  if (normalized === 'failed') return 'admin-badge-danger';
+  if (normalized === 'running') return 'admin-badge-sev-medium';
+  if (normalized === 'completed' || normalized === 'imported' || normalized === 'imported-with-fallback') return 'admin-badge-ok';
+  return 'admin-badge-type';
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────
