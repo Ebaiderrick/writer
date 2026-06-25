@@ -287,50 +287,38 @@ async function _loadOverview() {
           </div>
         </section>
       </div>
-      <section class="admin-overview-card">
-        <div class="admin-card-head">
-          <h3>Activity</h3>
-          <span class="admin-muted">${recentActivity.length}</span>
-        </div>
-        <div class="admin-activity-list">
-          ${recentActivity.length ? recentActivity.map((item) => `
-            <div class="admin-activity-row">
-              <span class="admin-badge ${item.tone === 'warning' ? 'admin-badge-sev-medium' : item.tone === 'ok' ? 'admin-badge-ok' : 'admin-badge-type'}">${_esc(item.type)}</span>
-              <div class="admin-activity-copy">
-                <strong>${_esc(item.title)}</strong>
-                <p>${_esc(item.body)}</p>
-              </div>
-              <small>${_formatTime(item.time)}</small>
-            </div>
-          `).join('') : '<p class="admin-loading">No recent activity yet.</p>'}
-        </div>
-      </section>
-      <section class="admin-overview-card">
-        <div class="admin-card-head">
-          <h3>Users</h3>
-          <span class="admin-muted">${users.length}</span>
-        </div>
-        <div class="admin-table-shell">
-          <table class="admin-simple-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email key</th>
-                <th>UID</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${users.slice(0, 8).map((user) => `
-                <tr>
-                  <td>${_esc(user.name || user.displayName || '—')}</td>
-                  <td>${_esc(user.id)}</td>
-                  <td><code>${_esc(user.uid || '—')}</code></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <div class="admin-overview-grid admin-overview-grid-compact">
+        <section class="admin-overview-card">
+          <div class="admin-card-head">
+            <h3>Activity</h3>
+            <span class="admin-muted">${recentActivity.length}</span>
+          </div>
+          ${_renderStackBars([
+            { label: 'Signs', value: signups.length, tone: 'accent' },
+            { label: 'Feedback', value: feedback.length, tone: 'ok' },
+            { label: 'Incidents', value: incidents.length, tone: 'danger' }
+          ])}
+          <div class="admin-chart-foot">
+            <span><strong>${recentActivity.length}</strong> recent items</span>
+            <span><strong>${users.length}</strong> users</span>
+          </div>
+        </section>
+        <section class="admin-overview-card">
+          <div class="admin-card-head">
+            <h3>Users</h3>
+            <span class="admin-muted">${users.length}</span>
+          </div>
+          ${_renderStackBars([
+            { label: 'Mirrored', value: users.length, tone: 'accent' },
+            { label: 'Active', value: activeUsers.length, tone: 'ok' },
+            { label: 'New', value: recentSignups.length, tone: 'warning' }
+          ])}
+          <div class="admin-chart-foot">
+            <span><strong>${activeUsers.length}</strong> active</span>
+            <span><strong>${recentSignups.length}</strong> new</span>
+          </div>
+        </section>
+      </div>
     `;
     _wireAdminQuickActions(panel);
   } catch (err) {
@@ -587,17 +575,9 @@ async function _loadAnalytics() {
               <p>Tasks still waiting on review or retry.</p>
             </article>
           </div>
-          <div class="admin-activity-list admin-analytics-activity">
-            ${latestJobs.length ? latestJobs.map((job) => `
-              <div class="admin-activity-row">
-                <span class="admin-badge ${_jobBadgeClass(job.status)}">${_esc(job.status || 'queued')}</span>
-                <div class="admin-activity-copy">
-                  <strong>${_esc(job.fileName || 'Untitled conversion')}</strong>
-                  <p>${_esc(job.stageLabel || 'No stage available')} • ${_esc(job.projectId || 'No project')}</p>
-                </div>
-                <small>${_formatTime(job.updatedAt || job.createdAt)}</small>
-              </div>
-            `).join('') : '<p class="admin-loading">No conversion jobs available.</p>'}
+          <div class="admin-chart-foot">
+            <span><strong>${latestJobs.length}</strong> recent jobs</span>
+            <span><strong>${typeBuckets["Other"]}</strong> uncategorized</span>
           </div>
         </section>
       </div>
@@ -607,30 +587,11 @@ async function _loadAnalytics() {
           <h3>Failures</h3>
           <span class="admin-muted">${latestFailures.length}</span>
         </div>
-        <div class="admin-table-shell">
-          <table class="admin-simple-table">
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Reason</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${latestFailures.length ? latestFailures.map((job) => `
-                <tr>
-                  <td>${_esc(job.fileName || 'Untitled file')}</td>
-                  <td>${_esc((job.warnings && job.warnings[0]) || job.stageLabel || 'Conversion failed')}</td>
-                  <td>${_formatTime(job.updatedAt || job.createdAt)}</td>
-                </tr>
-              `).join('') : `
-                <tr>
-                  <td colspan="3">No failed conversions yet.</td>
-                </tr>
-              `}
-            </tbody>
-          </table>
-        </div>
+        ${_renderStackBars([
+          { label: 'Failed', value: latestFailures.length, tone: 'danger' },
+          { label: 'Succeeded', value: groupedByStatus.success, tone: 'ok' },
+          { label: 'Queued', value: groupedByStatus.queued, tone: 'warning' }
+        ])}
       </section>
     `;
   } catch (err) {
@@ -731,25 +692,9 @@ async function _loadSupportSnapshot() {
             ${_statCard('Resolved', latestResolved.length)}
           </div>
           ${supportChart}
-          <div class="admin-table-shell">
-            <table class="admin-simple-table">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Priority</th>
-                  <th>Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${tickets.slice(0, 8).map((ticket) => `
-                  <tr>
-                    <td>${_esc(ticket.title)}</td>
-                    <td><span class="admin-badge ${_ticketBadgeClass(ticket.priority)}">${_esc(ticket.priority)}</span></td>
-                    <td>${_esc(ticket.source)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+          <div class="admin-chart-foot">
+            <span><strong>${tickets.length}</strong> tickets</span>
+            <span><strong>${latestResolved.length}</strong> resolved</span>
           </div>
         </section>
 
@@ -1337,3 +1282,6 @@ async function _saveAnnouncement() {
 function _esc(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+
+
