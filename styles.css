@@ -11899,8 +11899,10 @@ html[data-theme="white"] .user-trigger {
   top: 0;
   z-index: 12;
   padding: 14px 20px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
 }
 
 .admin-topbar-title {
@@ -11930,36 +11932,42 @@ html[data-theme="white"] .user-trigger {
 .admin-nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 16px 10px;
-  width: 170px;
+  gap: 6px;
+  padding: 16px 12px;
+  width: 210px;
   flex-shrink: 0;
   border-right: 1px solid var(--line);
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
   overflow-y: auto;
 }
 
 .admin-tab {
-  background: none;
-  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--muted);
   font-size: 0.88rem;
   text-align: left;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: background .15s, color .15s;
+  transition: background .15s, color .15s, border-color .15s, transform .15s;
 }
 
 .admin-tab:hover {
   background: var(--accent-soft);
   color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  transform: translateX(1px);
 }
 
 .admin-tab.is-active {
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-weight: 600;
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .admin-content {
@@ -11977,8 +11985,10 @@ html[data-theme="white"] .user-trigger {
 }
 
 .admin-section-inner {
-  padding: 24px 28px;
-  max-width: 860px;
+  padding: 24px 28px 32px;
+  max-width: 1140px;
+  display: grid;
+  gap: 16px;
 }
 
 .admin-section-inner h2 {
@@ -12002,7 +12012,7 @@ html[data-theme="white"] .user-trigger {
 
 .admin-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 14px;
   margin-bottom: 20px;
 }
@@ -12068,9 +12078,9 @@ html[data-theme="white"] .user-trigger {
 }
 
 .admin-overview-card {
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 16px;
   box-shadow: var(--shadow);
 }
@@ -12155,9 +12165,9 @@ html[data-theme="white"] .user-trigger {
 
 .admin-health-item {
   padding: 12px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  background: color-mix(in srgb, var(--panel) 95%, transparent);
 }
 
 .admin-health-item strong {
@@ -12231,8 +12241,9 @@ html[data-theme="white"] .user-trigger {
 .admin-table-shell {
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: var(--shadow);
 }
 
 .admin-simple-table {
@@ -12264,9 +12275,9 @@ html[data-theme="white"] .user-trigger {
 }
 
 .admin-stat-card {
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 95%, transparent);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 14px;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -12346,9 +12357,9 @@ html[data-theme="white"] .user-trigger {
 .admin-incident-item,
 .admin-incident-form,
 .admin-ann-current {
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 16px;
   box-shadow: var(--shadow);
 }
 
@@ -12359,7 +12370,7 @@ html[data-theme="white"] .user-trigger {
 
 .admin-feedback-item,
 .admin-incident-item {
-  padding: 12px;
+  padding: 14px 16px;
   margin-bottom: 10px;
 }
 
@@ -12468,9 +12479,9 @@ html[data-theme="white"] .user-trigger {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  background: color-mix(in srgb, var(--panel) 95%, transparent);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 12px;
   margin-bottom: 6px;
 }
 
