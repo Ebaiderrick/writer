@@ -854,21 +854,94 @@
           <section class="admin-section is-active" data-admin-section="overview">
             <div class="admin-section-inner">
               <h2>Operations at a glance</h2>
-              <div id="adminOverviewPanel"><p class="admin-loading">Loading...</p></div>
+              <div id="adminOverviewPanel">
+                <section class="admin-overview-card">
+                  <div class="admin-card-head">
+                    <h3>Growth</h3>
+                    <div class="admin-inline-filters">
+                      <select id="adminOverviewRange" class="comment-filter-select admin-mini-select">
+                        <option value="7">7D</option>
+                        <option value="14">14D</option>
+                        <option value="30">30D</option>
+                      </select>
+                      <select id="adminOverviewMode" class="comment-filter-select admin-mini-select">
+                        <option value="growth">Growth</option>
+                        <option value="incidents">Incidents</option>
+                        <option value="support">Support</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="admin-skel-chart"></div>
+                </section>
+                <section class="admin-overview-card">
+                  <div class="admin-card-head">
+                    <h3>Incidents</h3>
+                    <div class="admin-inline-filters">
+                      <select id="adminIncidentRange" class="comment-filter-select admin-mini-select">
+                        <option value="7">7D</option>
+                        <option value="14">14D</option>
+                        <option value="30">30D</option>
+                      </select>
+                      <select id="adminIncidentMode" class="comment-filter-select admin-mini-select">
+                        <option value="bar">Bar</option>
+                        <option value="line">Line</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="admin-skel-chart admin-skel-chart-bars"></div>
+                </section>
+              </div>
             </div>
           </section>
 
           <section class="admin-section" data-admin-section="analytics">
             <div class="admin-section-inner">
               <h2>AI &amp; Conversion Center</h2>
-              <div id="adminAnalyticsPanel"><p class="admin-loading">Loading...</p></div>
+              <div id="adminAnalyticsPanel">
+                <section class="admin-overview-card">
+                  <div class="admin-card-head">
+                    <h3>Pipeline</h3>
+                    <div class="admin-inline-filters">
+                      <select id="adminAnalyticsRange" class="comment-filter-select admin-mini-select">
+                        <option value="7">7D</option>
+                        <option value="14">14D</option>
+                        <option value="30">30D</option>
+                      </select>
+                      <select id="adminAnalyticsMode" class="comment-filter-select admin-mini-select">
+                        <option value="queued">Queued</option>
+                        <option value="running">Running</option>
+                        <option value="failed">Failed</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="admin-skel-chart"></div>
+                </section>
+              </div>
             </div>
           </section>
 
           <section class="admin-section" data-admin-section="support">
             <div class="admin-section-inner">
               <h2>Support &amp; Revenue</h2>
-              <div id="adminSupportPanel"><p class="admin-loading">Loading...</p></div>
+              <div id="adminSupportPanel">
+                <section class="admin-overview-card">
+                  <div class="admin-card-head">
+                    <h3>Support</h3>
+                    <div class="admin-inline-filters">
+                      <select id="adminSupportRange" class="comment-filter-select admin-mini-select">
+                        <option value="7">7D</option>
+                        <option value="14">14D</option>
+                        <option value="30">30D</option>
+                      </select>
+                      <select id="adminSupportMode" class="comment-filter-select admin-mini-select">
+                        <option value="tickets">Tickets</option>
+                        <option value="plans">Plans</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="admin-skel-chart admin-skel-chart-bars"></div>
+                </section>
+              </div>
             </div>
           </section>
 
@@ -877,10 +950,7 @@
               <h2>User Management</h2>
               <section class="admin-overview-card">
                 <div class="admin-card-head">
-                  <div>
-                    <h3>User lookup</h3>
-                    <p class="admin-card-subtitle">Search by email to see the mirrored account profile and recent activity.</p>
-                  </div>
+                  <h3>User lookup</h3>
                   <span class="admin-muted">Live search</span>
                 </div>
                 <div class="admin-search-row">
@@ -897,10 +967,7 @@
               <h2>Feedback</h2>
               <section class="admin-overview-card">
                 <div class="admin-card-head">
-                  <div>
-                    <h3>Feedback queue</h3>
-                    <p class="admin-card-subtitle">Review user comments, bug reports, and feature requests in one stream.</p>
-                  </div>
+                  <h3>Feedback queue</h3>
                   <span class="admin-muted">Sortable</span>
                 </div>
                 <div class="admin-filter-row">
@@ -923,10 +990,7 @@
               <h2>Feature Flags</h2>
               <section class="admin-overview-card">
                 <div class="admin-card-head">
-                  <div>
-                    <h3>Flag control</h3>
-                    <p class="admin-card-subtitle">Flags are stored in <code>config/featureFlags</code> and cached client-side for 5 minutes.</p>
-                  </div>
+                  <h3>Flag control</h3>
                   <span class="admin-muted">Config-driven</span>
                 </div>
                 <div id="adminFlagList"></div>
@@ -946,10 +1010,7 @@
               <h2>Incidents</h2>
               <section class="admin-overview-card">
                 <div class="admin-card-head">
-                  <div>
-                    <h3>Incident workflow</h3>
-                    <p class="admin-card-subtitle">Track live issues and create new incidents without leaving the dashboard.</p>
-                  </div>
+                  <h3>Incident workflow</h3>
                   <span class="admin-muted">Operations</span>
                 </div>
                 <div class="admin-incident-form">
@@ -976,10 +1037,7 @@
               <h2>Waitlist <span id="adminWaitlistCount" style="font-size:1rem;font-weight:400;color:var(--text-muted);"></span></h2>
               <section class="admin-overview-card">
                 <div class="admin-card-head">
-                  <div>
-                    <h3>Waitlist export</h3>
-                    <p class="admin-card-subtitle">Users who signed up for Premium early access from the marketing site.</p>
-                  </div>
+                  <h3>Waitlist export</h3>
                   <span class="admin-muted">CSV ready</span>
                 </div>
                 <div style="margin-bottom:16px;">
@@ -995,10 +1053,7 @@
               <h2>Announcement Banner</h2>
               <section class="admin-overview-card">
                 <div class="admin-card-head">
-                  <div>
-                    <h3>Announcement banner</h3>
-                    <p class="admin-card-subtitle">The banner appears at the top of the app for all users. Set <strong>enabled</strong> to show it, or disable to hide it without deleting the message.</p>
-                  </div>
+                  <h3>Announcement banner</h3>
                   <span class="admin-muted">Global</span>
                 </div>
                 <div id="adminAnnouncementStatus" class="admin-ann-status"></div>

@@ -10,6 +10,8 @@ import { listConversionJobRecords } from './conversionJobStore.js';
 
 let _view = null;
 let _isAdmin = false;
+let _activeAdminTab = 'overview';
+const _adminChartState = { range: 7, overviewMode: 'growth', analyticsMode: 'queued', supportMode: 'tickets' };
 
 // ─── Admin identity check ──────────────────────────────────────────────────
 
@@ -39,6 +41,7 @@ export const Admin = {
 
     document.getElementById('adminBackBtn')?.addEventListener('click', Admin.hide);
     _bindTabs();
+    _bindAdminFilters();
     _bindUsers();
     _bindFeedback();
     _bindFlags();
@@ -93,6 +96,7 @@ function _bindTabs() {
 }
 
 function _activateTab(name) {
+  _activeAdminTab = name;
   _view.querySelectorAll('[data-admin-tab]').forEach(t =>
     t.classList.toggle('is-active', t.dataset.adminTab === name));
   _view.querySelectorAll('[data-admin-section]').forEach(s =>
@@ -112,12 +116,28 @@ function _activateTab(name) {
   loaders[name]?.();
 }
 
+function _bindAdminFilters() {
+  const rerender = () => _activateTab(_activeAdminTab);
+  const overviewRange = document.getElementById('adminOverviewRange');
+  const overviewMode = document.getElementById('adminOverviewMode');
+  const analyticsRange = document.getElementById('adminAnalyticsRange');
+  const analyticsMode = document.getElementById('adminAnalyticsMode');
+  const supportRange = document.getElementById('adminSupportRange');
+  const supportMode = document.getElementById('adminSupportMode');
+  overviewRange?.addEventListener('change', () => { _adminChartState.range = Number(overviewRange.value) || 7; rerender(); });
+  overviewMode?.addEventListener('change', () => { _adminChartState.overviewMode = overviewMode.value || 'growth'; rerender(); });
+  analyticsRange?.addEventListener('change', () => { _adminChartState.range = Number(analyticsRange.value) || 7; rerender(); });
+  analyticsMode?.addEventListener('change', () => { _adminChartState.analyticsMode = analyticsMode.value || 'queued'; rerender(); });
+  supportRange?.addEventListener('change', () => { _adminChartState.range = Number(supportRange.value) || 7; rerender(); });
+  supportMode?.addEventListener('change', () => { _adminChartState.supportMode = supportMode.value || 'tickets'; rerender(); });
+}
+
 // ─── Overview ────────────────────────────────────────────────────────────
 
 async function _loadOverview() {
   const panel = document.getElementById('adminOverviewPanel');
   if (!panel) return;
-  panel.innerHTML = '<p class="admin-loading">Loading…</p>';
+  panel.innerHTML = _overviewSkeleton();
   try {
     const [sigSnap, fbSnap, auSnap, incSnap, waitSnap, usersSnap] = await Promise.all([
       getDocs(collection(db, 'adminSignups')),
@@ -136,6 +156,26 @@ async function _loadOverview() {
     const openIncidents = incidents.filter((item) => _normalizeStatus(item.status) !== 'resolved');
     const criticalIncidents = openIncidents.filter((item) => _normalizeSeverity(item.severity) === 'critical');
     const recentSignups = signups.filter((item) => _isWithinDays(item.createdAt, 7));
+    const recentWaitlist = waitlist.filter((item) => _isWithinDays(item.createdAt, 7));
+    const trendDays = _buildTrendDays(_adminChartState.range);
+    const growthTrend = _buildTrendSeries(trendDays, [
+      { label: 'Signups', items: signups, source: (item) => item.createdAt },
+      { label: 'Waitlist', items: waitlist, source: (item) => item.createdAt },
+      { label: 'Feedback', items: feedback, source: (item) => item.timestamp }
+    ]);
+    const incidentTrend = _buildTrendSeries(trendDays, [
+      { label: 'Open incidents', items: incidents.filter((item) => _normalizeStatus(item.status) !== 'resolved'), source: (item) => item.createdAt || item.updatedAt },
+      { label: 'Resolved', items: incidents.filter((item) => _normalizeStatus(item.status) === 'resolved'), source: (item) => item.updatedAt || item.createdAt }
+    ]);
+    const overviewChart = _adminChartState.overviewMode === 'incidents'
+      ? _renderTrendChart(incidentTrend, { primaryLabel: 'Open incidents', secondaryLabel: 'Resolved' })
+      : _adminChartState.overviewMode === 'support'
+        ? _renderStackBars([
+          { label: 'Tickets', value: feedback.length + incidents.length, tone: 'accent' },
+          { label: 'Critical', value: criticalIncidents.length, tone: 'danger' },
+          { label: 'Resolved', value: incidents.filter((item) => _normalizeStatus(item.status) === 'resolved').length, tone: 'ok' }
+        ])
+        : _renderTrendChart(growthTrend, { primaryLabel: 'Signups', secondaryLabel: 'Waitlist', tertiaryLabel: 'Feedback' });
     const recentActivity = [
       ...signups.map((item) => ({
         type: 'Signup',
@@ -186,17 +226,38 @@ async function _loadOverview() {
         ${_statCard('Waitlist Signups', waitlist.length)}
         ${_statCard('Open Incidents', openIncidents.length)}
       </div>
+      <section class="admin-overview-card">
+        <div class="admin-card-head">
+          <h3>Tools</h3>
+        </div>
+        <div class="admin-tool-grid">
+          ${_toolCard('Open Users', '', 'users')}
+          ${_toolCard('Review Feedback', '', 'feedback')}
+          ${_toolCard('Open Incidents', '', 'incidents')}
+          ${_toolCard('Export Waitlist', '', 'waitlist')}
+          ${_toolCard('Edit Flags', '', 'flags')}
+        </div>
+      </section>
       <div class="admin-overview-grid">
         <section class="admin-overview-card">
           <div class="admin-card-head">
-            <div>
-              <h3>System health</h3>
-              <p class="admin-card-subtitle">The admin view should tell you immediately if anything needs attention.</p>
-            </div>
+            <h3>Growth</h3>
+          </div>
+          ${overviewChart}
+          <div class="admin-chart-foot">
+            <span><strong>${recentSignups.length}</strong> new users</span>
+            <span><strong>${recentWaitlist.length}</strong> waitlist</span>
+            <span><strong>${feedback.filter((item) => _isWithinDays(item.timestamp, 7)).length}</strong> feedback</span>
+          </div>
+        </section>
+        <section class="admin-overview-card">
+          <div class="admin-card-head">
+            <h3>Incidents</h3>
             <span class="admin-badge ${healthTone === 'danger' ? 'admin-badge-danger' : healthTone === 'warning' ? 'admin-badge-sev-medium' : 'admin-badge-ok'}">
               ${criticalIncidents.length ? 'Attention needed' : openIncidents.length ? 'Watchlist' : 'Healthy'}
             </span>
           </div>
+          ${_renderTrendChart(incidentTrend, { primaryLabel: 'Open incidents', secondaryLabel: 'Resolved' })}
           <div class="admin-health-grid">
             ${healthRows.map((row) => `
               <article class="admin-health-item admin-health-${row.tone}">
@@ -207,35 +268,29 @@ async function _loadOverview() {
             `).join('')}
           </div>
         </section>
-        <section class="admin-overview-card">
-          <div class="admin-card-head">
-            <div>
-              <h3>Recent activity</h3>
-              <p class="admin-card-subtitle">Latest signals from signups, feedback, and incidents.</p>
-            </div>
-            <span class="admin-muted">${recentActivity.length} items</span>
-          </div>
-          <div class="admin-activity-list">
-            ${recentActivity.length ? recentActivity.map((item) => `
-              <div class="admin-activity-row">
-                <span class="admin-badge ${item.tone === 'warning' ? 'admin-badge-sev-medium' : item.tone === 'ok' ? 'admin-badge-ok' : 'admin-badge-type'}">${_esc(item.type)}</span>
-                <div class="admin-activity-copy">
-                  <strong>${_esc(item.title)}</strong>
-                  <p>${_esc(item.body)}</p>
-                </div>
-                <small>${_formatTime(item.time)}</small>
-              </div>
-            `).join('') : '<p class="admin-loading">No recent activity yet.</p>'}
-          </div>
-        </section>
       </div>
       <section class="admin-overview-card">
         <div class="admin-card-head">
-          <div>
-            <h3>User registry preview</h3>
-            <p class="admin-card-subtitle">A quick look at the accounts currently mirrored in the app.</p>
-          </div>
-          <span class="admin-muted">${users.length} tracked</span>
+          <h3>Activity</h3>
+          <span class="admin-muted">${recentActivity.length}</span>
+        </div>
+        <div class="admin-activity-list">
+          ${recentActivity.length ? recentActivity.map((item) => `
+            <div class="admin-activity-row">
+              <span class="admin-badge ${item.tone === 'warning' ? 'admin-badge-sev-medium' : item.tone === 'ok' ? 'admin-badge-ok' : 'admin-badge-type'}">${_esc(item.type)}</span>
+              <div class="admin-activity-copy">
+                <strong>${_esc(item.title)}</strong>
+                <p>${_esc(item.body)}</p>
+              </div>
+              <small>${_formatTime(item.time)}</small>
+            </div>
+          `).join('') : '<p class="admin-loading">No recent activity yet.</p>'}
+        </div>
+      </section>
+      <section class="admin-overview-card">
+        <div class="admin-card-head">
+          <h3>Users</h3>
+          <span class="admin-muted">${users.length}</span>
         </div>
         <div class="admin-table-shell">
           <table class="admin-simple-table">
@@ -259,6 +314,7 @@ async function _loadOverview() {
         </div>
       </section>
     `;
+    _wireAdminQuickActions(panel);
   } catch (err) {
     panel.innerHTML = `<p class="admin-error">Failed to load: ${err.message}</p>`;
   }
@@ -266,6 +322,134 @@ async function _loadOverview() {
 
 function _statCard(label, value) {
   return `<div class="admin-stat-card"><span class="admin-stat-value">${value}</span><span class="admin-stat-label">${label}</span></div>`;
+}
+
+function _toolCard(title, desc, target) {
+  return `
+    <button type="button" class="admin-tool-card" data-admin-jump="${_esc(target)}">
+      <strong>${_esc(title)}</strong>
+      ${desc ? `<span>${_esc(desc)}</span>` : ''}
+    </button>
+  `;
+}
+
+function _wireAdminQuickActions(panel) {
+  panel.querySelectorAll('[data-admin-jump]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.adminJump;
+      if (target) _activateTab(target);
+    });
+  });
+}
+
+function _buildTrendDays(count) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() - (count - 1 - index));
+    return date;
+  });
+}
+
+function _buildTrendSeries(days, seriesDefs) {
+  return seriesDefs.map((series) => ({
+    label: series.label,
+    values: days.map((day) => {
+      const key = day.toISOString().slice(0, 10);
+      return series.items.reduce((total, item) => total + (_dayKey(series.source(item)) === key ? 1 : 0), 0);
+    })
+  }));
+}
+
+function _dayKey(value) {
+  const ms = _parseTime(value);
+  if (!ms) return '';
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function _renderTrendChart(series, labels = {}) {
+  const colors = ['#38bdf8', '#22c55e', '#f59e0b'];
+  const maxValue = Math.max(1, ...series.flatMap((item) => item.values));
+  const dayCount = series[0]?.values.length || 0;
+  const xPositions = Array.from({ length: dayCount }, (_, index) => (dayCount <= 1 ? 0 : (index / (dayCount - 1)) * 100));
+  const axisLabels = dayCount ? Array.from({ length: dayCount }, (_, index) => (index === 0 ? '6d' : (index === dayCount - 1 ? 'Now' : ''))) : [];
+  return `
+    <div class="admin-trend-chart">
+      <svg viewBox="0 0 100 40" preserveAspectRatio="none" class="admin-trend-svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="adminTrendFill" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="rgba(56,189,248,0.26)"></stop>
+            <stop offset="100%" stop-color="rgba(56,189,248,0.04)"></stop>
+          </linearGradient>
+        </defs>
+        ${[10, 20, 30].map((y) => `<line x1="0" y1="${y}" x2="100" y2="${y}" class="admin-trend-grid"></line>`).join('')}
+        ${series.map((item, seriesIndex) => {
+          const points = item.values.map((value, index) => {
+            const x = xPositions[index];
+            const y = 36 - ((value / maxValue) * 28);
+            return `${x.toFixed(2)},${y.toFixed(2)}`;
+          }).join(' ');
+          const path = `M 0 40 ${points.split(' ').map((point) => `L ${point}`).join(' ')} L 100 40 Z`;
+          return `
+            <path d="${path}" fill="url(#adminTrendFill)" opacity="${seriesIndex === 0 ? 1 : 0.72}"></path>
+            <polyline points="${points}" fill="none" stroke="${colors[seriesIndex % colors.length]}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          `;
+        }).join('')}
+      </svg>
+      <div class="admin-trend-legend">
+        ${series.map((item, index) => `<span><i style="background:${colors[index % colors.length]}"></i>${_esc(labels[item.label] || item.label)}</span>`).join('')}
+      </div>
+      <div class="admin-trend-axis">
+        ${axisLabels.map((label) => `<span>${label}</span>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function _renderStackBars(items) {
+  const palette = {
+    accent: 'admin-bar-accent',
+    ok: 'admin-bar-ok',
+    warning: 'admin-bar-warning',
+    danger: 'admin-bar-danger',
+    muted: 'admin-bar-muted'
+  };
+  const maxValue = Math.max(1, ...items.map((item) => item.value || 0));
+  return `
+    <div class="admin-stack-bars">
+      ${items.map((item) => `
+        <div class="admin-stack-row">
+          <span>${_esc(item.label)}</span>
+          <div class="admin-bar-track">
+            <div class="admin-bar-fill ${palette[item.tone] || palette.accent}" style="width:${Math.max(10, Math.round(((item.value || 0) / maxValue) * 100))}%"></div>
+          </div>
+          <strong>${item.value || 0}</strong>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function _overviewSkeleton() {
+  return `
+    <section class="admin-overview-card">
+      <div class="admin-card-head"><h3>Growth</h3><div class="admin-inline-filters"><span class="admin-skel-pill"></span><span class="admin-skel-pill"></span></div></div>
+      <div class="admin-skel-chart"></div>
+    </section>
+    <section class="admin-overview-card">
+      <div class="admin-card-head"><h3>Incidents</h3><div class="admin-inline-filters"><span class="admin-skel-pill"></span><span class="admin-skel-pill"></span></div></div>
+      <div class="admin-skel-chart admin-skel-chart-bars"></div>
+    </section>
+    <section class="admin-overview-card">
+      <div class="admin-card-head"><h3>Status</h3><span class="admin-muted">Live</span></div>
+      <div class="admin-health-grid">
+        <article class="admin-health-item"><span class="admin-health-label">Auth</span><strong>?</strong></article>
+        <article class="admin-health-item"><span class="admin-health-label">Firestore</span><strong>?</strong></article>
+        <article class="admin-health-item"><span class="admin-health-label">Users</span><strong>?</strong></article>
+      </div>
+    </section>
+  `;
 }
 
 function _parseTime(value) {
@@ -323,16 +507,19 @@ async function _loadAnalytics() {
     const latestJobs = jobs.slice(0, 6);
     const aiTaskSummary = _summarizeSystemTasks(projectTasks);
     const maxBucket = Math.max(...Object.values(typeBuckets).map((count) => count || 0), 1);
+    const pipelineChart = _renderStackBars([
+      { label: 'Queued', value: groupedByStatus.queued, tone: 'warning' },
+      { label: 'Running', value: groupedByStatus.running, tone: 'accent' },
+      { label: 'Succeeded', value: groupedByStatus.success, tone: 'ok' },
+      { label: 'Failed', value: groupedByStatus.failed, tone: 'danger' }
+    ]);
 
     panel.innerHTML = `
       <div class="admin-analytics-grid">
         <section class="admin-overview-card">
           <div class="admin-card-head">
-            <div>
-              <h3>Conversion pipeline</h3>
-              <p class="admin-card-subtitle">Cross-user conversion jobs, with local fallback if the global query is restricted.</p>
-            </div>
-            <span class="admin-muted">${jobs.length} jobs</span>
+            <h3>Pipeline</h3>
+            <span class="admin-muted">${jobs.length}</span>
           </div>
           <div class="admin-stats-grid admin-analytics-stats">
             ${_statCard('Queued', groupedByStatus.queued)}
@@ -340,27 +527,17 @@ async function _loadAnalytics() {
             ${_statCard('Succeeded', groupedByStatus.success)}
             ${_statCard('Failed', groupedByStatus.failed)}
           </div>
-          <div class="admin-failure-note">
-            <strong>Fallback imports:</strong> ${fallbackCount}
-          </div>
-          <div class="admin-bar-chart" aria-label="Conversion job types">
-            ${Object.entries(typeBuckets).map(([label, count]) => `
-              <div class="admin-bar-row">
-                <span>${_esc(label)}</span>
-                <div class="admin-bar-track"><div class="admin-bar-fill" style="width:${Math.max(8, Math.round((count / maxBucket) * 100))}%"></div></div>
-                <strong>${count}</strong>
-              </div>
-            `).join('')}
+          ${pipelineChart}
+          <div class="admin-chart-foot">
+            <span><strong>${fallbackCount}</strong> fallback imports</span>
+            <span><strong>${maxBucket}</strong> peak type bucket</span>
           </div>
         </section>
 
         <section class="admin-overview-card">
           <div class="admin-card-head">
-            <div>
-              <h3>AI workload</h3>
-              <p class="admin-card-subtitle">System-generated workspace task activity in the current session.</p>
-            </div>
-            <span class="admin-muted">${aiTaskSummary.total} tasks</span>
+            <h3>AI</h3>
+            <span class="admin-muted">${aiTaskSummary.total}</span>
           </div>
           <div class="admin-stats-grid admin-analytics-stats">
             ${_statCard('Review', aiTaskSummary.review)}
@@ -397,11 +574,8 @@ async function _loadAnalytics() {
 
       <section class="admin-overview-card">
         <div class="admin-card-head">
-          <div>
-            <h3>Recent failures</h3>
-            <p class="admin-card-subtitle">These should surface immediately so you can see broken conversion flows.</p>
-          </div>
-          <span class="admin-muted">${latestFailures.length} failures</span>
+          <h3>Failures</h3>
+          <span class="admin-muted">${latestFailures.length}</span>
         </div>
         <div class="admin-table-shell">
           <table class="admin-simple-table">
@@ -486,15 +660,26 @@ async function _loadSupportSnapshot() {
       openTickets: supportCounts.open + supportCounts.medium,
       failures: incidents.filter((item) => _normalizeStatus(item.status) !== 'resolved').length
     };
+    const supportMode = _adminChartState.supportMode;
+    const supportChart = supportMode === 'plans'
+      ? _renderStackBars([
+        { label: 'Free', value: planSummary.free, tone: 'muted' },
+        { label: 'Pro', value: planSummary.pro, tone: 'ok' },
+        { label: 'Enterprise', value: planSummary.enterprise, tone: 'accent' },
+        { label: 'Unspecified', value: planSummary.unspecified, tone: 'warning' }
+      ])
+      : _renderStackBars([
+        { label: 'Critical', value: supportCounts.open, tone: 'danger' },
+        { label: 'Medium', value: supportCounts.medium, tone: 'warning' },
+        { label: 'Low', value: supportCounts.low, tone: 'ok' },
+        { label: 'Resolved', value: latestResolved.length, tone: 'accent' }
+      ]);
 
     panel.innerHTML = `
       <div class="admin-overview-grid">
         <section class="admin-overview-card">
           <div class="admin-card-head">
-            <div>
-              <h3>Support center</h3>
-              <p class="admin-card-subtitle">Use existing feedback and incident records as the current support queue.</p>
-            </div>
+            <h3>Support center</h3>
             <span class="admin-muted">${tickets.length} tickets</span>
           </div>
           <div class="admin-stats-grid admin-analytics-stats">
@@ -503,6 +688,7 @@ async function _loadSupportSnapshot() {
             ${_statCard('Low', supportCounts.low)}
             ${_statCard('Resolved', latestResolved.length)}
           </div>
+          ${supportChart}
           <div class="admin-table-shell">
             <table class="admin-simple-table">
               <thead>
@@ -527,10 +713,7 @@ async function _loadSupportSnapshot() {
 
         <section class="admin-overview-card">
           <div class="admin-card-head">
-            <div>
-              <h3>Subscription snapshot</h3>
-              <p class="admin-card-subtitle">Plan counts are inferred from profile records when plan data is present.</p>
-            </div>
+            <h3>Subscription snapshot</h3>
             <span class="admin-muted">${profiles.length} profiles</span>
           </div>
           <div class="admin-stats-grid admin-analytics-stats">
@@ -556,10 +739,7 @@ async function _loadSupportSnapshot() {
 
       <section class="admin-overview-card">
         <div class="admin-card-head">
-          <div>
-            <h3>Founder command center</h3>
-            <p class="admin-card-subtitle">A fast snapshot for the owner without any extra navigation.</p>
-          </div>
+          <h3>Founder command center</h3>
           <span class="admin-live-pill">Today</span>
         </div>
         <div class="admin-stats-grid admin-ops-stats">
