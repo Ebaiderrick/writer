@@ -132,6 +132,19 @@ function _bindAdminFilters() {
   supportMode?.addEventListener('change', () => { _adminChartState.supportMode = supportMode.value || 'tickets'; rerender(); });
 }
 
+function _adminFiltersMarkup(rangeId, modeId, rangeValue, modeValue, rangeOptions, modeOptions) {
+  return `
+    <div class="admin-inline-filters">
+      <select id="${rangeId}" class="comment-filter-select admin-mini-select">
+        ${rangeOptions.map((option) => `<option value="${option.value}" ${String(option.value) === String(rangeValue) ? 'selected' : ''}>${_esc(option.label)}</option>`).join('')}
+      </select>
+      <select id="${modeId}" class="comment-filter-select admin-mini-select">
+        ${modeOptions.map((option) => `<option value="${option.value}" ${String(option.value) === String(modeValue) ? 'selected' : ''}>${_esc(option.label)}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
 // ─── Overview ────────────────────────────────────────────────────────────
 
 async function _loadOverview() {
@@ -242,6 +255,11 @@ async function _loadOverview() {
         <section class="admin-overview-card">
           <div class="admin-card-head">
             <h3>Growth</h3>
+            ${_adminFiltersMarkup('adminOverviewRange', 'adminOverviewMode', _adminChartState.range, _adminChartState.overviewMode, [
+              { value: 7, label: '7D' }, { value: 14, label: '14D' }, { value: 30, label: '30D' }
+            ], [
+              { value: 'growth', label: 'Growth' }, { value: 'incidents', label: 'Incidents' }, { value: 'support', label: 'Support' }
+            ])}
           </div>
           ${overviewChart}
           <div class="admin-chart-foot">
@@ -486,7 +504,19 @@ function _normalizeSeverity(value) {
 async function _loadAnalytics() {
   const panel = document.getElementById('adminAnalyticsPanel');
   if (!panel) return;
-  panel.innerHTML = '<p class="admin-loading">Loading...</p>';
+  panel.innerHTML = `
+    <section class="admin-overview-card">
+      <div class="admin-card-head">
+        <h3>Pipeline</h3>
+        ${_adminFiltersMarkup('adminAnalyticsRange', 'adminAnalyticsMode', _adminChartState.range, _adminChartState.analyticsMode, [
+          { value: 7, label: '7D' }, { value: 14, label: '14D' }, { value: 30, label: '30D' }
+        ], [
+          { value: 'queued', label: 'Queued' }, { value: 'running', label: 'Running' }, { value: 'failed', label: 'Failed' }
+        ])}
+      </div>
+      <div class="admin-skel-chart"></div>
+    </section>
+  `;
 
   try {
     const [jobs, projectTasks] = await Promise.all([
@@ -611,7 +641,19 @@ async function _loadAnalytics() {
 async function _loadSupportSnapshot() {
   const panel = document.getElementById('adminSupportPanel');
   if (!panel) return;
-  panel.innerHTML = '<p class="admin-loading">Loading...</p>';
+  panel.innerHTML = `
+    <section class="admin-overview-card">
+      <div class="admin-card-head">
+        <h3>Support</h3>
+        ${_adminFiltersMarkup('adminSupportRange', 'adminSupportMode', _adminChartState.range, _adminChartState.supportMode, [
+          { value: 7, label: '7D' }, { value: 14, label: '14D' }, { value: 30, label: '30D' }
+        ], [
+          { value: 'tickets', label: 'Tickets' }, { value: 'plans', label: 'Plans' }
+        ])}
+      </div>
+      <div class="admin-skel-chart admin-skel-chart-bars"></div>
+    </section>
+  `;
 
   try {
     const [feedbackSnap, incidentsSnap, profileSnap, waitlistSnap] = await Promise.all([
