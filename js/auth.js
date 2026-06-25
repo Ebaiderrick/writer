@@ -110,6 +110,10 @@ export const Auth = (() => {
     }
   }
 
+  function releaseBootLock() {
+    document.documentElement.classList.remove('app-booting');
+  }
+
   function shouldShowHostedGoogleBrowserWarning(err) {
     return false;
   }
@@ -408,6 +412,7 @@ export const Auth = (() => {
           Settings.show();
         }
         await settleAuthTransition();
+        releaseBootLock();
       } else {
         cleanupCollaboration();
         const session = getCachedSession();
@@ -420,6 +425,7 @@ export const Auth = (() => {
             showAuth();
           }
           await settleAuthTransition();
+          releaseBootLock();
         } else {
           if (window.location.pathname === '/admin') {
             replaceWithAppHomePath();
@@ -433,6 +439,7 @@ export const Auth = (() => {
             Settings.show();
           }
           await settleAuthTransition();
+          releaseBootLock();
         }
       }
     });

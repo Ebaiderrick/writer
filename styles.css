@@ -12007,6 +12007,202 @@ html[data-theme="white"] .user-trigger {
   margin-bottom: 20px;
 }
 
+.admin-ops-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.admin-kicker {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.admin-ops-header h3,
+.admin-card-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.admin-card-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.admin-live-pill,
+.admin-muted {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.admin-muted {
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--muted);
+}
+
+.admin-ops-stats {
+  margin-bottom: 16px;
+}
+
+.admin-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-overview-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.admin-overview-card + .admin-overview-card {
+  margin-top: 0;
+}
+
+.admin-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.admin-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.admin-health-item {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.admin-health-item strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.95rem;
+}
+
+.admin-health-item p {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.admin-health-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.admin-health-ok {
+  border-color: rgba(34,197,94,.16);
+}
+
+.admin-health-warning {
+  border-color: rgba(234,179,8,.18);
+}
+
+.admin-health-danger {
+  border-color: rgba(239,68,68,.18);
+}
+
+.admin-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-activity-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-activity-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.admin-activity-copy strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.admin-activity-copy p {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.admin-activity-row small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.admin-table-shell {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+}
+
+.admin-simple-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.admin-simple-table th,
+.admin-simple-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-simple-table th {
+  font-size: 0.72rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+}
+
+.admin-simple-table td code {
+  font-family: monospace;
+  font-size: 0.76rem;
+  color: var(--ink-muted);
+}
+
 .admin-stat-card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -12028,6 +12224,12 @@ html[data-theme="white"] .user-trigger {
 .admin-stat-label {
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+@media (max-width: 980px) {
+  .admin-overview-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .admin-badge {

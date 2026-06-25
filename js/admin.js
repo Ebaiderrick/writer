@@ -115,19 +115,146 @@ async function _loadOverview() {
   if (!panel) return;
   panel.innerHTML = '<p class="admin-loading">Loading…</p>';
   try {
-    const [sigSnap, fbSnap, auSnap, incSnap] = await Promise.all([
+    const [sigSnap, fbSnap, auSnap, incSnap, waitSnap, usersSnap] = await Promise.all([
       getDocs(collection(db, 'adminSignups')),
       getDocs(collection(db, 'adminFeedback')),
       getDocs(collection(db, 'adminActiveUsers')),
-      getDocs(collection(db, 'incidents'))
+      getDocs(collection(db, 'incidents')),
+      getDocs(collection(db, 'waitlist')),
+      getDocs(collection(db, 'usersByEmail'))
     ]);
-    const openIncidents = incSnap.docs.filter(d => d.data().status !== 'resolved').length;
-    panel.innerHTML = `<div class="admin-stats-grid">
-      ${_statCard('Total Signups', sigSnap.size)}
-      ${_statCard('Feedback Items', fbSnap.size)}
-      ${_statCard('Active Users (tracked)', auSnap.size)}
-      ${_statCard('Open Incidents', openIncidents)}
-    </div>`;
+    const signups = sigSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const feedback = fbSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const activeUsers = auSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const incidents = incSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const waitlist = waitSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const users = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const openIncidents = incidents.filter((item) => _normalizeStatus(item.status) !== 'resolved');
+    const criticalIncidents = openIncidents.filter((item) => _normalizeSeverity(item.severity) === 'critical');
+    const recentSignups = signups.filter((item) => _isWithinDays(item.createdAt, 7));
+    const recentActivity = [
+      ...signups.map((item) => ({
+        type: 'Signup',
+        title: item.name || item.email || item.id,
+        body: item.source ? `Source: ${item.source}` : 'New account event',
+        time: item.createdAt,
+        tone: 'ok'
+      })),
+      ...feedback.map((item) => ({
+        type: 'Feedback',
+        title: item.subject || item.type || 'Feedback item',
+        body: item.body || 'User feedback captured',
+        time: item.timestamp,
+        tone: 'info'
+      })),
+      ...incidents.map((item) => ({
+        type: 'Incident',
+        title: item.title || 'Incident',
+        body: item.body || 'Incident record updated',
+        time: item.updatedAt || item.createdAt,
+        tone: _normalizeStatus(item.status) === 'resolved' ? 'ok' : 'warning'
+      }))
+    ]
+      .filter((item) => item.time)
+      .sort((a, b) => new Date(b.time) - new Date(a.time))
+      .slice(0, 6);
+    const healthRows = [
+      { label: 'Firebase Auth', status: auth.currentUser?.email ? 'Connected' : 'Signed in', tone: 'ok', detail: auth.currentUser?.email || 'Session available' },
+      { label: 'Firestore', status: 'Live', tone: 'ok', detail: 'Admin collections loaded successfully' },
+      { label: 'User Registry', status: `${users.length} records`, tone: users.length ? 'ok' : 'warning', detail: 'Registered accounts mirrored by email' },
+      { label: 'Waitlist', status: `${waitlist.length} entries`, tone: waitlist.length ? 'ok' : 'warning', detail: 'Early access pipeline' },
+      { label: 'Incidents', status: openIncidents.length ? `${openIncidents.length} open` : 'Clear', tone: openIncidents.length ? 'warning' : 'ok', detail: criticalIncidents.length ? `${criticalIncidents.length} critical` : 'No critical incidents' }
+    ];
+    const healthTone = criticalIncidents.length ? 'danger' : (openIncidents.length ? 'warning' : 'ok');
+    panel.innerHTML = `
+      <div class="admin-ops-header">
+        <div>
+          <p class="admin-kicker">Level 1 operations view</p>
+          <h3>Health, growth, and user activity in one place.</h3>
+        </div>
+        <span class="admin-live-pill">Live snapshot</span>
+      </div>
+      <div class="admin-stats-grid admin-ops-stats">
+        ${_statCard('Registered Users', users.length)}
+        ${_statCard('Active Users', activeUsers.length)}
+        ${_statCard('New Users (7d)', recentSignups.length)}
+        ${_statCard('Feedback Items', feedback.length)}
+        ${_statCard('Waitlist Signups', waitlist.length)}
+        ${_statCard('Open Incidents', openIncidents.length)}
+      </div>
+      <div class="admin-overview-grid">
+        <section class="admin-overview-card">
+          <div class="admin-card-head">
+            <div>
+              <h3>System health</h3>
+              <p class="admin-card-subtitle">The admin view should tell you immediately if anything needs attention.</p>
+            </div>
+            <span class="admin-badge ${healthTone === 'danger' ? 'admin-badge-danger' : healthTone === 'warning' ? 'admin-badge-sev-medium' : 'admin-badge-ok'}">
+              ${criticalIncidents.length ? 'Attention needed' : openIncidents.length ? 'Watchlist' : 'Healthy'}
+            </span>
+          </div>
+          <div class="admin-health-grid">
+            ${healthRows.map((row) => `
+              <article class="admin-health-item admin-health-${row.tone}">
+                <span class="admin-health-label">${_esc(row.label)}</span>
+                <strong>${_esc(row.status)}</strong>
+                <p>${_esc(row.detail)}</p>
+              </article>
+            `).join('')}
+          </div>
+        </section>
+        <section class="admin-overview-card">
+          <div class="admin-card-head">
+            <div>
+              <h3>Recent activity</h3>
+              <p class="admin-card-subtitle">Latest signals from signups, feedback, and incidents.</p>
+            </div>
+            <span class="admin-muted">${recentActivity.length} items</span>
+          </div>
+          <div class="admin-activity-list">
+            ${recentActivity.length ? recentActivity.map((item) => `
+              <div class="admin-activity-row">
+                <span class="admin-badge ${item.tone === 'warning' ? 'admin-badge-sev-medium' : item.tone === 'ok' ? 'admin-badge-ok' : 'admin-badge-type'}">${_esc(item.type)}</span>
+                <div class="admin-activity-copy">
+                  <strong>${_esc(item.title)}</strong>
+                  <p>${_esc(item.body)}</p>
+                </div>
+                <small>${_formatTime(item.time)}</small>
+              </div>
+            `).join('') : '<p class="admin-loading">No recent activity yet.</p>'}
+          </div>
+        </section>
+      </div>
+      <section class="admin-overview-card">
+        <div class="admin-card-head">
+          <div>
+            <h3>User registry preview</h3>
+            <p class="admin-card-subtitle">A quick look at the accounts currently mirrored in the app.</p>
+          </div>
+          <span class="admin-muted">${users.length} tracked</span>
+        </div>
+        <div class="admin-table-shell">
+          <table class="admin-simple-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email key</th>
+                <th>UID</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${users.slice(0, 8).map((user) => `
+                <tr>
+                  <td>${_esc(user.name || user.displayName || '—')}</td>
+                  <td>${_esc(user.id)}</td>
+                  <td><code>${_esc(user.uid || '—')}</code></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
   } catch (err) {
     panel.innerHTML = `<p class="admin-error">Failed to load: ${err.message}</p>`;
   }
@@ -135,6 +262,37 @@ async function _loadOverview() {
 
 function _statCard(label, value) {
   return `<div class="admin-stat-card"><span class="admin-stat-value">${value}</span><span class="admin-stat-label">${label}</span></div>`;
+}
+
+function _parseTime(value) {
+  if (!value) return 0;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function _formatTime(value) {
+  const ms = _parseTime(value);
+  if (!ms) return 'Just now';
+  const diff = Date.now() - ms;
+  const minutes = Math.max(1, Math.round(diff / 60000));
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(ms).toLocaleDateString();
+}
+
+function _isWithinDays(value, days) {
+  const ms = _parseTime(value);
+  if (!ms) return false;
+  return (Date.now() - ms) <= (days * 24 * 60 * 60 * 1000);
+}
+
+function _normalizeStatus(value) {
+  return String(value || 'open').trim().toLowerCase();
+}
+
+function _normalizeSeverity(value) {
+  return String(value || 'low').trim().toLowerCase();
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────
