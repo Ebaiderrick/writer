@@ -153,8 +153,8 @@ function sortProjectsForHome(projects) {
   }
   if (state.homeProjectSort === "scenes") {
     sorted.sort((a, b) => {
-      const aCount = (a.lines || []).filter((line) => line.type === "scene" && line.text.trim()).length;
-      const bCount = (b.lines || []).filter((line) => line.type === "scene" && line.text.trim()).length;
+      const aCount = a.sceneCount || 0;
+      const bCount = b.sceneCount || 0;
       return bCount - aCount || new Date(b.updatedAt) - new Date(a.updatedAt);
     });
     return sorted;
@@ -251,9 +251,8 @@ function renderWorkspaceProjectCards(projects, collaborationLabel) {
 
   projects.forEach((project) => {
     const node = template.content.firstElementChild.cloneNode(true);
-    const lines = Array.isArray(project.lines) ? project.lines : [];
-    const sceneCount = lines.filter((line) => line.type === "scene" && line.text.trim()).length;
-    const characterCount = new Set(lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+    const sceneCount = project.sceneCount || 0;
+    const characterCount = project.characterCount || 0;
     node.querySelector(".project-card-title").textContent = getProjectDisplayName(project);
     node.querySelector(".project-script-id").textContent = project.scriptId;
     node.querySelector(".project-card-context").textContent = "Workspace script";
@@ -1434,8 +1433,8 @@ export function renderHome() {
   if (!state.currentWorkspaceId) {
     const appendProjectCard = (project) => {
       const node = template.content.firstElementChild.cloneNode(true);
-      const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
-      const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+      const sceneCount = project.sceneCount || 0;
+      const characterCount = project.characterCount || 0;
       const workspaceLabel = project.workspace?.name || "Personal Workspace";
       const collaborationLabel = getProjectCollaborationLabel(project);
 
@@ -1470,8 +1469,8 @@ export function renderHome() {
 
   projects.forEach((project) => {
     const node = template.content.firstElementChild.cloneNode(true);
-    const sceneCount = project.lines.filter((line) => line.type === "scene" && line.text.trim()).length;
-    const characterCount = new Set(project.lines.filter((line) => line.type === "character" && line.text.trim()).map((line) => line.text.trim().toUpperCase())).size;
+    const sceneCount = project.sceneCount || 0;
+    const characterCount = project.characterCount || 0;
     const workspaceLabel = project.workspace?.name || "Personal Workspace";
     const collaborationLabel = project.isShared || Object.keys(project.collaborators || {}).length
       ? "Shared"

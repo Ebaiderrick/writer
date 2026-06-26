@@ -399,7 +399,32 @@ export function loadProjects() {
 }
 
 export function sanitizeProject(project) {
+  if (project?._sanitized) {
+    return project;
+  }
+  const lines = Array.isArray(project.lines) && project.lines.length
+    ? project.lines.map((line) => {
+        if (line.id && line.text !== undefined && !project._forceSanitize) {
+          return line;
+        }
+        const type = TYPE_LABELS[line.type] ? line.type : "action";
+        const sanitized = {
+          id: line.id || uid(),
+          type,
+          text: normalizeLineText(line.text || "", type)
+        };
+        if (typeof line.secondary === "string") {
+          sanitized.secondary = normalizeLineText(line.secondary, type);
+        }
+        return sanitized;
+      })
+    : [{ id: uid(), type: "action", text: "" }];
+
+  const sceneCount = lines.filter((line) => line?.type === "scene" && line.text?.trim()).length;
+  const characterCount = new Set(lines.filter((line) => line?.type === "character" && line.text?.trim()).map((line) => line.text.trim().toUpperCase())).size;
+
   return {
+    _sanitized: true,
     id: project.id || uid("project"),
     scriptId: normalizeScriptId(project.scriptId),
     name: project.name || project.title || "Untitled Script",
@@ -456,20 +481,9 @@ export function sanitizeProject(project) {
     version: Number.isFinite(Number(project.version)) ? Number(project.version) : 0,
     conversionJobId: typeof project.conversionJobId === "string" ? project.conversionJobId : "",
     conversionSourceFileName: typeof project.conversionSourceFileName === "string" ? project.conversionSourceFileName : "",
-    lines: Array.isArray(project.lines) && project.lines.length
-      ? project.lines.map((line) => {
-          const type = TYPE_LABELS[line.type] ? line.type : "action";
-          const sanitized = {
-            id: line.id || uid(),
-            type,
-            text: normalizeLineText(line.text || "", type)
-          };
-          if (typeof line.secondary === "string") {
-            sanitized.secondary = normalizeLineText(line.secondary, type);
-          }
-          return sanitized;
-        })
-      : [{ id: uid(), type: "action", text: "" }]
+    sceneCount,
+    characterCount,
+    lines
   };
 }
 
@@ -701,6 +715,11 @@ export function syncProjectFromInputs() {
   project.logline = refs.loglineInput.value.trim();
   project.coverVersion = refs.coverVersionInput?.value.trim() || "";
   project.updatedAt = new Date().toISOString();
+
+  // Update cached metadata
+  project.sceneCount = project.lines.filter((line) => line?.type === "scene" && line.text?.trim()).length;
+  project.characterCount = new Set(project.lines.filter((line) => line?.type === "character" && line.text?.trim()).map((line) => line.text.trim().toUpperCase())).size;
+
   return project;
 }
 
