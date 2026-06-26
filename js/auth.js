@@ -124,15 +124,17 @@ export const Auth = (() => {
   }
 
   function describeGoogleAuthError(err) {
+    const isIframe = window.self !== window.top;
+    const hostname = window.location.hostname;
     const map = {
-      'auth/popup-blocked': 'Google sign-in pop-up was blocked. We can continue with redirect sign-in instead.',
+      'auth/popup-blocked': `Google Sign-In pop-up was blocked by your browser.\n\nPlease allow pop-ups for this site, or click "Open in a new tab" in the top-right to sign in directly.`,
       'auth/popup-closed-by-user': 'Google sign-in was closed before completion.',
       'auth/cancelled-popup-request': 'Another Google sign-in is already in progress. Please wait a moment and try again.',
-      'auth/web-storage-unsupported': 'This browser blocks the storage Google sign-in needs. Try again in a standard browser tab.',
-      'auth/operation-not-supported-in-this-environment': 'This browser does not support Google pop-up sign-in. Redirect sign-in should work instead.',
-      'auth/operation-not-allowed': 'Google sign-in is not enabled yet for this Firebase project.',
-      'auth/unauthorized-domain': 'This domain is not authorized for Google sign-in in Firebase yet.',
-      'auth/internal-error': 'Google sign-in hit an internal Firebase error. Please try again in a moment.'
+      'auth/web-storage-unsupported': `This browser blocks the storage Google Sign-In needs.${isIframe ? '\n\nSince the app is running inside an iframe, please click "Open in a new tab" in the top-right to log in seamlessly!' : '\n\nPlease ensure third-party cookies or local storage are allowed.'}`,
+      'auth/operation-not-supported-in-this-environment': 'This browser does not support Google pop-up sign-in. Redirect sign-in or Email Sign-In should work instead.',
+      'auth/operation-not-allowed': 'Google Sign-In is not enabled yet for this Firebase project. Please enable Google provider under Authentication in your Firebase Console.',
+      'auth/unauthorized-domain': `This domain (${hostname}) is not authorized for Google Sign-In in your Firebase project.\n\nTo resolve this:\n1. Go to Firebase Console > Authentication > Settings > Authorized domains.\n2. Click "Add domain" and add "${hostname}".\n3. Alternatively, sign in using Email & Password or click "Demo Session" to test instantly!`,
+      'auth/internal-error': `Google Sign-In hit an internal Firebase error.${isIframe ? '\n\nSince the app is running inside an iframe, please click "Open in a new tab" in the top-right to log in seamlessly!' : ' Please try again in a moment.'}`
     };
     return map[err?.code] || friendlyError(err);
   }
@@ -159,43 +161,16 @@ export const Auth = (() => {
 
     try {
       setAuthPending(true, 'Signing you in...');
-      await Promise.race([
-        signInWithPopup(auth, googleProvider),
-        new Promise((_, reject) => window.setTimeout(() => reject({ code: 'auth/popup-timeout' }), 4000))
-      ]);
+      await signInWithPopup(auth, googleProvider);
     } catch (err) {
       setAuthPending(false);
       console.error('Google sign-in error:', err.code, err);
-      if (isHostedCustomDomain()) {
-        if (err.code === 'auth/popup-blocked') {
-          customAlert('Allow popups for Wraita and try Google sign-in again.', 'Allow Popup');
-          return;
-        }
-        if (err.code === 'auth/popup-closed-by-user') {
-          return;
-        }
-        customAlert(describeGoogleAuthError(err), 'Alert');
+      
+      if (err.code === 'auth/popup-closed-by-user') {
         return;
       }
-      if (
-        err.code === 'auth/popup-blocked' ||
-        err.code === 'auth/cancelled-popup-request' ||
-        err.code === 'auth/web-storage-unsupported' ||
-        err.code === 'auth/operation-not-supported-in-this-environment' ||
-        err.code === 'auth/popup-timeout'
-      ) {
-        try {
-          await startGoogleRedirect();
-        } catch (redirectErr) {
-          setAuthPending(false);
-          console.error('Google redirect error:', redirectErr.code, redirectErr);
-          customAlert(describeGoogleAuthError(redirectErr), 'Alert');
-        }
-        return;
-      }
-      if (err.code !== 'auth/popup-closed-by-user') {
-        customAlert(describeGoogleAuthError(err), 'Alert');
-      }
+      
+      customAlert(describeGoogleAuthError(err), 'Google Sign-In Alert');
     }
   }
 
@@ -251,6 +226,11 @@ export const Auth = (() => {
     profileUploadBtn = document.getElementById('change-photo-btn');
 
     if (!signupForm || !loginForm) return;
+
+    const session = getCachedSession();
+    if (!session) {
+      openAuthOverlay('login');
+    }
 
     // Password match validation
     signupPass2Input?.addEventListener('input', () => {
@@ -423,6 +403,7 @@ export const Auth = (() => {
             (refs.studioView && !refs.studioView.hidden)
           ) {
             showAuth();
+            openAuthOverlay('login');
           }
           await settleAuthTransition();
           releaseBootLock();
