@@ -59,6 +59,8 @@ function boot() {
   const session = Auth.getSession();
   if (session && session.loggedIn) {
     showHome();
+    // Early reveal for cached sessions
+    Auth.releaseBootLock();
   } else {
     showAuth();
   }
@@ -71,20 +73,25 @@ function boot() {
   applyTranslations();
   applySaveModeButtons();
   handleDebugLaunch();
+
   if (state.pendingRecoveryNotice) {
     showToast("Recovered your latest local session.", "success", { duration: 3400 });
   }
-  if (state.localBackupEnabled) {
-    restoreLocalSaveFile().then((restored) => {
-      applySaveModeButtons();
-      if (restored) startLocalSaveTimer();
-    });
-  }
-  initBackground();
-  AI.init();
-  ContextMenu.init();
-  Admin.init();
-  Settings.init();
+
+  // Defer non-critical initializations to prioritize first paint
+  window.setTimeout(() => {
+    if (state.localBackupEnabled) {
+      restoreLocalSaveFile().then((restored) => {
+        applySaveModeButtons();
+        if (restored) startLocalSaveTimer();
+      });
+    }
+    initBackground();
+    AI.init();
+    ContextMenu.init();
+    Admin.init();
+    Settings.init();
+  }, 1);
 }
 
 if (document.readyState === 'loading') {

@@ -391,16 +391,32 @@ export const Auth = (() => {
       if (e.key === 'Escape' && authWrapper?.classList.contains('is-open')) closeAuthOverlay();
     });
 
+    let authInitialized = false;
     onAuthStateChanged(auth, async firebaseUser => {
+      const isInitial = !authInitialized;
+      authInitialized = true;
+
       if (firebaseUser) {
         cacheSession(firebaseUser);
-        await ensureUsersByEmail(firebaseUser);
-        await syncProjectsOnLogin(firebaseUser.uid);
-        await loadUserProfile(firebaseUser);
+        // Parallelize non-dependent metadata tasks
+        const profileTask = loadUserProfile(firebaseUser);
+        const emailTask = ensureUsersByEmail(firebaseUser);
+
         if (refs.authView && !refs.authView.hidden) revealHomeShell();
         renderHome();
         updateTriggerUI(firebaseUser);
-        initCollaboration();
+
+        // Fast-path: release the boot lock early if we have a basic UI to show
+        await settleAuthTransition();
+        releaseBootLock();
+
+        // Background tasks: heavy sync and collaboration can follow
+        await Promise.all([profileTask, emailTask]);
+        syncProjectsOnLogin(firebaseUser.uid).then(() => {
+          renderHome();
+          initCollaboration();
+        });
+
         if (window.location.pathname === '/admin') {
           const opened = await Admin.show();
           if (!opened) {
@@ -411,19 +427,19 @@ export const Auth = (() => {
           const { Settings } = await import('./settings.js');
           Settings.show();
         }
-        await settleAuthTransition();
-        releaseBootLock();
       } else {
         cleanupCollaboration();
         const session = getCachedSession();
+
+        if (isInitial && session?.loggedIn && !session.isDemoSession) {
+          // If we have a local session but Firebase is still resolving, don't blow it away yet.
+          // Wait for a definitive state change.
+          return;
+        }
+
         if (!session?.isDemoSession) {
           clearSession();
-          if (
-            (refs.homeView && !refs.homeView.hidden) ||
-            (refs.studioView && !refs.studioView.hidden)
-          ) {
-            showAuth();
-          }
+          showAuth();
           await settleAuthTransition();
           releaseBootLock();
         } else {
@@ -458,7 +474,7 @@ export const Auth = (() => {
     try {
       const cloudProjects = await fetchCloudProjects(uid);
       const localProjects = state.projects.filter(
-        p => p.id !== 'sample-project' && p.lines.some(l => l.text.trim())
+        p => p.id !== 'sample-project' && (p.title !== 'Untitled Script' || p.lines.some(l => l.text.trim()))
       );
       const cloudIds = new Set(cloudProjects.map(p => p.id));
       const localOnly = localProjects.filter(p => !cloudIds.has(p.id));
@@ -576,6 +592,7 @@ export const Auth = (() => {
     }));
     showHome();
     renderHome();
+    releaseBootLock();
   }
 
   function setAuthPending(isPending, message = 'Signing you in...') {
@@ -1162,5 +1179,5 @@ export const Auth = (() => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  return { init, getSession, signOut: handleSignOut };
+  return { init, getSession, signOut: handleSignOut, releaseBootLock };
 })();
